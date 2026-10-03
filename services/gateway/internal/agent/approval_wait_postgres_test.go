@@ -117,7 +117,7 @@ func TestReviewWaitHoldsNoWorkerAndResumesTheApprovedActionAfterARestart(t *test
 		t.Fatalf("approve: %v", err)
 	}
 	var digestBefore []byte
-	_ = world.pool.QueryRow(context.Background(), "SELECT action_digest FROM runtime.actions WHERE id = $1", wait.actionID).Scan(&digestBefore)
+	mustScan(t, world.pool.QueryRow(context.Background(), "SELECT action_digest FROM runtime.actions WHERE id = $1", wait.actionID), &digestBefore)
 
 	// A new worker process claims the continuation.
 	stepper := &scriptedStepper{callLog: budget.NewCallLog(world.pool), ledger: budget.NewPostgresStore(world.pool),

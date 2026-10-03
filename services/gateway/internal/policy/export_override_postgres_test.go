@@ -67,7 +67,7 @@ func TestApprovalCannotOverrideTheExportRestriction(t *testing.T) {
 	mustExec(t, world.pool, `UPDATE runtime.actions SET status = 'approved' WHERE id = $1`, exportAction)
 	result := world.executor(1).Execute(ctx, world.run, exportAction)
 	var outboxRows int
-	_ = world.pool.QueryRow(ctx, `SELECT count(*) FROM demo.outbox_messages WHERE report_id = $1`, internal.ID).Scan(&outboxRows)
+	mustScan(t, world.pool.QueryRow(ctx, `SELECT count(*) FROM demo.outbox_messages WHERE report_id = $1`, internal.ID), &outboxRows)
 	if result.Status == ExecutionSucceeded || outboxRows != 0 {
 		t.Fatalf("replayed grant: result %s/%s, outbox rows %d", result.Status, result.ReasonCode, outboxRows)
 	}

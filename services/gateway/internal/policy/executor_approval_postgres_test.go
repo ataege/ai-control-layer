@@ -32,7 +32,7 @@ func (world *approvalWorld) outboxRows(t *testing.T) int {
 func (world *approvalWorld) attemptCount(t *testing.T) int {
 	t.Helper()
 	var attempts int
-	_ = world.pool.QueryRow(context.Background(), `SELECT count(*) FROM runtime.execution_attempts WHERE action_id = $1`, world.actionID).Scan(&attempts)
+	mustScan(t, world.pool.QueryRow(context.Background(), `SELECT count(*) FROM runtime.execution_attempts WHERE action_id = $1`, world.actionID), &attempts)
 	return attempts
 }
 
@@ -151,7 +151,7 @@ func TestConcurrentExecutionsConsumeTheGrantOnce(t *testing.T) {
 		}
 	}
 	var consumed int
-	_ = world.pool.QueryRow(context.Background(), `SELECT count(*) FROM runtime.approvals WHERE action_id = $1 AND consumed_at IS NOT NULL`, world.actionID).Scan(&consumed)
+	mustScan(t, world.pool.QueryRow(context.Background(), `SELECT count(*) FROM runtime.approvals WHERE action_id = $1 AND consumed_at IS NOT NULL`, world.actionID), &consumed)
 	if succeeded != 1 || world.outboxRows(t) != 1 || consumed != 1 {
 		t.Fatalf("succeeded %d, outbox rows %d, consumed grants %d; want 1, 1, 1 (results %+v)", succeeded, world.outboxRows(t), consumed, results)
 	}

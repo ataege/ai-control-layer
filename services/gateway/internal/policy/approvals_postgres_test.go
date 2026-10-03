@@ -55,9 +55,9 @@ func (world *approvalWorld) addMember(t *testing.T, roles []string) contracts.Op
 func (world *approvalWorld) counts(t *testing.T) (approvals, jobs int, status string) {
 	t.Helper()
 	ctx := context.Background()
-	_ = world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.approvals WHERE action_id = $1`, world.actionID).Scan(&approvals)
-	_ = world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.jobs WHERE run_id = $1`, world.run.RunID).Scan(&jobs)
-	_ = world.pool.QueryRow(ctx, `SELECT status FROM runtime.actions WHERE id = $1`, world.actionID).Scan(&status)
+	mustScan(t, world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.approvals WHERE action_id = $1`, world.actionID), &approvals)
+	mustScan(t, world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.jobs WHERE run_id = $1`, world.run.RunID), &jobs)
+	mustScan(t, world.pool.QueryRow(ctx, `SELECT status FROM runtime.actions WHERE id = $1`, world.actionID), &status)
 	return approvals, jobs, status
 }
 

@@ -86,7 +86,7 @@ func TestApprovalIntegrity(t *testing.T) {
 		}
 		_, err := NewApprovals(world.pool).Decide(context.Background(), world.reviewer, deniedAction, ApprovalApprove)
 		var grants int
-		_ = world.pool.QueryRow(context.Background(), `SELECT count(*) FROM runtime.approvals WHERE action_id = $1`, deniedAction).Scan(&grants)
+		mustScan(t, world.pool.QueryRow(context.Background(), `SELECT count(*) FROM runtime.approvals WHERE action_id = $1`, deniedAction), &grants)
 		if err == nil || grants != 0 {
 			t.Fatalf("approving a denied action: err %v, grants %d", err, grants)
 		}

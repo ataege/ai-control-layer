@@ -565,7 +565,7 @@ func TestPermittedReadReachesTheNextModelRequest(t *testing.T) {
 	var runEvents []string
 	for rows.Next() {
 		var eventType string
-		_ = rows.Scan(&eventType)
+		mustScan(t, rows, &eventType)
 		runEvents = append(runEvents, eventType)
 	}
 	rows.Close()
@@ -647,8 +647,8 @@ func TestToolResultInspectionBeforeAgentContext(t *testing.T) {
 			t.Fatalf("hostile note reached the agent context: %s", result)
 		}
 		var outcome string
-		_ = world.pool.QueryRow(context.Background(), `SELECT inspection_outcome FROM runtime.context_entries
-			WHERE organization_id = $1 AND kind = 'tool_result'`, world.organizationID).Scan(&outcome)
+		mustScan(t, world.pool.QueryRow(context.Background(), `SELECT inspection_outcome FROM runtime.context_entries
+			WHERE organization_id = $1 AND kind = 'tool_result'`, world.organizationID), &outcome)
 		if outcome != string(InspectionBlocked) {
 			t.Fatalf("stored inspection outcome %q, want blocked", outcome)
 		}
@@ -731,7 +731,7 @@ func TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText(t *testing.T) 
 	for rows.Next() {
 		var phase string
 		var count int
-		_ = rows.Scan(&phase, &count)
+		mustScan(t, rows, &phase, &count)
 		phases[phase] = count
 	}
 	rows.Close()
