@@ -44,16 +44,68 @@ type Querier interface {
 	Query(ctx context.Context, sql string, arguments ...any) (pgx.Rows, error)
 }
 
+// Fixed causes of a rejected final answer: the X-13 rejectionCause values, for the log and the
+// event's safe fields only, never the answer's text.
+const (
+	// CauseNotJSON: empty, over the size cap, or not a JSON object.
+	CauseNotJSON = "not_json"
+	// CauseExtraText: text before or after the object.
+	CauseExtraText = "extra_text"
+	// CauseCodeFence: a fence that is not exactly one fence enclosing the whole answer.
+	CauseCodeFence = "code_fence"
+	// CauseWrongStatus: status missing or not "completed".
+	CauseWrongStatus = "wrong_status"
+	// CauseWrongFields: an unknown or repeated key, no or more than two report ids, an id that is
+	// not a lowercase uuid, or a repeated id.
+	CauseWrongFields = "wrong_fields"
+	// CauseUnknownReport is for the caller: Validate's resource_out_of_scope (a report this run
+	// did not create). Cause checks the format only and never returns it.
+	CauseUnknownReport = "unknown_report"
+)
+
 // Parse checks the answer's format alone: one JSON object with exactly status and report_ids, the
 // completed status, one or two unique lowercase report uuids, no text around it.
 func Parse(answer string) (FinalResult, contracts.ReasonCode) {
-	// The bound applies to the whole answer, before surrounding whitespace is ignored.
-	if len(answer) > maximumAnswerBytes {
+	result, cause := parse(answer)
+	if cause != "" {
 		return FinalResult{}, contracts.ReasonInvalidArguments
 	}
+	return result, ""
+}
+
+// Cause names why Parse rejects the answer, from the fixed Cause* vocabulary, or "" when the
+// format is valid. It returns no part of the answer, so the caller may log it.
+func Cause(answer string) string {
+	_, cause := parse(answer)
+	return cause
+}
+
+// parse is the single format check behind Parse and Cause.
+func parse(answer string) (FinalResult, string) {
+	// The bound applies to the whole answer, before surrounding whitespace is ignored.
+	if len(answer) > maximumAnswerBytes {
+		return FinalResult{}, CauseNotJSON
+	}
 	trimmed := strings.TrimSpace(answer)
-	if trimmed == "" || !utf8.ValidString(trimmed) || !uniqueKeys(trimmed) {
-		return FinalResult{}, contracts.ReasonInvalidArguments
+	if strings.HasPrefix(trimmed, codeFence) {
+		// Lead decision: one code fence enclosing the whole answer is accepted; the object inside
+		// gets the same strict check. Any other fence use is rejected.
+		inner, enclosed := unfence(trimmed)
+		if !enclosed {
+			return FinalResult{}, CauseCodeFence
+		}
+		trimmed = inner
+	}
+	switch {
+	case trimmed == "":
+		return FinalResult{}, CauseNotJSON
+	case !strings.HasPrefix(trimmed, "{"):
+		if strings.Contains(trimmed, "{") {
+			return FinalResult{}, CauseExtraText
+		}
+		return FinalResult{}, CauseNotJSON
+	case !utf8.ValidString(trimmed):
+		return FinalResult{}, CauseNotJSON
 	}
 	var document struct {
 		Status    *string  `json:"status"`
@@ -62,19 +114,28 @@ func Parse(answer string) (FinalResult, contracts.ReasonCode) {
 	decoder := json.NewDecoder(strings.NewReader(trimmed))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&document); err != nil {
-		return FinalResult{}, contracts.ReasonInvalidArguments
+		// encoding/json names a rejected field this way; every other decode error is syntax or type.
+		if strings.Contains(err.Error(), "unknown field") {
+			return FinalResult{}, CauseWrongFields
+		}
+		return FinalResult{}, CauseNotJSON
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		return FinalResult{}, contracts.ReasonInvalidArguments
+		return FinalResult{}, CauseExtraText
 	}
-	if document.Status == nil || *document.Status != CompletedStatus ||
-		len(document.ReportIDs) == 0 || len(document.ReportIDs) > MaximumReports {
-		return FinalResult{}, contracts.ReasonInvalidArguments
+	if !uniqueKeys(trimmed) {
+		return FinalResult{}, CauseWrongFields
+	}
+	if document.Status == nil || *document.Status != CompletedStatus {
+		return FinalResult{}, CauseWrongStatus
+	}
+	if len(document.ReportIDs) == 0 || len(document.ReportIDs) > MaximumReports {
+		return FinalResult{}, CauseWrongFields
 	}
 	seen := make(map[string]bool, len(document.ReportIDs))
 	for _, reportID := range document.ReportIDs {
 		if !uuidPattern.MatchString(reportID) || seen[reportID] {
-			return FinalResult{}, contracts.ReasonInvalidArguments
+			return FinalResult{}, CauseWrongFields
 		}
 		seen[reportID] = true
 	}
@@ -121,6 +182,29 @@ func Validate(ctx context.Context, querier Querier, organizationID, runID, answe
 		return "", "", ErrUnavailable
 	}
 	return string(reference), "", nil
+}
+
+// codeFence opens and closes a Markdown code block.
+const codeFence = "```"
+
+// unfence returns the content of an answer that is exactly one code fence, opened by ``` or
+// ```json and closed by ```, with no other fence inside. The content is trimmed of whitespace.
+func unfence(answer string) (string, bool) {
+	if len(answer) < 2*len(codeFence) || !strings.HasSuffix(answer, codeFence) {
+		return "", false
+	}
+	body := strings.TrimSuffix(strings.TrimPrefix(answer, codeFence), codeFence)
+	// The info string is empty or json, and ends at the first line break or at the object.
+	if strings.HasPrefix(body, "json") {
+		body = strings.TrimPrefix(body, "json")
+	}
+	if body != "" && body[0] != '\n' && body[0] != '\r' && body[0] != ' ' && body[0] != '\t' && body[0] != '{' {
+		return "", false
+	}
+	if strings.Contains(body, codeFence) {
+		return "", false
+	}
+	return strings.TrimSpace(body), true
 }
 
 // uniqueKeys rejects an object that repeats a key at its top level (encoding/json keeps the last).

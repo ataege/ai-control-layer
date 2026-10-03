@@ -161,6 +161,21 @@ test("runtime contracts reject inconsistent combinations", () => {
   const summaryWithoutMessage: Record<string, unknown> = { ...event.maskedSummary };
   delete summaryWithoutMessage.safeMessage;
   assert.equal(validateEvent({ ...event, maskedSummary: summaryWithoutMessage }), false);
+  // rejectionCause is a fixed kind of a rejected final answer, never free text.
+  assert.equal(
+    validateEvent({
+      ...event,
+      maskedSummary: { ...event.maskedSummary, rejectionCause: "code_fence" },
+    }),
+    true,
+  );
+  assert.equal(
+    validateEvent({
+      ...event,
+      maskedSummary: { ...event.maskedSummary, rejectionCause: "The answer said: fraud" as never },
+    }),
+    false,
+  );
 
   const passport = readJson(join(fixtureDirectory, "passport.atlas.json")) as Passport;
   const validatePassport = validatorFor("passport");
@@ -307,6 +322,7 @@ export const typedSamples = {
       actorId: null,
       inputSource: null,
       evaluationId: null,
+      rejectionCause: null,
     },
     occurredAt: "2026-10-03T11:59:00Z",
   } satisfies SafeEvent,
@@ -426,6 +442,7 @@ export const typedSamples = {
           actorId: null,
           inputSource: null,
           evaluationId: null,
+          rejectionCause: null,
         },
         occurredAt: "2026-10-03T12:05:00Z",
       },
@@ -455,6 +472,7 @@ export const typedSamples = {
           actorId: null,
           inputSource: null,
           evaluationId: null,
+          rejectionCause: null,
         },
         occurredAt: "2026-10-03T12:05:00Z",
       },
@@ -561,6 +579,7 @@ export const typedSamples = {
           actorId: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
           inputSource: "judge",
           evaluationId: "7b911223-f38a-48f3-91b5-fbb942f0229a",
+          rejectionCause: null,
         },
         occurredAt: "2026-10-03T12:10:00.5Z",
       },

@@ -400,7 +400,14 @@ type MaskedSummary struct {
 	InputSource *string `json:"inputSource"`
 	// EvaluationID is a control evaluation's id; its control assessments carry the same id.
 	EvaluationID *string `json:"evaluationId"`
+	// RejectionCause is the fixed kind of a rejected final answer (one of RejectionCauses), never
+	// its text; nil on every other event.
+	RejectionCause *string `json:"rejectionCause"`
 }
+
+// RejectionCauses are the X-13 rejectionCause values: runresult.Cause returns the first five and
+// unknown_report is Validate's resource_out_of_scope.
+var RejectionCauses = []string{"not_json", "extra_text", "code_fence", "wrong_status", "wrong_fields", "unknown_report"}
 
 func contains[Value comparable](values []Value, candidate Value) bool {
 	for _, value := range values {
