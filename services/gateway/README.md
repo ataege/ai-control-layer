@@ -458,6 +458,28 @@ stopping.
   revision, an out-of-scope resource or destination) executes nothing and is a counted denial with
   bounded feedback, like a rejection; only run-level refusals stop, pause or fail the run.
 
+## Model and hardware freeze (GO-03)
+
+The Go input to decision 6, measured on 2026-10-03.
+
+| Item                 | Value                                                                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Model                | `qwen3.5:4b`, Ollama digest `2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`; qwen35 family, 4.7B parameters, Q4_K_M, Apache 2.0 |
+| Runtime              | Ollama 0.35.1, native `POST /api/chat`, `stream: false`, `think: false`                                                                            |
+| Context              | `num_ctx` 8192 for agent steps (`agent.contextTokens`) and security checks (`security.MinEvaluatorContextTokens`); the model allows 262,144        |
+| Client               | hand-written `net/http` client, bounded request and response sizes, no provider library                                                            |
+| Reservation          | JSON UTF-8 input bytes + template allowance 1024 + output ceiling (agent 512, security 256), from `config/policy.yaml`                             |
+| Usage                | `prompt_eval_count` + `eval_count`; missing or invalid usage is `usage_unknown` (reservation held), never zero                                     |
+| Cost                 | no tariff: monetary cost is unavailable, not zero                                                                                                  |
+| Limits (policy.yaml) | 24 calls (12 agent, 12 security), 20,000 tokens, 20 s request time, 2 local concurrent requests                                                    |
+| Machine              | MacBookPro18,1, Apple M1 Pro, 10 CPUs, 16 GB, macOS 27.0; Ollama on `http://localhost:11434`, same machine as the gateway                          |
+| Memory fit           | model resident in 3.33 GB, fully on the GPU, at context 8192                                                                                       |
+| Agent latency        | live agent calls p50 3.9 s, p95 5.4 s, max 7.6 s (30 calls; GO-27 live runs, load about 12 on 10 CPUs)                                             |
+| Security latency     | live security calls p50 3.2 s, max 4.5 s (4 calls, same runs); quiet-machine benchmark (GO-81): p50 1.93 s, gateway overhead about 5 ms            |
+
+Whether this machine is the presentation machine, and the endpoint if Ollama runs elsewhere, are
+SH-45 and SH-50; the latencies above are this machine's.
+
 ## Agent task instruction
 
 The first model message describes the `reconcile_atlas_v1` business task as the report's

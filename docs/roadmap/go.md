@@ -347,7 +347,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     identifiable dispatched attempts"); "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: nothing
 
-- [ ] **GO-03 · Decide: Go input to decision 6 (provider client, reservation sizing, usage)**
+- [x] **GO-03 · Decide: Go input to decision 6 (provider client, reservation sizing, usage)**
   - **Report 1.2 change:** Decision 6 input now targets a local model ("Choose a local model that runs on the actual machine"), one provider serving agent and security purposes; record the hardware fit, and use reported tokens, call counts and request duration as the accounting basis.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) with the lead (infrastructure) · Tier: A · Size: S (estimate 0.5-1.5 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -381,6 +381,24 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
   - Blocked by: nothing
+  - Completed (2026-10-03): the Go input to decision 6, measured and recorded in the gateway README,
+    "Model and hardware freeze (GO-03)". Model `qwen3.5:4b` (Ollama digest
+    `2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`; qwen35 family, 4.7B
+    parameters, Q4_K_M, Apache 2.0) on Ollama 0.35.1, `think: false`, `stream: false`, `num_ctx`
+    8192 for agent and security requests (model maximum 262,144). Accounting: the hand-written
+    `net/http` client (no provider library); reservation = JSON UTF-8 input bytes + template
+    allowance 1024 + output ceiling (agent 512, security 256); usage from `prompt_eval_count` and
+    `eval_count`, missing or invalid usage held as `usage_unknown`; no monetary tariff (cost
+    unavailable, not zero); one action or a constrained final answer validated per response
+    (GO-01). Measured on this machine (MacBookPro18,1, Apple M1 Pro, 10 CPUs, 16 GB, macOS 27.0;
+    Ollama on `http://localhost:11434`, the same machine as the gateway): the model is resident in
+    3.33 GB, fully on the GPU, at context 8192; live agent model calls p50 3.9 s, p95 5.4 s, max 7.6
+    s (30 calls) and security calls p50 3.2 s, max 4.5 s (4 calls), from `runtime.timing_records`
+    of the GO-27 live runs `8b812e16`, `cfbd598b`, `b4a7a4c8`, `7c1bc441` (load average about 12 on
+    10 CPUs, not quiet); Worker 2's quiet-machine benchmark (GO-81, 3aeade7) gives the live
+    semantic check p50 1.93 s with about 5 ms of gateway overhead. Not recorded by Go: whether this
+    machine is the presentation machine and its network endpoint (SH-45, SH-50); the decision 6
+    text in `docs/product/README.md` belongs to the document owner, who has the proposed wording.
 
 ### Enforcement (report role: Implementer 4)
 
