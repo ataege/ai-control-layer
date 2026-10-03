@@ -332,9 +332,23 @@ The presentation machine is the lead's MacBook Pro (M1 Pro, 16 GB); the Go imple
 an M2 with 8 GB. Pick a model that runs on both, and record on each machine which model and
 version it ran (SH-45):
 
-| Machine                     | Hardware      | Model tag        | Ollama version   | Result           |
-| --------------------------- | ------------- | ---------------- | ---------------- | ---------------- |
-| Lead (presentation machine) | M1 Pro, 16 GB | not yet recorded | not yet recorded | not yet recorded |
-| Go implementer              | M2, 8 GB      | not yet recorded | not yet recorded | not yet recorded |
+| Machine                     | Hardware      | Model tag                                      | Ollama version   | Result                         |
+| --------------------------- | ------------- | ---------------------------------------------- | ---------------- | ------------------------------ |
+| Lead (presentation machine) | M1 Pro, 16 GB | `qwen3.5:4b` (ID `2a654d98e6fb`, 4.7B, Q4_K_M) | 0.35.1           | Probe on 2026-10-03, see below |
+| Go implementer              | M2, 8 GB      | not yet recorded                               | not yet recorded | not yet recorded               |
 
 `ollama list` shows the pulled tags and their IDs; `ollama --version` shows the version.
+
+**Probe on the lead's machine, 2026-10-03** (Ollama 0.35.1, `POST /api/chat`, `stream: false`,
+`think: false`, temperature 0; a quick check, not the benchmark GO-81 builds or a detection-quality
+claim). The agent request offered one `read_invoice` tool; the security request sent one delimited
+note with a JSON schema for `risk_category`, `score` (0 to 1) and `reason_code`.
+
+| Model        | Runs | Agent tool call                       | Hostile note ("ignore previous instructions ...") | Clean note                                 | Latency after the first call              |
+| ------------ | ---- | ------------------------------------- | ------------------------------------------------- | ------------------------------------------ | ----------------------------------------- |
+| `qwen2.5:3b` | 1    | Correct (`read_invoice`, invoice_A01) | `prompt_injection`, score 90 (outside the range)  | `data_exfiltration`, score 3 (wrong label) | 3.3 s agent (first call), 0.6-0.8 s guard |
+| `qwen3.5:4b` | 3    | Correct in all three runs             | `prompt_injection`, score 0.95, every run         | `none`, score 0.0, every run               | about 0.9 s agent, 0.8 s guard            |
+
+Ollama did not enforce the schema's numeric range for `qwen2.5:3b`, so Go must validate every
+verdict itself (report 1.2: "Go rejects unsupported fields and malformed scores"). `qwen3.5:4b` is the
+provisional model for both purposes; the M2 8 GB machine still has to run it before it is fixed.
