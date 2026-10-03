@@ -133,6 +133,12 @@ type Settings struct {
 	EvaluatedCatalogRevisionID int64
 	SecretPattern              GuardSettings
 	SemanticInjection          SemanticSettings
+	// SignatureMatch uses no Mode: each feed rule carries its own response.
+	SignatureMatch GuardSettings
+	DisabledRules  []string
+	// Feed is the validated, digest-pinned feed bound to this revision; nil only when
+	// SignatureMatch is disabled.
+	Feed *Feed
 }
 
 // validate rejects settings the controls cannot enforce; a bad catalog is never an allow.
@@ -149,6 +155,10 @@ func (settings Settings) validate() error {
 	if settings.SemanticInjection.Enabled && (math.IsNaN(threshold) || threshold < 0 || threshold > 1) {
 		return ErrSettings
 	}
+	// An enabled signature guard never runs as an empty rule set.
+	if settings.SignatureMatch.Enabled && settings.Feed == nil {
+		return ErrSettings
+	}
 	return nil
 }
 
@@ -161,6 +171,8 @@ type ControlRecord struct {
 	Outcome                    Outcome
 	ReasonCode                 string
 	MatchedRuleID              string
+	FeedRevision               string
+	FeedDigest                 string
 	EvaluatedCatalogRevisionID int64
 	Duration                   time.Duration
 	// Semantic records only: the validated verdict, whether it came from the live model or a
