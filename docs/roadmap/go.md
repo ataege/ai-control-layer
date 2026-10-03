@@ -1066,7 +1066,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     matrix" ("a hidden URL is not a protection")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-22 · Write safe decision events with every state change**
+- [x] **GO-22 · Write safe decision events with every state change**
   - **Report 1.2 change:** Events add the metered purpose, admission and active catalog revisions, matched rule and feed revision; safe summaries omit raw notes, secrets, model requests and classifier reasoning.
   - **Report 1.1 change:** Events link the run, action, policy version, matched rule, report ID, template version, classification, lineage-check outcome and actual effect; event names from SH-10 (the architecture's examples include `report.created`, `report.export_denied`, `report.safe_template_offered`).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h)
@@ -1084,6 +1084,24 @@ typecheck` PASS; `pnpm verify` 6 passed.
     gap or duplicate under concurrent writes; a decision event carries every link listed; the
     serialized events of a run that read protected fields contain none of the fixture's protected
     values; a failed state change leaves no event. The X-24 command.
+  - Completed (2026-10-03): `internal/repository` is the X-12 event writer and reader.
+    `Tx.AppendEvent` validates every event against X-12 (closed types, decisions, reason codes and
+    masked-summary values; an action needs its run) and inserts it in the caller's transaction, so
+    it commits with its state change or not at all; `Join(pgx.Tx)` lets another lane's transaction
+    use it. A run-scoped append first takes a `FOR NO KEY UPDATE` lock on the run row until commit,
+    so a run's events commit in id order and `Repository.RunEvents(org, run, afterEventID, limit)`
+    pages by cursor without gaps or duplicates; a stored row outside X-12 is never served. Admission
+    writes `run.queued` / `admission.rejected`, and every `TransitionRun` requires its event. Tests
+    (PostgreSQL): four concurrent writers commit 60 events while a reader pages by cursor and reads
+    each exactly once in order (the same test failed 10 of 10 runs with the lock removed and passed
+    10 of 10 with it); a decision event round-trips every link (purpose, admission and active
+    catalog revisions, matched rule, feed revision, report, template, classification, lineage
+    check, effect, replay source, alternative template, safe message); another organization reads
+    and writes nothing; a row with an extra summary key fails closed; a failed state change leaves
+    no event (GO-19 test). Checks: gateway five checks PASS; `go test -race -count=3
+./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Waits on other lanes:
+    decision, approval and execution events are written by lanes w3, w2 and f3, which must switch
+    their raw inserts to `repository.Join(tx).AppendEvent` for the ordering guarantee.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
     semantics)

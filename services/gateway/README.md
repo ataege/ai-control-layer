@@ -138,7 +138,7 @@ internal/tools/       the four tool adapters and the effect runner the executor 
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
-internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
+internal/repository/  runtime passports, runs, jobs and X-12 events (gap-free per-run cursor); guarded run transitions (GO-19, GO-22)
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
 internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)

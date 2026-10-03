@@ -45,6 +45,12 @@ type Tx struct {
 	transaction pgx.Tx
 }
 
+// Join wraps a transaction another component opened, so it can use the repository's validated
+// writers (for example AppendEvent) inside its own transaction. The caller commits it.
+func Join(transaction pgx.Tx) Tx {
+	return Tx{transaction: transaction}
+}
+
 // Raw exposes the transaction to a component that must join it, for example a local demo
 // effect that commits with its execution record (GO-34). The caller must not commit it.
 func (tx Tx) Raw() pgx.Tx {
