@@ -118,6 +118,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/admission`       | Go lane 3c (repository, admission, passport, API)             |
 | `internal/api`             | Go lane 3c (repository, admission, passport, API)             |
 | `internal/evaluation`      | Go lane 3c (repository, admission, passport, API)             |
+| `internal/runresult`       | Go lane 3c (repository, admission, passport, API)             |
 | `internal/catalog`         | Go lane 3c (repository, admission, passport, API)             |
 | `internal/tools`           | Go lane w2 (tools and provenance)                             |
 | `internal/policy`          | Go lane w3 (action gate and approvals)                        |
@@ -153,6 +154,7 @@ internal/operatorcontext/ X-Operator-Context HS256 verification and the verified
 internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
 internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)
 internal/evaluation/  control evaluation adapter: model input, tool result, decision-only action (GO-82)
+internal/runresult/   the narrow final result: format, report ownership, persisted reference (GO-26)
 internal/catalog/     trusted active snapshot loader (GO-72) and catalog activation: validate, acknowledge or reject a requested revision (GO-73)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```

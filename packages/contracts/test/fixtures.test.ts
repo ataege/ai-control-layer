@@ -230,6 +230,7 @@ export const typedSamples = {
     cancelRequestedAt: null,
     createdAt: "2026-10-03T12:00:00Z",
     updatedAt: "2026-10-03T12:07:30Z",
+    resultReference: null,
   } satisfies RunState,
   safeEvent: {
     eventId: "7",

@@ -1318,6 +1318,25 @@ typecheck` PASS; `pnpm verify` 6 passed.
     field or lacks a reference is rejected and the run does not complete; a valid result completes
     the run with its recorded reason; the persisted result holds no free text the format does not
     allow. `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Progress (2026-10-03): `final result format` decided by the lead: the model's final answer is
+    exactly `{"status":"completed","report_ids":[...]}` naming one or two reports this run created
+    in its organization; nothing else, no prose. `internal/runresult.Validate` parses it strictly
+    (unknown or repeated keys, text around it, other statuses, more than two or repeated ids and
+    non-uuid ids are `invalid_arguments`) and checks every id is a `demo.reports` row of this run
+    and organization (another run's, another organization's or an unknown report is
+    `resource_out_of_scope`); it returns the canonical reference `{"report_ids":[...]}`.
+    `repository.RunTransition.ResultReference` persists it in `runtime.runs.result_reference` in the
+    same transaction as the transition to completed (refused for any other target or for a
+    reference outside the format), and X-11 `RunState.resultReference {reportIds}` exposes it
+    (schema, fixtures including a completed run, TS, Go). `runresult.FinalAnswerInstruction` is the
+    one wording for the agent prompt. Tests: 14 rejected formats, two valid ones, the instruction's
+    example parses; PostgreSQL: own reports validated, a sibling run's report (same organization),
+    another organization's and an unknown report rejected; a rejected final answer leaves the run
+    running and a forged or misplaced reference is refused; the validated reference completes the
+    run and reads back unchanged with no prose. Missing half: lane f3 calls `Validate` in the
+    loop's StepFinal, counts a rejection as a correction (GO-29, lead decision) and adds the
+    instruction to the agent prompt; then a reconciliation run completes only with a validated
+    result.
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary); "The enforcement loop and data minimization"; "Threat model limits and unresolved
     design choices" ("Final-output validation requires an output format and a data rule")

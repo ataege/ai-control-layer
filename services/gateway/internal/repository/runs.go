@@ -108,7 +108,10 @@ type RunTransition struct {
 	To             contracts.RunStatus
 	// Reason is required for paused, failed and stopped and forbidden otherwise (X-11).
 	Reason *contracts.ReasonCode
-	Event  NewEvent
+	// ResultReference is the validated final result (runresult.Validate) persisted with a
+	// transition to completed; it is refused with any other target.
+	ResultReference *string
+	Event           NewEvent
 }
 
 // TransitionRun applies a guarded status change and appends its event in this transaction.
@@ -117,7 +120,8 @@ func (tx Tx) TransitionRun(ctx context.Context, transition RunTransition) (contr
 	var state contracts.RunState
 	if ctx == nil || !validUUID(transition.OrganizationID) || !validUUID(transition.RunID) ||
 		!transition.To.Valid() || transition.To.NeedsReason() != (transition.Reason != nil) ||
-		(transition.Reason != nil && !transition.Reason.Valid()) {
+		(transition.Reason != nil && !transition.Reason.Valid()) ||
+		(transition.ResultReference != nil && (transition.To != contracts.RunCompleted || !validResultReference(*transition.ResultReference))) {
 		return state, ErrInvalid
 	}
 	// The event belongs to this run; it may not name another run or organization.
@@ -132,11 +136,11 @@ func (tx Tx) TransitionRun(ctx context.Context, transition RunTransition) (contr
 	}
 	// One guarded statement: the status check and the update cannot interleave with another writer.
 	row := tx.transaction.QueryRow(ctx, `UPDATE runtime.runs
-		SET status = $3, terminal_reason = $4, updated_at = now()
+		SET status = $3, terminal_reason = $4, result_reference = coalesce($6, result_reference), updated_at = now()
 		WHERE id = $1 AND organization_id = $2 AND status = ANY($5)
 		RETURNING `+runStateColumns,
 		transition.RunID, transition.OrganizationID, string(transition.To), reason,
-		sourceStatusesFor(transition.To))
+		sourceStatusesFor(transition.To), transition.ResultReference)
 	state, err := scanRunState(row)
 	if errors.Is(err, ErrNotFound) {
 		// Distinguish a missing run from a refused transition without revealing other organizations.
@@ -154,7 +158,7 @@ func (tx Tx) TransitionRun(ctx context.Context, transition RunTransition) (contr
 	return state, nil
 }
 
-const runStateColumns = `id::text, passport_id::text, status, terminal_reason, cancel_requested_at, created_at, updated_at`
+const runStateColumns = `id::text, passport_id::text, status, terminal_reason, cancel_requested_at, created_at, updated_at, result_reference`
 
 type rowScanner interface {
 	Scan(destinations ...any) error
@@ -165,9 +169,18 @@ func scanRunState(row rowScanner) (contracts.RunState, error) {
 	var status string
 	var reason *string
 	var cancelRequestedAt *time.Time
-	err := row.Scan(&state.RunID, &state.PassportID, &status, &reason, &cancelRequestedAt, &state.CreatedAt, &state.UpdatedAt)
+	var resultReference *string
+	err := row.Scan(&state.RunID, &state.PassportID, &status, &reason, &cancelRequestedAt, &state.CreatedAt, &state.UpdatedAt, &resultReference)
 	if err != nil {
 		return contracts.RunState{}, storageError(err)
+	}
+	if resultReference != nil {
+		stored, valid := decodeResultReference(*resultReference)
+		if !valid {
+			// A stored result outside the format is never reported as the run's deliverable.
+			return contracts.RunState{}, ErrUnavailable
+		}
+		state.ResultReference = &stored
 	}
 	state.Status = contracts.RunStatus(status)
 	if !state.Status.Valid() {
@@ -306,4 +319,28 @@ func (repository *Repository) CancelRun(ctx context.Context, organizationID, run
 		return cancelErr
 	})
 	return state, err
+}
+
+// storedResultReference is the persisted final result: the canonical runresult form.
+type storedResultReference struct {
+	ReportIDs []string `json:"report_ids"`
+}
+
+// decodeResultReference reads the persisted canonical reference into its X-11 form.
+func decodeResultReference(reference string) (contracts.RunResultReference, bool) {
+	var stored storedResultReference
+	if contracts.DecodeStrict([]byte(reference), &stored) != nil || len(stored.ReportIDs) == 0 || len(stored.ReportIDs) > 2 {
+		return contracts.RunResultReference{}, false
+	}
+	for index, reportID := range stored.ReportIDs {
+		if !validUUID(reportID) || slices.Contains(stored.ReportIDs[:index], reportID) {
+			return contracts.RunResultReference{}, false
+		}
+	}
+	return contracts.RunResultReference{ReportIDs: stored.ReportIDs}, true
+}
+
+func validResultReference(reference string) bool {
+	_, valid := decodeResultReference(reference)
+	return valid
 }
