@@ -24,7 +24,8 @@
         "safeMessage": "This report inherits an Internal only restriction and cannot be sent to the vendor.",
         "actorId": null,
         "inputSource": null,
-        "evaluationId": null
+        "evaluationId": null,
+        "rejectionCause": null
       },
       "occurredAt": "2026-10-03T12:05:00Z"
     },
@@ -52,7 +53,8 @@
         "safeMessage": "This report inherits an Internal only restriction and cannot be sent to the vendor.",
         "actorId": null,
         "inputSource": null,
-        "evaluationId": null
+        "evaluationId": null,
+        "rejectionCause": null
       },
       "occurredAt": "2026-10-03T12:05:00Z"
     }

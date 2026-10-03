@@ -24,7 +24,8 @@
         "safeMessage": "The security check found instruction-like content and withheld it.",
         "actorId": "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
         "inputSource": "judge",
-        "evaluationId": "7b911223-f38a-48f3-91b5-fbb942f0229a"
+        "evaluationId": "7b911223-f38a-48f3-91b5-fbb942f0229a",
+        "rejectionCause": null
       },
       "occurredAt": "2026-10-03T12:10:00.5Z"
     }

@@ -239,6 +239,12 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
    semantic check. Only the inspected result enters `runtime.context_entries`.
 8. **Finish** (`runresult`). Only the exact final answer `{"status":"completed","report_ids":[...]}`
    naming reports this run created completes the run; the validated reference is stored with it.
+   One Markdown code fence (` ``` ` or ` ```json `) enclosing the whole answer is
+   accepted (lead decision); text outside it, two fences or a non-object inside are rejected, and
+   the stored reference never contains the fence. `runresult.Cause` names a rejection with a fixed
+   kind for the log and `maskedSummary.rejectionCause` (`not_json`, `extra_text`, `code_fence`,
+   `wrong_status`, `wrong_fields`; `unknown_report` for another run's report), never the answer's
+   text.
 9. **Reads and probes** (`reads`, `provenance`, `evaluation`). NestJS reads run state, usage,
    events, the stored report and the security records through private routes; judges probe the
    controls through `POST /internal/control/evaluate` without running the agent.
