@@ -610,7 +610,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     browser or agent"); "Data ownership and the transition from starter to product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-09 · Add a fail-closed command client toward Go**
+- [x] **API-09 · Add a fail-closed command client toward Go**
+  - Done (2026-10-03): shared authenticated GET/POST transport rejects missing or invalid X-14 context before dispatch, signs only verified context, preserves upstream HTTP status, validates responses and refuses redirects. Stub tests cover 404, 401, 500, 503, timeout, refused connection, malformed JSON and unknown fields; secrets and upstream messages are withheld. Checks: API lint, typecheck and build exited 0; API unit tests: "134 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Database schema and records are unchanged by this task.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: SH-11 · Needs: X-13 · Provides: nothing
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
