@@ -2092,7 +2092,7 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     approval command refusing a decision on a stopped run, which is lane w3's GO-44 check.
   - Audit 2026-10-03: (1) the right to cancel is a verified operator of the run's organization; no
     per-run or role-specific management right exists, so the Tests line's "actor without the right" case
-    is covered only as another organization's operator (404). A role check would need a decision. (2)
+    is covered only as another organization's operator (404). Lead decision (2026-10-03): any verified operator of the organization may cancel its runs; cancelling only restricts and never grants, so no extra role is needed. (2)
     Since 025a339 (lane f3 maps it, edb712c) a cancellation that lands during a step is never
     overwritten: `TransitionRun` refuses running, awaiting_approval, paused and completed once
     `cancel_requested_at` is set (`ErrCancelRequested`), and the loop stops the run with `run_cancelled`
