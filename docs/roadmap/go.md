@@ -2390,6 +2390,14 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     version change (resource_version_changed) or an unregistered projection version
     (template_not_allowed), outbox 0. Missing: the "old approval is rejected" half (needs Worker
     3's GO-45 and GO-52) and revocations (SH-38).
+  - Progress (2026-10-03): the "old approval is rejected" half for changes is on `main` through
+    GO-45: Worker 3's `TestApprovedActionRechecksBeforeExecution` approves a queue_report, then
+    changes the source invoice version (refused `resource_version_changed`) or the active catalog
+    revision (refused `source_policy_changed`), with outbox 0 and no attempt; rerun on 55c851f
+    against `starter_test`: PASS (5 of 5 subtests). Template and projection versions are Go
+    constants, so a running gateway cannot change them during a review; a stored report with an
+    unregistered projection version is refused by the adapter test above. Missing: revoking a
+    source or template during review, which needs GO-52 and the revocation records (SH-38).
   - Report: "Validation plan and evidence matrix" (Source or template policy changes)
   - Blocked by: nothing
 
