@@ -900,7 +900,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     implementation milestones and critical dependencies" (Proposed 24-hour implementation sequence)
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **WEB-07 · Replace the starter texts that the product makes untrue**
+- [x] **WEB-07 · Replace the starter texts that the product makes untrue**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: API-04 · Needs: nothing · Provides: nothing
   - Paths: `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx`,
@@ -1074,7 +1074,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-08 · Show the passport summary beside the timeline**
+- [x] **WEB-08 · Show the passport summary beside the timeline**
   - **Report 1.2 change:** The passport summary shows the active policy version and the allowed models.
   - **Report 1.1 change:** Shows the allowed report templates. No policy editor is planned (open item `policy editor`).
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1.5-4 h)
@@ -1102,7 +1102,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     1 create and delegate a task)
   - Blocked by: `passport in the run view`
 
-- [ ] **WEB-09 · Build the run timeline with attempts apart from effects**
+- [x] **WEB-09 · Build the run timeline with attempts apart from effects**
   - **Report 1.1 change:** The export denial is WEB-28's; Report beats 5, 6 and 9.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: WEB-06 · Needs: X-12, X-36 · Provides: nothing
@@ -1135,7 +1135,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     disclosure channel)
   - Blocked by: nothing
 
-- [ ] **WEB-10 · Show the run's waiting and terminal states with their reasons**
+- [x] **WEB-10 · Show the run's waiting and terminal states with their reasons**
   - **Report 1.1 change:** Cite Journey 3 (recover, cancel or investigate) of report 1.1.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-4.5 h)
   - Depends on: WEB-06 · Needs: X-11 · Provides: nothing
@@ -1157,7 +1157,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     challenge" (Why successful work matters as much as blocked work)
   - Blocked by: nothing
 
-- [ ] **WEB-11 · Explain an admission rejection and require explicit resubmission**
+- [x] **WEB-11 · Explain an admission rejection and require explicit resubmission**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 1-2.5 h)
   - Depends on: WEB-05 · Needs: X-13 · Provides: nothing
   - Paths: `apps/web/src/app` (the task setup page from WEB-05)
@@ -1242,7 +1242,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     and proposed user journeys" (Journey 3)
   - Blocked by: nothing
 
-- [ ] **WEB-32 · Show hybrid decisions in the run timeline**
+- [x] **WEB-32 · Show hybrid decisions in the run timeline**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: WEB-06 · Needs: X-12, X-13 · Provides: nothing
   - Paths: `apps/web`

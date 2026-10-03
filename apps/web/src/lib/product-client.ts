@@ -1,10 +1,10 @@
-import { fetchJson, postJson, FetchJsonResult } from "./fetch-json";
-import type {
-  StartRunRequest,
-  StartRunResponse,
-  TaskFormOptions,
-  RunView,
-  SanitizedEvent,
+import { fetchJson, postJson, FetchJsonResult, FetchJsonOptions } from "./fetch-json";
+import type { 
+  StartRunRequest, 
+  StartRunResponse, 
+  TaskFormOptions, 
+  RunView, 
+  SanitizedEvent 
 } from "@workspace/contracts";
 
 export const REASON_CODE_MESSAGES: Record<string, string> = {
@@ -41,7 +41,7 @@ export function getSafeMessage(error: FetchJsonError | string): string {
     return REASON_CODE_MESSAGES[error] || "An unknown error occurred.";
   }
   if (error.kind === "http") {
-    const code = (error.body as { error?: { code?: string } } | undefined)?.error?.code;
+    const code = (error.body as { error?: { code?: string } })?.error?.code;
     if (code === "unauthorized") return "Invalid credentials.";
     if (code) return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
     if (error.status === 401) return "Invalid credentials.";
@@ -51,16 +51,20 @@ export function getSafeMessage(error: FetchJsonError | string): string {
   return REASON_CODE_MESSAGES[error.kind] || "An unknown error occurred.";
 }
 
+export function getErrorCode(error: FetchJsonError | string): string | undefined {
+  if (typeof error === "string") return error;
+  if (error.kind === "http") {
+    const code = (error.body as { error?: { code?: string } })?.error?.code;
+    return code || (error.status === 401 ? "unauthorized" : undefined);
+  }
+  return error.kind;
+}
+
 // Type Guards for frozen contracts
 function isStartRunResponse(data: unknown): data is StartRunResponse {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "runId" in data &&
-    typeof (data as Record<string, unknown>).runId === "string" &&
-    "passportId" in data &&
-    typeof (data as Record<string, unknown>).passportId === "string"
-  );
+  return typeof data === "object" && data !== null && 
+    "runId" in data && typeof (data as Record<string, unknown>).runId === "string" &&
+    "passportId" in data && typeof (data as Record<string, unknown>).passportId === "string";
 }
 
 function isTaskFormOptions(data: unknown): data is TaskFormOptions {
@@ -71,44 +75,37 @@ function isRunView(data: unknown): data is RunView {
   return typeof data === "object" && data !== null && "id" in data && "status" in data;
 }
 
-function isSanitizedEventsResponse(
-  data: unknown,
-): data is { events: SanitizedEvent[]; nextCursor?: string } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "events" in data &&
-    Array.isArray((data as Record<string, unknown>).events)
-  );
+function isSanitizedEventsResponse(data: unknown): data is { events: SanitizedEvent[]; nextCursor?: string } {
+  return typeof data === "object" && data !== null && "events" in data && Array.isArray((data as Record<string, unknown>).events);
 }
 
 // Ensure the result matches the guard or return an invalid_json error.
 function enforceGuard<T>(
-  result: FetchJsonResult<unknown>,
-  guard: (data: unknown) => data is T,
+  result: FetchJsonResult<unknown>, 
+  guard: (data: unknown) => data is T
 ): FetchJsonResult<T> {
   if (!result.ok) {
     return result as FetchJsonResult<T>;
   }
-
+  
   if (result.data === undefined) {
-    return {
-      ok: false,
+    return { 
+      ok: false, 
       error: { kind: "invalid_json", status: result.status },
       durationMs: result.durationMs,
-      requestId: result.requestId,
+      requestId: result.requestId
     };
   }
 
   if (guard(result.data)) {
     return result as FetchJsonResult<T>;
   }
-
-  return {
-    ok: false,
+  
+  return { 
+    ok: false, 
     error: { kind: "invalid_json", status: result.status },
     durationMs: result.durationMs,
-    requestId: result.requestId,
+    requestId: result.requestId
   };
 }
 
@@ -118,58 +115,34 @@ export class ProductClient {
     return enforceGuard(result, isStartRunResponse);
   }
 
+
   static async getOptions(): Promise<FetchJsonResult<TaskFormOptions>> {
     const result = await fetchJson("/api/runs/options");
     return enforceGuard(result, isTaskFormOptions);
   }
 
-  static async getRun(id: string): Promise<FetchJsonResult<RunView>> {
-    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
+  static async getRun(id: string, options?: FetchJsonOptions): Promise<FetchJsonResult<RunView>> {
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`, options);
     return enforceGuard(result, isRunView);
   }
 
-  static async getRunEvents(
-    id: string,
-    cursor?: string,
-  ): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
+  static async getRunEvents(id: string, cursor?: string, options?: FetchJsonOptions): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
     const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`);
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`, options);
     return enforceGuard(result, isSanitizedEventsResponse);
   }
 
-  static async signIn(credentials: {
-    email: string;
-    password: string;
-  }): Promise<FetchJsonResult<{ message: string }>> {
+  static async signIn(credentials: { email: string; password: string }): Promise<FetchJsonResult<{ message: string }>> {
     const result = await postJson("/api/auth/sign-in", credentials);
-    return enforceGuard(
-      result,
-      (data): data is { message: string } =>
-        typeof data === "object" && data !== null && "message" in data,
+    return enforceGuard(result, (data): data is { message: string } => 
+      typeof data === "object" && data !== null && "message" in data
     );
   }
 
-  static async getMe(): Promise<
-    FetchJsonResult<{
-      id: string;
-      email: string;
-      name: string;
-      organizationId: string;
-      roles: string[];
-    }>
-  > {
+  static async getMe(): Promise<FetchJsonResult<{ id: string; email: string; name: string; organizationId: string; roles: string[] }>> {
     const result = await fetchJson("/api/auth/me");
-    return enforceGuard(
-      result,
-      (
-        data,
-      ): data is {
-        id: string;
-        email: string;
-        name: string;
-        organizationId: string;
-        roles: string[];
-      } => typeof data === "object" && data !== null && "id" in data && "name" in data,
+    return enforceGuard(result, (data): data is { id: string; email: string; name: string; organizationId: string; roles: string[] } => 
+      typeof data === "object" && data !== null && "id" in data && "name" in data
     );
   }
 }
