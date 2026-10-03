@@ -168,7 +168,7 @@ scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of th
 
 ## Technical handoff (GO-61)
 
-This section is the Go part of the handoff, written from the code on `main` (855ae20 plus go/w2).
+This section is the Go part of the handoff, written from the code on `main` (87f22f0 plus go/w2).
 The sections below it hold the detail of each task; this one says how the parts fit, where each
 boundary is, what happens when it fails, how evidence is labelled and what is not covered.
 
@@ -236,23 +236,23 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
 
 ### Boundaries and their fail-closed behaviour
 
-| Boundary                      | Check                                                                                 | On failure                                                                                                                                         |
-| ----------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Service identity and operator | service token, HS256 operator context (5 min, single use)                             | `401` before any handler                                                                                                                           |
-| Organization and object       | every route scopes by the verified organization                                       | `404` (or the caller's own empty records); no data, no write (GO-57)                                                                               |
-| Admission                     | template, invoices, vendor, destination, limits within the catalog                    | `400` with the reason code and an `admission.rejected` event; catalog unreadable: `503 decision_unavailable`; nothing created                      |
-| Active catalog                | coherent snapshot of revision, limits, security settings and feed                     | no dispatch (the job waits) and no admission; a bad requested revision is rejected and the last good one stays                                     |
-| Model gateway                 | allowlist, ledger reservation, process slot, request deadline                         | `stopped/model_not_allowed`, `paused/allowance_exhausted`, requeue for a slot; timeout or unknown usage: `paused/outcome_unknown`, usage held      |
-| Action gate                   | tool, arguments, scope, destination, provenance, signatures, free-text semantics      | denial with feedback, counted as a correction; past the limit `stopped/allowance_exhausted`; any unavailable dependency: `decision_unavailable`    |
-| Review and execution recheck  | exact digest, grant, source versions, catalog revision, run active                    | refused (`resource_version_changed`, `source_policy_changed`, `action_changed`, `approval_expired`, `run_cancelled`); nothing executed             |
-| Executor and adapters         | attempt limit under the run lock, passport scope in the effect transaction            | `allowance_exhausted`; a known no-effect failure retries once under the same action; a precondition stops the run; an unknown commit pauses        |
-| Provenance                    | stored lineage, hash, template and projection versions, re-derived label, destination | `report_export_restricted` (with the vendor template as alternative), `report_lineage_missing`, `template_not_allowed`, `resource_version_changed` |
-| Tool-result inspection        | field limit, secret patterns, signatures, semantic check on the note                  | a value withheld or masked; a guard failure releases nothing and pauses the run                                                                    |
-| Final result                  | exact JSON naming this run's reports                                                  | denied as a correction; a failed check pauses (`decision_unavailable`)                                                                             |
-| Reads                         | organization scope, X-12 re-check of every stored row                                 | `503`, never a partial or unchecked answer                                                                                                         |
-| Database role                 | the gateway connects as `task_passport_gateway` with table grants only (GO-38)        | the gateway refuses to start without its password                                                                                                  |
+| Boundary                      | Check                                                                                 | On failure                                                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Service identity and operator | service token, HS256 operator context (5 min, single use)                             | `401` before any handler                                                                                                                                    |
+| Organization and object       | every route scopes by the verified organization                                       | `404` (or the caller's own empty records); no data, no write (GO-57)                                                                                        |
+| Admission                     | template, invoices, vendor, destination, limits within the catalog                    | `400` with the reason code and an `admission.rejected` event; catalog unreadable: `503 decision_unavailable`; nothing created                               |
+| Active catalog                | coherent snapshot of revision, limits, security settings and feed                     | no dispatch (the job waits) and no admission; a bad requested revision is rejected and the last good one stays                                              |
+| Model gateway                 | allowlist, ledger reservation, process slot, request deadline                         | `stopped/model_not_allowed`, `paused/allowance_exhausted`, requeue for a slot; timeout or unknown usage: `paused/outcome_unknown`, usage held               |
+| Action gate                   | tool, arguments, scope, destination, provenance, signatures, free-text semantics      | denial with feedback, counted as a correction; past the limit `stopped/allowance_exhausted`; any unavailable dependency: `decision_unavailable`             |
+| Review and execution recheck  | exact digest, grant, source versions, catalog revision, run active                    | refused (`resource_version_changed`, `source_policy_changed`, `action_changed`, `approval_expired`, `approval_rejected`, `run_cancelled`); nothing executed |
+| Executor and adapters         | attempt limit under the run lock, passport scope in the effect transaction            | `allowance_exhausted`; a known no-effect failure retries once under the same action; a precondition stops the run; an unknown commit pauses                 |
+| Provenance                    | stored lineage, hash, template and projection versions, re-derived label, destination | `report_export_restricted` (with the vendor template as alternative), `report_lineage_missing`, `template_not_allowed`, `resource_version_changed`          |
+| Tool-result inspection        | field limit, secret patterns, signatures, semantic check on the note                  | a value withheld or masked; a guard failure releases nothing and pauses the run                                                                             |
+| Final result                  | exact JSON naming this run's reports                                                  | denied as a correction; a failed check pauses (`decision_unavailable`)                                                                                      |
+| Reads                         | organization scope, X-12 re-check of every stored row                                 | `503`, never a partial or unchecked answer                                                                                                                  |
+| Database role                 | the gateway connects as `task_passport_gateway` with table grants only (GO-38)        | the gateway refuses to start without its password                                                                                                           |
 
-Every reason code is one of the 30 X-13 codes (`contracts.ReasonCodes`), and
+Every reason code is one of the 31 X-13 codes (`contracts.ReasonCodes`), and
 `contracts.ReasonCode.SafeMessage()` gives each a fixed safe operator message, which every
 reason-coded event carries. Decisions are `allow`, `deny`, `approval_required`, `redact`,
 `approved` and `rejected`; run statuses are X-11's seven.

@@ -2833,7 +2833,7 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
 
 ### All Go areas
 
-- [ ] **GO-61 · Supply the Go technical handoff text**
+- [x] **GO-61 · Supply the Go technical handoff text**
   - **Report 1.2 change:** The handoff adds local model acquisition and setup, the adapter contract, `policy.yaml`, the feed schema and revision, telemetry and the measured limits.
   - **Report 1.1 change:** Adds provenance, templates, the projection and the 13 reason codes; limitation: "The lineage mechanism covers fixed templates and registered adapters".
   - Owner: Go implementer (all report roles on this side) · Tier: B · Size: S (estimate 1-2 h)
@@ -2850,6 +2850,21 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     "the demonstration matches the submitted build and its documented limitations".
   - Tests: a teammate who did not write the Go code follows the Go setup text on a clean checkout
     and runs the go checks.
+  - Completed (2026-10-03): W2 lane. "Technical handoff (GO-61)" in `services/gateway/README.md`,
+    written from the code on `main` 87f22f0: the Go setup steps (pointing into `docs/setup.md`);
+    how a run flows through the packages, from admission to the final result, the review wait,
+    the reads and catalog activation; a table of every boundary with its check and fail-closed
+    behaviour; the four tools' arguments, model-facing results and effects; the 31 X-13 codes
+    with their safe messages, the decisions and statuses; the accounting rule; live, fixture,
+    labelled replay and the simulated outbox; the known limitations (one gateway per database and
+    model host, no feed signing key, bounded recipient references, the semantic check on free text
+    only, no model-call retries, the semantic score returned to judges, no reconciliation of
+    unknown outcomes, the audit stream as application evidence, literal field inspection, no
+    start-run idempotency key); and every evidence command with what it proves. The README's
+    configuration table now lists `POSTGRES_GATEWAY_PASSWORD`, `MODEL_BASE_URL` and `MODEL_NAME`.
+    `docs/architecture.md` "Product modules" has one row per Go package on `main` (24 internal, 5
+    commands) with purpose, owner lane, contracts and tables. Not done: the Tests line's dry run
+    by a teammate who did not write the Go code.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation); "Durable state idempotency audit and uncertain outcomes" (Evidence without
     creating a second disclosure channel)
