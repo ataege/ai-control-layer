@@ -418,7 +418,7 @@ must enforce and show, so that any gap reaches the document owner in the same se
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-01 · Check the frozen examples against what the interface must show**
+- [x] **WEB-01 · Check the frozen examples against what the interface must show**
   - **Report 1.1 change:** The fields add the classification, source trail, export denial, alternative template, report and source versions in review, and internal evidence and report types in the task form.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 0.5-1.5 h, this roadmap's
     estimate)
@@ -437,6 +437,12 @@ must enforce and show, so that any gap reaches the document owner in the same se
     the M0 exit's "agreed contract example for each command and event" covers the screens the report
     names.
   - Tests: none (a review of the examples).
+  - Evidence (2026-10-04, branch `web/audit-01-02`): `docs/web-contract-audit.md`. A reading review,
+    not a live run (the API does not compile on that day's merged `main`). Open items recorded there:
+    task goal text, correction count, estimated cost, report types and internal evidence in the task
+    form. The page-level mismatches (legacy `RunView` and `SanitizedEvent` shapes against the frozen
+    `RunState` and `SafeEvent`) are listed there as blocking the demonstration; they are follow-up
+    work, not part of this review.
   - Report: "Users operating model and proposed user journeys" (Journeys 1 to 3); "Live
     demonstration storyboard and proof checks"; "Atomic allowances hard limits and estimated cost"
   - Blocked by: `contract owners`
