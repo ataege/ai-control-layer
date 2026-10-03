@@ -13,3 +13,6 @@ docs/product/project-architecture.md
 
 # The signature feed is pinned by the SHA-256 of its exact bytes; formatting would break the pin
 config/attack-signatures.json
+
+# Agent worktrees inside the checkout hold other branches; they are not this tree
+.claude/worktrees/
