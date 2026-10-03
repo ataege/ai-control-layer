@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "approval-response.schema.json",
+  "title": "ApprovalResponse",
+  "description": "GO-44 (lane w3), POST /internal/actions/{actionId}/approval with an X-10 ApprovalDecision: the stored grant's references only. The approval, the action's new status, the approval.decided event and the continuation job committed together.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["approvalId", "actionId", "runId", "decision"],
+  "properties": {
+    "approvalId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "actionId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "decision": {
+      "enum": ["approve", "reject"]
+    }
+  }
+}

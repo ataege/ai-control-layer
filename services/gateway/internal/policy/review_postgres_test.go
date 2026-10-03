@@ -260,6 +260,9 @@ func TestApprovalRequestEventHoldsNoReviewContent(t *testing.T) {
 			sawRequest = strings.Contains(summary, world.reportID)
 		}
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read events: %v", err)
+	}
 	if !sawRequest {
 		t.Fatal("no approval.requested event referencing the report")
 	}
