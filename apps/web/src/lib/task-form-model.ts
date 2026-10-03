@@ -8,15 +8,11 @@ import type { StartRunRequest, TaskFormOptions } from "@workspace/contracts";
 import type { FetchJsonError } from "./fetch-json";
 
 /**
- * An offered invoice. `vendorId` is the vendor the invoice belongs to; the options contract carries it so
- * the form can keep a selection to one vendor (admission rejects a set that mixes vendors). It is optional
- * until every producer sends it; an invoice without one is offered ungrouped.
+ * An offered invoice. Its `vendorId` (carried by the options contract) lets the form keep a selection to
+ * one vendor, because admission rejects a set that mixes vendors. `currency` is the ISO 4217 code of
+ * `amount`, which is in minor units; the contract does not carry it yet, so it may be absent.
  */
-export type OfferedInvoice = TaskFormOptions["invoices"][number] & {
-  vendorId?: string;
-  /** ISO 4217 code of `amount`, which is in minor units; absent until every producer sends it. */
-  currency?: string;
-};
+export type OfferedInvoice = TaskFormOptions["invoices"][number] & { currency?: string };
 
 /**
  * An invoice amount for display. The amount is an integer in the currency's minor units, so it is only
@@ -37,8 +33,7 @@ export function formatInvoiceAmount(amount: number, currency: string | undefined
 }
 
 export interface InvoiceGroup {
-  /** The vendor id, or null for invoices the server did not attribute to a vendor. */
-  vendorId: string | null;
+  vendorId: string;
   vendorName: string;
   invoices: OfferedInvoice[];
 }
@@ -81,24 +76,18 @@ export function initialFormState(options: TaskFormOptions): TaskFormState {
   };
 }
 
-/** Invoices grouped by vendor in the order the server listed the vendors, then any unlisted vendor. */
+/** Invoices grouped by vendor in the order the server listed the vendors, then any unlisted vendor by id. */
 export function groupInvoicesByVendor(
   invoices: OfferedInvoice[],
   vendors: { id: string; name: string }[],
 ): InvoiceGroup[] {
-  const groups: InvoiceGroup[] = [];
   const byVendor = new Map<string, InvoiceGroup>();
-  const ungrouped: InvoiceGroup = { vendorId: null, vendorName: "Invoices", invoices: [] };
 
   for (const vendor of vendors) {
     const group: InvoiceGroup = { vendorId: vendor.id, vendorName: vendor.name, invoices: [] };
     byVendor.set(vendor.id, group);
   }
   for (const invoice of invoices) {
-    if (invoice.vendorId === undefined) {
-      ungrouped.invoices.push(invoice);
-      continue;
-    }
     let group = byVendor.get(invoice.vendorId);
     if (group === undefined) {
       group = { vendorId: invoice.vendorId, vendorName: invoice.vendorId, invoices: [] };
@@ -106,18 +95,16 @@ export function groupInvoicesByVendor(
     }
     group.invoices.push(invoice);
   }
-  groups.push(...[...byVendor.values()].filter((group) => group.invoices.length > 0));
-  if (ungrouped.invoices.length > 0) groups.push(ungrouped);
-  return groups;
+  return [...byVendor.values()].filter((group) => group.invoices.length > 0);
 }
 
-/** The one vendor the selected invoices belong to, or null when none is selected or none is attributed. */
+/** The one vendor the selected invoices belong to, or null when none is selected. */
 export function vendorOfSelection(
   invoices: OfferedInvoice[],
   selectedIds: string[],
 ): string | null {
   for (const invoice of invoices) {
-    if (selectedIds.includes(invoice.id) && invoice.vendorId !== undefined) return invoice.vendorId;
+    if (selectedIds.includes(invoice.id)) return invoice.vendorId;
   }
   return null;
 }
@@ -134,7 +121,6 @@ export function isInvoiceOutsideSelectedVendor(
   const selectedVendor = vendorOfSelection(invoices, selectedIds);
   return (
     selectedVendor !== null &&
-    invoice.vendorId !== undefined &&
     invoice.vendorId !== selectedVendor &&
     !selectedIds.includes(invoice.id)
   );
@@ -164,8 +150,7 @@ export function firstProblemWithChoices(
   const vendorIds = new Set(
     invoices
       .filter((invoice) => state.invoiceIds.includes(invoice.id))
-      .map((invoice) => invoice.vendorId)
-      .filter((vendorId) => vendorId !== undefined),
+      .map((invoice) => invoice.vendorId),
   );
   if (vendorIds.size > 1) return "Select invoices from one vendor only.";
   if (!offers(options.destinations, state.destination)) return "Choose a report destination.";

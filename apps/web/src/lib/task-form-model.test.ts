@@ -23,8 +23,20 @@ const options: TaskFormOptions = {
     { id: "vendor_Borealis", name: "Borealis" },
   ],
   invoices: [
-    { id: "invoice_A01", number: "INV104", date: "2026-09-01", amount: 125000 },
-    { id: "invoice_A02", number: "INV104", date: "2026-09-08", amount: 125000 },
+    {
+      id: "invoice_A01",
+      number: "INV104",
+      date: "2026-09-01",
+      amount: 125000,
+      vendorId: "vendor_Atlas",
+    },
+    {
+      id: "invoice_A02",
+      number: "INV104",
+      date: "2026-09-08",
+      amount: 125000,
+      vendorId: "vendor_Atlas",
+    },
   ],
   destinations: [
     { id: "vendor_Atlas", name: "Atlas" },
@@ -80,15 +92,6 @@ describe("groupInvoicesByVendor", () => {
       groupInvoicesByVendor([vendorInvoices[0]!], options.vendors).map((g) => g.vendorName),
     ).toEqual(["Atlas"]);
   });
-
-  it("offers invoices without a vendor in one ungrouped list, and names an unlisted vendor by its id", () => {
-    const noVendor: OfferedInvoice[] = options.invoices;
-    expect(groupInvoicesByVendor(noVendor, options.vendors)).toEqual([
-      { vendorId: null, vendorName: "Invoices", invoices: noVendor },
-    ]);
-    const unlisted: OfferedInvoice[] = [{ ...vendorInvoices[0]!, vendorId: "vendor_Other" }];
-    expect(groupInvoicesByVendor(unlisted, options.vendors)[0]?.vendorName).toBe("vendor_Other");
-  });
 });
 
 describe("isInvoiceOutsideSelectedVendor", () => {
@@ -104,12 +107,6 @@ describe("isInvoiceOutsideSelectedVendor", () => {
     expect(isInvoiceOutsideSelectedVendor(atlasOne, vendorInvoices, ["invoice_A01"])).toBe(false);
     // Nothing selected: everything is available.
     expect(isInvoiceOutsideSelectedVendor(borealis, vendorInvoices, [])).toBe(false);
-  });
-
-  it("blocks nothing when the server did not attribute invoices to vendors", () => {
-    expect(
-      isInvoiceOutsideSelectedVendor(options.invoices[1]!, options.invoices, ["invoice_A01"]),
-    ).toBe(false);
   });
 });
 

@@ -141,12 +141,10 @@ export function TaskFormView({
             <legend className="text-sm font-medium">Invoices</legend>
             <div className="max-h-64 space-y-4 overflow-y-auto rounded-md border p-3">
               {invoiceGroups.map((group) => (
-                <div key={group.vendorId ?? "ungrouped"} className="space-y-2">
-                  {group.vendorId !== null && (
-                    <p className="text-xs font-medium text-muted-foreground uppercase">
-                      {group.vendorName}
-                    </p>
-                  )}
+                <div key={group.vendorId} className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">
+                    {group.vendorName}
+                  </p>
                   {group.invoices.map((invoice) => {
                     const isOutsideSelectedVendor = isInvoiceOutsideSelectedVendor(
                       invoice,

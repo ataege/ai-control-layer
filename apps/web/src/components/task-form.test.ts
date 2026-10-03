@@ -9,7 +9,7 @@ import type { TaskFormState } from "@/lib/task-form-model";
 // The form reads the router only in the stateful container; the view under test never calls it.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
 
-const options: TaskFormOptions & { invoices: { vendorId?: string }[] } = {
+const options: TaskFormOptions = {
   templates: [{ id: "reconcile_atlas_v1", name: "Reconcile Atlas invoices" }],
   vendors: [
     { id: "vendor_Atlas", name: "Atlas" },
