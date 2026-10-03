@@ -809,8 +809,11 @@ revision (it never activates), nothing in those flows is enforceable until this 
 - Exit 0: a revision was activated, or nothing was requested and a revision is active. Exit 1:
   nothing is active (no pointer, or the first request was rejected), the requested revision was
   rejected (the safe code is printed: `revision_missing`, `signature_feed_missing` or
-  `catalog_invalid`; a rejected request is not retried, the fix is a new import), or the activation
-  could not run. This is stricter than "idle is success": an idle result with no active catalog
+  `catalog_invalid`; a rejected request is not retried, the fix is a new import), the active
+  revision was never validated by the gateway (the state an old import's first-revision bootstrap
+  leaves: requested = active, validated and feed empty) or cannot be loaded as an enforceable
+  catalog (`catalog.Loader.Active` fails, for example a policy that needs a signature feed has
+  none), or the activation could not run. This is stricter than "idle is success": an idle result with no active catalog
   would hide exactly the failure the command exists to catch.
 - It prints fixed texts, revision ids and the recorded code, never policy or feed content, and
   needs the same `POSTGRES_*` settings as the gateway; a role other than the gateway's needs the

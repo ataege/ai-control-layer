@@ -115,6 +115,42 @@ func TestPostgresFirstRejectedRequestLeavesNoActiveCatalog(t *testing.T) {
 	}
 }
 
+// The state an old import's first-revision bootstrap leaves (3c's rehearsal): requested = active,
+// validated and feed empty. The activation sees nothing pending, but admission would fail closed, so
+// the command must not report success.
+func TestPostgresBootstrappedUnvalidatedCatalogFails(t *testing.T) {
+	w := newWorld(t)
+	active := catalogtest.Activate(t, w.outer, catalogtest.PolicyContent, nil)
+	if _, err := w.outer.Exec(context.Background(), `UPDATE app.control_catalog_pointer SET requested_revision_id = $1 WHERE id = 1`, active); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := w.run()
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "never validated by the gateway") {
+		t.Fatalf("code %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	// A validated active revision without the feed its policy needs still cannot be loaded.
+	if _, err := w.outer.Exec(context.Background(), `UPDATE app.control_catalog_pointer SET validated_revision_id = active_revision_id WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := w.run(); code != 1 || !strings.Contains(stderr, "cannot be loaded as an enforceable catalog") {
+		t.Fatalf("validated but feedless: code %d stderr %q", code, stderr)
+	}
+}
+
+// A policy with signature matching off needs no feed, so a gateway-validated revision without one is
+// a legitimate enforceable catalog.
+func TestPostgresSignaturesOffPolicyNeedsNoFeed(t *testing.T) {
+	w := newWorld(t)
+	w.clearPointer(t)
+	content := strings.Replace(catalogtest.PolicyContent,
+		`"signature_match": {"enabled": true,`, `"signature_match": {"enabled": false,`, 1)
+	catalogtest.Request(t, w.outer, content)
+	code, stdout, stderr := w.run()
+	if code != 0 || stderr != "" || !strings.Contains(stdout, "activated revision") {
+		t.Fatalf("code %d stdout %q stderr %q", code, stdout, stderr)
+	}
+}
+
 // failingDatabase cannot start a transaction, as an unreachable database.
 type failingDatabase struct{}
 

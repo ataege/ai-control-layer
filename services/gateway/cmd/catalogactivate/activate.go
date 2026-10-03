@@ -57,10 +57,10 @@ func activate(ctx context.Context, db activationDatabase, stdout, stderr io.Writ
 		}
 	}
 
-	var requested, active, feed *int64
+	var requested, validated, active, feed *int64
 	var lastError []byte
-	err := db.QueryRow(ctx, `SELECT requested_revision_id, active_revision_id, active_feed_revision_id, last_error
-		FROM app.control_catalog_pointer WHERE id = 1`).Scan(&requested, &active, &feed, &lastError)
+	err := db.QueryRow(ctx, `SELECT requested_revision_id, validated_revision_id, active_revision_id, active_feed_revision_id, last_error
+		FROM app.control_catalog_pointer WHERE id = 1`).Scan(&requested, &validated, &active, &feed, &lastError)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		fmt.Fprintln(stderr, "catalog activation: FAIL (the pointer could not be read)")
 		return 1
@@ -73,6 +73,18 @@ func activate(ctx context.Context, db activationDatabase, stdout, stderr io.Writ
 		fmt.Fprintf(stderr, "catalog activation: FAIL (the requested revision %d was rejected%s; revision %d stays active)\n",
 			*requested, rejectionNote(lastError), *active)
 		return 1
+	case validated == nil || *validated != *active:
+		// An active revision the gateway never validated, for example one an old import bootstrapped
+		// (validated and feed empty): the activation sees nothing pending, but admission would fail closed.
+		fmt.Fprintf(stderr, "catalog activation: FAIL (revision %d is active but was never validated by the gateway; import the policy again with pnpm policy:import)\n", *active)
+		return 1
+	}
+	// The criterion is what the gateway itself loads: the active revision with the feed it needs.
+	if _, err := catalog.NewLoader().Active(ctx, db); err != nil {
+		fmt.Fprintf(stderr, "catalog activation: FAIL (the active revision %d cannot be loaded as an enforceable catalog, for example a policy that needs a signature feed has none; import the policy again)\n", *active)
+		return 1
+	}
+	switch {
 	case outcome == catalog.ActivationActivated:
 		fmt.Fprintf(stdout, "catalog activation: activated revision %d%s\n", *active, feedNote(feed))
 	default:
