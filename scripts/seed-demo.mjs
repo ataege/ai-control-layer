@@ -105,7 +105,7 @@ if (!catalogTablesPresent) {
 if (existingCatalogRevisionCount > 0) {
   printStatus(
     "ok",
-    `control catalog already seeded (${existingCatalogRevisionCount} revisions, active ${activeCatalogRevisionId ?? "none"}); not re-imported`,
+    `control catalog already seeded (${existingCatalogRevisionCount} revisions, active ${activeCatalogRevisionId ?? "none, waiting for the gateway"}); not re-imported`,
   );
   process.exit(0);
 }
@@ -116,4 +116,7 @@ if (importExitCode !== 0) {
   printStatus("fail", `control catalog import failed (exit code ${importExitCode})`);
   process.exit(1);
 }
-printStatus("ok", "control catalog imported");
+printStatus(
+  "ok",
+  "control catalog imported as the requested revision with its signature feed; the gateway validates and activates it",
+);
