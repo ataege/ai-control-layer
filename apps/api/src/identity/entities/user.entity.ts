@@ -13,7 +13,7 @@ export class User {
 
   @Column({
     unique: true,
-    transformer: { to: (value: string) => value?.toLowerCase(), from: (value) => value },
+    transformer: { to: (value: string) => value?.toLowerCase(), from: (value: string) => value },
   })
   email: string;
 

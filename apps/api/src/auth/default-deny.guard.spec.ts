@@ -4,7 +4,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createTestApp } from "../testing/create-test-app.js";
 import { Public } from "./public.decorator.js";
-import { AUTH_PROVIDER } from "./auth.types.js";
+import { AUTH_PROVIDER, type AuthenticatedPrincipal } from "./auth.types.js";
 import { DataSource } from "typeorm";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { Membership } from "../identity/entities/membership.entity.js";
@@ -23,17 +23,33 @@ class GuardTestController {
   }
 }
 
+// The test doubles that createTestApp registers, replaced per test.
+interface AuthProviderDouble {
+  authenticate: (credential: string) => Promise<AuthenticatedPrincipal>;
+}
+interface DataSourceDouble {
+  isInitialized: boolean;
+}
+interface MembershipRepositoryDouble {
+  findOne: (options: unknown) => Promise<unknown>;
+}
+interface ErrorBody {
+  error: { code: string; message: string };
+}
+
 describe("DefaultDenyGuard", () => {
   let app: NestExpressApplication;
-  let authProviderMock: any;
-  let dataSourceMock: any;
-  let membershipRepoMock: any;
+  let authProviderMock: AuthProviderDouble;
+  let dataSourceMock: DataSourceDouble;
+  let membershipRepoMock: MembershipRepositoryDouble;
 
   beforeAll(async () => {
     app = await createTestApp({ controllers: [GuardTestController] });
-    authProviderMock = app.get(AUTH_PROVIDER);
-    dataSourceMock = app.get(DataSource);
-    membershipRepoMock = app.get(getRepositoryToken(Membership));
+    authProviderMock = app.get<unknown, AuthProviderDouble>(AUTH_PROVIDER);
+    dataSourceMock = app.get<unknown, DataSourceDouble>(DataSource);
+    membershipRepoMock = app.get<unknown, MembershipRepositoryDouble>(
+      getRepositoryToken(Membership),
+    );
   });
 
   afterAll(async () => {
@@ -80,7 +96,7 @@ describe("DefaultDenyGuard", () => {
       .set("Cookie", ["session=valid-session-id"]);
 
     expect(response.status).toBe(401);
-    expect(response.body.error.message).toBe("User has no organization membership");
+    expect((response.body as ErrorBody).error.message).toBe("User has no organization membership");
   });
 
   it("rejects a wrong, expired or revoked credential with 401", async () => {
@@ -92,7 +108,7 @@ describe("DefaultDenyGuard", () => {
       .set("Cookie", ["session=bad-session-id"]);
 
     expect(response.status).toBe(401);
-    expect(response.body.error.code).toBe("unauthorized");
+    expect((response.body as ErrorBody).error.code).toBe("unauthorized");
   });
 
   it("answers 503 while the database is down", async () => {
@@ -102,7 +118,7 @@ describe("DefaultDenyGuard", () => {
       .set("Cookie", ["session=valid-session-id"]);
 
     expect(response.status).toBe(503);
-    expect(response.body.error.code).toBe("service_unavailable");
+    expect((response.body as ErrorBody).error.code).toBe("service_unavailable");
 
     // restore
     dataSourceMock.isInitialized = true;

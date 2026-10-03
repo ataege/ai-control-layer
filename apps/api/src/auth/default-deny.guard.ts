@@ -9,7 +9,8 @@ import {
 import { Reflector } from "@nestjs/core";
 import { IS_PUBLIC_KEY } from "./public.decorator.js";
 import type { Request } from "express";
-import { AUTH_PROVIDER, AuthProvider } from "./auth.types.js";
+import { AUTH_PROVIDER, AuthProvider, type AuthenticatedPrincipal } from "./auth.types.js";
+import { readSessionCookie } from "./session-cookie.js";
 import { DataSource, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Membership } from "../identity/entities/membership.entity.js";
@@ -20,6 +21,8 @@ declare global {
   namespace Express {
     interface Request {
       operatorContext: OperatorContext;
+      /** The principal the auth provider resolved from the session cookie. */
+      user?: AuthenticatedPrincipal;
     }
   }
 }
@@ -52,7 +55,7 @@ export class DefaultDenyGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request>();
-    const sessionCookie = request.cookies?.session;
+    const sessionCookie = readSessionCookie(request);
 
     if (!sessionCookie) {
       throw new UnauthorizedException("Missing session cookie");
@@ -85,7 +88,7 @@ export class DefaultDenyGuard implements CanActivate {
       roles: membership.roles,
     };
 
-    (request as any)["user"] = principal;
+    request.user = principal;
     return true;
   }
 }

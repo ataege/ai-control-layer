@@ -3,6 +3,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Logger } from "@nestjs/common";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { AppConfigService } from "../config/app-config.service.js";
 import { GatewayClientService } from "./gateway-client.service.js";
 
@@ -187,7 +188,6 @@ describe("GatewayClientService", () => {
   });
 
   describe("postCommand", () => {
-    const { z } = require("zod");
     const testSchema = z.object({ result: z.string() });
     // An explicit test operator context: the client itself never invents one.
     const testOperatorContext = { userId: "user-1", organizationId: "org-1", roles: ["operator"] };

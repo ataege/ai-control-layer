@@ -12,7 +12,7 @@ export class ZodValidationPipe implements PipeTransform {
         return parsedValue;
       }
       return value;
-    } catch (error) {
+    } catch {
       throw new BadRequestException("Validation failed");
     }
   }

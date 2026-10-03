@@ -63,14 +63,9 @@ const KNOWN_ERROR_CODES = new Set([
 function resolveErrorCode(statusCode: number, exception: unknown): string {
   if (exception instanceof HttpException) {
     const payload = exception.getResponse();
-    if (
-      typeof payload === "object" &&
-      payload !== null &&
-      "code" in payload &&
-      typeof (payload as any).code === "string"
-    ) {
-      const code = (payload as any).code;
-      if (KNOWN_ERROR_CODES.has(code)) {
+    if (typeof payload === "object" && payload !== null && "code" in payload) {
+      const code: unknown = payload.code;
+      if (typeof code === "string" && KNOWN_ERROR_CODES.has(code)) {
         return code;
       }
     }

@@ -20,11 +20,14 @@ import { Session } from "../identity/entities/session.entity.js";
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from "@nestjs/swagger";
 import { verifyPassword } from "./password.util.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
+import { readSessionCookie } from "./session-cookie.js";
 
 const signInSchema = z.object({
   email: z.string().email(),
   password: z.string().max(256),
 });
+
+type SignInBody = z.infer<typeof signInSchema>;
 
 const DUMMY_HASH =
   "s$203ae1bfb6f75447afa7e0250281a922$53fa0c8e8b2d87c05550f51a4646ddb845fc9034a42d7149bdf5d2c27db100cfff2cb595b965393b151494cbff873e4fa6617c6d997453f1a2a90a494ffa3188";
@@ -55,7 +58,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: "Successfully signed in" })
   @ApiResponse({ status: 401, description: "Invalid credentials" })
-  async signIn(@Body() body: any, @Res({ passthrough: true }) res: Response) {
+  async signIn(@Body() body: SignInBody, @Res({ passthrough: true }) res: Response) {
     const { email, password } = body;
 
     // Cleanup expired sessions
@@ -97,7 +100,7 @@ export class AuthController {
   @HttpCode(200)
   @ApiOperation({ summary: "Sign out" })
   async signOut(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const sessionCookie = req.cookies?.session;
+    const sessionCookie = readSessionCookie(req);
     if (sessionCookie) {
       await this.sessionRepository.delete({ id: hashSessionId(sessionCookie) });
     }
