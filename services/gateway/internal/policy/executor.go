@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/tools"
 )
 
@@ -21,13 +22,6 @@ const (
 // Attempt outcome for an attempt whose transaction was rolled back before commit: no effect was
 // committed, so the outcome is known.
 const attemptOutcomeAborted = "aborted"
-
-// More reason codes from the report's vocabulary, used by the executor.
-const (
-	ReasonActionChanged      ReasonCode = "action_changed"
-	ReasonAllowanceExhausted ReasonCode = "allowance_exhausted"
-	ReasonOutcomeUnknown     ReasonCode = "outcome_unknown"
-)
 
 // ExecutionStatus says what happened to one execution request.
 type ExecutionStatus string
@@ -175,13 +169,13 @@ func (executor *Executor) loadAction(ctx context.Context, run RunIdentity, actio
 	err := executor.pool.QueryRow(ctx,
 		`SELECT a.tool, a.canonical_arguments::text, a.action_digest, a.evaluated_catalog_revision_id, a.status,
 		        r.passport_id::text,
-		        (r.cancel_requested_at IS NULL AND r.status NOT IN ('cancelled', 'completed', 'failed')),
+		        (r.cancel_requested_at IS NULL AND r.status = $4),
 		        p.expires_at > now()
 		   FROM runtime.actions a
 		   JOIN runtime.runs r ON r.id = a.run_id AND r.organization_id = a.organization_id
 		   JOIN runtime.passports p ON p.id = r.passport_id AND p.organization_id = r.organization_id
 		  WHERE a.id = $1 AND a.organization_id = $2 AND a.run_id = $3`,
-		actionID, run.OrganizationID, run.RunID,
+		actionID, run.OrganizationID, run.RunID, string(contracts.RunRunning),
 	).Scan(&tool, &action.canonicalArguments, &action.actionDigest, &action.evaluatedRevisionID, &action.status,
 		&action.passportID, &action.runActive, &action.passportUnexpired)
 	action.tool = ToolName(tool)

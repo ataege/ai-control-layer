@@ -127,11 +127,11 @@ internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
 internal/contracts/   Go mirrors of the runtime wire contracts and strict decoding (GO-18)
-internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
+internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
+internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
-internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
