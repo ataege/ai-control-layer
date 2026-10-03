@@ -2416,6 +2416,20 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     its action, or claim its resources.")
   - Tests: internal-boundary tests through the X-24 command: each cross-organization command and
     read is rejected, and the runtime rows are identical before and after.
+  - Progress (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
+    committed run (awaiting approval), an action awaiting approval, an internal report, a vendor and
+    invoices, and calls every mounted internal route with a valid service token and organization
+    B's verified operator context: start a run on A's invoices, cancel A's run, read A's report,
+    approve and reject A's action, read A's review. Each is rejected (start: 400 or 503, cancel and
+    report 404, approval and review 403 or 404), no response contains A's report text or vendor,
+    B gets no passport, and an md5 fingerprint of every row A owns in runtime.passports, runs, jobs,
+    actions, approvals, audit_events, review_payloads, demo.reports, outbox_messages, invoices and
+    vendors is identical before and after; A's own operator still reads the report (200) and
+    cancels the run (200). Checks: `pnpm test:db gateway` 688 passed, 0 failed, 0 skipped; gateway
+    five checks PASS; `pnpm verify` 6 passed. Missing half: lane w2's GO-24 run, usage and event
+    reads are not mounted yet; they join this test when they land. On the seeded test database the
+    cross-organization start-run gets 503 (its catalog binds no feed), so the scope rejection of
+    that call is shown by GO-13's tests instead.
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
