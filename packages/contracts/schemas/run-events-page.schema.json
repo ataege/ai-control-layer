@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-events-page.schema.json",
+  "title": "RunEventsPage",
+  "description": "X-30 (GO-24): one cursor page of a run's X-12 events in id order; nextCursor is the id to pass as `after` next.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["events", "nextCursor"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "safe-event.schema.json"
+      },
+      "maxItems": 500
+    },
+    "nextCursor": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,18})$"
+    }
+  }
+}

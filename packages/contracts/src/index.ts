@@ -434,3 +434,193 @@ export interface ControlEvaluationResponse {
   content: { text: string } | null;
   catalog: { admissionRevisionId: number; activeRevisionId: number; feedRevisionId: number | null };
 }
+
+// Go-owned read contracts (lane w2), served by the gateway's private routes in
+// services/gateway/internal/reads and internal/provenance. NestJS consumes them; the Go types are
+// the source and decode these fixtures strictly.
+
+/** X-29 draft (GO-24): model usage of one metered purpose, from recorded dispatches and the ledger. */
+export interface PurposeUsage {
+  purpose: "agent" | "security";
+  /** Dispatch records committed before each call; split by outcome below. */
+  dispatched: number;
+  completed: number;
+  failed: number;
+  /** Usage could not be settled; the reservation stays held. Never shown as zero. */
+  usageUnknown: number;
+  /** Dispatched, no outcome recorded yet. */
+  inFlight: number;
+  /** Provider-reported tokens of settled calls. */
+  settledTokens: number;
+  /** Tokens reserved for calls in flight or with unknown usage. */
+  heldTokens: number;
+  usageUnknownReservations: number;
+}
+
+/** One token allowance of the ledger; limit is null for a purpose without its own sub-limit. */
+export interface LedgerTokens {
+  limit: number | null;
+  reserved: number;
+  used: number;
+}
+
+/** X-29 draft (GO-24): the run's model ledger, the authority for calls, tokens, time and slots. */
+export interface ModelLedger {
+  paused: boolean;
+  /** The shared token total of both purposes. */
+  tokens: LedgerTokens;
+  agentTokens: LedgerTokens;
+  securityTokens: LedgerTokens;
+  /** Call limits and the calls counted at reservation (never refunded). */
+  calls: {
+    limit: number;
+    agentLimit: number;
+    securityLimit: number;
+    agent: number;
+    security: number;
+  };
+  requestTimeoutMilliseconds: number;
+  maxConcurrentCalls: number;
+  /** Held slots: calls in flight or with unknown usage. */
+  callsInFlight: number;
+}
+
+/** X-29 draft (GO-24), `GET /internal/runs/{runId}/usage`: no estimate and no cost (local model). */
+export interface RunUsage {
+  runId: string;
+  /** Always two entries, "agent" then "security". */
+  modelCalls: PurposeUsage[];
+  /** Null when the run has no ledger yet. */
+  ledger: ModelLedger | null;
+  /** Tool execution attempts by outcome; open attempts have no recorded outcome yet. */
+  toolAttempts: { total: number; succeeded: number; failed: number; aborted: number; open: number };
+}
+
+/** X-30 (GO-24), `GET /internal/runs/{runId}/events?after=&limit=`: X-12 events in id order. */
+export interface RunEventsPage {
+  events: SafeEvent[];
+  /** The id to pass as `after` next; equals the request's cursor when nothing new was committed. */
+  nextCursor: string;
+}
+
+/** GO-83: the decided semantic verdict schema, and only it. */
+export interface VerdictSummary {
+  risk_category: string;
+  score: number;
+  reason_code: string;
+}
+
+/** GO-83: one control assessment: stable codes and revisions, never inspected text. */
+export interface AssessmentRecord {
+  assessmentId: string;
+  runId: string;
+  evaluationId: string;
+  actionId: string | null;
+  securityModelCallId: string | null;
+  boundary: string;
+  controlClass: "deterministic" | "semantic";
+  controlId: string;
+  outcome: string;
+  /** The control's own stable code: an X-13 code, or a control-level one such as no_free_text_arguments. */
+  reasonCode: string | null;
+  admissionCatalogRevisionId: number;
+  evaluatedCatalogRevisionId: number;
+  matchedRuleId: string | null;
+  feedRevision: string | null;
+  /** "live" or "fixture" on a semantic record that classified something; null on a deterministic one and on an unclassified (not_applicable) semantic one. */
+  verdictSource: "live" | "fixture" | null;
+  verdict: VerdictSummary | null;
+  /** "judge" for a judge probe's evidence (GO-82), null for the run's own. */
+  inputSource: "judge" | null;
+  assessedAt: string;
+}
+
+/**
+ * GO-83, `GET /internal/security/assessments?cursor=&limit=`: a window-cursor page. Every committed
+ * record is returned exactly once; order is by id within a window, so sort by id for display.
+ */
+export interface AssessmentPage {
+  records: AssessmentRecord[];
+  /** Opaque "v1.<low>.<high>.<afterId>"; pass it back as `cursor`. */
+  nextCursor: string;
+}
+
+/** GO-83, `GET /internal/security/events?cursor=&limit=`: the organization's X-12 events, windowed. */
+export interface SecurityEventPage {
+  events: SafeEvent[];
+  nextCursor: string;
+}
+
+/** GO-83: one row of the security summary's event counts. */
+export interface DecisionCount {
+  eventType: SafeEventType;
+  decision: SafeEventDecision | null;
+  reasonCode: ReasonCode | null;
+  inputSource: "judge" | null;
+  count: number;
+}
+
+/** GO-83: one row of the security summary's assessment counts. */
+export interface AssessmentCount {
+  controlClass: "deterministic" | "semantic";
+  controlId: string;
+  outcome: string;
+  verdictSource: "live" | "fixture" | null;
+  inputSource: "judge" | null;
+  count: number;
+}
+
+/** GO-83: observed spans of one measured phase, in microseconds. */
+export interface PhaseTiming {
+  phase: string;
+  count: number;
+  failed: number;
+  medianMicroseconds: number;
+  p95Microseconds: number;
+  maxMicroseconds: number;
+}
+
+/** X-93 input (GO-83), `GET /internal/security/summary`: every count comes from stored records. */
+export interface SecuritySummary {
+  organizationId: string;
+  generatedAt: string;
+  runs: { status: RunStatus; count: number }[];
+  decisions: DecisionCount[];
+  assessments: AssessmentCount[];
+  /** Every model call of the organization, judge probes' security calls included. */
+  modelUsage: PurposeUsage[];
+  /** The security calls behind judge probes, counted on their own. */
+  judgeSecurityCalls: number;
+  timings: PhaseTiming[];
+}
+
+/** X-64 (GO-37): one trusted source of a report: references and labels, never source values. */
+export interface LineageSummary {
+  sourceKind: "invoice";
+  sourceId: string;
+  sourceVersion: number;
+  classification: "internal_only" | "vendor_shareable";
+  consumedFields: string[];
+}
+
+/**
+ * X-64 (GO-37), `GET /internal/runs/{runId}/reports/{reportId}`: the stored report with its stored
+ * label; the interface reads the classification instead of computing one.
+ */
+export interface ReportView {
+  reportId: string;
+  runId: string;
+  version: number;
+  template: ReportTemplate;
+  templateVersion: number;
+  projectionRule: "vendor_invoice_fields_v1" | null;
+  projectionRuleVersion: number | null;
+  classification: "internal_only" | "vendor_shareable";
+  destinationClass: "internal_reviewers" | "registered_vendor_recipient";
+  title: string;
+  contentHash: string;
+  /** Null exactly when contentWithheld is true. */
+  content: string | null;
+  contentWithheld: boolean;
+  lineage: LineageSummary[];
+}

@@ -1,0 +1,45 @@
+{
+  "reportId": "f7c58bfd-6ed2-403c-abba-7f698d7aaea2",
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "version": 1,
+  "template": "vendor_reconciliation_v1",
+  "templateVersion": 1,
+  "projectionRule": "vendor_invoice_fields_v1",
+  "projectionRuleVersion": 1,
+  "classification": "vendor_shareable",
+  "destinationClass": "registered_vendor_recipient",
+  "title": "Vendor reconciliation",
+  "contentHash": "500b7e182fb9fa4ed633aad1094763cb22109114986ab51e0d43e112684e9d15",
+  "content": "Vendor reconciliation (vendor_reconciliation_v1, projection vendor_invoice_fields_v1)\n\n- invoice_A01: external reference INV104, total EUR 1250.00, due 2026-10-31, duplicate reference: yes\n- invoice_A02: external reference INV104, total EUR 1250.00, due 2026-10-31, duplicate reference: yes\n",
+  "contentWithheld": false,
+  "lineage": [
+    {
+      "sourceKind": "invoice",
+      "sourceId": "invoice_A01",
+      "sourceVersion": 1,
+      "classification": "vendor_shareable",
+      "consumedFields": [
+        "invoice_id",
+        "external_reference",
+        "duplicate_reference",
+        "currency",
+        "total_minor_units",
+        "due_on"
+      ]
+    },
+    {
+      "sourceKind": "invoice",
+      "sourceId": "invoice_A02",
+      "sourceVersion": 1,
+      "classification": "vendor_shareable",
+      "consumedFields": [
+        "invoice_id",
+        "external_reference",
+        "duplicate_reference",
+        "currency",
+        "total_minor_units",
+        "due_on"
+      ]
+    }
+  ]
+}

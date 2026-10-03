@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "assessment-record.schema.json",
+  "title": "AssessmentRecord",
+  "description": "GO-83: one control assessment (runtime.control_assessments): stable codes and revisions only; the verdict is the decided schema and nothing else; a semantic check that made no model call (not_applicable) has no verdict source; inputSource is \"judge\" for a judge probe's evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "assessmentId",
+    "runId",
+    "evaluationId",
+    "actionId",
+    "securityModelCallId",
+    "boundary",
+    "controlClass",
+    "controlId",
+    "outcome",
+    "reasonCode",
+    "admissionCatalogRevisionId",
+    "evaluatedCatalogRevisionId",
+    "matchedRuleId",
+    "feedRevision",
+    "verdictSource",
+    "verdict",
+    "inputSource",
+    "assessedAt"
+  ],
+  "properties": {
+    "assessmentId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,18}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "evaluationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "actionId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "securityModelCallId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "boundary": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "controlClass": {
+      "enum": ["deterministic", "semantic"]
+    },
+    "controlId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "outcome": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "reasonCode": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "admissionCatalogRevisionId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "evaluatedCatalogRevisionId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "matchedRuleId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "feedRevision": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verdictSource": {
+      "anyOf": [
+        {
+          "enum": ["live", "fixture"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["risk_category", "score", "reason_code"],
+          "properties": {
+            "risk_category": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            },
+            "score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "reason_code": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "inputSource": {
+      "anyOf": [
+        {
+          "enum": ["judge"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "assessedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "controlClass": {
+            "const": "deterministic"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "verdictSource": {
+            "type": "null"
+          },
+          "verdict": {
+            "type": "null"
+          },
+          "securityModelCallId": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "controlClass": {
+            "const": "semantic"
+          },
+          "verdictSource": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "const": "not_applicable"
+          },
+          "verdict": {
+            "type": "null"
+          },
+          "securityModelCallId": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

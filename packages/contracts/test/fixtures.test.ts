@@ -6,12 +6,14 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { Ajv2020 } from "ajv/dist/2020.js";
+import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 
 import type {
   ActionProposal,
   ApiReadinessResponse,
   ApprovalDecision,
+  AssessmentPage,
+  AssessmentRecord,
   ControlEvaluationRequest,
   ControlEvaluationResponse,
   ErrorResponse,
@@ -22,8 +24,13 @@ import type {
   Passport,
   ReadinessResponse,
   ReasonCode,
+  ReportView,
+  RunEventsPage,
   RunState,
+  RunUsage,
   SafeEvent,
+  SecurityEventPage,
+  SecuritySummary,
   StartRunRequest,
   StartRunResponse,
   StoredAction,
@@ -42,16 +49,31 @@ function schemaNameOf(fixtureFileName: string): string {
   return fixtureFileName.split(".")[0] ?? "";
 }
 
-const schemaValidator = new Ajv2020({ allErrors: true, strict: true });
 const schemaFileNames = readdirSync(schemaDirectory).filter((name) =>
   name.endsWith(".schema.json"),
 );
+
+// One validator holds every schema, so a schema can reference another by its $id (a page of
+// events refers to safe-event.schema.json instead of copying it).
+function newSchemaValidator(): Ajv2020 {
+  const validator = new Ajv2020({ allErrors: true, strict: true });
+  for (const schemaFileName of schemaFileNames) {
+    validator.addSchema(readJson(join(schemaDirectory, schemaFileName)) as object);
+  }
+  return validator;
+}
+
+function compiledSchema(validator: Ajv2020, schemaName: string): ValidateFunction {
+  const validate = validator.getSchema(`${schemaName}.schema.json`);
+  assert.ok(validate, `schema "${schemaName}" is not registered`);
+  return validate;
+}
 const fixtureFileNames = readdirSync(fixtureDirectory).filter((name) => name.endsWith(".json"));
 
 test("every schema compiles and has at least one fixture", () => {
   for (const schemaFileName of schemaFileNames) {
     const schemaName = schemaFileName.replace(".schema.json", "");
-    schemaValidator.compile(readJson(join(schemaDirectory, schemaFileName)) as object);
+    compiledSchema(newSchemaValidator(), schemaName);
     const hasFixture = fixtureFileNames.some((name) => schemaNameOf(name) === schemaName);
     assert.ok(hasFixture, `schema "${schemaName}" has no fixture`);
   }
@@ -59,19 +81,14 @@ test("every schema compiles and has at least one fixture", () => {
 
 test("every fixture matches its schema", () => {
   for (const fixtureFileName of fixtureFileNames) {
-    const schemaPath = join(schemaDirectory, `${schemaNameOf(fixtureFileName)}.schema.json`);
-    const validate = new Ajv2020({ allErrors: true, strict: true }).compile(
-      readJson(schemaPath) as object,
-    );
+    const validate = compiledSchema(newSchemaValidator(), schemaNameOf(fixtureFileName));
     const isValid = validate(readJson(join(fixtureDirectory, fixtureFileName)));
     assert.ok(isValid, `${fixtureFileName}: ${JSON.stringify(validate.errors)}`);
   }
 });
 
 function validatorFor(schemaName: string): (value: unknown) => boolean {
-  const validate = new Ajv2020({ strict: true }).compile(
-    readJson(join(schemaDirectory, `${schemaName}.schema.json`)) as object,
-  );
+  const validate = compiledSchema(newSchemaValidator(), schemaName);
   return (value) => validate(value);
 }
 
@@ -286,6 +303,382 @@ export const typedSamples = {
     content: null,
     catalog: { admissionRevisionId: 1, activeRevisionId: 1, feedRevisionId: 1 },
   } satisfies ControlEvaluationResponse,
+  runUsage: {
+    runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    modelCalls: [
+      {
+        purpose: "agent",
+        dispatched: 3,
+        completed: 2,
+        failed: 0,
+        usageUnknown: 1,
+        inFlight: 0,
+        settledTokens: 300,
+        heldTokens: 40,
+        usageUnknownReservations: 1,
+      },
+      {
+        purpose: "security",
+        dispatched: 1,
+        completed: 0,
+        failed: 0,
+        usageUnknown: 0,
+        inFlight: 1,
+        settledTokens: 0,
+        heldTokens: 10,
+        usageUnknownReservations: 0,
+      },
+    ],
+    ledger: {
+      paused: false,
+      tokens: {
+        limit: 20000,
+        reserved: 50,
+        used: 300,
+      },
+      agentTokens: {
+        limit: 12000,
+        reserved: 40,
+        used: 300,
+      },
+      securityTokens: {
+        limit: null,
+        reserved: 10,
+        used: 0,
+      },
+      calls: {
+        limit: 24,
+        agentLimit: 12,
+        securityLimit: 12,
+        agent: 3,
+        security: 1,
+      },
+      requestTimeoutMilliseconds: 20000,
+      maxConcurrentCalls: 2,
+      callsInFlight: 2,
+    },
+    toolAttempts: {
+      total: 4,
+      succeeded: 1,
+      failed: 1,
+      aborted: 1,
+      open: 1,
+    },
+  } satisfies RunUsage,
+  runEventsPage: {
+    events: [
+      {
+        eventId: "41",
+        organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+        runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        actionId: "9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a",
+        eventType: "report.export_denied",
+        decision: "deny",
+        reasonCode: "report_export_restricted",
+        catalogRevisionId: 1,
+        maskedSummary: {
+          purpose: null,
+          admissionCatalogRevisionId: null,
+          matchedRule: null,
+          feedRevision: null,
+          reportId: "3b532026-0d57-4c4c-8f0b-6f320ebd5d66",
+          template: "internal_investigation_v1",
+          classification: "internal_only",
+          lineageCheck: "passed",
+          effect: "none",
+          replaySource: null,
+          alternativeTemplate: "vendor_reconciliation_v1",
+          safeMessage:
+            "This report inherits an Internal only restriction and cannot be sent to the vendor.",
+          actorId: null,
+          inputSource: null,
+          evaluationId: null,
+        },
+        occurredAt: "2026-10-03T12:05:00Z",
+      },
+      {
+        eventId: "42",
+        organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+        runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        actionId: "9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a",
+        eventType: "report.safe_template_offered",
+        decision: "deny",
+        reasonCode: "report_export_restricted",
+        catalogRevisionId: 1,
+        maskedSummary: {
+          purpose: null,
+          admissionCatalogRevisionId: null,
+          matchedRule: null,
+          feedRevision: null,
+          reportId: "3b532026-0d57-4c4c-8f0b-6f320ebd5d66",
+          template: null,
+          classification: null,
+          lineageCheck: null,
+          effect: "none",
+          replaySource: null,
+          alternativeTemplate: "vendor_reconciliation_v1",
+          safeMessage:
+            "This report inherits an Internal only restriction and cannot be sent to the vendor.",
+          actorId: null,
+          inputSource: null,
+          evaluationId: null,
+        },
+        occurredAt: "2026-10-03T12:05:00Z",
+      },
+    ],
+    nextCursor: "42",
+  } satisfies RunEventsPage,
+  assessmentRecord: {
+    assessmentId: "3",
+    runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    evaluationId: "7b911223-f38a-48f3-91b5-fbb942f0229a",
+    actionId: null,
+    securityModelCallId: "ea6bd0bf-d14e-4109-9889-1f0f8aa7c26d",
+    boundary: "model_input",
+    controlClass: "semantic",
+    controlId: "semantic_injection",
+    outcome: "block",
+    reasonCode: "semantic_injection_detected",
+    admissionCatalogRevisionId: 1,
+    evaluatedCatalogRevisionId: 1,
+    matchedRuleId: null,
+    feedRevision: null,
+    verdictSource: "live",
+    verdict: {
+      risk_category: "instruction_injection",
+      score: 0.97,
+      reason_code: "instruction_override",
+    },
+    inputSource: "judge",
+    assessedAt: "2026-10-03T12:10:00.5Z",
+  } satisfies AssessmentRecord,
+  assessmentPage: {
+    records: [
+      {
+        assessmentId: "2",
+        runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        evaluationId: "6a0a71b2-9677-430a-8958-4fd79345d1f1",
+        actionId: "9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a",
+        securityModelCallId: null,
+        boundary: "action_proposal",
+        controlClass: "deterministic",
+        controlId: "signature_match",
+        outcome: "block",
+        reasonCode: "signature_match",
+        admissionCatalogRevisionId: 1,
+        evaluatedCatalogRevisionId: 1,
+        matchedRuleId: "sig_override_001",
+        feedRevision: "feed_v1",
+        verdictSource: null,
+        verdict: null,
+        inputSource: null,
+        assessedAt: "2026-10-03T12:03:00.123456Z",
+      },
+      {
+        assessmentId: "3",
+        runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        evaluationId: "7b911223-f38a-48f3-91b5-fbb942f0229a",
+        actionId: null,
+        securityModelCallId: "ea6bd0bf-d14e-4109-9889-1f0f8aa7c26d",
+        boundary: "model_input",
+        controlClass: "semantic",
+        controlId: "semantic_injection",
+        outcome: "block",
+        reasonCode: "semantic_injection_detected",
+        admissionCatalogRevisionId: 1,
+        evaluatedCatalogRevisionId: 1,
+        matchedRuleId: null,
+        feedRevision: null,
+        verdictSource: "live",
+        verdict: {
+          risk_category: "instruction_injection",
+          score: 0.97,
+          reason_code: "instruction_override",
+        },
+        inputSource: "judge",
+        assessedAt: "2026-10-03T12:10:00.5Z",
+      },
+    ],
+    nextCursor: "v1.1746.1750.3",
+  } satisfies AssessmentPage,
+  securityEventPage: {
+    events: [
+      {
+        eventId: "57",
+        organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+        runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+        actionId: null,
+        eventType: "control.evaluated",
+        decision: "deny",
+        reasonCode: "semantic_injection_detected",
+        catalogRevisionId: 1,
+        maskedSummary: {
+          purpose: "security",
+          admissionCatalogRevisionId: 1,
+          matchedRule: null,
+          feedRevision: null,
+          reportId: null,
+          template: null,
+          classification: null,
+          lineageCheck: null,
+          effect: "none",
+          replaySource: null,
+          alternativeTemplate: null,
+          safeMessage: "The security check found instruction-like content and withheld it.",
+          actorId: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+          inputSource: "judge",
+          evaluationId: "7b911223-f38a-48f3-91b5-fbb942f0229a",
+        },
+        occurredAt: "2026-10-03T12:10:00.5Z",
+      },
+    ],
+    nextCursor: "v1.1750.0.0",
+  } satisfies SecurityEventPage,
+  securitySummary: {
+    organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+    generatedAt: "2026-10-03T12:30:00.25Z",
+    runs: [
+      {
+        status: "awaiting_approval",
+        count: 1,
+      },
+      {
+        status: "completed",
+        count: 2,
+      },
+    ],
+    decisions: [
+      {
+        eventType: "control.evaluated",
+        decision: "deny",
+        reasonCode: "semantic_injection_detected",
+        inputSource: "judge",
+        count: 1,
+      },
+      {
+        eventType: "report.export_denied",
+        decision: "deny",
+        reasonCode: "report_export_restricted",
+        inputSource: null,
+        count: 1,
+      },
+    ],
+    assessments: [
+      {
+        controlClass: "deterministic",
+        controlId: "signature_match",
+        outcome: "block",
+        verdictSource: null,
+        inputSource: null,
+        count: 1,
+      },
+      {
+        controlClass: "semantic",
+        controlId: "semantic_injection",
+        outcome: "block",
+        verdictSource: "live",
+        inputSource: "judge",
+        count: 1,
+      },
+      {
+        controlClass: "semantic",
+        controlId: "semantic_injection",
+        outcome: "pass",
+        verdictSource: "fixture",
+        inputSource: null,
+        count: 4,
+      },
+    ],
+    modelUsage: [
+      {
+        purpose: "agent",
+        dispatched: 9,
+        completed: 9,
+        failed: 0,
+        usageUnknown: 0,
+        inFlight: 0,
+        settledTokens: 6120,
+        heldTokens: 0,
+        usageUnknownReservations: 0,
+      },
+      {
+        purpose: "security",
+        dispatched: 6,
+        completed: 6,
+        failed: 0,
+        usageUnknown: 0,
+        inFlight: 0,
+        settledTokens: 1310,
+        heldTokens: 0,
+        usageUnknownReservations: 0,
+      },
+    ],
+    judgeSecurityCalls: 1,
+    timings: [
+      {
+        phase: "deterministic",
+        count: 15,
+        failed: 0,
+        medianMicroseconds: 77,
+        p95Microseconds: 172,
+        maxMicroseconds: 640,
+      },
+      {
+        phase: "provider",
+        count: 15,
+        failed: 1,
+        medianMicroseconds: 1919761,
+        p95Microseconds: 1983987,
+        maxMicroseconds: 2060859,
+      },
+    ],
+  } satisfies SecuritySummary,
+  reportView: {
+    reportId: "f7c58bfd-6ed2-403c-abba-7f698d7aaea2",
+    runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    version: 1,
+    template: "vendor_reconciliation_v1",
+    templateVersion: 1,
+    projectionRule: "vendor_invoice_fields_v1",
+    projectionRuleVersion: 1,
+    classification: "vendor_shareable",
+    destinationClass: "registered_vendor_recipient",
+    title: "Vendor reconciliation",
+    contentHash: "500b7e182fb9fa4ed633aad1094763cb22109114986ab51e0d43e112684e9d15",
+    content:
+      "Vendor reconciliation (vendor_reconciliation_v1, projection vendor_invoice_fields_v1)\n\n- invoice_A01: external reference INV104, total EUR 1250.00, due 2026-10-31, duplicate reference: yes\n- invoice_A02: external reference INV104, total EUR 1250.00, due 2026-10-31, duplicate reference: yes\n",
+    contentWithheld: false,
+    lineage: [
+      {
+        sourceKind: "invoice",
+        sourceId: "invoice_A01",
+        sourceVersion: 1,
+        classification: "vendor_shareable",
+        consumedFields: [
+          "invoice_id",
+          "external_reference",
+          "duplicate_reference",
+          "currency",
+          "total_minor_units",
+          "due_on",
+        ],
+      },
+      {
+        sourceKind: "invoice",
+        sourceId: "invoice_A02",
+        sourceVersion: 1,
+        classification: "vendor_shareable",
+        consumedFields: [
+          "invoice_id",
+          "external_reference",
+          "duplicate_reference",
+          "currency",
+          "total_minor_units",
+          "due_on",
+        ],
+      },
+    ],
+  } satisfies ReportView,
 };
 
 // Fixture file that each typed literal must equal, one per schema.
@@ -308,6 +701,13 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   approvalDecision: "approval-decision.approve.json",
   controlEvaluationRequest: "control-evaluation-request.action-proposal.json",
   controlEvaluationResponse: "control-evaluation-response.scope-deny.json",
+  runUsage: "run-usage.ledger.json",
+  runEventsPage: "run-events-page.export-denied.json",
+  assessmentRecord: "assessment-record.semantic-judge.json",
+  assessmentPage: "assessment-page.two-records.json",
+  securityEventPage: "security-event-page.judge.json",
+  securitySummary: "security-summary.judge-split.json",
+  reportView: "report-view.vendor.json",
 };
 
 test("typed samples are identical to their fixtures", () => {

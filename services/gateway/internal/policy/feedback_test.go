@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 func TestDenialFeedbackOffersOnlyPermittedAlternatives(t *testing.T) {
@@ -32,9 +34,26 @@ func TestDenialFeedbackOffersOnlyPermittedAlternatives(t *testing.T) {
 	}
 }
 
+// Every X-13 reason code yields a specific message, from this package's feedback texts or from the
+// contracts table, never the generic fallback (a multi-action denial once told the model only that).
+func TestEveryReasonCodeHasASpecificFeedbackMessage(t *testing.T) {
+	scope := atlasScope()
+	for _, code := range contracts.ReasonCodes {
+		feedback := BuildDenialFeedback(Decision{Outcome: OutcomeDeny, ReasonCode: ReasonCode(code)}, scope)
+		if feedback.SafeMessage == "" || feedback.SafeMessage == genericSafeMessage || feedback.SafeMessage == contracts.ReasonCode("").SafeMessage() {
+			t.Errorf("%s has no specific feedback message (got %q)", code, feedback.SafeMessage)
+		}
+	}
+	multiple := BuildDenialFeedback(Decision{Outcome: OutcomeDeny, ReasonCode: ReasonCode(contracts.ReasonMultipleActionsNotSupported)}, scope)
+	if multiple.SafeMessage != contracts.ReasonMultipleActionsNotSupported.SafeMessage() {
+		t.Fatalf("multiple actions feedback = %q", multiple.SafeMessage)
+	}
+}
+
 func TestDenialFeedbackHoldsNoProtectedValue(t *testing.T) {
 	scope := atlasScope()
-	for reason := range safeMessages {
+	for _, code := range contracts.ReasonCodes {
+		reason := ReasonCode(code)
 		feedback := BuildDenialFeedback(Decision{Outcome: OutcomeDeny, ReasonCode: reason}, scope)
 		encoded, _ := json.Marshal(feedback)
 		for _, protected := range []string{"@", "Investigation note", testRecipient, "INV104"} {

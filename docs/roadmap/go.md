@@ -1329,7 +1329,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-26 · Validate the narrow final result and complete the run**
+- [x] **GO-26 · Validate the narrow final result and complete the run**
   - **Report 1.1 change:** The final result may reference both reports.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-32 · Needs: X-11, X-33 · Provides: nothing
@@ -1361,10 +1361,18 @@ typecheck` PASS; `pnpm verify` 6 passed.
     example parses; PostgreSQL: own reports validated, a sibling run's report (same organization),
     another organization's and an unknown report rejected; a rejected final answer leaves the run
     running and a forged or misplaced reference is refused; the validated reference completes the
-    run and reads back unchanged with no prose. Missing half: lane f3 calls `Validate` in the
-    loop's StepFinal, counts a rejection as a correction (GO-29, lead decision) and adds the
-    instruction to the agent prompt; then a reconciliation run completes only with a validated
-    result.
+    run and reads back unchanged with no prose.
+  - Completed (2026-10-03): lane f3 wired the loop (e03ab44): StepFinal calls `runresult.Validate`, the
+    agent prompt carries `FinalAnswerInstruction` verbatim, a rejected answer counts as a GO-29
+    correction and a failed check pauses with `decision_unavailable`. Tests (lane f3,
+    `internal/agent/final_postgres_test.go`): a final answer without a report of this run is denied with
+    `invalid_arguments` feedback and, after two corrections, the run stops `allowance_exhausted` without
+    completing; an answer naming a report the run created completes it with that reference. `pnpm
+test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 passed, 0 failed, 0
+    skipped (internal/agent and internal/runresult ok). Live (3c private database, qwen3.5:4b): run
+    66cbb01a completed after the vendor report was approved and queued, and stored `result_reference`
+    `{"report_ids":["292c82de-6ca9-4fa1-9e7b-e514317a19a3"]}`, its own vendor report; per the lead, lane
+    w2's GO-47 live run also completed through this check.
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary); "The enforcement loop and data minimization"; "Threat model limits and unresolved
     design choices" ("Final-output validation requires an output format and a data rule")
@@ -1384,6 +1392,22 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Tests: the scenario test asserts the allowlisted fields, the report's references to permitted
     invoices only and the seeded discrepancy, and its output can be retrieved as evidence. The X-24
     command; one live run, quoted.
+  - Progress (2026-10-03), live evidence, not yet this task's scenario: two live runs went through the
+    real gate, executor, adapters, review and outbox with qwen3.5:4b. (1) Run 66cbb01a on the 3c private
+    database (main 855ae20). (2) Clean-checkout rehearsal: a fresh `git clone` of main 87f22f0, set up
+    only by README.md and docs/setup.md (`pnpm install --frozen-lockfile`, `pnpm run setup`, a private
+    PostgreSQL, `pnpm db:migration:run`, `pnpm db:roles`, `pnpm db:seed`, `pnpm dev:gateway`), run
+    e350fea7. Both completed the same way: `read_invoice` A01 and A02, `create_report`
+    `vendor_reconciliation_v1` (Vendor shareable), `queue_report` held for review, approved through
+    `POST /internal/actions/{actionId}/approval`, resumed, one simulated outbox message, and a validated
+    result `{"report_ids":[<the vendor report>]}`. Agent model calls: 5 each; security calls: 1 each.
+    Setup caveats of the rehearsal: the signature feed was loaded by hand and imported a second time
+    with the gateway running, because the feed import is not on main and the first import activates
+    without gateway validation. The app organization, user and reviewer membership were inserted by hand
+    (SH-19 not on main). The operator-context token came from a development script, not the API. Not
+    shown: the model went straight to the vendor template, so neither run created the
+    `internal_investigation_v1` report, showed INV104 or triggered the internal-export denial that this
+    task and X-63 need.
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 3);
     "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
@@ -2401,7 +2425,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     future dispatch after a review wait"); "Functional requirements MVP boundary and deferred scope"
     (Cancellation and revocation)
   - Blocked by: nothing
-  - Progress (2026-10-03, lane w3): `internal/agent/cancellation_postgres_test.go` through lane f3's loop with the production gate (review freezer), executor and adapters, model scripted and counted on the ledger. Evidence X-55: cancel during a model request -> stopped/run_cancelled, 2 model calls, 1 succeeded attempt from before the cancel, the later proposal not executed, a late continuation dispatches nothing; cancel during a review wait -> stopped/run_cancelled, the reviewer's decision refused (run stopped), executor refuses, no approval row, report kept, outbox 0, no further model request; cancel after approval -> the approved action refused run_cancelled, grant unconsumed, outbox 0; expiry between steps -> stopped/run_expired before the next model request, the earlier read kept. Each logs the cancel_requested_at and run.stopped timestamps. The executor now refuses an expired passport with run_expired instead of run_cancelled (lane f3 asked to map it to stopped in `refusalEnd`). Not ticked: the continuation after a review wait needs lane f3's GO-40, and the revocation case needs GO-52 (blocked on SH-38).
+  - Progress (2026-10-03, lane w3): `internal/agent/cancellation_postgres_test.go` through lane f3's loop with the production gate (review freezer), executor and adapters, model scripted and counted on the ledger. Evidence X-55: cancel during a model request -> stopped/run_cancelled, 2 model calls, 1 succeeded attempt from before the cancel, the later proposal not executed, a late continuation dispatches nothing; cancel during a review wait -> stopped/run_cancelled, the reviewer's decision refused (run stopped), executor refuses, no approval row, report kept, outbox 0, no further model request; cancel after approval -> the approved action refused run_cancelled, grant unconsumed, outbox 0; expiry between steps -> stopped/run_expired before the next model request, the earlier read kept. Each logs the cancel_requested_at and run.stopped timestamps. The executor now refuses an expired passport with run_expired instead of run_cancelled (lane f3 asked to map it to stopped in `refusalEnd`). The continuation after a review wait is covered by lane f3's GO-40 tests in `internal/agent/approval_wait_postgres_test.go`: `TestApprovedActionOfACancelledRunDoesNotResume`, `TestExpiredRunStopsFromTheWaitWithoutAResumedEvent` (no run.resumed, nothing executed) and `TestUndecidedApprovalExpiresWhileNoWorkerHoldsTheRun`. My review's lost-cancellation finding (a cancel during a model request lost when the step paused) is fixed by lane 3c's TransitionRun guard and lane f3's mapping (edb712c). Not ticked: the revocation case needs GO-52 (blocked on SH-38).
 
 - [x] **GO-81 · Build the repeatable performance benchmark**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
@@ -2434,14 +2458,14 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: `measurement method`
 
-- [ ] **GO-86 · Prove policy reload, the model allowlist and local model resources**
+- [x] **GO-86 · Prove policy reload, the model allowlist and local model resources**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: GO-39, GO-73, GO-79 · Needs: X-83, X-89 · Provides: X-101, X-102, X-103
   - Paths: none (scenario tests run through the X-89 suite)
   - Work: Change a threshold and a rule and show the before and after revision and decisions; submit an invalid file and show the rejected activation and the retained revision; remove a model and lower a budget on an admitted run; exhaust calls, tokens, time and the concurrency cap.
   - Done when: the evidence of X-101, X-102 and X-103 is captured, and no case widens the stored passport.
   - Tests: the scenario tests in the suite, with the results quoted.
-  - Progress (2026-10-03): live evidence, run once on the 3c private database with the gateway binary
+  - Completed (2026-10-03): live evidence, run once on the 3c private database with the gateway binary
     (go/3c at c8d0e64 with lane f3's chain and GO-79), local qwen3.5:4b, every edit through `pnpm
 policy:import` and the gateway's activation (GO-73), every decision through `POST
 /internal/control/evaluate` (GO-82). The signature feed was loaded by hand (c1's import not on
@@ -2458,9 +2482,12 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     reservation (reservations 3 before, 3 after; denied `security_evaluator_unavailable`). X-103
     local resources: local_max_concurrency 1 (revision 241) serialized three parallel evaluations
     (dispatch records within 12 ms, completions at 07.2, 09.0 and 10.9 s). The original policy was
-    restored (revision 242, same digest). Missing: lowering calls_security to 1 (revision 240) did
-    not restrict the admitted run, whose 4th security call was still reserved; the ledger keeps the
-    passport's limits, so current reductions do not reach security calls (lane f3, reported).
+    restored (revision 242, same digest). Current reduction (rerun on go/3c 7fb3009, main 4443272 with
+    lane f3's fd67778): after 3 security calls on an admitted run, lowering calls_security to 1
+    (revision 289, active after 5.2 s) refused the 4th call before any reservation
+    (`security_allowance_exhausted`, reservations 3 before and after) while the run's stored limit
+    stayed 12; restoring the policy (revision 290) allowed the next call again. The first run (revision
+    240, before fd67778) had still reserved that call.
     Calls, tokens and time exhaustion are covered by lane f3's GO-39/GO-79 tests and not repeated
     live here.
   - Report: "Validation plan and evidence matrix" (Policy reload and rollback safety, Model allowlist and current reductions, Local model resources)
@@ -2895,7 +2922,7 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
 
 ### All Go areas
 
-- [ ] **GO-61 · Supply the Go technical handoff text**
+- [x] **GO-61 · Supply the Go technical handoff text**
   - **Report 1.2 change:** The handoff adds local model acquisition and setup, the adapter contract, `policy.yaml`, the feed schema and revision, telemetry and the measured limits.
   - **Report 1.1 change:** Adds provenance, templates, the projection and the 13 reason codes; limitation: "The lineage mechanism covers fixed templates and registered adapters".
   - Owner: Go implementer (all report roles on this side) · Tier: B · Size: S (estimate 1-2 h)
@@ -2912,6 +2939,21 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     "the demonstration matches the submitted build and its documented limitations".
   - Tests: a teammate who did not write the Go code follows the Go setup text on a clean checkout
     and runs the go checks.
+  - Completed (2026-10-03): W2 lane. "Technical handoff (GO-61)" in `services/gateway/README.md`,
+    written from the code on `main` 87f22f0: the Go setup steps (pointing into `docs/setup.md`);
+    how a run flows through the packages, from admission to the final result, the review wait,
+    the reads and catalog activation; a table of every boundary with its check and fail-closed
+    behaviour; the four tools' arguments, model-facing results and effects; the 31 X-13 codes
+    with their safe messages, the decisions and statuses; the accounting rule; live, fixture,
+    labelled replay and the simulated outbox; the known limitations (one gateway per database and
+    model host, no feed signing key, bounded recipient references, the semantic check on free text
+    only, no model-call retries, the semantic score returned to judges, no reconciliation of
+    unknown outcomes, the audit stream as application evidence, literal field inspection, no
+    start-run idempotency key); and every evidence command with what it proves. The README's
+    configuration table now lists `POSTGRES_GATEWAY_PASSWORD`, `MODEL_BASE_URL` and `MODEL_NAME`.
+    `docs/architecture.md` "Product modules" has one row per Go package on `main` (24 internal, 5
+    commands) with purpose, owner lane, contracts and tables. Not done: the Tests line's dry run
+    by a teammate who did not write the Go code.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation); "Durable state idempotency audit and uncertain outcomes" (Evidence without
     creating a second disclosure channel)
