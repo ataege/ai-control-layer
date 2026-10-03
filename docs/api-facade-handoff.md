@@ -44,4 +44,6 @@ labelled Go response fixtures. New live-model approval/outbox execution and Dock
 
 Gateway readiness already returns 503 when its worker/catalog is not ready. The existing diagnostics
 route reports that aggregate result as degraded. The shared readiness contract has no separate
-worker field; API-15's individual worker presentation still requires a coordinated contract and web change.
+worker field. Decision 11 explicitly retains that shape: worker/catalog unavailability is represented
+by upstream HTTP 503, even when its database check is up. The API preserves this as degraded;
+API-15's browser presentation remains the web owner's verification task, with no invented worker field.
