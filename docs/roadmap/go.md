@@ -1975,7 +1975,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     revocation)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-42 · Prove the limit-triggered stop**
+- [x] **GO-42 · Prove the limit-triggered stop**
   - **Report 1.2 change:** The exhausted allowance may be the security sub-budget (`security_allowance_exhausted`).
   - **Report 1.1 change:** Beat 9; X-46 as amended in the spine.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 1-2 h)
@@ -1999,6 +1999,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     unresolved design choices" (smallest credible vertical slice); "Mapping the proposal to the
     Goldman Sachs challenge" (Unpredictable costs)
   - Blocked by: `model call retries` (the retry part only)
+  - Completed (2026-10-03, lane w3): `internal/agent/limit_stop_postgres_test.go`, `TestModelLimitStopsTheRunBeforeTheNextDispatch`, a clearly labelled runtime test: a run admitted with an agent call allowance of 2 runs through lane f3's loop with the production stepper, accounted caller, Ollama client, token ledger and call log against a labelled provider double (an httptest server speaking the Ollama chat API, always proposing a permitted read). Evidence X-46: provider requests 2, `model_calls` 2 completed, reservations 2 settled with input and output usage, 0 unresolved, ledger used 98 reserved 0 tokens, run paused/`allowance_exhausted` with the `run.paused` event's safe message; the third request was rejected before dispatch. The tool-attempt limit is covered at the executor by `TestAttemptLimitIsEnforced`. Retry part (`model call retries` decided 2026-10-03 by the lead's delegate: the MVP makes no automatic model-call retries): `TestFailedModelCallIsNeverResent` uses a provider double that fails request 1 (HTTP 500) and would answer request 2; provider requests 1, `model_calls` outcome `usage_unknown`, the reservation held as `usage_unknown`, run paused/`outcome_unknown`, and a second claim of the job sends nothing. The security sub-budget variant is lane c1's `security_allowance_exhausted` evidence. Checks: see the commit.
 
 - [x] **GO-79 · Enforce the model allowlist, request timeout and local concurrency cap**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
@@ -2328,6 +2329,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     future dispatch after a review wait"); "Functional requirements MVP boundary and deferred scope"
     (Cancellation and revocation)
   - Blocked by: nothing
+  - Progress (2026-10-03, lane w3): `internal/agent/cancellation_postgres_test.go` through lane f3's loop with the production gate (review freezer), executor and adapters, model scripted and counted on the ledger. Evidence X-55: cancel during a model request -> stopped/run_cancelled, 2 model calls, 1 succeeded attempt from before the cancel, the later proposal not executed, a late continuation dispatches nothing; cancel during a review wait -> stopped/run_cancelled, the reviewer's decision refused (run stopped), executor refuses, no approval row, report kept, outbox 0, no further model request; cancel after approval -> the approved action refused run_cancelled, grant unconsumed, outbox 0; expiry between steps -> stopped/run_expired before the next model request, the earlier read kept. Each logs the cancel_requested_at and run.stopped timestamps. The executor now refuses an expired passport with run_expired instead of run_cancelled (lane f3 asked to map it to stopped in `refusalEnd`). Not ticked: the continuation after a review wait needs lane f3's GO-40, and the revocation case needs GO-52 (blocked on SH-38).
 
 - [x] **GO-81 · Build the repeatable performance benchmark**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
@@ -2360,6 +2362,28 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Work: Change a threshold and a rule and show the before and after revision and decisions; submit an invalid file and show the rejected activation and the retained revision; remove a model and lower a budget on an admitted run; exhaust calls, tokens, time and the concurrency cap.
   - Done when: the evidence of X-101, X-102 and X-103 is captured, and no case widens the stored passport.
   - Tests: the scenario tests in the suite, with the results quoted.
+  - Progress (2026-10-03): live evidence, run once on the 3c private database with the gateway binary
+    (go/3c at c8d0e64 with lane f3's chain and GO-79), local qwen3.5:4b, every edit through `pnpm
+policy:import` and the gateway's activation (GO-73), every decision through `POST
+/internal/control/evaluate` (GO-82). The signature feed was loaded by hand (c1's import not on
+    main); the evaluation runs' jobs were closed by hand so the worker left them to the evaluations.
+    X-101 policy reload: the baseline was active 4.9 s after import (revision 234); the hostile tool
+    result was denied `signature_match` (prompt_ignore_previous_v1). Disabling that rule (revision 235,
+    active after 3.3 s) changed the decision on the same input to a semantic block (score 0.85, rule
+    passes). A threshold of 0.99 (revision 236, 3.5 s) still blocked because the live score was 1.0,
+    so the live run does not show a threshold-driven change; the catalog test shows the new threshold
+    in the next snapshot. An unknown disabled rule (revision 237) was rejected with `catalog_invalid`
+    while 236 kept deciding. Raising calls_total to 40 (revision 238) left the admitted run's
+    passport (24 calls) and ledger (24, 12 security, concurrency 2) unchanged. X-102 model
+    allowlist: allowed_models [qwen3.5:9b] (revision 239) refused the next security call before any
+    reservation (reservations 3 before, 3 after; denied `security_evaluator_unavailable`). X-103
+    local resources: local_max_concurrency 1 (revision 241) serialized three parallel evaluations
+    (dispatch records within 12 ms, completions at 07.2, 09.0 and 10.9 s). The original policy was
+    restored (revision 242, same digest). Missing: lowering calls_security to 1 (revision 240) did
+    not restrict the admitted run, whose 4th security call was still reserved; the ledger keeps the
+    passport's limits, so current reductions do not reach security calls (lane f3, reported).
+    Calls, tokens and time exhaustion are covered by lane f3's GO-39/GO-79 tests and not repeated
+    live here.
   - Report: "Validation plan and evidence matrix" (Policy reload and rollback safety, Model allowlist and current reductions, Local model resources)
   - Blocked by: nothing
 

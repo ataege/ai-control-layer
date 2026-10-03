@@ -103,6 +103,10 @@ const (
 	ReasonSemanticInjectionDetected    = "semantic_injection_detected"
 	ReasonSecurityEvaluatorUnavailable = "security_evaluator_unavailable"
 	ReasonSecurityAllowanceExhausted   = "security_allowance_exhausted"
+	// ReasonNoFreeTextArguments marks a semantic check that made no model call because every
+	// argument of the proposal is a constrained value (identifier, template, uuid, reference). It is
+	// evidence on a control record, not a decision reason.
+	ReasonNoFreeTextArguments = "no_free_text_arguments"
 )
 
 // MaxFieldBytes bounds one inspected field. An oversized field is withheld whole, never truncated,
