@@ -204,3 +204,22 @@ and `ReviewRoutePattern` (`GET /internal/actions/{actionId}/review`, `ReviewHand
   `running` when it claims the job.
 - `Approvals.FrozenReviewFor` returns the frozen payload (exact content and recipient) to a reviewer
   of the organization only.
+
+## Executing an approved action (GO-45)
+
+The executor runs an `approved` action as well as an `allowed` one. Before anything is written it
+also checks that the active catalog revision is still the action's evaluated revision
+(`source_policy_changed` otherwise), and for an approved action:
+
+- the grant is approved, unconsumed and unexpired (`approval_expired` otherwise);
+- the frozen sources' versions equal the current ones (`resource_version_changed`);
+- the review material rebuilt from current rows with the same builder as the freeze (recipient
+  resolved again, stored report and lineage) has the frozen digest, so a changed address, content,
+  template or argument is `action_changed`.
+
+In the effect's transaction the grant is consumed by the attempt before `RunEffect` (the database
+guard allows one consumption of an approved, unexpired grant); nothing to consume means rollback
+and `approval_expired`. Attempts are counted under `FOR NO KEY UPDATE` on the run row: it
+serializes executions of the run without blocking the foreign-key checks of event and effect
+inserts (a `FOR UPDATE` lock deadlocked with a running effect in the concurrency test). A losing
+concurrent execution is refused (`action_changed`).

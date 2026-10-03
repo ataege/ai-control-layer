@@ -3,12 +3,15 @@ package policy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/provenance"
 	"starter/services/gateway/internal/tools"
 )
 
@@ -92,8 +95,10 @@ func (executor *Executor) Execute(ctx context.Context, run RunIdentity, actionID
 	if err != nil {
 		return paused(ReasonDecisionUnavailable)
 	}
-	if action.status != actionStatusAllowed {
-		return refused(ReasonActionChanged) // only an allowed, not yet executed action runs
+	// Only an allowed action, or an approved one (GO-45), not yet executed, runs.
+	approved := action.status == string(contracts.ActionApproved)
+	if action.status != actionStatusAllowed && !approved {
+		return refused(ReasonActionChanged)
 	}
 	if !action.runActive || !action.passportUnexpired {
 		return refused(ReasonRunCancelled)
@@ -106,9 +111,30 @@ func (executor *Executor) Execute(ctx context.Context, run RunIdentity, actionID
 	if err != nil || scope.PassportID != action.passportID {
 		return paused(ReasonDecisionUnavailable)
 	}
+	// The action was evaluated under one catalog revision; a different active revision may carry
+	// stricter rules, so the action needs a fresh evaluation instead of running on a stale one.
+	activeRevision, err := executor.scopes.ActiveCatalogRevision(ctx)
+	if err != nil {
+		return paused(ReasonDecisionUnavailable)
+	}
+	if activeRevision != action.evaluatedRevisionID {
+		return refused(contracts.ReasonSourcePolicyChanged)
+	}
+	if approved {
+		reason, err := executor.recheckApproved(ctx, run, actionID, action)
+		if err != nil {
+			return paused(ReasonDecisionUnavailable)
+		}
+		if reason != "" {
+			return refused(reason)
+		}
+	}
 	attemptID, err := executor.recordAttempt(ctx, run, actionID, scope.ToolAttemptLimit)
 	if errors.Is(err, errAttemptLimitReached) {
 		return refused(ReasonAllowanceExhausted)
+	}
+	if errors.Is(err, errActionNotExecutable) {
+		return refused(ReasonActionChanged)
 	}
 	if err != nil {
 		return paused(ReasonDecisionUnavailable)
@@ -122,18 +148,31 @@ func (executor *Executor) Execute(ctx context.Context, run RunIdentity, actionID
 		CanonicalArguments: action.canonicalArguments, ActionDigest: digest,
 		CatalogRevisionID: action.evaluatedRevisionID,
 	}
-	return executor.runEffect(ctx, run, request)
+	return executor.runEffect(ctx, run, request, approved)
 }
 
 // runEffect calls the adapter in one transaction and commits it. An adapter error rolls back,
 // so no effect was committed and the attempt is closed as aborted; a failed commit leaves the
 // outcome unknown and the attempt open.
-func (executor *Executor) runEffect(ctx context.Context, run RunIdentity, request tools.EffectRequest) ExecutionResult {
+func (executor *Executor) runEffect(ctx context.Context, run RunIdentity, request tools.EffectRequest, consumeApproval bool) ExecutionResult {
 	outcome := ExecutionResult{AttemptID: request.AttemptID}
 	tx, err := executor.pool.Begin(ctx)
 	if err != nil {
 		executor.abortAttempt(ctx, run, request)
 		return ExecutionResult{Status: ExecutionPaused, ReasonCode: ReasonDecisionUnavailable, AttemptID: request.AttemptID}
+	}
+	if consumeApproval {
+		// The bound grant is consumed once, by this attempt, in the effect's transaction: a
+		// consumed, rejected or expired grant leaves nothing to consume and nothing runs.
+		consumed, err := consumeApprovalGrant(ctx, tx, run, request)
+		if err != nil || !consumed {
+			_ = tx.Rollback(ctx)
+			executor.abortAttempt(ctx, run, request)
+			if err != nil {
+				return ExecutionResult{Status: ExecutionPaused, ReasonCode: ReasonDecisionUnavailable, AttemptID: request.AttemptID}
+			}
+			return ExecutionResult{Status: ExecutionRefused, ReasonCode: contracts.ReasonApprovalExpired, AttemptID: request.AttemptID}
+		}
 	}
 	effect, err := executor.runner.RunEffect(ctx, tx, request)
 	if err == nil {
@@ -196,15 +235,21 @@ func digestStillMatches(run RunIdentity, actionID string, action storedExecutabl
 	return err == nil && bytes.Equal(recomputed[:], action.actionDigest)
 }
 
-var errAttemptLimitReached = errors.New("tool attempt limit reached")
+var (
+	errAttemptLimitReached = errors.New("tool attempt limit reached")
+	// errActionNotExecutable means another execution of the same action got there first.
+	errActionNotExecutable = errors.New("action is no longer executable")
+)
 
 // recordAttempt counts the run's attempts against the passport's limit, then inserts and commits
 // the open attempt (GO-02: the record of intent exists before dispatch). The run's attempts are
-// counted under a lock on the run row, so two executions cannot both take the last attempt.
+// counted under a FOR NO KEY UPDATE lock on the run row, so two executions cannot both take the
+// last attempt, while inserts that reference the run (events, effects) are not blocked: a FOR
+// UPDATE lock would block their foreign-key checks and could deadlock with a running effect.
 func (executor *Executor) recordAttempt(ctx context.Context, run RunIdentity, actionID string, attemptLimit int) (string, error) {
 	var attemptID string
 	err := pgx.BeginFunc(ctx, executor.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `SELECT 1 FROM runtime.runs WHERE id = $1 AND organization_id = $2 FOR UPDATE`,
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM runtime.runs WHERE id = $1 AND organization_id = $2 FOR NO KEY UPDATE`,
 			run.RunID, run.OrganizationID); err != nil {
 			return err
 		}
@@ -225,17 +270,21 @@ func (executor *Executor) recordAttempt(ctx context.Context, run RunIdentity, ac
 			   FROM runtime.execution_attempts WHERE action_id = $2 AND organization_id = $1
 			 RETURNING id::text`,
 			run.OrganizationID, actionID).Scan(&attemptID); err != nil {
+			var postgresError *pgconn.PgError
+			if errors.As(err, &postgresError) && postgresError.Code == "23505" {
+				return errActionNotExecutable // another attempt of this action is open
+			}
 			return err
 		}
 		tag, err := tx.Exec(ctx,
 			`UPDATE runtime.actions SET status = $1, updated_at = now()
-			  WHERE id = $2 AND organization_id = $3 AND status = $4`,
-			actionStatusExecuting, actionID, run.OrganizationID, actionStatusAllowed)
+			  WHERE id = $2 AND organization_id = $3 AND status IN ($4, $5)`,
+			actionStatusExecuting, actionID, run.OrganizationID, actionStatusAllowed, string(contracts.ActionApproved))
 		if err != nil {
 			return err
 		}
 		if tag.RowsAffected() != 1 {
-			return errors.New("action is no longer allowed")
+			return errActionNotExecutable // a concurrent execution moved it on
 		}
 		return nil
 	})
@@ -268,4 +317,83 @@ func (executor *Executor) abortAttempt(ctx context.Context, run RunIdentity, req
 		`UPDATE runtime.execution_attempts SET outcome = $1, completed_at = now()
 		  WHERE id = $2 AND organization_id = $3 AND completed_at IS NULL`,
 		attemptOutcomeAborted, request.AttemptID, run.OrganizationID)
+}
+
+// recheckApproved runs the GO-45 rechecks of an approved action before anything is written: the
+// grant is still open and unexpired, and the review material rebuilt from current rows (recipient
+// address, report content and lineage versions, template) still has the frozen digest. A changed
+// source version is resource_version_changed; any other change, or a recipient or report that no
+// longer resolves, is action_changed.
+func (executor *Executor) recheckApproved(ctx context.Context, run RunIdentity, actionID string, action storedExecutableAction) (ReasonCode, error) {
+	var reason ReasonCode
+	err := pgx.BeginTxFunc(ctx, executor.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		var grantOpen bool
+		err := tx.QueryRow(ctx,
+			`SELECT decision = 'approved' AND consumed_at IS NULL AND expires_at > now()
+			   FROM runtime.approvals WHERE action_id = $1 AND organization_id = $2`,
+			actionID, run.OrganizationID).Scan(&grantOpen)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !grantOpen) {
+			reason = contracts.ReasonApprovalExpired
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		var rawPayload, frozenDigest []byte
+		if err := tx.QueryRow(ctx,
+			`SELECT payload::text, payload_digest FROM runtime.review_payloads WHERE action_id = $1 AND organization_id = $2`,
+			actionID, run.OrganizationID).Scan(&rawPayload, &frozenDigest); err != nil {
+			reason = ReasonActionChanged
+			return nil
+		}
+		var frozen ReviewPayload
+		if json.Unmarshal(rawPayload, &frozen) != nil {
+			reason = ReasonActionChanged
+			return nil
+		}
+		current, _, err := buildReviewPayload(ctx, tx, run, StoredAction{
+			ActionID: actionID, Tool: action.tool, CanonicalArguments: action.canonicalArguments,
+			EvaluatedRevisionID: action.evaluatedRevisionID,
+		}, action.passportID, frozen.ExpiresAt)
+		if err != nil {
+			reason = ReasonActionChanged
+			return nil
+		}
+		// The frozen and the rebuilt payload both carry the lineage's versions, so the current
+		// versions of the sources are compared explicitly (exact integer equality).
+		if frozen.Report != nil {
+			var sourceIDs []string
+			for _, source := range frozen.Report.Sources {
+				sourceIDs = append(sourceIDs, source.ID)
+			}
+			versions, err := provenance.CurrentInvoiceVersions(ctx, tx, run.OrganizationID, sourceIDs)
+			if err != nil {
+				return err
+			}
+			if len(StaleSources(frozen, versions)) > 0 {
+				reason = contracts.ReasonResourceVersionChanged
+				return nil
+			}
+		}
+		currentDigest, _, err := current.Digest()
+		if err != nil || !bytes.Equal(currentDigest[:], frozenDigest) {
+			reason = ReasonActionChanged
+		}
+		return nil
+	})
+	return reason, err
+}
+
+// consumeApprovalGrant marks the action's approved grant consumed by this attempt. The database
+// guard allows one consumption, before expiry, of an approved grant only.
+func consumeApprovalGrant(ctx context.Context, tx pgx.Tx, run RunIdentity, request tools.EffectRequest) (bool, error) {
+	tag, err := tx.Exec(ctx,
+		`UPDATE runtime.approvals SET consumed_at = now(), consumed_by_attempt_id = $3
+		  WHERE action_id = $1 AND organization_id = $2 AND decision = 'approved'
+		    AND consumed_at IS NULL AND expires_at > now()`,
+		request.ActionID, run.OrganizationID, request.AttemptID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
