@@ -38,7 +38,7 @@ export function LoginForm() {
       }
 
       router.refresh();
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred during sign in.");
     } finally {
       setIsLoading(false);

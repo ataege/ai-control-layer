@@ -243,8 +243,7 @@ listed in the README.
 | `src/openapi.ts`      | Swagger UI at `/api/docs`, document at `/api/docs-json`.                                                                                                               |
 
 The HTTP server has request, header and keep-alive timeouts and shuts down gracefully on
-`SIGTERM` / `SIGINT`. CORS allows only the origins in `CORS_ALLOWED_ORIGINS` and only `GET`,
-`HEAD` and `OPTIONS`.
+`SIGTERM` / `SIGINT`. CORS allows only the origins in `CORS_ALLOWED_ORIGINS` and configured methods (e.g. `GET`, `POST`, `OPTIONS`).
 
 ### `services/gateway`
 
@@ -309,6 +308,7 @@ telemetry (`architecture specification version`). When the first code of a produ
 
 | Module                                              | Owner service               | Responsibility                                                                                                                                 | Contracts                                                           | Tables                                                                                                     |
 | --------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Tasks                                               | API                         | Stores task runs and their events, forwards setup options                                                                                      | X-07, X-11, X-12, API-12                                            | `run`, `run_event`                                                                                         |
 | `services/gateway/cmd/gateway`                      | Go (shared; wiring lane f3) | Process wiring: configuration, pool, catalog activation watcher, production chain, worker, approval expiry, HTTP server and graceful shutdown. | all internal routes                                                 | none directly                                                                                              |
 | `services/gateway/cmd/modelcheck`                   | Go (lane f3)                | Explicit synthetic Ollama connectivity check; no governed task.                                                                                | native Ollama `/api/chat`                                           | none                                                                                                       |
 | `services/gateway/cmd/budgetcheck`                  | Go (lane f3)                | Explicit ledger accounting diagnostic against the active catalog, on a labelled synthetic run.                                                 | internal                                                            | `runtime.model_token_*`, `runtime.model_calls`                                                             |
@@ -344,6 +344,7 @@ Go test support (GO-20), `services/gateway/internal/testdb`, is development infr
 than a runtime product feature. It provides bounded explicit PostgreSQL connections and UUID
 fixture identifiers for database-backed tests, through the existing X-24 `pnpm test:db` command.
 It owns no tables, performs no schema creation or migrations, and is not used by gateway startup.
+
 
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"

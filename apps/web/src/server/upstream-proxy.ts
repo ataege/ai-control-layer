@@ -28,7 +28,10 @@ export const DEFAULT_UPSTREAM_TIMEOUT_MS = 10_000;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
 type ProxyErrorCode =
-  "configuration_error" | "upstream_unreachable" | "upstream_timeout" | "upstream_invalid_response";
+  | "configuration_error"
+  | "upstream_unreachable"
+  | "upstream_timeout"
+  | "upstream_invalid_response";
 
 interface ProxyOptions {
   /** Upper bound for the whole upstream exchange, including reading the body. */
@@ -106,9 +109,7 @@ function isJsonText(bodyText: string): boolean {
 
 function isPathAllowed(path: string): boolean {
   const pathname = path.split("?")[0] || "";
-  return UPSTREAM_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
-  );
+  return UPSTREAM_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + "/"));
 }
 
 export async function proxyUpstream(
@@ -148,7 +149,7 @@ export async function proxyUpstream(
   const headers = new Headers();
   headers.set("accept", "application/json");
   headers.set(REQUEST_ID_HEADER, requestId);
-
+  
   // Forward session cookie if present
   const cookie = request.headers.get("cookie");
   if (cookie) {
@@ -188,19 +189,19 @@ export async function proxyUpstream(
     if (timeoutId) clearTimeout(timeoutId);
 
     const upstreamRequestId = upstreamResponse.headers.get(REQUEST_ID_HEADER) ?? requestId;
-
+    
     // Copy headers from upstream
     const responseHeaders = new Headers();
     responseHeaders.set("cache-control", "no-store");
     responseHeaders.set(REQUEST_ID_HEADER, upstreamRequestId);
-
+    
     if (upstreamResponse.headers.has("content-type")) {
       responseHeaders.set("content-type", upstreamResponse.headers.get("content-type")!);
     }
-
+    
     // Forward Set-Cookie headers
-    const setCookieHeaders = upstreamResponse.headers.getSetCookie
-      ? upstreamResponse.headers.getSetCookie()
+    const setCookieHeaders = upstreamResponse.headers.getSetCookie 
+      ? upstreamResponse.headers.getSetCookie() 
       : [];
     if (setCookieHeaders.length === 0) {
       // Fallback
@@ -213,7 +214,7 @@ export async function proxyUpstream(
 
     if (buffer) {
       const upstreamBodyText = await upstreamResponse.text();
-
+      
       // Empty 2xx bodies are allowed
       const isSuccessEmpty = upstreamResponse.ok && upstreamBodyText === "";
 
@@ -240,8 +241,7 @@ export async function proxyUpstream(
     }
   } catch (error) {
     if (timeoutId) clearTimeout(timeoutId);
-    const isTimeout =
-      error instanceof Error && (error.name === "TimeoutError" || error.message === "TimeoutError");
+    const isTimeout = error instanceof Error && (error.name === "TimeoutError" || error.message === "TimeoutError");
     return isTimeout
       ? proxyErrorResponse(
           504,

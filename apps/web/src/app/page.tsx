@@ -8,14 +8,17 @@ export const metadata: Metadata = { title: "Task Passport" };
 export default function HomePage() {
   return (
     <>
-      <PageHeader title="Task Passport" description="Create and monitor delegated tasks." />
+      <PageHeader
+        title="Task Passport"
+        description="Create and monitor delegated tasks."
+      />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <TaskForm />
         </div>
         <div>
-          <RunTimeline />
+          <RunTimeline events={[]} />
         </div>
       </div>
     </>
