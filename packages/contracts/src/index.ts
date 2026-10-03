@@ -368,3 +368,57 @@ export interface SafeEvent {
 export interface ApprovalDecision {
   decision: "approve" | "reject";
 }
+
+/** X-91: the boundary an evaluated interaction is checked at. */
+export type ControlBoundary = "model_input" | "tool_result" | "action_proposal";
+
+/**
+ * X-91: POST /internal/control/evaluate. One interaction of an admitted run, evaluated through the
+ * same gates as the agent path. Identity comes from the verified operator context, never from the
+ * body; the caller cannot issue a grant; the call never dispatches the agent model.
+ */
+export interface ControlEvaluationRequest {
+  runId: string;
+  kind: ControlBoundary;
+  /** Untrusted text for model_input and tool_result; null for action_proposal. */
+  text: string | null;
+  /** The tool a tool_result is attributed to, or the proposed tool; null for model_input. */
+  tool: ToolName | null;
+  /** The proposed tool's snake_case arguments (X-09) for action_proposal; otherwise null. */
+  arguments: Record<string, unknown> | null;
+}
+
+/** X-91: one control that ran for an evaluation. */
+export interface ControlEvaluationControl {
+  boundary: ControlBoundary;
+  controlClass: "deterministic" | "semantic";
+  control: string;
+  outcome: "pass" | "redact" | "block" | "error" | "not_applicable";
+  reasonCode: string | null;
+  ruleId: string | null;
+  feedRevision: string | null;
+}
+
+/**
+ * X-91: the decision for one evaluated interaction (HTTP 200 for every decision). Evaluated actions
+ * are decisions only: nothing is stored as an action or executed, so actionId is always null.
+ */
+export interface ControlEvaluationResponse {
+  evaluationId: string;
+  runId: string;
+  actionId: null;
+  decision: "allow" | "deny" | "redact" | "approval_required";
+  reasonCode: ReasonCode | null;
+  safeMessage: string;
+  alternativeTemplate: ReportTemplate | null;
+  controls: ControlEvaluationControl[];
+  semantic: {
+    source: "live" | "fixture";
+    riskCategory: string;
+    score: number;
+    reasonCode: string;
+  } | null;
+  /** The server-redacted text, only when decision is redact; blocked text is never echoed. */
+  content: { text: string } | null;
+  catalog: { admissionRevisionId: number; activeRevisionId: number; feedRevisionId: number | null };
+}
