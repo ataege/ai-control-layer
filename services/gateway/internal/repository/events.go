@@ -229,10 +229,7 @@ func scanEvent(row rowScanner) (contracts.SafeEvent, error) {
 		return contracts.SafeEvent{}, ErrUnavailable
 	}
 	event.OccurredAt = event.OccurredAt.UTC()
-	stored := NewEvent{OrganizationID: event.OrganizationID, RunID: event.RunID, ActionID: event.ActionID,
-		EventType: event.EventType, Decision: event.Decision, ReasonCode: event.ReasonCode,
-		CatalogRevisionID: event.CatalogRevisionID, MaskedSummary: event.MaskedSummary}
-	if !validEvent(stored) {
+	if !ValidStoredEvent(event) {
 		return contracts.SafeEvent{}, ErrUnavailable
 	}
 	return event, nil
@@ -243,4 +240,17 @@ func nonNilEvents(events []contracts.SafeEvent) []contracts.SafeEvent {
 		return []contracts.SafeEvent{}
 	}
 	return events
+}
+
+// ValidStoredEvent reports whether an event read from runtime.audit_events fits X-12: a decimal
+// cursor, an occurrence time and every value check AppendEvent applies. Readers that page events
+// themselves (for example organization-wide) use it so no row outside the contract is served.
+func ValidStoredEvent(event contracts.SafeEvent) bool {
+	eventID, err := strconv.ParseInt(event.EventID, 10, 64)
+	if err != nil || eventID <= 0 || strconv.FormatInt(eventID, 10) != event.EventID || event.OccurredAt.IsZero() {
+		return false
+	}
+	return validEvent(NewEvent{OrganizationID: event.OrganizationID, RunID: event.RunID, ActionID: event.ActionID,
+		EventType: event.EventType, Decision: event.Decision, ReasonCode: event.ReasonCode,
+		CatalogRevisionID: event.CatalogRevisionID, MaskedSummary: event.MaskedSummary})
 }

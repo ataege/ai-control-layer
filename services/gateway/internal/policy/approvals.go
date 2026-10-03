@@ -82,6 +82,7 @@ type awaitingAction struct {
 	payloadDigest       []byte
 	expiresAt           time.Time
 	runOpen             bool
+	replaySource        *string
 }
 
 // Decide checks the reviewer's authority from app.memberships (never from the signed claim
@@ -141,6 +142,7 @@ func (approvals *Approvals) Decide(ctx context.Context, operator contracts.Opera
 		if _, err := tx.AppendEvent(ctx, repository.NewEvent{
 			OrganizationID: operator.OrganizationID, RunID: &runID, ActionID: &reference,
 			EventType: contracts.EventApprovalDecided, Decision: &eventDecision, CatalogRevisionID: &revisionID,
+			MaskedSummary: contracts.MaskedSummary{ReplaySource: action.replaySource},
 		}); err != nil {
 			return err
 		}
@@ -197,7 +199,7 @@ func loadAwaitingAction(ctx context.Context, tx pgx.Tx, organizationID, actionID
 	err := tx.QueryRow(ctx,
 		`SELECT a.run_id::text, r.passport_id::text, a.tool, a.canonical_arguments::text, a.action_digest,
 		        a.evaluated_catalog_revision_id, a.status, p.id::text, p.payload::text, p.payload_digest, p.expires_at,
-		        (r.cancel_requested_at IS NULL AND r.status NOT IN ('completed', 'failed', 'stopped'))
+		        (r.cancel_requested_at IS NULL AND r.status NOT IN ('completed', 'failed', 'stopped')), a.replay_source
 		   FROM runtime.actions AS a
 		   JOIN runtime.runs AS r ON r.id = a.run_id AND r.organization_id = a.organization_id
 		   JOIN runtime.review_payloads AS p ON p.action_id = a.id AND p.organization_id = a.organization_id
@@ -206,7 +208,7 @@ func loadAwaitingAction(ctx context.Context, tx pgx.Tx, organizationID, actionID
 		actionID, organizationID,
 	).Scan(&action.runID, &action.passportID, &tool, &action.canonicalArguments, &action.actionDigest,
 		&action.evaluatedRevisionID, &action.status, &action.payloadID, &action.payload, &action.payloadDigest, &action.expiresAt,
-		&action.runOpen)
+		&action.runOpen, &action.replaySource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return awaitingAction{}, ErrApprovalNotFound
 	}

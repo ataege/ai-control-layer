@@ -423,7 +423,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-05 · Decide: how the labelled action replay enters a run and is marked**
+- [x] **GO-05 · Decide: how the labelled action replay enters a run and is marked**
   - **Report 1.1 change:** A recorded proposal enters a run for the export test (beat 5) and for the supporting rehearsal of an out-of-scope read (beat 9); the beat 6 sentence is dropped. Report field: "Supporting rehearsals hostile instructions limits and uncertainty".
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 0.5-1 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -451,6 +451,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     invented behavior); "Illustrative invoice scenario and future domain adaptations" (Scene 2 a
     hostile instruction in a business document)
   - Blocked by: nothing
+  - Completed (2026-10-03): the recorded decision (option 1, a labelled Go runtime scenario) is implemented by GO-36: the label lives on the stored action (X-09 `replaySource`, `runtime.actions.replay_source`) and in every event (X-12 `maskedSummary.replaySource`); evidence in GO-36.
 
 ## M0: hours 0-2
 
@@ -595,7 +596,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     process); "Functional requirements MVP boundary and deferred scope" (Durable execution)
   - Blocked by: nothing
 
-- [ ] **GO-09 · Cover the worker in graceful shutdown and readiness**
+- [x] **GO-09 · Cover the worker in graceful shutdown and readiness**
   - **Report 1.2 change:** Readiness also reports a missing valid catalog as not ready (GO-72, X-82), through a shared contract change.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-08 · Needs: nothing · Provides: X-32
@@ -622,17 +623,16 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     budget and the pool closes after it; a job interrupted by the shutdown can be claimed again
     after its lease expires; readiness answers `unavailable` while the worker loop is not running;
     the readiness fixtures decode strictly. `pnpm --filter gateway run test`.
-  - Progress (2026-10-03): `worker.Service` (456d802 on go/f3) stops claiming on `Stop`, lets the
-    current step finish until the drain deadline, then cancels the handler (`ErrDrainTimeout`); an
-    interrupted job keeps its lease and is claimed again after expiry. Readiness (option B of
-    `worker readiness`, agreed with the lead, no contract change): `health.Handler.Worker` makes
-    `/health/ready` answer 503 `unavailable` with the true database check while the loop is not
-    running. Tests pass (`TestStopLetsTheCurrentStepFinishAndStopsClaiming`,
-    `TestStopCancelsAStepThatOverrunsTheDeadline`,
-    `TestInterruptedJobIsClaimedAgainAfterItsLeaseExpires`, `TestReadinessCoversTheWorker`); `pnpm
-test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Missing half: the
-    wiring into `cmd/gateway/main.go` (Stop before `pool.Close()`), which lands with the GO-11
-    wiring.
+  - Completed (2026-10-03): `worker.Service` (456d802) stops claiming on `Stop`, lets the current
+    step finish until the drain deadline and cancels the handler after it; an interrupted job keeps
+    its lease and is claimed again after expiry. `cmd/gateway` now starts it with the production
+    chain, reports it in `/health/ready` (option B of `worker readiness`, no contract change: 503
+    `unavailable` with the true database check while the loop is not running) and stops it in
+    parallel with the HTTP drain before `pool.Close()`. Observed: the built gateway on PostgreSQL 18
+    as `task_passport_gateway` answered `/health/ready` 200 with the worker running and logged
+    `shutdown requested` then `http server stopped` on SIGTERM; with `MODEL_NAME` empty it started,
+    logged `model not configured; every model call fails closed` and answered 200. Checks: see
+    GO-11's completion line, same commit.
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Functional requirements MVP
     boundary and deferred scope" (Durable execution)
   - Blocked by: `worker readiness`
@@ -684,7 +684,7 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     unsuitable output)
   - Blocked by: `decision 6 in docs/product/README.md`; `multiple-action responses`; `model call retries` (the failure handling only)
 
-- [ ] **GO-11 · Run the bounded agent loop for permitted actions**
+- [x] **GO-11 · Run the bounded agent loop for permitted actions**
   - **Report 1.2 change:** Each step also checks the active catalog revision (GO-72, from M2) and the applicable guards.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-08, GO-10, GO-15, GO-16 · Needs: X-06, X-11 · Provides: nothing
@@ -710,18 +710,17 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     reason; a permitted read runs and its minimized result reaches the next model request; the
     steps and their order can be reconstructed from the stored records. The X-24 command;
     `pnpm --filter gateway run test`.
-  - Progress (2026-10-03): `agent.Loop` with the append-only `runtime.context_entries` (faac792) now
-    uses the production pieces on go/f3: c1's `InspectToolResult` through `agent.SecurityInspector`
-    (the interim guard is removed), GO-29's correction counter, limit and denial feedback (stored as
-    `correction` entries, migration `1791100000000-AllowContextCorrections`), and
-    `agent.RecordingCaller` recording each security call in `model_calls` before dispatch. Database
-    tests with the real repository, gate, executor, `tools.Runner` and inspector (labelled scripted
-    stepper and fixture security model) pass, including a clean note passing with its
-    classification, a hostile note withheld by signature or semantic verdict, a guard failure
-    pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
-    gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
-    the new one reverts and re-runs; `pnpm verify` 6 passed. The loop reads the active catalog before every model request and narrows the passport with `catalog.EffectiveFor` (GO-72; `TestTheActiveCatalogNarrowsEveryStep`). Missing half: wiring into `cmd/gateway/main.go` next to `catalog.WatchRequested` and the live run,
-    which also needs the signature-feed import (c1, API-34).
+  - Completed (2026-10-03): `agent.Loop` with `runtime.context_entries`, c1's tool-result
+    inspection, GO-29 corrections, the active-catalog narrowing (GO-72) and GO-80 telemetry, built
+    once by `agent.NewProductionChain` and run by the gateway's worker. Live done-when observed with
+    `TestLiveProductionChainExecutesAPermittedTool` (opt-in, developer M2/8 GiB, Ollama 0.35.1,
+    `qwen3.5:4b`, the repository's policy and feed activated through `catalogtest`): the model read
+    invoice A01 (note passed inspection) and A02, created a `vendor_reconciliation_v1` report and
+    proposed `queue_report`, which stopped at `awaiting_approval`; 4 agent calls each preceded by
+    the run check (4 policy lookups), 5 security calls, 6,954 tokens. Other runs on this memory-
+    constrained machine answered without a tool or paused with `outcome_unknown` after a 20-second
+    request timeout, as designed. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm verify` 6 passed, 0 failed, 0 skipped; `go test -p 1 -count=1 ./...` against the test database with `TEST_DATABASE_REQUIRED=1`: all 21 packages ok. Parallel `pnpm test:db` on the shared, memory-constrained machine failed 6 and then 5 different database tests in other packages at the 3-second connect timeout (api 16 passed); the serial run passes them all.
+    The run used the chain directly; the HTTP admission path is 3c's GO-14.
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
     (Figure 4); "Users operating model and proposed user journeys" (Journey 3 recover cancel or
@@ -1705,7 +1704,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-36 · Replay a prohibited proposal through the real gate, labelled**
+- [x] **GO-36 · Replay a prohibited proposal through the real gate, labelled**
   - **Report 1.2 change:** The replay stays labelled and is supplementary: "the delivered semantic control and its real-model tests must still work".
   - **Report 1.1 change:** The stored proposals are the export of a genuinely created internal report and the out-of-scope read or redirect. Tier A: the denied export is in the slice, and the report asks for a labelled replay when the live model does not propose the send.
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
@@ -1727,6 +1726,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
     output)
   - Blocked by: `replay entry`
+  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. The demo-triggerable entry (cmd/replay) follows separately.
 
 - [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
   - **Report 1.1 change:** Serves the extended X-64 (classification, template and projection versions, content hash, destination class, lineage summary).
@@ -1798,7 +1798,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
+- [x] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
   - **Report 1.2 change:** Reserve shared task allowance and the agent or security sub-budget atomically, including maximum output tokens and a concurrency slot; purpose is assigned by trusted runtime code, and security calls count against the shared ceiling. With GO-75 this delivers Implementer 3's report 1.2 first integrated deliverable: "A live agent call and live semantic check both reserve allowance and record independent purpose and latency."
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 5-8 h)
   - Depends on: GO-02, GO-03, GO-10 · Needs: X-06, X-11, X-39 · Provides: X-53
@@ -1820,13 +1820,25 @@ typecheck` PASS; `pnpm verify` 6 passed.
     counted, never zero; settlement settles the reservation against the reported usage in its own
     transaction; no reservation transaction is open while the stubbed provider call runs; a model
     call retry, where `model call retries` adopts them, reserves again. The X-24 command.
-  - Progress (2026-10-03): `budget.OpenRunLedger` (1a470f6 on go/f3) opens the run's ledger inside
-    admission's transaction with the passport's token total (alignment decision 6) and validates the
-    per-purpose sub-limits; without a ledger row nothing can be reserved
-    (`TestOpenRunLedgerCommitsWithTheCallersTransaction`). Missing: the new migration applying
-    alignment decisions 1 to 5 (uuid run id with a foreign key, organization id, call id =
-    `model_calls.id`, per-purpose sub-limits, calls, request time and the concurrency slot on the
-    ledger) and the reservation of calls and sub-budgets before every dispatch.
+  - Completed (2026-10-03): migration `1791130000000-AlignTokenLedger` applies alignment decisions 1
+    to 5 (uuid run id with a foreign key to runs, organization id, call id = `model_calls.id` with
+    the purpose bound, per-purpose token sub-limits and counters, call limits and counters, request
+    timeout and concurrency slot). `budget.OpenRunLedger` copies every passport limit at admission;
+    `Reserve` refuses before dispatch on a paused ledger, an exhausted shared or purpose call count
+    or token allowance, a held slot or a missing dispatch record, and returns the request timeout
+    that `model.AccountedCaller` applies; calls count at reserve and are never refunded; unknown
+    usage keeps the reservation and the slot (`Snapshot` reports unresolved calls per purpose);
+    `Settle` settles once in its own transaction. The loop's step count is the ledger's
+    `agent_calls`; a held slot requeues. Tests: shared and purpose call limits, security token sub-
+    budget, slot held through unknown usage and released by the late settlement, purpose binding,
+    concurrent reservations, overrun and overflow pauses, late settlement once, no ledger lock
+    during the provider call (`TestPostgresNoLedgerLockDuringTheProviderCall`). Migration: run,
+    revert, run on a fresh database (18 migrations) and on a database holding an admitted run whose
+    ledger had a settled and an unknown reservation plus an orphan diagnostic ledger: limits
+    backfilled from the passport, counters rebuilt, dispatch records backfilled, the orphan deleted.
+    Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; api `lint`, `typecheck` exit 0; `pnpm verify` 6 passed, 0 failed, 0 skipped; `GOFLAGS=-p=3 pnpm test:db`: gateway "741 passed, 0 failed, 0 skipped; 185 need the database", api "16 passed". Model call retries are not adopted
+    (`model call retries`), so no retry reserves again; local inference has no tariff, so no
+    estimated cost is recorded.
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
     matrix" (critical check Unknown usage); "Architecture and chart reading guide" (Figures 4 and 5)
   - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
@@ -2013,7 +2025,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `record versions`
   - Completed (2026-10-03): `internal/policy/executor.go`: approved actions run after rechecks of the active catalog revision (`source_policy_changed`), the open unexpired grant (`approval_expired`), the frozen source versions against the current ones (`resource_version_changed`) and the review material rebuilt from current rows against the frozen digest (recipient address, content, template, arguments: `action_changed`); the grant is consumed once by the attempt in the effect's transaction before `RunEffect`; attempts are counted under `FOR NO KEY UPDATE` on the run row (a `FOR UPDATE` lock deadlocked with a running effect's event insert in the concurrency test). Checks: `pnpm test:db gateway` 653 passed, 0 failed, 0 skipped with `TestApprovedActionExecutesOnceAndConsumesItsGrant` (one outbox row, the grant consumed by the attempt, a second execution refused), `TestApprovedActionRechecksBeforeExecution` (changed source version, changed recipient address, changed arguments, cancelled run, changed catalog revision: refused, no attempt, no outbox row), `TestExpiredOrRejectedGrantExecutesNothing` and `TestConcurrentExecutionsConsumeTheGrantOnce` (4 concurrent executions: one success, one outbox row, one consumption); `go test -race -count=10` on the concurrency and recheck tests against the database PASS; the exhausted attempt allowance is `TestAttemptLimitIsEnforced` (GO-16); `pnpm verify` 6/6. Not here: the guard re-run when the assessment is stale (Report 1.2 change) is covered by refusing a changed catalog revision, which hands the action back for a fresh evaluation; current revocations join in GO-52.
 
-- [ ] **GO-46 · Prove approval integrity**
+- [x] **GO-46 · Prove approval integrity**
   - **Report 1.1 change:** Adds a changed template or projection version; Report: Scene 4 precise human review and one simulated delivery.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-45 · Needs: X-16, X-34 · Provides: X-45
@@ -2031,8 +2043,9 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     changed content requires new review"); "Illustrative invoice scenario and future domain
     adaptations" (Scene 3 precise human review)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestApprovalIntegrity` (internal/policy, against Worker 2's real queue_report): after a real approval, each tampering is refused with its reason, no outbox row and the original grant unconsumed: changed recipient address and changed recipient reference and changed content (another report) -> `action_changed`; changed source record version -> `resource_version_changed`; an expired approval stores no grant (`approval_expired`); approving an action the gate denied (`resource_out_of_scope`) is refused with no grant, so an approval cannot enlarge the passport. `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped; `pnpm verify` 6/6. A changed template or projection version is Worker 2's evidence (`policy_change_test.go`, X-76: template_not_allowed, outbox 0); the gate's rebuilt payload also binds the template version.
 
-- [ ] **GO-69 · Prove that approval cannot override the export restriction**
+- [x] **GO-69 · Prove that approval cannot override the export restriction**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: GO-44, GO-64 · Needs: X-34 · Provides: X-77
   - Paths: none (a scenario test in the packages above)
@@ -2047,6 +2060,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (Approval cannot override classification);
     "Delivery scope and six person ownership" (Proposed team ownership)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestApprovalCannotOverrideTheExportRestriction`: a genuinely created Internal only report (provenance.StoreReport, titled "Public summary") proposed to the correct, permitted Atlas recipient is denied at the gate before review (`report_export_restricted`); a submitted approval is refused and stores no grant; a replayed grant inserted directly with the action set to approved still executes nothing (refused `action_changed`: nothing was frozen for review); outbox rows for the report: 0. Worker 2's queue_report re-checks the restriction at effect time as a last line. `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped; `pnpm verify` 6/6.
 
 - [x] **GO-73 · Validate and acknowledge a candidate catalog revision**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
@@ -2294,7 +2308,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     outcomes and retries)
   - Blocked by: nothing
 
-- [ ] **GO-54 · Prove approval replay under concurrent requests**
+- [x] **GO-54 · Prove approval replay under concurrent requests**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-44, GO-45 · Needs: X-24, X-34 · Provides: X-51
   - Paths: none (concurrency tests in the packages above)
@@ -2308,6 +2322,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (critical check Approval replay); "Threat model
     limits and unresolved design choices" (Verification priorities)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestConcurrentApprovalDecisionsStoreOneGrant` (6 concurrent approve/reject decisions -> 1 accepted, 5 refused; 1 grant, 1 continuation job) and `TestConcurrentExecutionsConsumeTheGrantOnce` (4 concurrent executions of one approved action -> 1 succeeded; 1 consumed grant; 1 outbox row), both against the database: `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped, and `go test -race -count=5` on both PASS; `pnpm verify` 6/6.
 
 - [x] **GO-55 · Prove the database execution transaction with fault injection**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
@@ -2331,7 +2346,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: `decision 2 in docs/product/README.md`
 
-- [ ] **GO-30 · Prove the resource and destination boundaries**
+- [x] **GO-30 · Prove the resource and destination boundaries**
   - **Report 1.1 change:** Tier B, moved to M4 where X-37 and X-38 are needed (the ID stays). The beat 4 sentence is dropped; "The attempted out-of-scope read would leave no corresponding data access or effect." Report: beat 9 and "Supporting rehearsals". It no longer carries a first integrated deliverable.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-28, GO-31, GO-33, GO-36 · Needs: X-16, X-34 · Provides: X-37, X-38
@@ -2354,6 +2369,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     boundary); "Live demonstration storyboard and proof checks" (beats 4 and 5); "Risk register and
     scope controls" (Demo proves logs, not prevention)
   - Blocked by: nothing
+  - Completed (2026-10-03): `internal/policy/boundary_evidence_postgres_test.go`, `TestResourceAndDestinationBoundaries`, through the production gate (with the review freezer) and executor. No live model loop exists on this branch yet (f3), so the out-of-scope invoice and the changed recipient come from the labelled replay (GO-36) and the vendor outside the task is a constructed proposal, logged as "not a replay"; none is presented as model output. Evidence X-37: out-of-scope invoice [labelled_replay:hostile_note_redirect_record_v1] and vendor outside the task -> stored decision `deny/resource_out_of_scope`; X-38: changed recipient [labelled_replay:hostile_note_redirect_recipient_v1] -> `deny/destination_not_allowed`. For each: adapter calls 0 (a counting adapter wraps the real runner), the executor refuses, execution attempts 0->0, excluded invoice version 1->1, reports 2->2, outbox 0->0, stored passport scope and actor unchanged; every snapshot read fails the test if it errors. Checks: see the commit.
 
 - [x] **GO-68 · Prove label and rename tampering and missing lineage**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
@@ -2458,7 +2474,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-57 · Prove organization access at the internal boundary**
+- [x] **GO-57 · Prove organization access at the internal boundary**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-14, GO-21, GO-41, GO-44 · Needs: X-22, X-24, X-34 · Provides: X-56
   - Paths: `services/gateway/internal/httpserver/server_test.go`
@@ -2471,20 +2487,22 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     its action, or claim its resources.")
   - Tests: internal-boundary tests through the X-24 command: each cross-organization command and
     read is rejected, and the runtime rows are identical before and after.
-  - Progress (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
+  - Completed (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
     committed run (awaiting approval), an action awaiting approval, an internal report, a vendor and
     invoices, and calls every mounted internal route with a valid service token and organization
     B's verified operator context: start a run on A's invoices, cancel A's run, read A's report,
-    approve and reject A's action, read A's review. Each is rejected (start: 400 or 503, cancel and
-    report 404, approval and review 403 or 404), no response contains A's report text or vendor,
-    B gets no passport, and an md5 fingerprint of every row A owns in runtime.passports, runs, jobs,
-    actions, approvals, audit_events, review_payloads, demo.reports, outbox_messages, invoices and
-    vendors is identical before and after; A's own operator still reads the report (200) and
-    cancels the run (200). Checks: `pnpm test:db gateway` 688 passed, 0 failed, 0 skipped; gateway
-    five checks PASS; `pnpm verify` 6 passed. Missing half: lane w2's GO-24 run, usage and event
-    reads are not mounted yet; they join this test when they land. On the seeded test database the
-    cross-organization start-run gets 503 (its catalog binds no feed), so the scope rejection of
-    that call is shown by GO-13's tests instead.
+    approve and reject A's action, read A's review, read A's run state, events and usage (lane w2's
+    GO-24). Each is rejected (start 400 or 503; cancel, report, run state, events and usage 404;
+    approval and review 403 or 404); the organization-wide security summary, assessments and events
+    (GO-83) answer B with none of A's run, action, report or organization ids; no response contains
+    A's report text or vendor; B gets no passport; and an md5 fingerprint of every row A owns in
+    runtime.passports, runs, jobs, actions, approvals, audit_events, review_payloads, demo.reports,
+    outbox_messages, invoices and vendors is identical before and after. A's own operator still
+    reads the report, the run state and the events (200) and cancels the run (200). Checks: `go test
+./internal/api` against the test database PASS; gateway five checks PASS; `pnpm test:db
+gateway` and `pnpm verify` as quoted in the commit. On the seeded test database the
+    cross-organization start-run answers 503 (its catalog binds no feed), so the scope rejection of
+    that call is shown by GO-13's tests.
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
@@ -2587,7 +2605,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Enforcement (report role: Implementer 4)
 
-- [ ] **GO-59 · Optional: rehearse an unknown outcome**
+- [x] **GO-59 · Optional: rehearse an unknown outcome**
   - **Report 1.1 change:** Report: "Supporting rehearsals hostile instructions limits and uncertainty".
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: C · Size: S (estimate 1-2 h)
   - Depends on: GO-53 · Needs: X-34 · Provides: X-61
@@ -2601,6 +2619,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Illustrative invoice scenario and future domain adaptations" (Scene 4 cost limits and
     uncertain execution)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestFailedCommitRecordsAnUnknownOutcome`, labelled as a simulation in its evidence line (X-61): the request is cancelled right before the effect's commit, so the outcome cannot be established; the action is placed in the attention state `unknown` with an `action.unknown` event (`outcome_unknown`) and one open attempt, the result is `paused`, and a second dispatch is refused instead of repeating the effect. The executor half of GO-53 implements it (5a6b211). `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped; `pnpm verify` 6/6. The simulated failure is a local commit failure, not a remote provider; no external system exists in the prototype.
 
 ## M6: hours 21-24
 

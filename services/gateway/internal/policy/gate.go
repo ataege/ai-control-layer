@@ -58,6 +58,9 @@ type Proposal struct {
 	IdempotencyKey string // kept by every safe retry of the same action (GO-02)
 	Tool           string
 	RawArguments   json.RawMessage
+	// ReplaySource is labelled_replay:<fixture id> for a labelled replay (GO-36) and empty for a
+	// model proposal. It only labels the records; the gate's checks are the same.
+	ReplaySource string
 }
 
 // PassportScope is the part of the immutable passport the gate checks, as loaded for a verified
@@ -89,6 +92,7 @@ type StoredAction struct {
 	CanonicalizationVersion int
 	ActionDigest            [sha256.Size]byte
 	EvaluatedRevisionID     int64
+	ReplaySource            string
 }
 
 // Decision is the gate's answer for one proposal. The zero value is not a valid decision; every
@@ -109,6 +113,8 @@ type Decision struct {
 	// runtime.control_assessments with the decision.
 	ControlRecords             []security.ControlRecord
 	AdmissionCatalogRevisionID int64
+	// ReplaySource labels every record of a replayed proposal.
+	ReplaySource string
 }
 
 // ScopeReader loads the passport scope and the active catalog revision for a verified run.
@@ -197,11 +203,14 @@ func (gate *Gate) Evaluate(ctx context.Context, run RunIdentity, proposal Propos
 
 func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal) Decision {
 	denied := func(reason ReasonCode) Decision {
-		return Decision{Outcome: OutcomeDeny, ReasonCode: reason, ActionID: proposal.ActionID}
+		return Decision{Outcome: OutcomeDeny, ReasonCode: reason, ActionID: proposal.ActionID, ReplaySource: proposal.ReplaySource}
 	}
 	if run.OrganizationID == "" || run.RunID == "" || !uuidPattern.MatchString(proposal.ActionID) ||
 		proposal.StepNumber <= 0 || proposal.IdempotencyKey == "" {
 		return denied(ReasonInvalidArguments)
+	}
+	if proposal.ReplaySource != "" && !replaySourcePattern.MatchString(proposal.ReplaySource) {
+		return Decision{Outcome: OutcomeDeny, ReasonCode: ReasonInvalidArguments, ActionID: proposal.ActionID}
 	}
 
 	arguments, err := DecodeArguments(ToolName(proposal.Tool), proposal.RawArguments)
@@ -253,6 +262,7 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 		CanonicalizationVersion: CanonicalizationVersion,
 		ActionDigest:            digest,
 		EvaluatedRevisionID:     revisionID,
+		ReplaySource:            proposal.ReplaySource,
 	}
 	if err := gate.recorder.StoreAction(ctx, storedAction); err != nil {
 		return denied(ReasonDecisionUnavailable)
@@ -262,6 +272,7 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 			Outcome: outcome, ReasonCode: reason, ActionID: proposal.ActionID,
 			ActionStored: true, ActionDigest: digest, EvaluatedRevisionID: revisionID,
 			AdmissionCatalogRevisionID: scope.AdmissionCatalogRevisionID,
+			ReplaySource:               proposal.ReplaySource,
 		}
 	}
 

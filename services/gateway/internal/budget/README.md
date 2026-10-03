@@ -1,52 +1,45 @@
-# Durable model token accounting
+# Model allowance ledger
 
-`PostgresStore` owns shared per-run token balances. Call `CreateRun` explicitly at
-admission; construction never creates tables, budgets or fixtures. The application
-migration toolchain must provide:
+`PostgresStore` is the run's model allowance ledger and the single authority for model calls,
+tokens (shared and per purpose), request time and the per-run concurrency slot (alignment decisions
+1 to 7 in `docs/contracts/runtime-schema-alignment.md`). Admission opens the ledger with
+`OpenRunLedger` inside its own transaction, copying the passport's limits; construction never
+creates tables, ledgers or fixtures.
 
-- `runtime.model_token_budgets`: `run_id text PRIMARY KEY`, `token_limit bigint`
-  greater than zero, `reserved_tokens bigint` and `used_tokens bigint` nonnegative
-  with default zero, and `paused boolean NOT NULL DEFAULT false`.
-- `runtime.model_token_reservations`: composite primary key `(run_id, call_id)`,
-  `run_id` foreign key to the balance row, `purpose text` restricted to `agent`
-  or `security`, positive `token_reservation bigint`, `status text` restricted to
-  `reserved`, `usage_unknown` or `settled`, and nullable nonnegative `input_tokens`,
-  `output_tokens` and `actual_tokens bigint`. Settled rows require all usage fields;
-  their actual count equals input plus output. Other states have no usage fields.
+Tables (migrations `1791043000000-AddModelTokenBudgets` and `1791130000000-AlignTokenLedger`):
 
-Every balance mutation locks the run row first, then its reservation. Both agent
-and security calls consume this same balance. `Reserve` rejects an already-used
-call ID, a paused run or insufficient allowance before the caller dispatches.
-A transport timeout or missing usage calls `MarkUnknown`: it releases nothing.
-Reconstructing the store retains this state. A reliable late result can settle
-once; the same counters return `AlreadySettled`, while different counters return
-`ErrConflict`. The caller must authenticate and correlate late information before
-calling `Settle`; a model response is not permission to reopen a call or retry it.
+- `runtime.model_token_budgets`, one row per run: `run_id uuid` with an organization-safe foreign
+  key to `runtime.runs`, `organization_id`, the shared `token_limit` with `reserved_tokens` and
+  `used_tokens`, optional `agent_token_limit` and `security_token_limit` with per-purpose counters,
+  `call_limit`, `agent_call_limit`, `security_call_limit` with `agent_calls` and `security_calls`,
+  `request_timeout_ms`, `max_concurrent_calls` with `calls_in_flight`, and `paused`.
+- `runtime.model_token_reservations`, one row per call: `call_id` is the call's
+  `runtime.model_calls.id`; the foreign key `(call_id, organization_id, purpose)` means a call cannot
+  spend the other purpose's capacity. Status `reserved`, `usage_unknown` or `settled`; settled rows
+  carry input, output and actual tokens (actual = input + output). `slot_held` and
+  `request_deadline_at` record the concurrency slot and the request deadline.
 
-Settlement releases the whole outstanding reservation and records the entire
-measured count as used. If measurement exceeds its reservation, the stored budget
-is paused even when its overall balance would still suffice. The stored paused
-flag fences subsequent model dispatch; admission/run orchestration must propagate
-that flag to the corresponding run state. All storage failures fail closed and
-return sanitized errors. Counter sums reject overflow. If an otherwise valid
-measured count would overflow the aggregate balance, the transaction pauses the
-budget, retains the full reservation as `usage_unknown`, and returns an accounting
-error without clipping either balance. Public operations reject a nil context.
+Rules:
 
-Run the integration tests against a dedicated, migrated test database through the shared helper:
+- Every mutation locks the run's ledger row first, in a short transaction that never spans a model
+  request: reserve, commit, dispatch, then settle in a later transaction.
+- `Reserve` refuses before dispatch, writing nothing, when the call is already reserved, the ledger
+  is paused, a shared or purpose call limit or token allowance would be exceeded (all
+  `errors.Is(err, ErrExhausted)`), or all slots are held (`ErrConcurrencyLimit`). It needs the call's
+  dispatch record. It returns the request timeout, and `model.AccountedCaller` bounds the provider
+  request with it.
+- A call counts when its reservation is granted and is never refunded: a dispatched call is a call.
+  `CountAgentCalls` is the agent loop's step count.
+- `MarkUnknown` keeps the whole reservation and the slot: a timeout or missing usage does not prove
+  that nothing was used or that the provider stopped. `Snapshot` reports unresolved calls per
+  purpose; unknown usage is never shown as zero.
+- `Settle` records measured usage once, refunds the unused reservation and releases the slot. The
+  same counters again return `AlreadySettled`, different ones `ErrConflict`. A measured count above
+  the reservation is recorded in full and pauses the ledger; a count that cannot fit the aggregate
+  pauses it and keeps the reservation.
+- The per-run `calls_in_flight` is evidence and a per-run cap, not the report's process-wide local
+  concurrency limit, which is GO-79.
+- All storage failures fail closed and hide driver details. Local inference has no tariff, so no
+  monetary cost is recorded; estimated cost is not invented as zero.
 
-```sh
-pnpm test:db gateway
-```
-
-`internal/testdb.Open` uses `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
-`POSTGRES_PASSWORD` and `POSTGRES_DB`. Completely absent optional settings visibly skip;
-partial settings or an unavailable configured database fail. `TEST_DATABASE_REQUIRED=1`
-makes absent settings fail as well. `GATEWAY_TEST_DATABASE_URL` is no longer supported,
-so the shared runner's database-free discovery cannot accidentally connect through another URL.
-
-Tests create UUID-named fixtures and remove only their own rows with bounded cleanup contexts.
-They cover concurrent agent/security reservations, restart reads, retained unknown usage,
-one-time late settlement, conflicting late counters and untruncated overruns. Database skips
-are not PostgreSQL verification; the gateway wrapper prints them individually. No test creates
-schemas or tables.
+`budgettest` seeds synthetic runs with an open ledger for database tests.

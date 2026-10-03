@@ -185,7 +185,7 @@ func readPurposeUsage(ctx context.Context, tx pgx.Tx, organizationID string, run
 			coalesce(sum(reservation.token_reservation) FILTER (WHERE reservation.status IN ('reserved', 'usage_unknown')), 0)::bigint,
 			count(*) FILTER (WHERE reservation.status = 'usage_unknown')
 		FROM runtime.model_token_reservations AS reservation
-		JOIN runtime.runs AS run ON run.id::text = reservation.run_id
+		JOIN runtime.runs AS run ON run.id = reservation.run_id AND run.organization_id = reservation.organization_id
 		WHERE run.organization_id = $1 AND ($2::text IS NULL OR run.id = $2::text::uuid)
 		GROUP BY reservation.purpose`, organizationID, runID)
 	if err != nil {

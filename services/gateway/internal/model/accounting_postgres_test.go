@@ -15,28 +15,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/budget/budgettest"
 	"starter/services/gateway/internal/testdb"
 )
 
-func postgresAccountingStore(t *testing.T) (*budget.PostgresStore, *pgxpool.Pool, string) {
+// postgresAccountingStore seeds a run with an open ledger of 20,000 tokens. Call and concurrency
+// limits are raised so the token allowance stays the limit under test. The store writes each
+// call's dispatch record before reserving, as the call log does in production.
+func postgresAccountingStore(t *testing.T) (*budgettest.DispatchRecordingStore, *pgxpool.Pool, string) {
 	t.Helper()
 	pool := testdb.Open(t)
-	store := budget.NewPostgresStore(pool)
-	id := "model-accounting-test-" + testdb.ID(t)
-	if err := store.CreateRun(context.Background(), id, 20000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cleanupContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_reservations WHERE run_id=$1", id); err != nil {
-			t.Error("could not clean test reservations")
-		}
-		if _, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_budgets WHERE run_id=$1", id); err != nil {
-			t.Error("could not clean test budget")
-		}
-	})
-	return store, pool, id
+	limits := budgettest.Limits(20000)
+	limits.CallsTotal, limits.CallsAgent, limits.CallsSecurity, limits.LocalMaxConcurrency = 40, 40, 40, 40
+	run := budgettest.OpenRun(t, pool, limits)
+	return budgettest.NewDispatchRecordingStore(pool), pool, run.RunID
 }
 func postgresAccountingCaller(t *testing.T, store budget.Store, handler http.HandlerFunc, timeout time.Duration) (*AccountedCaller, *atomic.Int64) {
 	t.Helper()
@@ -61,7 +53,7 @@ func TestPostgresOllamaMeasuredSettlement(t *testing.T) {
 	caller, hits := postgresAccountingCaller(t, store, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"model":"test-fixture","done":true,"message":{"role":"assistant","content":"ok"},"prompt_eval_count":200,"eval_count":50}`)
 	}, time.Second)
-	result, err := caller.Call(context.Background(), id, "normal", postgresAccountingRequest(AgentPurpose))
+	result, err := caller.Call(context.Background(), id, testdb.ID(t), postgresAccountingRequest(AgentPurpose))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +70,8 @@ func TestPostgresOllamaMissingCounterRetained(t *testing.T) {
 	caller, _ := postgresAccountingCaller(t, store, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"model":"test-fixture","done":true,"message":{"role":"assistant","content":"ok"},"prompt_eval_count":200}`)
 	}, time.Second)
-	result, err := caller.Call(context.Background(), id, "missing", postgresAccountingRequest(SecurityPurpose))
+	missingCall := testdb.ID(t)
+	result, err := caller.Call(context.Background(), id, missingCall, postgresAccountingRequest(SecurityPurpose))
 	if !errors.Is(err, ErrUsageUnknown) || !result.UsageUnknown {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -88,7 +81,7 @@ func TestPostgresOllamaMissingCounterRetained(t *testing.T) {
 	}
 	var status string
 	var input, output, actual *int64
-	if err := pool.QueryRow(context.Background(), "SELECT status,input_tokens,output_tokens,actual_tokens FROM runtime.model_token_reservations WHERE run_id=$1 AND call_id='missing'", id).Scan(&status, &input, &output, &actual); err != nil {
+	if err := pool.QueryRow(context.Background(), "SELECT status,input_tokens,output_tokens,actual_tokens FROM runtime.model_token_reservations WHERE run_id=$1 AND call_id=$2", id, missingCall).Scan(&status, &input, &output, &actual); err != nil {
 		t.Fatal("could not inspect test reservation")
 	}
 	if status != "usage_unknown" || input != nil || output != nil || actual != nil {
@@ -107,11 +100,12 @@ func TestPostgresOllamaTimeoutNoRedispatch(t *testing.T) {
 		}
 	}, 10*time.Millisecond)
 	request := postgresAccountingRequest(AgentPurpose)
-	result, err := caller.Call(context.Background(), id, "timeout", request)
+	timeoutCall := testdb.ID(t)
+	result, err := caller.Call(context.Background(), id, timeoutCall, request)
 	if !errors.Is(err, ErrTimeout) || !result.UsageUnknown {
 		t.Fatalf("%+v %v", result, err)
 	}
-	if _, err := caller.Call(context.Background(), id, "timeout", request); !errors.Is(err, budget.ErrDuplicate) {
+	if _, err := caller.Call(context.Background(), id, timeoutCall, request); !errors.Is(err, budget.ErrDuplicate) {
 		t.Fatal(err)
 	}
 	snapshot, err := store.Snapshot(context.Background(), id)
@@ -121,11 +115,11 @@ func TestPostgresOllamaTimeoutNoRedispatch(t *testing.T) {
 }
 func TestPostgresOllamaInsufficientBudgetNoHTTP(t *testing.T) {
 	store, _, id := postgresAccountingStore(t)
-	if _, err := store.Reserve(context.Background(), id, "held", "agent", 20000); err != nil {
+	if _, err := store.Reserve(context.Background(), id, testdb.ID(t), "agent", 20000); err != nil {
 		t.Fatal(err)
 	}
 	caller, hits := postgresAccountingCaller(t, store, func(w http.ResponseWriter, r *http.Request) { t.Error("provider dispatched without allowance") }, time.Second)
-	if _, err := caller.Call(context.Background(), id, "denied", postgresAccountingRequest(AgentPurpose)); !errors.Is(err, budget.ErrExhausted) {
+	if _, err := caller.Call(context.Background(), id, testdb.ID(t), postgresAccountingRequest(AgentPurpose)); !errors.Is(err, budget.ErrExhausted) {
 		t.Fatal(err)
 	}
 	if hits.Load() != 0 {
@@ -137,6 +131,10 @@ func TestPostgresOllamaConcurrentSharedAllowance(t *testing.T) {
 	caller, hits := postgresAccountingCaller(t, store, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"model":"test-fixture","done":true,"message":{"role":"assistant","content":"fixture"}}`)
 	}, time.Second)
+	callIDs := make([]string, 30)
+	for index := range callIDs {
+		callIDs[index] = testdb.ID(t)
+	}
 	var wg sync.WaitGroup
 	results := make(chan AccountedResult, 30)
 	failures := make(chan error, 30)
@@ -148,7 +146,7 @@ func TestPostgresOllamaConcurrentSharedAllowance(t *testing.T) {
 			if i%2 == 1 {
 				purpose = SecurityPurpose
 			}
-			result, err := caller.Call(context.Background(), id, fmt.Sprintf("concurrent-%d", i), postgresAccountingRequest(purpose))
+			result, err := caller.Call(context.Background(), id, callIDs[i], postgresAccountingRequest(purpose))
 			if errors.Is(err, ErrUsageUnknown) {
 				results <- result
 			} else {
@@ -180,7 +178,7 @@ func TestPostgresOllamaOverspendPausesFullCount(t *testing.T) {
 	caller, hits := postgresAccountingCaller(t, store, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"model":"test-fixture","done":true,"message":{"role":"assistant","content":"fixture"},"prompt_eval_count":24000,"eval_count":500}`)
 	}, time.Second)
-	result, err := caller.Call(context.Background(), id, "over", postgresAccountingRequest(AgentPurpose))
+	result, err := caller.Call(context.Background(), id, testdb.ID(t), postgresAccountingRequest(AgentPurpose))
 	if !errors.Is(err, ErrOverspend) || result.Settlement == nil || result.Settlement.ActualTokens != 24500 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -188,10 +186,35 @@ func TestPostgresOllamaOverspendPausesFullCount(t *testing.T) {
 	if err != nil || snapshot.Used != 24500 || snapshot.Reserved != 0 || !snapshot.Paused {
 		t.Fatalf("%+v %v", snapshot, err)
 	}
-	if _, err := caller.Call(context.Background(), id, "next", postgresAccountingRequest(SecurityPurpose)); !errors.Is(err, budget.ErrPaused) {
+	if _, err := caller.Call(context.Background(), id, testdb.ID(t), postgresAccountingRequest(SecurityPurpose)); !errors.Is(err, budget.ErrPaused) {
 		t.Fatal(err)
 	}
 	if hits.Load() != 1 {
 		t.Fatal("paused run dispatched")
+	}
+}
+
+// TestPostgresNoLedgerLockDuringTheProviderCall shows the reservation commits before dispatch:
+// while the provider double answers, another connection can lock the run's ledger row at once.
+func TestPostgresNoLedgerLockDuringTheProviderCall(t *testing.T) {
+	store, _, id := postgresAccountingStore(t)
+	observer := testdb.Open(t)
+	var ledgerLockedDuringCall atomic.Bool
+	ledgerLockedDuringCall.Store(true)
+	caller, _ := postgresAccountingCaller(t, store, func(w http.ResponseWriter, r *http.Request) {
+		transaction, err := observer.Begin(r.Context())
+		if err == nil {
+			var lockedRun string
+			lockErr := transaction.QueryRow(r.Context(), "SELECT run_id::text FROM runtime.model_token_budgets WHERE run_id = $1 FOR UPDATE NOWAIT", id).Scan(&lockedRun)
+			ledgerLockedDuringCall.Store(lockErr != nil)
+			_ = transaction.Rollback(r.Context())
+		}
+		fmt.Fprint(w, `{"model":"test-fixture","done":true,"message":{"role":"assistant","content":"fixture"},"prompt_eval_count":10,"eval_count":2}`)
+	}, time.Second)
+	if _, err := caller.Call(context.Background(), id, testdb.ID(t), postgresAccountingRequest(AgentPurpose)); err != nil {
+		t.Fatal(err)
+	}
+	if ledgerLockedDuringCall.Load() {
+		t.Fatal("the run's ledger row was locked while the provider call ran")
 	}
 }

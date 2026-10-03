@@ -25,6 +25,9 @@ import (
 // step limit. A run that is still going afterwards is requeued and claimed again.
 const maximumStepsPerClaim = 64
 
+// concurrencyRetryDelay is how long a job waits when its run holds all its model call slots.
+const concurrencyRetryDelay = time.Second
+
 // ModelStepper performs one agent model step (Stepper).
 type ModelStepper interface {
 	Step(ctx context.Context, run Run, taskContext []model.Message) (StepResult, error)
@@ -40,7 +43,7 @@ type ActionExecutor interface {
 	Execute(ctx context.Context, run policy.RunIdentity, actionID string) policy.ExecutionResult
 }
 
-// StepCounter counts the run's agent model calls (budget.CallLog).
+// StepCounter counts the run's reserved agent model calls (budget.PostgresStore, the ledger).
 type StepCounter interface {
 	CountAgentCalls(ctx context.Context, organizationID, runID string) (int, error)
 }
@@ -126,6 +129,10 @@ func (loop *Loop) Handle(ctx context.Context, job worker.Job) (worker.Outcome, e
 		stepStarted := time.Now()
 		end, proceed, err := loop.step(ctx, runIdentity)
 		loop.recordSpans(ctx, runIdentity, Span{Phase: PhaseTotal, Duration: time.Since(stepStarted), Failed: err != nil})
+		if errors.Is(err, budget.ErrConcurrencyLimit) {
+			// The run holds all its call slots (a call with unresolved usage): try again shortly.
+			return worker.Requeue(concurrencyRetryDelay), nil
+		}
 		if err != nil {
 			return worker.Outcome{}, err
 		}
@@ -204,6 +211,9 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	if err != nil {
 		if ctx.Err() != nil {
 			return runEnd{}, false, ctx.Err()
+		}
+		if errors.Is(err, budget.ErrConcurrencyLimit) {
+			return runEnd{}, false, err
 		}
 		return stepErrorEnd(err), false, nil
 	}

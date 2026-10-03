@@ -12,58 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/budget/budgettest"
 	"starter/services/gateway/internal/model"
 	"starter/services/gateway/internal/testdb"
 )
 
-// newRunFixture inserts a synthetic passport and run plus the run's token ledger, and removes
-// them afterwards. Passports reject DELETE by trigger, so the passport is removed with triggers
-// disabled for that transaction (superuser test database); otherwise it is left and logged.
+// newRunFixture seeds a synthetic passport, run and open ledger (budgettest) and removes them,
+// with every dispatch record and reservation of the run, when the test ends.
 func newRunFixture(t *testing.T, pool *pgxpool.Pool, tokenLimit int64) Run {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	run := Run{OrganizationID: testdb.ID(t), RunID: testdb.ID(t), AllowedModels: []string{"test-fixture"}}
-	passportID := testdb.ID(t)
-	if _, err := pool.Exec(ctx, `INSERT INTO runtime.passports(id, organization_id, actor_id, task_version, admission_catalog_revision_id, scope, limits, expires_at)
-		VALUES ($1, $2, $3, 'agent_test_v1', 1, '{}', '{}', now() + interval '1 hour')`, passportID, run.OrganizationID, testdb.ID(t)); err != nil {
-		t.Fatalf("insert passport fixture: %v", err)
-	}
-	if _, err := pool.Exec(ctx, `INSERT INTO runtime.runs(id, organization_id, passport_id, status) VALUES ($1, $2, $3, 'running')`,
-		run.RunID, run.OrganizationID, passportID); err != nil {
-		t.Fatalf("insert run fixture: %v", err)
-	}
-	if err := budget.NewPostgresStore(pool).CreateRun(ctx, run.RunID, tokenLimit); err != nil {
-		t.Fatalf("create ledger: %v", err)
-	}
-	t.Cleanup(func() {
-		cleanupContext, cancelCleanup := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancelCleanup()
-		for _, statement := range []string{
-			"DELETE FROM runtime.model_token_reservations WHERE run_id = $1",
-			"DELETE FROM runtime.model_token_budgets WHERE run_id = $1",
-			"DELETE FROM runtime.model_calls WHERE run_id = $1",
-			"DELETE FROM runtime.runs WHERE id = $1",
-		} {
-			if _, err := pool.Exec(cleanupContext, statement, run.RunID); err != nil {
-				t.Errorf("clean run fixture: %v", err)
-				return
-			}
-		}
-		transaction, err := pool.Begin(cleanupContext)
-		if err == nil {
-			defer func() { _ = transaction.Rollback(cleanupContext) }()
-			if _, err = transaction.Exec(cleanupContext, "SET LOCAL session_replication_role = replica"); err == nil {
-				if _, err = transaction.Exec(cleanupContext, "DELETE FROM runtime.passports WHERE id = $1", passportID); err == nil {
-					err = transaction.Commit(cleanupContext)
-				}
-			}
-		}
-		if err != nil {
-			t.Logf("passport fixture %s left in place (removing it needs a superuser)", passportID)
-		}
-	})
-	return run
+	seeded := budgettest.OpenRun(t, pool, budgettest.Limits(tokenLimit))
+	return Run{OrganizationID: seeded.OrganizationID, RunID: seeded.RunID, AllowedModels: []string{"test-fixture"}}
 }
 
 // TestStepRecordsTheDispatchAndSettlesUsage runs one step through the real Ollama client, the
