@@ -35,6 +35,13 @@ does not reshape them.
 | `SecurityEventPage` | `GET /internal/security/events?cursor=&limit=`      | `security-event-page.schema.json` | `reads.SecurityEventPage` | Go-owned (lane w2); NestJS consumes |
 | `ReportView` (X-64) | `GET /internal/runs/{runId}/reports/{reportId}`     | `report-view.schema.json`         | `provenance.ReportView`   | Go-owned (lane w2); NestJS consumes |
 
+Change log (additive only; existing fields keep their meaning):
+
+- 2026-10-03: `SecuritySummary.decisions[].rejectionCause` (nullable: `not_json`, `extra_text`,
+  `code_fence`, `wrong_status`, `wrong_fields`, `unknown_report`) counts rejected final answers
+  (GO-26) by kind, null on every other row. The event pages carry the same value in
+  `maskedSummary.rejectionCause` (X-12, 3c).
+
 Names: the TypeScript `RunEventsPage` (schema `run-events-page`) is the Go type `reads.RunEventPage`.
 `modelCalls` and `modelUsage` always hold two entries in a fixed order, `agent` then `security`.
 The fixture `report-view.internal-withheld.json` documents the withheld case the contract allows;

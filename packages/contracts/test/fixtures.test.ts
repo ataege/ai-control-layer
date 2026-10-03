@@ -601,10 +601,19 @@ export const typedSamples = {
     ],
     decisions: [
       {
+        eventType: "action.denied",
+        decision: "deny",
+        reasonCode: "invalid_arguments",
+        inputSource: null,
+        rejectionCause: "code_fence",
+        count: 1,
+      },
+      {
         eventType: "control.evaluated",
         decision: "deny",
         reasonCode: "semantic_injection_detected",
         inputSource: "judge",
+        rejectionCause: null,
         count: 1,
       },
       {
@@ -612,6 +621,7 @@ export const typedSamples = {
         decision: "deny",
         reasonCode: "report_export_restricted",
         inputSource: null,
+        rejectionCause: null,
         count: 1,
       },
     ],

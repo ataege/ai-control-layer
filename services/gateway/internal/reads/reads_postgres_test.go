@@ -359,6 +359,13 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 		MaskedSummary: contracts.MaskedSummary{InputSource: pointer("judge"), ActorID: pointer(testdb.ID(t)), EvaluationID: &judgeEvaluationID}}); err != nil {
 		t.Fatal(err)
 	}
+	// A rejected final answer (GO-26): its fixed rejection cause, never the answer's text.
+	codeFence := "code_fence"
+	if _, err := repository.Join(tx).AppendEvent(ctx, repository.NewEvent{OrganizationID: organizationID, RunID: &runID,
+		EventType: contracts.EventActionDenied, Decision: pointer(contracts.DecisionDeny), ReasonCode: pointer(contracts.ReasonInvalidArguments),
+		MaskedSummary: contracts.MaskedSummary{RejectionCause: &codeFence}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -417,12 +424,41 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 	wantTiming := PhaseTiming{Phase: "deterministic", Count: 5, Failed: 1, MedianMicroseconds: 300, P95Microseconds: 5000, MaxMicroseconds: 5000}
 	if len(summary.Timings) != 1 || summary.Timings[0] != wantTiming ||
 		len(summary.Runs) != 1 || summary.Runs[0] != (StatusCount{Status: contracts.RunRunning, Count: 1}) ||
-		len(summary.Decisions) != 2 || summary.Decisions[0].Count != 1 || *summary.Decisions[0].ReasonCode != contracts.ReasonSignatureMatch ||
-		summary.Decisions[0].InputSource != nil || summary.Decisions[1].InputSource == nil || *summary.Decisions[1].InputSource != "judge" ||
+		len(summary.Decisions) != 3 ||
+		summary.Decisions[0].EventType != contracts.EventActionDenied || summary.Decisions[0].RejectionCause == nil ||
+		*summary.Decisions[0].RejectionCause != "code_fence" || summary.Decisions[0].Count != 1 ||
+		summary.Decisions[1].Count != 1 || *summary.Decisions[1].ReasonCode != contracts.ReasonSignatureMatch ||
+		summary.Decisions[1].InputSource != nil || summary.Decisions[1].RejectionCause != nil ||
+		summary.Decisions[2].InputSource == nil || *summary.Decisions[2].InputSource != "judge" ||
 		summary.ModelUsage[1].Completed != 2 || summary.JudgeSecurityCalls != 1 || summary.OrganizationID != organizationID {
 		t.Fatalf("summary %s", recorder.Body.String())
 	}
 	t.Logf("evidence GO-83: summary %s", recorder.Body.String())
+
+	// The organization event page serves the rejection cause as stored.
+	var causes []string
+	eventCursor := ""
+	eventually(t, "the rejected final answer on the event page", func() bool {
+		target := "/internal/security/events?limit=500"
+		if eventCursor != "" {
+			target += "&cursor=" + eventCursor
+		}
+		page := serve(t, SecurityEventsRoutePattern, SecurityEventsHandler(pool), target, operatorOf(organizationID))
+		var events SecurityEventPage
+		if page.Code != http.StatusOK || contracts.DecodeStrict(page.Body.Bytes(), &events) != nil {
+			t.Fatalf("events %d: %s", page.Code, page.Body.String())
+		}
+		eventCursor = events.NextCursor
+		for _, event := range events.Events {
+			if event.MaskedSummary.RejectionCause != nil {
+				causes = append(causes, *event.MaskedSummary.RejectionCause)
+			}
+		}
+		return len(causes) > 0
+	})
+	if len(causes) != 1 || causes[0] != "code_fence" {
+		t.Fatalf("rejection causes on the event page: %v", causes)
+	}
 
 	// Another organization sees none of it.
 	recorder = serve(t, SecuritySummaryRoutePattern, SecuritySummaryHandler(pool), "/internal/security/summary", operatorOf(testdb.ID(t)))
