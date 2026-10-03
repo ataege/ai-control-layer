@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"log/slog"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -82,7 +84,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	}
 	callLog := budget.NewCallLog(pool)
 	catalogSource := PoolCatalog{Loader: loader, Pool: pool}
-	modelCaller := &CatalogAccountedCaller{provider: provider, ledger: budget.NewPostgresStore(pool), catalog: pool}
+	modelCaller := NewCatalogAccountedCaller(provider, budget.NewPostgresStore(pool), poolAccounting{pool: pool}, catalogSource, pool, modelName)
 
 	securityCaller, err := NewRecordingCaller(callLog, modelCaller, modelName)
 	if err != nil {
@@ -137,33 +139,139 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 }
 
 // CatalogAccountedCaller reads the active catalog's accounting settings on every call, so a policy
-// reload changes output ceilings and request time at the next dispatch, then reserves on the run's
-// ledger and calls the provider through model.AccountedCaller.
+// reload changes output ceilings, request time, the model allowlist and the local concurrency cap
+// at the next dispatch, then reserves on the run's ledger and calls the provider through
+// model.AccountedCaller (GO-79).
 type CatalogAccountedCaller struct {
-	provider model.ChatProvider
-	ledger   budget.Store
-	catalog  config.CatalogReader
+	provider   model.ChatProvider
+	ledger     budget.Store
+	accounting AccountingSource
+	snapshots  CatalogSource
+	passports  catalog.Querier
+	modelName  string
+	local      *localConcurrency
 }
 
-// Call makes one accounted model call; without an active catalog nothing is dispatched.
+// AccountingSource returns the active catalog's model accounting settings.
+type AccountingSource interface {
+	Active(ctx context.Context) (config.AccountingCatalog, error)
+}
+
+// poolAccounting reads the accounting projection of the active catalog on the pool.
+type poolAccounting struct{ pool config.CatalogReader }
+
+func (source poolAccounting) Active(ctx context.Context) (config.AccountingCatalog, error) {
+	return config.ReadActiveAccountingCatalog(ctx, source.pool)
+}
+
+// NewCatalogAccountedCaller returns the metered model gateway of the production chain. passports
+// reads the run's passport scope; modelName is the configured provider model.
+func NewCatalogAccountedCaller(provider model.ChatProvider, ledger budget.Store, accounting AccountingSource, snapshots CatalogSource,
+	passports catalog.Querier, modelName string) *CatalogAccountedCaller {
+	return &CatalogAccountedCaller{provider: provider, ledger: ledger, accounting: accounting, snapshots: snapshots,
+		passports: passports, modelName: modelName, local: &localConcurrency{}}
+}
+
+// Call makes one accounted model call. Nothing is reserved or dispatched when there is no active
+// catalog, or when the configured model is outside the catalog's or the run passport's allowed
+// models. Every purpose, the security check included, passes the same checks.
 func (caller *CatalogAccountedCaller) Call(ctx context.Context, runID, callID string, request model.Request) (model.AccountedResult, error) {
-	active, err := config.ReadActiveAccountingCatalog(ctx, caller.catalog)
+	snapshot, err := caller.snapshots.Active(ctx)
+	if err != nil {
+		return model.AccountedResult{}, err
+	}
+	active, err := caller.accounting.Active(ctx)
 	if err != nil {
 		return model.AccountedResult{}, err
 	}
 	settings := active.Settings
+	if !slices.Contains(snapshot.Limits.AllowedModels, caller.modelName) {
+		return model.AccountedResult{}, ErrModelNotAllowed
+	}
+	if allowed, err := caller.passportAllowsModel(ctx, runID); err != nil || !allowed {
+		return model.AccountedResult{}, ErrModelNotAllowed
+	}
 	accounted, err := model.NewAccountedCaller(caller.provider, caller.ledger, model.AccountingSettings{
 		AgentOutputTokens: settings.AgentOutputTokens, SecurityOutputTokens: settings.SecurityOutputTokens, TemplateTokens: settings.TemplateTokens,
 	})
 	if err != nil {
 		return model.AccountedResult{}, err
 	}
-	if settings.RequestTimeout > 0 {
+	requestTimeout := time.Duration(snapshot.Limits.RequestTimeoutSeconds) * time.Second
+	if requestTimeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, settings.RequestTimeout)
+		ctx, cancel = context.WithTimeout(ctx, requestTimeout)
 		defer cancel()
 	}
-	return accounted.Call(ctx, runID, callID, request)
+	// The process-wide local cap: wait for a slot within the request deadline, before reserving.
+	release, err := caller.local.acquire(ctx, int(snapshot.Limits.LocalMaxConcurrency))
+	if err != nil {
+		return model.AccountedResult{}, budget.ErrConcurrencyLimit
+	}
+	result, callErr := accounted.Call(ctx, runID, callID, request)
+	if result.UsageUnknown {
+		// A client timeout does not prove inference stopped: keep the slot one more request period.
+		time.AfterFunc(requestTimeout, release)
+	} else {
+		release()
+	}
+	return result, callErr
+}
+
+// passportAllowsModel reads the run's immutable passport scope: a model the passport does not name is
+// never dispatched, whatever the catalog allows.
+func (caller *CatalogAccountedCaller) passportAllowsModel(ctx context.Context, runID string) (bool, error) {
+	var allowedModels []string
+	err := caller.passports.QueryRow(ctx, `SELECT COALESCE(ARRAY(SELECT jsonb_array_elements_text(passport.scope -> 'allowedModels')), '{}')
+		FROM runtime.runs AS run
+		JOIN runtime.passports AS passport ON passport.id = run.passport_id AND passport.organization_id = run.organization_id
+		WHERE run.id = $1`, runID).Scan(&allowedModels)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(allowedModels, caller.modelName), nil
+}
+
+// localConcurrency bounds the model requests this process has in flight; the bound is read from the
+// active catalog on every call, so a lowered cap applies to the next request.
+type localConcurrency struct {
+	mutex   sync.Mutex
+	inUse   int
+	changed chan struct{}
+}
+
+// acquire waits until fewer than limit requests are in flight, or until ctx ends.
+func (limiter *localConcurrency) acquire(ctx context.Context, limit int) (func(), error) {
+	if limit <= 0 {
+		return nil, budget.ErrConcurrencyLimit
+	}
+	for {
+		limiter.mutex.Lock()
+		if limiter.changed == nil {
+			limiter.changed = make(chan struct{})
+		}
+		if limiter.inUse < limit {
+			limiter.inUse++
+			limiter.mutex.Unlock()
+			var once sync.Once
+			return func() { once.Do(limiter.release) }, nil
+		}
+		changed := limiter.changed
+		limiter.mutex.Unlock()
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+func (limiter *localConcurrency) release() {
+	limiter.mutex.Lock()
+	defer limiter.mutex.Unlock()
+	limiter.inUse--
+	close(limiter.changed)
+	limiter.changed = make(chan struct{})
 }
 
 // CatalogSettings gives the security settings of the active catalog revision (policy's

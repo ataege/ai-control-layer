@@ -438,6 +438,21 @@ GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
   -run '^TestLiveProductionChainExecutesAPermittedTool$' -count=1 -v
 ```
 
+## Model allowlist, request deadline and local concurrency (GO-79)
+
+`agent.CatalogAccountedCaller`, the chain's metered model gateway, checks every call of either
+purpose before anything is reserved or sent: the configured model must be in the active catalog's
+allowed models and in the run passport's (`ErrModelNotAllowed`, which the loop maps to `stopped` /
+`model_not_allowed` and the semantic check to a pause). Each request is bounded by the catalog's
+request time and by the ledger's (`budget.Reservation.RequestTimeout`, applied in
+`model.AccountedCaller`). Besides the per-run ledger slot, a process-wide cap of the catalog's
+`local_max_concurrency` makes further requests wait for a slot within their deadline (a wait that
+runs out is `budget.ErrConcurrencyLimit`, which requeues the job). After a timeout or unknown usage
+the process slot stays held for one more request period, because a client timeout does not prove
+the provider stopped; the ledger keeps the reservation and its slot until the late settlement.
+`model.AccountedCaller` now joins the safe failure sentinel (`ErrTransport`, `ErrResponse`) to
+`ErrUsageUnknown`, never the provider's raw error.
+
 ## Model allowance ledger alignment (GO-39)
 
 Migration `1791130000000-AlignTokenLedger` applies alignment decisions 1 to 5 to the GO-06 ledger:
