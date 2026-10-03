@@ -32,12 +32,15 @@ const (
 	// FieldToolResultValue is any other string value of a minimized tool result, for example a
 	// vendor display name: deterministic rules only, never a semantic call.
 	FieldToolResultValue FieldName = "tool_result_value"
+	// FieldActionProposalText is a proposal's tool name and canonical arguments.
+	FieldActionProposalText FieldName = "action_proposal_text"
 )
 
 // designatedFields lists which fields each boundary may carry.
 var designatedFields = map[Boundary][]FieldName{
-	BoundaryToolResult: {FieldToolResultText, FieldInternalNote, FieldToolResultValue},
-	BoundaryModelInput: {FieldModelInputText},
+	BoundaryToolResult:     {FieldToolResultText, FieldInternalNote, FieldToolResultValue},
+	BoundaryModelInput:     {FieldModelInputText},
+	BoundaryActionProposal: {FieldActionProposalText},
 }
 
 // SourceRef is trusted provenance resolved by Go from source records. This package copies it
