@@ -1728,7 +1728,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
     output)
   - Blocked by: `replay entry`
-  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` 6/6. The demo-triggerable entry (cmd/replay) follows separately.
+  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. The demo-triggerable entry (cmd/replay) follows separately.
 
 - [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
   - **Report 1.1 change:** Serves the extended X-64 (classification, template and projection versions, content hash, destination class, lineage summary).
@@ -2310,7 +2310,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: `decision 2 in docs/product/README.md`
 
-- [ ] **GO-30 · Prove the resource and destination boundaries**
+- [x] **GO-30 · Prove the resource and destination boundaries**
   - **Report 1.1 change:** Tier B, moved to M4 where X-37 and X-38 are needed (the ID stays). The beat 4 sentence is dropped; "The attempted out-of-scope read would leave no corresponding data access or effect." Report: beat 9 and "Supporting rehearsals". It no longer carries a first integrated deliverable.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-28, GO-31, GO-33, GO-36 · Needs: X-16, X-34 · Provides: X-37, X-38
@@ -2333,6 +2333,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     boundary); "Live demonstration storyboard and proof checks" (beats 4 and 5); "Risk register and
     scope controls" (Demo proves logs, not prevention)
   - Blocked by: nothing
+  - Completed (2026-10-03): `internal/policy/boundary_evidence_postgres_test.go`, `TestResourceAndDestinationBoundaries`, through the production gate (with the review freezer) and executor. No live model loop exists on this branch yet (f3), so the out-of-scope invoice and the changed recipient come from the labelled replay (GO-36) and the vendor outside the task is a constructed proposal, logged as "not a replay"; none is presented as model output. Evidence X-37: out-of-scope invoice [labelled_replay:hostile_note_redirect_record_v1] and vendor outside the task -> stored decision `deny/resource_out_of_scope`; X-38: changed recipient [labelled_replay:hostile_note_redirect_recipient_v1] -> `deny/destination_not_allowed`. For each: adapter calls 0 (a counting adapter wraps the real runner), the executor refuses, execution attempts 0->0, excluded invoice version 1->1, reports 2->2, outbox 0->0, stored passport scope and actor unchanged; every snapshot read fails the test if it errors. Checks: see the commit.
 
 - [x] **GO-68 · Prove label and rename tampering and missing lineage**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)

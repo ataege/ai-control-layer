@@ -262,3 +262,12 @@ note: `hostile_note_redirect_record_v1` reads `invoice_B01` (`resource_out_of_sc
 (`destination_not_allowed`), `hostile_note_internal_disclosure_v1` queues the internal report to
 the registered recipient (`report_export_restricted`). A replay makes no provider call and records
 no model usage; a malformed label is denied (`invalid_arguments`).
+
+## Resource and destination boundary evidence (GO-30)
+
+`TestResourceAndDestinationBoundaries` submits an out-of-scope invoice and a changed recipient
+(both from the labelled replay) and a vendor outside the task through the production gate and
+executor. It snapshots the excluded invoice's version, the report, outbox and execution-attempt
+counts and the stored passport before and after, and asserts the stored denial, a refused
+execution and zero adapter calls (X-37, X-38). Until the agent loop lands, no case is a live model
+proposal.
