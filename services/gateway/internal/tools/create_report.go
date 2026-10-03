@@ -67,6 +67,9 @@ func createReport(ctx context.Context, tx pgx.Tx, current scope, request EffectR
 	case provenance.InternalInvestigationV1.Name:
 		content, sources = renderInternal(invoices, current.passport.InternalNoteReadable)
 	case provenance.VendorReconciliationV1.Name:
+		if !current.allowsProjection(provenance.VendorInvoiceFieldsV1.Name) {
+			return failed(ReasonTemplateNotAllowed), nil
+		}
 		var vendorID string
 		content, sources, vendorID = renderVendor(invoices)
 		if vendorID == "" || !current.allowsVendor(vendorID) {
