@@ -31,7 +31,7 @@ func TestLiveProductionChainExecutesAPermittedTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("model configuration: %v", err)
 	}
-	world := newLoopWorld(t, passportOptions{allowedModel: modelConfig.Name, openLedger: true})
+	world := newLoopWorld(t, passportOptions{allowedModel: modelConfig.Name})
 	activateRepositoryPolicy(t, world)
 
 	logs := &bytes.Buffer{}

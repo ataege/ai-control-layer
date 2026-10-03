@@ -110,7 +110,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	}
 	loop, err := NewLoop(LoopDependencies{
 		Runs: repository.New(pool), Stepper: stepper, Gate: gate, Executor: executor, Inspector: resultInspector,
-		Catalog: catalogSource, Scopes: scopes, Corrections: policy.NewCorrectionCounter(pool), Steps: callLog,
+		Catalog: catalogSource, Scopes: scopes, Corrections: policy.NewCorrectionCounter(pool), Steps: budget.NewPostgresStore(pool),
 		Contexts: NewContextStore(pool), Telemetry: NewTelemetry(pool), Logger: chainConfig.Logger,
 	})
 	if err != nil {

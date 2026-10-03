@@ -46,8 +46,9 @@ func openReviewWorld(t *testing.T) *reviewWorld {
 	mustExec(t, pool, `INSERT INTO demo.invoices (id, organization_id, vendor_id, external_reference, currency, total_minor_units, issued_on, due_on)
 	                   VALUES ($1, $2, $3, 'INV104', 'EUR', 125000, '2026-09-01', '2026-10-31')`, world.invoiceID, world.run.OrganizationID, vendorID)
 	scope, _ := json.Marshal(contracts.PassportScope{
-		Tools: []contracts.ToolName{contracts.ToolCreateReport, contracts.ToolQueueReport}, InvoiceIDs: []string{world.invoiceID},
-		VendorIDs: []string{vendorID}, ReportTemplates: []contracts.ReportTemplate{contracts.TemplateVendorReconciliation},
+		Tools:      []contracts.ToolName{contracts.ToolReadInvoice, contracts.ToolReadVendor, contracts.ToolCreateReport, contracts.ToolQueueReport},
+		InvoiceIDs: []string{world.invoiceID},
+		VendorIDs:  []string{vendorID}, ReportTemplates: []contracts.ReportTemplate{contracts.TemplateVendorReconciliation},
 		ProjectionRules: []string{"vendor_invoice_fields_v1"}, RecipientReferences: []string{world.reference},
 		AllowedModels: []string{"qwen3.5:4b"}, ApprovalRequiredTools: []contracts.ToolName{contracts.ToolQueueReport},
 	})
@@ -60,8 +61,9 @@ func openReviewWorld(t *testing.T) *reviewWorld {
 		world.run.RunID, world.run.OrganizationID, passportID)
 	world.scope = PassportScope{
 		OrganizationID: world.run.OrganizationID, RunID: world.run.RunID, PassportID: passportID,
-		AllowedTools: []ToolName{ToolCreateReport, ToolQueueReport}, AllowedInvoiceIDs: []string{world.invoiceID},
-		AllowedTemplates: []string{TemplateVendorReconciliation}, RecipientReferences: []string{world.reference},
+		AllowedTools:      []ToolName{ToolReadInvoice, ToolReadVendor, ToolCreateReport, ToolQueueReport},
+		AllowedInvoiceIDs: []string{world.invoiceID},
+		AllowedTemplates:  []string{TemplateVendorReconciliation}, RecipientReferences: []string{world.reference},
 		ApprovalRequiredTools: []ToolName{ToolQueueReport}, ToolAttemptLimit: 12, ExpiresAt: expiresAt,
 	}
 

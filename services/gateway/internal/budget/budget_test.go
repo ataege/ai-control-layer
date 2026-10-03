@@ -1,176 +1,272 @@
-package budget
+package budget_test
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/budget/budgettest"
+	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/testdb"
 )
 
 func TestValidationAndUnavailableFailClosed(t *testing.T) {
-	s := NewPostgresStore(nil)
+	store := budget.NewPostgresStore(nil)
 	ctx := context.Background()
-	if _, err := s.Reserve(ctx, "run", "call", "agent", 100); !errors.Is(err, ErrUnavailable) {
+	if _, err := store.Reserve(ctx, "run", "call", "agent", 100); !errors.Is(err, budget.ErrUnavailable) {
 		t.Fatal(err)
 	}
 	for _, purpose := range []string{"", "guard", "other"} {
-		if _, err := s.Reserve(ctx, "run", "call", purpose, 100); !errors.Is(err, ErrInvalid) {
+		if _, err := store.Reserve(ctx, "run", "call", purpose, 100); !errors.Is(err, budget.ErrInvalid) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.Settle(ctx, "run", "call", math.MaxInt64, 1); !errors.Is(err, ErrInvalid) {
+	if _, err := store.Settle(ctx, "run", "call", math.MaxInt64, 1); !errors.Is(err, budget.ErrInvalid) {
 		t.Fatal(err)
 	}
-	if _, err := s.Settle(ctx, "run", "call", -1, 1); !errors.Is(err, ErrInvalid) {
+	if _, err := store.Settle(ctx, "run", "call", -1, 1); !errors.Is(err, budget.ErrInvalid) {
 		t.Fatal(err)
 	}
-	if err := s.CreateRun(ctx, "run", 0); !errors.Is(err, ErrInvalid) {
+	var missingContext context.Context
+	if _, err := store.Snapshot(missingContext, "run"); !errors.Is(err, budget.ErrInvalid) {
+		t.Fatal(err)
+	}
+	if err := store.MarkUnknown(missingContext, "run", "call"); !errors.Is(err, budget.ErrInvalid) {
 		t.Fatal(err)
 	}
 }
-func databaseStore(t *testing.T) (*PostgresStore, string) {
+
+// ledger is one seeded run with its open ledger and a helper that writes dispatch records.
+type ledger struct {
+	t     *testing.T
+	pool  *pgxpool.Pool
+	store *budget.PostgresStore
+	run   budgettest.Run
+}
+
+func newLedger(t *testing.T, limits contracts.PassportLimits) ledger {
 	t.Helper()
 	pool := testdb.Open(t)
-	id := "budget-test-" + testdb.ID(t)
-	s := NewPostgresStore(pool)
-	if err := s.CreateRun(context.Background(), id, 20000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cleanupContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_reservations WHERE run_id=$1", id)
-		if err != nil {
-			t.Error("could not clean PostgreSQL test fixtures")
-		}
-		_, err = pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_budgets WHERE run_id=$1", id)
-		if err != nil {
-			t.Error("could not clean PostgreSQL test fixtures")
-		}
-	})
-	return s, id
+	return ledger{t: t, pool: pool, store: budget.NewPostgresStore(pool), run: budgettest.OpenRun(t, pool, limits)}
 }
+
+// call writes a dispatch record of the purpose and returns its id.
+func (fixture ledger) call(purpose string) string {
+	fixture.t.Helper()
+	callID := testdb.ID(fixture.t)
+	budgettest.RecordDispatch(fixture.t, fixture.pool, fixture.run, callID, purpose)
+	return callID
+}
+
 func TestPostgresSettlementDurabilityAndUnknown(t *testing.T) {
-	s, id := databaseStore(t)
+	fixture := newLedger(t, budgettest.Limits(20000))
 	ctx := context.Background()
-	if _, err := s.Reserve(ctx, id, "normal", "agent", 2000); err != nil {
+	normal, late := fixture.call("agent"), fixture.call("security")
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, normal, "agent", 2000); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.Settle(ctx, id, "normal", 700, 50)
+	got, err := fixture.store.Settle(ctx, fixture.run.RunID, normal, 700, 50)
 	if err != nil || got.ActualTokens != 750 || got.RefundedTokens != 1250 {
 		t.Fatalf("%+v %v", got, err)
 	}
-	if _, err = s.Reserve(ctx, id, "late", "security", 2000); err != nil {
+	if _, err = fixture.store.Reserve(ctx, fixture.run.RunID, late, "security", 2000); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.MarkUnknown(ctx, id, "late"); err != nil {
+	if err = fixture.store.MarkUnknown(ctx, fixture.run.RunID, late); err != nil {
 		t.Fatal(err)
 	}
-	// A fresh store reads persisted counters, rather than process-local state.
-	restarted := NewPostgresStore(s.pool)
-	snap, err := restarted.Snapshot(ctx, id)
-	if err != nil || snap.Reserved != 2000 || snap.Used != 750 {
-		t.Fatalf("%+v %v", snap, err)
+	// A fresh store reads the persisted counters; unknown usage stays reserved, never zero.
+	restarted := budget.NewPostgresStore(fixture.pool)
+	snapshot, err := restarted.Snapshot(ctx, fixture.run.RunID)
+	if err != nil || snapshot.Reserved != 2000 || snapshot.Used != 750 || snapshot.Security.UnresolvedCalls != 1 ||
+		snapshot.Security.ReservedTokens != 2000 || snapshot.Agent.UsedTokens != 750 || snapshot.CallsInFlight != 1 {
+		t.Fatalf("%+v %v", snapshot, err)
 	}
-	var state string
-	if err = s.pool.QueryRow(ctx, "SELECT status FROM runtime.model_token_reservations WHERE run_id=$1 AND call_id='late'", id).Scan(&state); err != nil || state != "usage_unknown" {
-		t.Fatalf("%s %v", state, err)
-	}
-	got, err = restarted.Settle(ctx, id, "late", 300, 100)
+	got, err = restarted.Settle(ctx, fixture.run.RunID, late, 300, 100)
 	if err != nil || got.RefundedTokens != 1600 {
 		t.Fatalf("%+v %v", got, err)
 	}
-	got, err = s.Settle(ctx, id, "late", 300, 100)
-	if err != nil || !got.AlreadySettled {
+	if got, err = fixture.store.Settle(ctx, fixture.run.RunID, late, 300, 100); err != nil || !got.AlreadySettled {
 		t.Fatalf("%+v %v", got, err)
 	}
-	if _, err = s.Settle(ctx, id, "late", 301, 100); !errors.Is(err, ErrConflict) {
+	if _, err = fixture.store.Settle(ctx, fixture.run.RunID, late, 301, 100); !errors.Is(err, budget.ErrConflict) {
 		t.Fatal(err)
 	}
-	if err = s.MarkUnknown(ctx, id, "late"); err != nil {
+	if _, err = fixture.store.Reserve(ctx, fixture.run.RunID, late, "security", 2000); !errors.Is(err, budget.ErrDuplicate) {
 		t.Fatal(err)
 	}
-	if _, err = s.Reserve(ctx, id, "late", "security", 2000); !errors.Is(err, ErrDuplicate) {
-		t.Fatal(err)
-	}
-	snap, err = s.Snapshot(ctx, id)
-	if err != nil || snap.Reserved != 0 || snap.Used != 1150 {
-		t.Fatalf("%+v %v", snap, err)
+	snapshot, err = fixture.store.Snapshot(ctx, fixture.run.RunID)
+	if err != nil || snapshot.Reserved != 0 || snapshot.Used != 1150 || snapshot.CallsInFlight != 0 || snapshot.Security.UnresolvedCalls != 0 ||
+		snapshot.Agent.Calls != 1 || snapshot.Security.Calls != 1 {
+		t.Fatalf("%+v %v", snapshot, err)
 	}
 }
+
 func TestPostgresConcurrentSharedBudget(t *testing.T) {
-	s, id := databaseStore(t)
+	limits := budgettest.Limits(20000)
+	limits.CallsTotal, limits.CallsAgent, limits.CallsSecurity, limits.LocalMaxConcurrency = 40, 40, 40, 40
+	fixture := newLedger(t, limits)
 	ctx := context.Background()
-	var wg sync.WaitGroup
-	results := make(chan error, 40)
-	for i := range 40 {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			purpose := "agent"
-			if i%2 == 1 {
-				purpose = "security"
-			}
-			_, err := s.Reserve(ctx, id, fmt.Sprintf("call-%d", i), purpose, 1000)
-			results <- err
-		}(i)
+	callIDs := make([]string, 40)
+	purposes := make([]string, 40)
+	for index := range callIDs {
+		purposes[index] = "agent"
+		if index%2 == 1 {
+			purposes[index] = "security"
+		}
+		callIDs[index] = fixture.call(purposes[index])
 	}
-	wg.Wait()
+	var waitGroup sync.WaitGroup
+	results := make(chan error, 40)
+	for index := range callIDs {
+		waitGroup.Add(1)
+		go func(index int) {
+			defer waitGroup.Done()
+			_, err := fixture.store.Reserve(ctx, fixture.run.RunID, callIDs[index], purposes[index], 1000)
+			results <- err
+		}(index)
+	}
+	waitGroup.Wait()
 	close(results)
-	success := 0
+	granted := 0
 	for err := range results {
 		if err == nil {
-			success++
-		} else if !errors.Is(err, ErrExhausted) {
+			granted++
+		} else if !errors.Is(err, budget.ErrExhausted) {
 			t.Fatal(err)
 		}
 	}
-	snap, err := s.Snapshot(ctx, id)
-	if err != nil || success != 20 || snap.Reserved != 20000 {
-		t.Fatalf("success=%d %+v %v", success, snap, err)
+	snapshot, err := fixture.store.Snapshot(ctx, fixture.run.RunID)
+	if err != nil || granted != 20 || snapshot.Reserved != 20000 || snapshot.Agent.Calls+snapshot.Security.Calls != 20 {
+		t.Fatalf("granted=%d %+v %v", granted, snapshot, err)
 	}
 }
-func TestPostgresOverrunPausesWithoutClipping(t *testing.T) {
-	s, id := databaseStore(t)
+
+func TestPostgresCallLimitsSubBudgetsAndConcurrency(t *testing.T) {
 	ctx := context.Background()
-	if _, err := s.Reserve(ctx, id, "call", "agent", 100); err != nil {
+	t.Run("purpose and shared call limits", func(t *testing.T) {
+		limits := budgettest.Limits(20000)
+		limits.CallsTotal, limits.CallsAgent, limits.CallsSecurity = 3, 2, 3
+		fixture := newLedger(t, limits)
+		for range 2 {
+			callID := fixture.call("agent")
+			if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, callID, "agent", 10); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fixture.store.Settle(ctx, fixture.run.RunID, callID, 5, 5); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("agent"), "agent", 10); !errors.Is(err, budget.ErrExhausted) {
+			t.Fatalf("third agent call: %v", err)
+		}
+		securityCall := fixture.call("security")
+		if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, securityCall, "security", 10); err != nil {
+			t.Fatalf("security call within the shared limit: %v", err)
+		}
+		if _, err := fixture.store.Settle(ctx, fixture.run.RunID, securityCall, 5, 5); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("security"), "security", 10); !errors.Is(err, budget.ErrExhausted) {
+			t.Fatalf("call beyond the shared limit: %v", err)
+		}
+	})
+	t.Run("security token sub-budget inside the shared total", func(t *testing.T) {
+		limits := budgettest.Limits(20000)
+		securityTokens := int64(1000)
+		limits.TokensSecurity = &securityTokens
+		fixture := newLedger(t, limits)
+		if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("security"), "security", 1001); !errors.Is(err, budget.ErrExhausted) {
+			t.Fatalf("security reservation above its sub-budget: %v", err)
+		}
+		// The agent's share is not limited by the security sub-budget.
+		if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("agent"), "agent", 5000); err != nil {
+			t.Fatalf("agent reservation: %v", err)
+		}
+	})
+	t.Run("concurrency slot held through unknown usage", func(t *testing.T) {
+		limits := budgettest.Limits(20000)
+		limits.LocalMaxConcurrency = 1
+		fixture := newLedger(t, limits)
+		first := fixture.call("agent")
+		granted, err := fixture.store.Reserve(ctx, fixture.run.RunID, first, "agent", 100)
+		if err != nil || granted.RequestTimeout != 20*time.Second {
+			t.Fatalf("first reservation: %+v %v", granted, err)
+		}
+		if err = fixture.store.MarkUnknown(ctx, fixture.run.RunID, first); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("security"), "security", 100); !errors.Is(err, budget.ErrConcurrencyLimit) {
+			t.Fatalf("second call while the slot is held: %v", err)
+		}
+		// The one late reconciliation releases the slot.
+		if _, err = fixture.store.Settle(ctx, fixture.run.RunID, first, 50, 10); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("security"), "security", 100); err != nil {
+			t.Fatalf("call after the slot was released: %v", err)
+		}
+	})
+	t.Run("a call cannot spend the other purpose", func(t *testing.T) {
+		fixture := newLedger(t, budgettest.Limits(20000))
+		agentCall := fixture.call("agent")
+		if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, agentCall, "security", 100); !errors.Is(err, budget.ErrUnavailable) {
+			t.Fatalf("agent call reserved as security: %v", err)
+		}
+		if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, testdb.ID(t), "agent", 100); !errors.Is(err, budget.ErrUnavailable) {
+			t.Fatalf("call without a dispatch record: %v", err)
+		}
+		snapshot, err := fixture.store.Snapshot(ctx, fixture.run.RunID)
+		if err != nil || snapshot.Reserved != 0 || snapshot.Agent.Calls != 0 || snapshot.Security.Calls != 0 {
+			t.Fatalf("a refused reservation changed the ledger: %+v %v", snapshot, err)
+		}
+	})
+}
+
+func TestPostgresOverrunPausesWithoutClipping(t *testing.T) {
+	fixture := newLedger(t, budgettest.Limits(20000))
+	ctx := context.Background()
+	callID := fixture.call("agent")
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, callID, "agent", 100); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.Settle(ctx, id, "call", 150, 75)
+	got, err := fixture.store.Settle(ctx, fixture.run.RunID, callID, 150, 75)
 	if err != nil || !got.Paused || got.ActualTokens != 225 {
 		t.Fatalf("%+v %v", got, err)
 	}
-	snap, err := s.Snapshot(ctx, id)
-	if err != nil || snap.Used != 225 || snap.Reserved != 0 || !snap.Paused {
-		t.Fatalf("%+v %v", snap, err)
+	snapshot, err := fixture.store.Snapshot(ctx, fixture.run.RunID)
+	if err != nil || snapshot.Used != 225 || snapshot.Reserved != 0 || !snapshot.Paused || snapshot.Agent.UsedTokens != 225 {
+		t.Fatalf("%+v %v", snapshot, err)
 	}
-	if _, err = s.Reserve(ctx, id, "next", "security", 1); !errors.Is(err, ErrPaused) {
+	if _, err = fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("security"), "security", 1); !errors.Is(err, budget.ErrPaused) {
 		t.Fatal(err)
 	}
 }
 
 func TestPostgresConcurrentLateSettlementOnce(t *testing.T) {
-	s, id := databaseStore(t)
+	fixture := newLedger(t, budgettest.Limits(20000))
 	ctx := context.Background()
-	if _, err := s.Reserve(ctx, id, "late", "agent", 2000); err != nil {
+	late := fixture.call("agent")
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, late, "agent", 2000); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkUnknown(ctx, id, "late"); err != nil {
+	if err := fixture.store.MarkUnknown(ctx, fixture.run.RunID, late); err != nil {
 		t.Fatal(err)
 	}
-	var wg sync.WaitGroup
-	results := make(chan Settlement, 12)
+	var waitGroup sync.WaitGroup
+	results := make(chan budget.Settlement, 12)
 	failures := make(chan error, 12)
 	for range 12 {
-		wg.Add(1)
+		waitGroup.Add(1)
 		go func() {
-			defer wg.Done()
-			result, err := s.Settle(ctx, id, "late", 700, 50)
+			defer waitGroup.Done()
+			result, err := fixture.store.Settle(ctx, fixture.run.RunID, late, 700, 50)
 			if err != nil {
 				failures <- err
 				return
@@ -178,7 +274,7 @@ func TestPostgresConcurrentLateSettlementOnce(t *testing.T) {
 			results <- result
 		}()
 	}
-	wg.Wait()
+	waitGroup.Wait()
 	close(results)
 	close(failures)
 	for err := range failures {
@@ -190,56 +286,52 @@ func TestPostgresConcurrentLateSettlementOnce(t *testing.T) {
 			first++
 		}
 	}
-	snap, err := s.Snapshot(ctx, id)
-	if err != nil || first != 1 || snap.Used != 750 || snap.Reserved != 0 {
-		t.Fatalf("first=%d %+v %v", first, snap, err)
-	}
-}
-
-func TestNilContextRejected(t *testing.T) {
-	s := NewPostgresStore(nil)
-	if err := s.CreateRun(nil, "run", 100); !errors.Is(err, ErrInvalid) {
-		t.Fatal(err)
-	}
-	if _, err := s.Snapshot(nil, "run"); !errors.Is(err, ErrInvalid) {
-		t.Fatal(err)
-	}
-	if _, err := s.Reserve(nil, "run", "call", "agent", 100); !errors.Is(err, ErrInvalid) {
-		t.Fatal(err)
-	}
-	if err := s.MarkUnknown(nil, "run", "call"); !errors.Is(err, ErrInvalid) {
-		t.Fatal(err)
-	}
-	if _, err := s.Settle(nil, "run", "call", 1, 1); !errors.Is(err, ErrInvalid) {
-		t.Fatal(err)
+	snapshot, err := fixture.store.Snapshot(ctx, fixture.run.RunID)
+	if err != nil || first != 1 || snapshot.Used != 750 || snapshot.Reserved != 0 || snapshot.CallsInFlight != 0 {
+		t.Fatalf("first=%d %+v %v", first, snapshot, err)
 	}
 }
 
 func TestPostgresAggregateOverflowPauses(t *testing.T) {
-	s, id := databaseStore(t)
+	fixture := newLedger(t, budgettest.Limits(20000))
 	ctx := context.Background()
-	if _, err := s.Reserve(ctx, id, "prior", "agent", 10); err != nil {
+	prior, huge := fixture.call("agent"), fixture.call("security")
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, prior, "agent", 10); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Settle(ctx, id, "prior", 1, 0); err != nil {
+	if _, err := fixture.store.Settle(ctx, fixture.run.RunID, prior, 1, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Reserve(ctx, id, "huge", "security", 100); err != nil {
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, huge, "security", 100); err != nil {
 		t.Fatal(err)
 	}
-	result, err := s.Settle(ctx, id, "huge", math.MaxInt64, 0)
-	if !errors.Is(err, ErrInvalid) || !result.Paused || result.ActualTokens != math.MaxInt64 {
+	result, err := fixture.store.Settle(ctx, fixture.run.RunID, huge, math.MaxInt64, 0)
+	if !errors.Is(err, budget.ErrInvalid) || !result.Paused || result.ActualTokens != math.MaxInt64 {
 		t.Fatalf("%+v %v", result, err)
 	}
-	snap, err := s.Snapshot(ctx, id)
-	if err != nil || !snap.Paused || snap.Used != 1 || snap.Reserved != 100 {
-		t.Fatalf("%+v %v", snap, err)
+	snapshot, err := fixture.store.Snapshot(ctx, fixture.run.RunID)
+	if err != nil || !snapshot.Paused || snapshot.Used != 1 || snapshot.Reserved != 100 || snapshot.Security.UnresolvedCalls != 1 {
+		t.Fatalf("%+v %v", snapshot, err)
 	}
-	if _, err := s.Reserve(ctx, id, "next", "agent", 1); !errors.Is(err, ErrPaused) {
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("agent"), "agent", 1); !errors.Is(err, budget.ErrPaused) {
 		t.Fatal(err)
 	}
-	var status string
-	if err := s.pool.QueryRow(ctx, "SELECT status FROM runtime.model_token_reservations WHERE run_id=$1 AND call_id='huge'", id).Scan(&status); err != nil || status != "usage_unknown" {
-		t.Fatalf("%s %v", status, err)
+}
+
+func TestCountAgentCallsReadsTheLedger(t *testing.T) {
+	fixture := newLedger(t, budgettest.Limits(20000))
+	ctx := context.Background()
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("agent"), "agent", 10); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.store.Reserve(ctx, fixture.run.RunID, fixture.call("security"), "security", 10); err != nil {
+		t.Fatal(err)
+	}
+	calls, err := fixture.store.CountAgentCalls(ctx, fixture.run.OrganizationID, fixture.run.RunID)
+	if err != nil || calls != 1 {
+		t.Fatalf("agent calls %d %v", calls, err)
+	}
+	if _, err = fixture.store.CountAgentCalls(ctx, testdb.ID(t), fixture.run.RunID); !errors.Is(err, budget.ErrNotFound) {
+		t.Fatalf("another organization read the ledger: %v", err)
 	}
 }

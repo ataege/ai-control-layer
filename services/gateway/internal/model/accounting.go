@@ -116,10 +116,18 @@ func (caller *AccountedCaller) Call(ctx context.Context, runID, callID string, r
 		return result, err
 	}
 	result.ReservationTokens = reservation
-	if _, err = caller.store.Reserve(ctx, runID, callID, string(request.Purpose), reservation); err != nil {
+	granted, err := caller.store.Reserve(ctx, runID, callID, string(request.Purpose), reservation)
+	if err != nil {
 		return result, safeBudgetError(err)
 	}
-	result.Provider, err = caller.provider.Chat(ctx, request)
+	// The ledger is the authority for request time: the provider request ends at its deadline.
+	dispatchContext := ctx
+	if granted.RequestTimeout > 0 {
+		var cancelDispatch context.CancelFunc
+		dispatchContext, cancelDispatch = context.WithTimeout(ctx, granted.RequestTimeout)
+		defer cancelDispatch()
+	}
+	result.Provider, err = caller.provider.Chat(dispatchContext, request)
 	input, generated := result.Provider.Usage.InputTokens, result.Provider.Usage.OutputTokens
 	if err != nil || input == nil || generated == nil || *input < 0 || *generated < 0 || *input > math.MaxInt64-*generated {
 		result.Provider.Message = Message{}
@@ -172,7 +180,8 @@ func (caller *AccountedCaller) Reconcile(ctx context.Context, runID, callID stri
 }
 
 func safeBudgetError(err error) error {
-	for _, known := range []error{budget.ErrInvalid, budget.ErrNotFound, budget.ErrExhausted, budget.ErrPaused, budget.ErrDuplicate, budget.ErrConflict, budget.ErrUnavailable} {
+	for _, known := range []error{budget.ErrInvalid, budget.ErrNotFound, budget.ErrExhausted, budget.ErrPaused, budget.ErrDuplicate,
+		budget.ErrConflict, budget.ErrConcurrencyLimit, budget.ErrUnavailable} {
 		if errors.Is(err, known) {
 			return known
 		}

@@ -79,6 +79,7 @@ type storedExecutableAction struct {
 	passportID          string
 	runActive           bool
 	passportUnexpired   bool
+	replaySource        *string // labelled replay (GO-36); events read it from the row
 }
 
 // maximumSafeRetries bounds the retries of a known no-effect failure within one Execute call;
@@ -262,14 +263,14 @@ func (executor *Executor) loadAction(ctx context.Context, run RunIdentity, actio
 		`SELECT a.tool, a.canonical_arguments::text, a.action_digest, a.evaluated_catalog_revision_id, a.status,
 		        r.passport_id::text,
 		        (r.cancel_requested_at IS NULL AND r.status = $4),
-		        p.expires_at > now()
+		        p.expires_at > now(), a.replay_source
 		   FROM runtime.actions a
 		   JOIN runtime.runs r ON r.id = a.run_id AND r.organization_id = a.organization_id
 		   JOIN runtime.passports p ON p.id = r.passport_id AND p.organization_id = r.organization_id
 		  WHERE a.id = $1 AND a.organization_id = $2 AND a.run_id = $3`,
 		actionID, run.OrganizationID, run.RunID, string(contracts.RunRunning),
 	).Scan(&tool, &action.canonicalArguments, &action.actionDigest, &action.evaluatedRevisionID, &action.status,
-		&action.passportID, &action.runActive, &action.passportUnexpired)
+		&action.passportID, &action.runActive, &action.passportUnexpired, &action.replaySource)
 	action.tool = ToolName(tool)
 	return action, err
 }
@@ -515,12 +516,19 @@ func (executor *Executor) recordUnknownOutcome(ctx context.Context, run RunIdent
 	})
 }
 
-// appendActionEvent writes one executor event about the action, references only.
+// appendActionEvent writes one executor event about the action, references only. A replayed
+// action's label is copied from the stored action, so every record of it carries it.
 func appendActionEvent(ctx context.Context, tx repository.Tx, run RunIdentity, request tools.EffectRequest, eventType contracts.EventType, reason ReasonCode) error {
+	var replaySource *string
+	if err := tx.Raw().QueryRow(ctx, `SELECT replay_source FROM runtime.actions WHERE id = $1 AND organization_id = $2`,
+		request.ActionID, run.OrganizationID).Scan(&replaySource); err != nil {
+		return err
+	}
 	runID, actionID, revisionID := run.RunID, request.ActionID, request.CatalogRevisionID
 	_, err := tx.AppendEvent(ctx, repository.NewEvent{
 		OrganizationID: run.OrganizationID, RunID: &runID, ActionID: &actionID, EventType: eventType,
 		ReasonCode: &reason, CatalogRevisionID: &revisionID,
+		MaskedSummary: contracts.MaskedSummary{ReplaySource: replaySource},
 	})
 	return err
 }

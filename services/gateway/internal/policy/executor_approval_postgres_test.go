@@ -155,4 +155,5 @@ func TestConcurrentExecutionsConsumeTheGrantOnce(t *testing.T) {
 	if succeeded != 1 || world.outboxRows(t) != 1 || consumed != 1 {
 		t.Fatalf("succeeded %d, outbox rows %d, consumed grants %d; want 1, 1, 1 (results %+v)", succeeded, world.outboxRows(t), consumed, results)
 	}
+	t.Logf("evidence X-51: %d concurrent executions of one approved action -> 1 succeeded; 1 consumed grant; 1 outbox row", executions)
 }

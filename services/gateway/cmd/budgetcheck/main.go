@@ -17,10 +17,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"starter/services/gateway/internal/budget"
 	"starter/services/gateway/internal/config"
+	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/database"
 	"starter/services/gateway/internal/model"
+	"starter/services/gateway/internal/repository"
 )
 
 func main() {
@@ -68,20 +72,28 @@ func run(ctx context.Context, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	var identifier [16]byte
-	if _, err = rand.Read(identifier[:]); err != nil {
-		return errors.New("diagnostic identifier unavailable")
-	}
-	runID := "budgetcheck-" + hex.EncodeToString(identifier[:])
-	writeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
-	err = store.CreateRun(writeContext, runID, settings.TokensTotal)
-	cancel()
+	organizationID, runID, err := admitDiagnosticRun(ctx, pool, catalog, providerConfig.Name)
 	if err != nil {
 		return err
 	}
+	callLog := budget.NewCallLog(pool)
 	for _, purpose := range []model.Purpose{model.AgentPurpose, model.SecurityPurpose} {
-		result, err := caller.Call(ctx, runID, string(purpose), model.Request{Purpose: purpose, ContextTokens: 4096,
+		callID, err := callLog.RecordDispatch(ctx, organizationID, runID, string(purpose), providerConfig.Name)
+		if err != nil {
+			return err
+		}
+		result, err := caller.Call(ctx, runID, callID, model.Request{Purpose: purpose, ContextTokens: 4096,
 			Messages: []model.Message{{Role: "user", Content: "Synthetic accounting diagnostic. Reply OK. This is not a task or security assessment."}}})
+		outcome := budget.CallCompleted
+		if err != nil {
+			outcome = budget.CallFailed
+			if result.UsageUnknown {
+				outcome = budget.CallUsageUnknown
+			}
+		}
+		recordContext, cancelRecord := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		_ = callLog.RecordOutcome(recordContext, organizationID, callID, outcome)
+		cancelRecord()
 		if err != nil {
 			return err
 		}
@@ -106,4 +118,45 @@ func run(ctx context.Context, output io.Writer) error {
 		Label  string          `json:"label"`
 		Budget budget.Snapshot `json:"budget"`
 	}{"synthetic budget accounting diagnostic", snapshot})
+}
+
+// diagnosticJobKind is a job kind no worker claims: the diagnostic run is never stepped.
+const diagnosticJobKind = "budgetcheck_diagnostic"
+
+// admitDiagnosticRun stores a labelled synthetic passport, run, unclaimed job and open ledger in one
+// transaction, with one agent and one security call allowed. The rows stay for inspection.
+func admitDiagnosticRun(ctx context.Context, pool *pgxpool.Pool, catalog config.AccountingCatalog, modelName string) (organizationID, runID string, err error) {
+	identifiers := make([]string, 5)
+	for index := range identifiers {
+		var random [16]byte
+		if _, err = rand.Read(random[:]); err != nil {
+			return "", "", errors.New("diagnostic identifier unavailable")
+		}
+		random[6] = (random[6] & 0x0f) | 0x40
+		random[8] = (random[8] & 0x3f) | 0x80
+		encoded := hex.EncodeToString(random[:])
+		identifiers[index] = encoded[0:8] + "-" + encoded[8:12] + "-" + encoded[12:16] + "-" + encoded[16:20] + "-" + encoded[20:32]
+	}
+	issuedAt := time.Now().UTC()
+	timeoutSeconds := max(int64(catalog.Settings.RequestTimeout/time.Second), 1)
+	passport := contracts.Passport{
+		PassportID: identifiers[0], RunID: identifiers[1], OrganizationID: identifiers[2], ActorID: identifiers[3],
+		TaskVersion: "budgetcheck_diagnostic", AdmissionCatalogRevisionID: catalog.RevisionID,
+		IssuedAt: issuedAt, ExpiresAt: issuedAt.Add(15 * time.Minute),
+		Scope: contracts.PassportScope{AllowedModels: []string{modelName}},
+		Limits: contracts.PassportLimits{CallsTotal: 2, CallsAgent: 1, CallsSecurity: 1, TokensTotal: catalog.Settings.TokensTotal,
+			RequestTimeoutSeconds: timeoutSeconds, LocalMaxConcurrency: 1, RunExpiryMinutes: 15},
+	}
+	writeContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err = repository.New(pool).InTransaction(writeContext, func(transaction repository.Tx) error {
+		if err := transaction.InsertAdmission(writeContext, passport, repository.NewJob{ID: identifiers[4], Kind: diagnosticJobKind}); err != nil {
+			return err
+		}
+		return budget.OpenRunLedger(writeContext, transaction.Raw(), passport.OrganizationID, passport.RunID, passport.Limits)
+	})
+	if err != nil {
+		return "", "", errors.New("diagnostic run could not be admitted")
+	}
+	return passport.OrganizationID, passport.RunID, nil
 }

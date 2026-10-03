@@ -51,6 +51,9 @@ var (
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// replaySourcePattern is the label of a labelled replay (GO-05, GO-36): labelled_replay:<fixture id>.
+var replaySourcePattern = regexp.MustCompile(`^labelled_replay:[A-Za-z0-9._-]{1,200}$`)
+
 // Arguments are the typed, validated arguments of one registered tool.
 type Arguments interface {
 	Tool() ToolName

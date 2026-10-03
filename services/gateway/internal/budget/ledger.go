@@ -19,18 +19,27 @@ var ledgerUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}
 // copied from the passport at admission and never raised afterwards). A run without a ledger row
 // cannot reserve, so no model request is dispatched for it.
 //
-// The per-purpose token sub-limits are validated here; they are stored once GO-39's migration
-// adds their columns. The X-08 passport fixture leaves them null.
+// All the passport's model limits are copied: the shared token total, the per-purpose token
+// sub-limits (nullable, as in X-08), the call limits, the request timeout and the concurrency cap.
 func OpenRunLedger(ctx context.Context, transaction pgx.Tx, organizationID, runID string, limits contracts.PassportLimits) error {
 	if ctx == nil || transaction == nil || !ledgerUUIDPattern.MatchString(organizationID) || !ledgerUUIDPattern.MatchString(runID) {
 		return ErrInvalid
 	}
 	if limits.TokensTotal <= 0 || limits.TokensTotal > maximumSafeInteger ||
-		!validSubLimit(limits.TokensAgent, limits.TokensTotal) || !validSubLimit(limits.TokensSecurity, limits.TokensTotal) {
+		!validSubLimit(limits.TokensAgent, limits.TokensTotal) || !validSubLimit(limits.TokensSecurity, limits.TokensTotal) ||
+		limits.CallsTotal <= 0 || limits.CallsTotal > maximumSafeInteger ||
+		limits.CallsAgent < 0 || limits.CallsAgent > limits.CallsTotal ||
+		limits.CallsSecurity < 0 || limits.CallsSecurity > limits.CallsTotal ||
+		limits.RequestTimeoutSeconds <= 0 || limits.RequestTimeoutSeconds > 3600 ||
+		limits.LocalMaxConcurrency <= 0 || limits.LocalMaxConcurrency > 1024 {
 		return ErrInvalid
 	}
-	if _, err := transaction.Exec(ctx,
-		"INSERT INTO runtime.model_token_budgets(run_id, token_limit) VALUES ($1, $2)", runID, limits.TokensTotal); err != nil {
+	if _, err := transaction.Exec(ctx, `
+		INSERT INTO runtime.model_token_budgets(run_id, organization_id, token_limit, agent_token_limit, security_token_limit,
+			call_limit, agent_call_limit, security_call_limit, request_timeout_ms, max_concurrent_calls)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		runID, organizationID, limits.TokensTotal, limits.TokensAgent, limits.TokensSecurity,
+		limits.CallsTotal, limits.CallsAgent, limits.CallsSecurity, limits.RequestTimeoutSeconds*1000, limits.LocalMaxConcurrency); err != nil {
 		return ErrUnavailable
 	}
 	return nil
