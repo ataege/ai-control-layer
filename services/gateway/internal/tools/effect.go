@@ -206,6 +206,11 @@ func completeAttempt(ctx context.Context, tx pgx.Tx, request EffectRequest, outc
 	}
 	eventTx := repository.Join(tx)
 	for _, record := range outcome.events {
+		// A denied or failed effect says why in its X-13 safe message (GO-58).
+		if reasonCode != nil && record.summary.SafeMessage == nil {
+			message := reasonCode.SafeMessage()
+			record.summary.SafeMessage = &message
+		}
 		if _, err := eventTx.AppendEvent(ctx, repository.NewEvent{
 			OrganizationID: request.OrganizationID, RunID: &runID, ActionID: &actionID,
 			EventType: record.eventType, Decision: record.decision, ReasonCode: reasonCode,

@@ -16,8 +16,9 @@ type RunUsage struct {
 	RunID string `json:"runId"`
 	// ModelCalls has one entry per metered purpose, always "agent" then "security".
 	ModelCalls []PurposeUsage `json:"modelCalls"`
-	// Tokens is the run's token ledger; null when the run has no ledger yet.
-	Tokens       *TokenLedger     `json:"tokens"`
+	// Ledger is the run's model ledger (calls, tokens, request time, slots); null when the run has
+	// no ledger yet.
+	Ledger       *ModelLedger     `json:"ledger"`
 	ToolAttempts ToolAttemptUsage `json:"toolAttempts"`
 }
 
@@ -40,12 +41,37 @@ type PurposeUsage struct {
 	UsageUnknownReservations int64 `json:"usageUnknownReservations"`
 }
 
-// TokenLedger is the run's token budget as the ledger holds it.
-type TokenLedger struct {
-	Limit    int64 `json:"limit"`
-	Reserved int64 `json:"reserved"`
-	Used     int64 `json:"used"`
-	Paused   bool  `json:"paused"`
+// ModelLedger is the run's model allowance as the ledger holds it (GO-39): the single authority
+// for model calls, tokens, request time and concurrent calls.
+type ModelLedger struct {
+	Paused bool `json:"paused"`
+	// Tokens is the shared token total of both purposes.
+	Tokens         LedgerTokens `json:"tokens"`
+	AgentTokens    LedgerTokens `json:"agentTokens"`
+	SecurityTokens LedgerTokens `json:"securityTokens"`
+	Calls          LedgerCalls  `json:"calls"`
+	// RequestTimeoutMilliseconds bounds each model request.
+	RequestTimeoutMilliseconds int64 `json:"requestTimeoutMilliseconds"`
+	MaxConcurrentCalls         int64 `json:"maxConcurrentCalls"`
+	// CallsInFlight are held slots: calls in flight or with unknown usage.
+	CallsInFlight int64 `json:"callsInFlight"`
+}
+
+// LedgerTokens is one token allowance. Limit is null for a purpose without its own sub-limit
+// (only the shared total applies).
+type LedgerTokens struct {
+	Limit    *int64 `json:"limit"`
+	Reserved int64  `json:"reserved"`
+	Used     int64  `json:"used"`
+}
+
+// LedgerCalls are the call limits and the calls counted at reservation (never refunded).
+type LedgerCalls struct {
+	Limit         int64 `json:"limit"`
+	AgentLimit    int64 `json:"agentLimit"`
+	SecurityLimit int64 `json:"securityLimit"`
+	Agent         int64 `json:"agent"`
+	Security      int64 `json:"security"`
 }
 
 // ToolAttemptUsage counts the run's tool execution attempts by outcome. Open attempts were
@@ -85,8 +111,8 @@ func RunUsageHandler(database Beginner) http.Handler {
 	})
 }
 
-// readRunUsage checks that the run belongs to the organization before it reads anything keyed
-// by the run id alone (the token ledger has no organization column).
+// readRunUsage checks that the run belongs to the organization before it reads its usage; every
+// query is also scoped by the organization.
 func readRunUsage(ctx context.Context, tx pgx.Tx, organizationID, runID string) (RunUsage, error) {
 	var found bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runtime.runs WHERE id = $1 AND organization_id = $2)`,
@@ -101,13 +127,23 @@ func readRunUsage(ctx context.Context, tx pgx.Tx, organizationID, runID string) 
 	if usage.ModelCalls, err = readPurposeUsage(ctx, tx, organizationID, &runID); err != nil {
 		return RunUsage{}, err
 	}
-	var ledger TokenLedger
-	err = tx.QueryRow(ctx, `SELECT token_limit, reserved_tokens, used_tokens, paused
-		FROM runtime.model_token_budgets WHERE run_id = $1`, runID).
-		Scan(&ledger.Limit, &ledger.Reserved, &ledger.Used, &ledger.Paused)
+	var ledger ModelLedger
+	var tokenLimit int64
+	err = tx.QueryRow(ctx, `SELECT paused, token_limit, reserved_tokens, used_tokens,
+			agent_token_limit, agent_reserved_tokens, agent_used_tokens,
+			security_token_limit, security_reserved_tokens, security_used_tokens,
+			call_limit, agent_call_limit, security_call_limit, agent_calls, security_calls,
+			request_timeout_ms, max_concurrent_calls, calls_in_flight
+		FROM runtime.model_token_budgets WHERE run_id = $1 AND organization_id = $2`, runID, organizationID).
+		Scan(&ledger.Paused, &tokenLimit, &ledger.Tokens.Reserved, &ledger.Tokens.Used,
+			&ledger.AgentTokens.Limit, &ledger.AgentTokens.Reserved, &ledger.AgentTokens.Used,
+			&ledger.SecurityTokens.Limit, &ledger.SecurityTokens.Reserved, &ledger.SecurityTokens.Used,
+			&ledger.Calls.Limit, &ledger.Calls.AgentLimit, &ledger.Calls.SecurityLimit, &ledger.Calls.Agent, &ledger.Calls.Security,
+			&ledger.RequestTimeoutMilliseconds, &ledger.MaxConcurrentCalls, &ledger.CallsInFlight)
 	switch {
 	case err == nil:
-		usage.Tokens = &ledger
+		ledger.Tokens.Limit = &tokenLimit
+		usage.Ledger = &ledger
 	case !errors.Is(err, pgx.ErrNoRows):
 		return RunUsage{}, err
 	}
@@ -137,8 +173,8 @@ func readRunUsage(ctx context.Context, tx pgx.Tx, organizationID, runID string) 
 }
 
 // readPurposeUsage aggregates model usage per purpose for the organization, or for one of its
-// runs when runID is set. The ledger rows are scoped through runtime.runs, since they carry
-// only the run id.
+// runs when runID is set. The ledger rows are also joined to runtime.runs, so only the
+// organization's own runs count.
 func readPurposeUsage(ctx context.Context, tx pgx.Tx, organizationID string, runID *string) ([]PurposeUsage, error) {
 	byPurpose := map[string]*PurposeUsage{}
 	usage := make([]PurposeUsage, len(meteredPurposes))
