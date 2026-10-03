@@ -1,0 +1,17 @@
+# Keep the build context small and free of local secrets
+.git
+.gitignore
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+services/gateway/bin
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+.DS_Store
+.claude
+docs

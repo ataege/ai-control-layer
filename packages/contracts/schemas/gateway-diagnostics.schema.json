@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gateway-diagnostics.schema.json",
+  "title": "GatewayDiagnosticsResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "requestId", "checks"],
+  "properties": {
+    "status": { "enum": ["ok", "degraded", "unavailable"] },
+    "requestId": { "type": "string", "minLength": 1 },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reachability", "databaseReadiness"],
+      "properties": {
+        "reachability": { "$ref": "#/$defs/diagnosticCheck" },
+        "databaseReadiness": { "$ref": "#/$defs/diagnosticCheck" }
+      }
+    }
+  },
+  "$defs": {
+    "diagnosticCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "latencyMs"],
+      "properties": {
+        "status": { "enum": ["up", "down"] },
+        "latencyMs": { "type": "number", "minimum": 0 },
+        "upstreamStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "reason": {
+          "enum": ["timeout", "unreachable", "unauthorized", "not_ready", "unexpected_response"]
+        }
+      }
+    }
+  }
+}

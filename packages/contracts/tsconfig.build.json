@@ -1,0 +1,11 @@
+{
+  "extends": "@workspace/config/tsconfig/node-library.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "sourceMap": false,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}

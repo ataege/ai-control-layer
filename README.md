@@ -1,0 +1,486 @@
+# Monorepo starter
+
+A monorepo with a Next.js web app, a NestJS API, a Go service and one PostgreSQL instance, wired
+together with health checks, diagnostics, shared contracts and development tooling. The team is
+building Task Passport on top of it at HackYeah.
+
+**Status: implementation phase.** The starter baseline of 2026-10-02 contains infrastructure and
+reusable components only: no entities, no tables, no authentication implementation and no product
+features. Product work is added on top of it, each feature in the service that owns its
+responsibility. The binding rules are in [AGENTS.md](AGENTS.md). Baseline items that are still
+unverified are listed under [Verification status](#verification-status).
+
+| Part                  | Stack                                                   | Path                 |
+| --------------------- | ------------------------------------------------------- | -------------------- |
+| Web app               | Next.js 16 (App Router), React 19, Tailwind CSS 4       | `apps/web`           |
+| API                   | NestJS 12 (ESM), TypeORM 1, Swagger                     | `apps/api`           |
+| Gateway               | Go 1.27, `net/http`, `slog`, pgx v5 pool                | `services/gateway`   |
+| Shared UI             | shadcn/ui primitives, generic layout components, styles | `packages/ui`        |
+| Shared contracts      | TypeScript types, JSON Schemas, fixtures                | `packages/contracts` |
+| Shared configuration  | TypeScript, ESLint and Prettier configuration           | `packages/config`    |
+| Local infrastructure  | Docker Compose, three Dockerfiles                       | `infra`              |
+| Helper scripts        | Setup, development runner, verification, smoke test     | `scripts`            |
+| Migration notes       | README only; migrations live in the API                 | `db/migrations`      |
+| Team and agent guides | `AGENTS.md`, `CLAUDE.md`, project agents                | `.claude/agents`     |
+
+More detail: [docs/setup.md](docs/setup.md), [docs/architecture.md](docs/architecture.md),
+[docs/team-workflow.md](docs/team-workflow.md),
+[docs/preparation-record.md](docs/preparation-record.md).
+
+## Prerequisites
+
+| Tool    | Version                               | Notes                                                                                        |
+| ------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Node.js | `>=24.15.0 <25` (`.nvmrc`: `24.18.0`) | Enforced at install time (`engineStrict: true`).                                             |
+| pnpm    | `11.10.0`                             | Pinned through `packageManager` in the root `package.json`.                                  |
+| Go      | `1.27` or newer                       | Needed to run, test and build the gateway on the host. Not needed for `dev:web` / `dev:api`. |
+| Docker  | Engine with the Compose plugin        | `docker compose version` must work. Needed for `infra:*` and `stack:*`.                      |
+
+Getting pnpm 11.10.0 is your choice of method; the starter does not change any machine setting:
+
+- Corepack, where your Node.js installation ships it: `corepack enable pnpm` makes `pnpm` follow
+  the `packageManager` pin.
+- npm: `npm install --global pnpm@11.10.0`.
+- An existing pnpm 11 of another version: pnpm's default behaviour is to download and switch to
+  the pinned version. That path was not exercised during preparation.
+
+Nothing in this repository installs Go, Docker or any global tool. `pnpm run setup` only reports
+what is missing.
+
+### macOS and Linux
+
+Install the four tools with the method you normally use (version manager, OS packages, official
+installers). If you use a Node version manager, `.nvmrc` selects 24.18.0.
+
+### Windows: use WSL 2
+
+Native Windows shells are not supported: the development runner (`scripts/lib/supervisor.mjs`)
+signals POSIX process groups, which do not exist there.
+
+- Run every command inside a WSL 2 distribution (for example Ubuntu).
+- Keep the repository on the Linux filesystem (for example `~/code/...`), not under `/mnt/c`.
+- Install Node.js, pnpm and Go inside WSL, not on the Windows side.
+- For Docker, use Docker Desktop with WSL integration enabled for your distribution, or Docker
+  Engine installed inside WSL.
+- Open `http://localhost:3000` from a Windows browser as usual.
+
+Linux and WSL were not exercised on the preparation machine (macOS); see
+[Verification status](#verification-status).
+
+## Quick start
+
+Run everything from the repository root.
+
+```sh
+pnpm install       # install all workspace dependencies
+pnpm run setup     # report prerequisites, create .env with generated local secrets
+pnpm infra:up      # start PostgreSQL in Docker and wait until it is healthy
+pnpm dev           # run web, api and gateway on the host (Ctrl+C stops all three)
+```
+
+In a second terminal:
+
+```sh
+pnpm smoke         # real HTTP checks against the running services
+```
+
+> Always type `pnpm run setup`. Bare `pnpm setup` is a pnpm built-in that edits your shell
+> profile; it does not run this repository's script.
+
+Stop with Ctrl+C in the `pnpm dev` terminal, then `pnpm infra:down`. The database volume is kept.
+
+## URLs
+
+| Service | URL                                             | What it is                                                         |
+| ------- | ----------------------------------------------- | ------------------------------------------------------------------ |
+| Web     | <http://localhost:3000/>                        | Home page                                                          |
+| Web     | <http://localhost:3000/components>              | Component showcase                                                 |
+| Web     | <http://localhost:3000/diagnostics>             | Live service diagnostics                                           |
+| API     | <http://localhost:3001/api/health/live>         | Liveness, no dependencies                                          |
+| API     | <http://localhost:3001/api/health/ready>        | Readiness, `SELECT 1` against PostgreSQL                           |
+| API     | <http://localhost:3001/api/diagnostics/gateway> | Authenticated ping and readiness of the gateway                    |
+| API     | <http://localhost:3001/api/docs>                | Swagger UI (OpenAPI JSON at `/api/docs-json`)                      |
+| Gateway | <http://localhost:8080/health/live>             | Liveness, no dependencies                                          |
+| Gateway | <http://localhost:8080/health/ready>            | Readiness, PostgreSQL ping                                         |
+| Gateway | <http://localhost:8080/internal/ping>           | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`, else 401 |
+
+The web app also serves three proxy routes that forward to the API and nothing else:
+`/api/health/live`, `/api/health/ready` and `/api/diagnostics/gateway` on port 3000. The browser
+never calls the API or the gateway directly.
+
+In full-container mode the gateway URLs are not reachable from the host unless you start the stack
+with `--debug`.
+
+## Run modes
+
+Stop one mode before starting the other; both publish the same host ports.
+
+### 1. Host development
+
+PostgreSQL runs in a container. Web, API and gateway run on your machine and read the root `.env`.
+
+```sh
+pnpm infra:up
+pnpm dev
+pnpm smoke
+pnpm infra:down
+```
+
+Services reach each other through `localhost` (`API_UPSTREAM_URL=http://localhost:3001`,
+`GATEWAY_URL=http://localhost:8080`, `POSTGRES_HOST=localhost`). The API and the gateway bind to
+`127.0.0.1`.
+
+`pnpm dev` and `pnpm dev:web` start the web process without `GATEWAY_SERVICE_TOKEN` and without
+any `POSTGRES_*` variable, the same rule the `web` container follows. The API and the gateway
+receive the full environment.
+
+### 2. Full-container mode
+
+All four components run through Compose (profile `full`). Go is not needed on the host; Node.js
+and pnpm are still needed because the root scripts drive Compose.
+
+```sh
+pnpm stack:up                  # build the images, start everything, wait for the health checks
+pnpm smoke --mode=container    # direct gateway checks are reported as skipped
+pnpm stack:down                # stop and remove the containers, keep the database volume
+```
+
+Inside the Compose network the services use service names instead of the `.env` host values:
+
+| Setting            | Value inside Compose  |
+| ------------------ | --------------------- |
+| `POSTGRES_HOST`    | `postgres`            |
+| `POSTGRES_PORT`    | `5432`                |
+| `GATEWAY_URL`      | `http://gateway:8080` |
+| `API_UPSTREAM_URL` | `http://api:3001`     |
+| `API_HOST`         | `0.0.0.0`             |
+| `GATEWAY_HOST`     | `0.0.0.0`             |
+
+The API and gateway images also set their bind address to `0.0.0.0` themselves
+(`infra/docker/api.Dockerfile`, `infra/docker/gateway.Dockerfile`), so they do not depend on
+Compose for it.
+
+What is published on the host (always bound to `127.0.0.1`):
+
+| Service    | Host address                        | Modes                                     |
+| ---------- | ----------------------------------- | ----------------------------------------- |
+| `postgres` | `127.0.0.1:${POSTGRES_PORT}` (5432) | Both                                      |
+| `web`      | `127.0.0.1:${WEB_PORT}` (3000)      | Full-container                            |
+| `api`      | `127.0.0.1:${API_PORT}` (3001)      | Full-container                            |
+| `gateway`  | not published                       | Only as `gateway:8080` inside the network |
+
+To reach the gateway from the host while debugging, add the override `infra/compose.debug.yaml`:
+
+```sh
+pnpm stack:up --debug      # also publishes 127.0.0.1:${GATEWAY_PORT} (8080)
+pnpm stack:down --debug
+```
+
+After `pnpm stack:up` use `pnpm stack:down`, not `pnpm infra:down`, so the profiled containers are
+removed as well. See [infra/README.md](infra/README.md) for the Compose details.
+
+## Environment variables
+
+One file: the root `.env`, created by `pnpm run setup` from `.env.example`. It is git-ignored and
+readable by your user only. Real environment variables always win over the file. There are no
+`NEXT_PUBLIC_*` variables.
+
+| Variable                | Default                 | Read by                             | Notes                                                                                                      |
+| ----------------------- | ----------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_HOST`         | `localhost`             | API, gateway                        | Compose sets `postgres` for the containers.                                                                |
+| `POSTGRES_PORT`         | `5432`                  | API, gateway, Compose               | Also the published host port of the `postgres` container.                                                  |
+| `POSTGRES_USER`         | `starter`               | API, gateway, Compose               | Applied by the PostgreSQL image only when the volume is first created.                                     |
+| `POSTGRES_PASSWORD`     | generated by setup      | API, gateway, Compose               | 32 random characters. Same first-creation rule as above. Not passed to the web process or container.       |
+| `POSTGRES_DB`           | `starter`               | API, gateway, Compose               | Same first-creation rule.                                                                                  |
+| `WEB_PORT`              | `3000`                  | web launchers, Compose, smoke       | Host port of the web app. A whole number from 1 to 65535.                                                  |
+| `API_PORT`              | `3001`                  | API, Compose, smoke                 | Host port of the API.                                                                                      |
+| `GATEWAY_PORT`          | `8080`                  | gateway, Compose (`--debug`), smoke | Host port of the gateway.                                                                                  |
+| `API_UPSTREAM_URL`      | `http://localhost:3001` | web (server side)                   | Where the Next.js server reaches the API. Validated at request time, not at build time.                    |
+| `GATEWAY_URL`           | `http://localhost:8080` | API                                 | Where the API reaches the gateway.                                                                         |
+| `CORS_ALLOWED_ORIGINS`  | `http://localhost:3000` | API                                 | Comma-separated explicit origins. `*` and values with a path are rejected.                                 |
+| `GATEWAY_SERVICE_TOKEN` | generated by setup      | API, gateway                        | 48 random characters, minimum 32. Held by the two backends only. The smoke script reads it for its checks. |
+| `GATEWAY_TIMEOUT_MS`    | `3000`                  | API                                 | Upper bound for one API to gateway call. Whole milliseconds, 100-20000.                                    |
+| `DATABASE_TIMEOUT_MS`   | `3000`                  | API, gateway                        | Upper bound for one connection attempt or readiness check. Both accept whole milliseconds, 100-20000.      |
+| `LOG_LEVEL`             | `info`                  | API, gateway                        | `debug`, `info`, `warn` or `error`.                                                                        |
+
+Optional variables that are not in `.env.example`:
+
+| Variable       | Default       | Read by                            | Notes                                                                                                         |
+| -------------- | ------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `API_HOST`     | `127.0.0.1`   | API                                | Bind address. The API image and Compose set `0.0.0.0`.                                                        |
+| `GATEWAY_HOST` | `127.0.0.1`   | gateway                            | Bind address. The gateway image and Compose set `0.0.0.0`.                                                    |
+| `NODE_ENV`     | `development` | API                                | `development`, `test` or `production`. The API image and Compose set `production`.                            |
+| `WEB_HOST`     | `127.0.0.1`   | `pnpm --filter web run start` only | Bind address of the standalone web server started on the host. An inherited `HOSTNAME` is ignored on purpose. |
+
+The gateway also rejects a `GATEWAY_SERVICE_TOKEN` that starts or ends with whitespace and blank
+`POSTGRES_USER`, `POSTGRES_PASSWORD` or `POSTGRES_DB` values.
+
+### Changing ports
+
+Edit `.env` and restart. When you change a port, change the URL that points at it too:
+
+| Change          | Also update                                                    |
+| --------------- | -------------------------------------------------------------- |
+| `WEB_PORT`      | `CORS_ALLOWED_ORIGINS` (host development)                      |
+| `API_PORT`      | `API_UPSTREAM_URL` (host development)                          |
+| `GATEWAY_PORT`  | `GATEWAY_URL` (host development)                               |
+| `POSTGRES_PORT` | nothing else; both backends and Compose read the same variable |
+
+In full-container mode only the published host ports change; the ports inside the network stay
+3000, 3001, 8080 and 5432, and Compose derives the CORS origin from `WEB_PORT`.
+
+## Command reference
+
+All root scripts, as defined in `package.json`:
+
+| Command                                 | What it does                                                                                                      |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`                          | Installs all workspace dependencies (pnpm itself, not a script).                                                  |
+| `pnpm run setup`                        | Reports prerequisites; creates or completes `.env` without overwriting existing values or printing secrets.       |
+| `pnpm infra:up`                         | Starts the `postgres` container and waits until it is healthy.                                                    |
+| `pnpm infra:down`                       | Stops and removes the containers. Keeps the database volume.                                                      |
+| `pnpm stack:up` (`--debug`)             | Builds the images and starts all four services; waits for the health checks.                                      |
+| `pnpm stack:down` (`--debug`)           | Stops and removes all containers. Keeps the database volume.                                                      |
+| `pnpm dev`                              | Builds the contracts once, then runs web, API and gateway on the host with prefixed logs. If one stops, all stop. |
+| `pnpm dev:web`                          | Runs only the web app (`next dev`, after building the contracts).                                                 |
+| `pnpm dev:api`                          | Runs only the API in watch mode (after building the contracts).                                                   |
+| `pnpm dev:gateway`                      | Compiles `services/gateway/bin/gateway-dev` and runs it. No hot reload: restart it to pick up code changes.       |
+| `pnpm lint`                             | ESLint in every TypeScript workspace; `go vet` and a `gofmt` check for the gateway.                               |
+| `pnpm format`                           | Prettier write for the repository, then `gofmt -w` for the gateway.                                               |
+| `pnpm format:check`                     | Prettier check, then a `gofmt` check for the gateway.                                                             |
+| `pnpm typecheck`                        | `tsc --noEmit` per TypeScript workspace (web runs `next typegen` first); `go build ./...` for the gateway.        |
+| `pnpm test`                             | Vitest (web, API), `node --test` (contracts), `go test ./...` (gateway).                                          |
+| `pnpm build`                            | Builds contracts, web, API and the gateway binary (`services/gateway/bin/gateway`).                               |
+| `pnpm verify`                           | Runs `check:instructions`, `format:check`, `lint`, `typecheck`, `test`, `build` and prints a summary.             |
+| `pnpm smoke` (`--mode=host\|container`) | HTTP checks against the running services.                                                                         |
+| `pnpm check:instructions`               | Checks that `AGENTS.md` and `CLAUDE.md` are identical and complete, and that the agent files are valid.           |
+| `pnpm db:migration:create <Name>`       | Writes an empty migration file.                                                                                   |
+| `pnpm db:migration:generate <Name>`     | Generates a migration from the difference between entities and the database.                                      |
+| `pnpm db:migration:show`                | Lists migrations and whether they ran.                                                                            |
+| `pnpm db:migration:run`                 | Applies pending migrations.                                                                                       |
+| `pnpm db:migration:revert`              | Reverts the most recent migration.                                                                                |
+
+One workspace at a time: `pnpm --filter <name> run lint|typecheck|test|build`, where `<name>` is
+`web`, `api`, `gateway`, `@workspace/ui`, `@workspace/contracts` or `@workspace/config`. Not every
+workspace defines every task: `@workspace/ui` has only `lint` and `typecheck`, and
+`@workspace/config` has no scripts.
+
+`pnpm --filter web run start` serves a finished web build on the host with the standalone server
+(`WEB_PORT`, `WEB_HOST`); see [apps/web/README.md](apps/web/README.md).
+
+## Migrations
+
+There is one migration toolchain for the shared database: TypeORM in `apps/api`. Migration files
+live in `apps/api/src/database/migrations`. The baseline shipped none, defined no entities and created
+no tables; the first entity and migration follow
+[docs/team-workflow.md](docs/team-workflow.md#adding-the-first-entity-and-migration). Nothing runs migrations at application startup (`synchronize: false`,
+`migrationsRun: false`). The gateway never migrates.
+
+The commands need the root `.env` and, except for `create`, a reachable PostgreSQL. `<Name>` must
+consist of letters and digits and start with a letter.
+
+Expected results in the untouched starter (zero entities, zero migrations):
+
+| Command                             | Result                                                                                                                                                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm db:migration:generate <Name>` | Prints `No changes in database schema were found - cannot generate a migration. To create a new empty migration use "typeorm migration:create" command` and **exits 1**. Creates no table. This is correct. |
+| `pnpm db:migration:show`            | Exits 0 with an empty list. First command that creates TypeORM's empty bookkeeping table `migrations` in the `public` schema; `run` and `revert` also create it when it is missing.                         |
+| `pnpm db:migration:run`             | `No migrations are pending`                                                                                                                                                                                 |
+| `pnpm db:migration:revert`          | `No migrations were found in the database. Nothing to revert!`                                                                                                                                              |
+| `pnpm db:migration:create <Name>`   | Writes `apps/api/src/database/migrations/<timestamp>-<Name>.ts`.                                                                                                                                            |
+
+Generated files are not formatted; run `pnpm format` afterwards. How to add the first entity and
+migration: [docs/team-workflow.md](docs/team-workflow.md#adding-the-first-entity-and-migration).
+
+## Testing and verification
+
+### `pnpm verify`
+
+Static quality gate. Needs no `.env`, no database and no running service, but it needs Go on
+`PATH`. It runs six steps in order, continues after a failure and prints a summary:
+
+1. `check:instructions`: `AGENTS.md` and `CLAUDE.md` byte-identical, no at-sign imports, the
+   verification status recorded, six valid agent files.
+2. `format:check`: Prettier and `gofmt`.
+3. `lint`: ESLint, `go vet`.
+4. `typecheck`: TypeScript and Go compile checks.
+5. `test`: contracts fixtures against their JSON Schemas, and one typed sample per schema compared
+   with its fixture file; web tests (fetch helper, proxy allowlist and failure mapping, check
+   interpretation); API tests (readiness failure and connection release, gateway timeout and
+   failure mapping, error envelope, environment validation, database connection retries); Go tests
+   (configuration, token rejection, readiness, shutdown, log redaction, contract fixtures).
+6. `build`: contracts, web, API, gateway binary.
+
+It exits non-zero when any step fails or is skipped. Gateway tasks are never cached by Turborepo,
+so a missing Go toolchain is reported as a failure and never replayed as a pass.
+
+### `pnpm smoke`
+
+Runtime check with real HTTP calls against services that are already running (`pnpm dev` or
+`pnpm stack:up`). It needs `.env`. It checks:
+
+- API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200.
+- The three web pages load.
+- Neither the service token nor the database password appears in the pages or in any JavaScript or
+  CSS asset they reference.
+- The three web proxy routes return the same status as the API.
+- `x-request-id` is echoed by the API, the web proxy and the gateway.
+- Gateway liveness and readiness; `/internal/ping` returns 401 without a token and with a wrong
+  token, and 200 with the service token.
+
+With `--mode=container` the direct gateway checks are reported as skipped because the port is not
+published. Exit code 1 means at least one check failed; a stopped database makes it fail.
+
+## Troubleshooting
+
+| Symptom                                                                             | Cause and fix                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| You ran `pnpm setup` and your shell profile changed                                 | That is the pnpm built-in, not this starter. Undo the lines it added to your profile if you do not want them, then run `pnpm run setup`.                                                                                                                                            |
+| `No .env file found in the repository root. Run pnpm run setup first to create it.` | `dev`, `infra:*`, `stack:*`, `smoke` and `db:migration:*` need `.env`. Run `pnpm run setup`.                                                                                                                                                                                        |
+| `EADDRINUSE` or `address already in use` on 3000, 3001 or 8080                      | Another process, or the other run mode, holds the port. Stop it (`pnpm stack:down`), or change `WEB_PORT` / `API_PORT` / `GATEWAY_PORT` in `.env` (see [Changing ports](#changing-ports)).                                                                                          |
+| `pnpm infra:up` fails because port 5432 is already allocated                        | A local PostgreSQL is running. Stop it, or set another `POSTGRES_PORT` in `.env`.                                                                                                                                                                                                   |
+| `[dev] Go toolchain not found on PATH. The gateway needs Go 1.27 or newer.`         | Install Go 1.27+ yourself, open a new terminal and check `go version`. Until then use `pnpm dev:web` and `pnpm dev:api`. `pnpm verify` reports the gateway steps as failed with "Go is not installed, so the gateway part cannot pass".                                             |
+| The API answers 413 `payload_too_large`                                             | The request body is larger than the body parser accepts. The starter has only `GET` routes, so this appears only for requests it does not expect.                                                                                                                                   |
+| The API or the gateway exits at start with a message naming `DATABASE_TIMEOUT_MS`   | The value is outside 100-20000 or not a whole number. The same applies to `GATEWAY_TIMEOUT_MS` in the API.                                                                                                                                                                          |
+| `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` when running a `pnpm` script           | pnpm wants to reinstall because its recorded install state no longer matches (seen during preparation after a `pnpm deploy --prod` in the live workspace). Nothing was removed. Run `pnpm install --frozen-lockfile` in a terminal and retry.                                       |
+| `[compose] Docker was not found on PATH.` (exit code 127)                           | Install and start Docker. `The Docker Compose plugin (docker compose) is not available` means Docker is present but the plugin is missing. On WSL, enable Docker Desktop's WSL integration.                                                                                         |
+| Readiness returns 503                                                               | The service runs but cannot reach PostgreSQL. API body: terminus report with `details.database.status: "down"`; gateway body: `status: "unavailable"` with `checks.database.message: "database unreachable"`. Start the database (`pnpm infra:up`); both recover without a restart. |
+| `/api/diagnostics/gateway` returns 503, 502 or 504                                  | 503 `degraded`: gateway reachable, its database is not. 502 `unavailable`: gateway unreachable, token rejected or unexpected answer. 504 `unavailable`: the ping timed out. See [docs/architecture.md](docs/architecture.md#status-mapping).                                        |
+| Readiness stays 503 after you deleted and regenerated `.env`                        | Password mismatch with the existing volume; see below.                                                                                                                                                                                                                              |
+| `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` on install                                 | pnpm 11 rejects releases younger than one day. The lockfile pins such versions through `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`; make sure that block is present and committed. For a new dependency, pick a version older than one day.                                 |
+| `ERR_PNPM_IGNORED_BUILDS` on install                                                | A dependency wants to run a build script. Ask the lockfile owner to add it to `allowBuilds` in `pnpm-workspace.yaml` (`true` to allow, `false` to skip deliberately).                                                                                                               |
+| `Issues with peer dependencies found` during install                                | Expected. `eslint-config-next` pulls ESLint plugins whose peer ranges end at ESLint 9, while the starter uses ESLint 10. Linting works; `packages/config/eslint/next.mjs` pins the React version setting that would otherwise crash.                                                |
+| Install fails with an unsupported engine / expected version message                 | Your Node.js is outside `>=24.15.0 <25`. Switch to 24.x (`.nvmrc`).                                                                                                                                                                                                                 |
+| `pnpm verify` fails only on `format:check`                                          | Run `pnpm format`, review the diff, run `pnpm verify` again.                                                                                                                                                                                                                        |
+
+### Database password mismatch after regenerating `.env`
+
+The PostgreSQL image applies `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` only when the
+data volume is created. If you delete `.env` and run `pnpm run setup` again, a new password is
+generated, but the existing volume `starter_postgres-data` still holds the old one. The container
+starts and is healthy, while both readiness endpoints stay at 503 and the service logs report
+failed database connections.
+
+No script removes the volume for you: `infra:down` and `stack:down` always keep it. Choose one:
+
+1. **Keep the data.** Put the previous `POSTGRES_PASSWORD` back into `.env`, if you still have it.
+2. **Discard the data, deliberately.** This deletes every database in the volume and cannot be
+   undone:
+
+   ```sh
+   pnpm infra:down                          # or pnpm stack:down
+   docker volume rm starter_postgres-data
+   pnpm infra:up
+   ```
+
+   Afterwards re-apply migrations with `pnpm db:migration:run` once the project has any.
+
+## Verification status
+
+Verified on the preparation machine on 2026-10-02 (macOS arm64, Node.js 24.18.0, pnpm 11.10.0).
+Go and Docker were not installed there. A Go 1.27.1 toolchain was unpacked into a temporary
+directory (not installed) for the Go checks, and PostgreSQL 18.4 was provided by the
+`embedded-postgres` npm package from a temporary directory; neither is part of the repository.
+
+This section describes the starter baseline of 2026-10-02. Everything added during the
+implementation phase needs its own verification: `pnpm verify` and `pnpm smoke` are the gates, and
+results are quoted, not assumed.
+
+The runtime checks below were run before the review round described in the preparation record and
+repeated afterwards from a clean state (frozen install, fresh `.env`, empty database): `pnpm verify`
+with and without Go, a build with no environment, `pnpm dev`, the database-down sequence,
+`pnpm smoke`, the five migration commands, the table listing and the secret scans. Only the browser
+view of the diagnostics page was not repeated after the review round.
+
+**Ran and passed**
+
+- `pnpm install --frozen-lockfile`.
+- `pnpm verify` with Go on `PATH`: all six steps passed, before and after the review round. Tests in
+  the latest run: contracts 5, web 25, API 36, gateway 5 Go packages (before the review round:
+  contracts 3, web 25, API 26, gateway 5 Go packages, also with `-race`).
+- `pnpm verify` without Go on `PATH`: reports the Go-dependent steps as FAIL with a clear message,
+  as designed.
+- `pnpm run setup`: created `.env` (mode 0600) with generated secrets, values not printed.
+- `pnpm dev`: started web (3000), API (3001) and gateway (8080); Ctrl+C stopped all three with no
+  orphan processes.
+- With PostgreSQL down: API liveness 200, API readiness 503, gateway readiness 503, diagnostics 503
+  `degraded`, `/internal/ping` without a token 401, and `pnpm smoke` failed truthfully (16 passed,
+  3 failed, exit 1).
+- After PostgreSQL came up, without restarting any service: both readiness endpoints returned 200
+  within about one second and `pnpm smoke` passed 19 of 19, including the leak check (3 pages and
+  20 assets) and the token rejection checks.
+- No tables after both backends started. The five migration commands behaved as listed under
+  [Migrations](#migrations).
+- `/api/docs-json` lists exactly the three API routes.
+- The service token and the database password do not appear in any service log of the dev run.
+- The diagnostics page was viewed in a browser: four cards rendered from real responses.
+- `pnpm check:instructions` passes; `AGENTS.md` and `CLAUDE.md` are identical.
+
+**After the review round**
+
+- The development runner (`node scripts/dev.mjs`, the script behind `pnpm dev`) started web, API
+  and gateway against the running PostgreSQL; `pnpm smoke` passed 19 of 19; SIGINT stopped all
+  three and left no listener on 3000, 3001 or 8080.
+- The `next dev` process started by the runner had neither `GATEWAY_SERVICE_TOKEN` nor any
+  `POSTGRES_*` variable in its environment (variable names read from the process list).
+
+Targeted checks by the owner of each change, with temporary ports:
+
+- API: with connections to PostgreSQL silently dropped 13 times in a row, readiness answered 503
+  and then 200 again every time (before the fix it stayed at 503 after 10 rounds); an oversized
+  request body returned 413 `payload_too_large` without an error-level log line.
+- Gateway through `node scripts/dev.mjs gateway`: liveness and readiness 200; SIGINT and SIGTERM
+  stopped it cleanly; a gateway frozen with SIGSTOP was killed after the 8 second grace period
+  with no orphan process; a readiness request waiting on an unresponsive database answered 503 as
+  soon as the gateway was told to stop.
+- Web: `pnpm --filter web run dev` and `pnpm --filter web run start` served the pages on a
+  temporary port; a browser check covered the mobile menu after widening the window, the heading
+  outline of the showcase and the Escape key in the confirm dialog.
+- Development runner: with a stand-in for `pnpm` that prints variable names, the web child received
+  neither `GATEWAY_SERVICE_TOKEN` nor any `POSTGRES_*` variable, while the API and gateway children
+  received them.
+- `pnpm --filter api --prod deploy` into a temporary directory produced `dist`, `node_modules`,
+  `package.json` and `README.md` only, and the API started from that directory.
+
+**Not run**
+
+- Docker Compose and the Dockerfiles were never executed: `docker compose config`, the image builds,
+  the container health checks, `pnpm infra:up` / `infra:down`, `pnpm stack:up` / `stack:down`
+  (with and without `--debug`) and `pnpm smoke --mode=container`. Host development was verified
+  against a PostgreSQL that did not come from the `postgres:18-alpine` image. The review round's
+  changes to `.dockerignore` and to the API and gateway Dockerfiles are therefore untested as well.
+- Linux and Windows through WSL 2.
+- The label "Diagnostics response status" on the gateway cards of the diagnostics page in the
+  degraded state was not seen in a browser; it is covered by the type check only.
+
+To close the gap, run this on a machine with Docker and report the real results:
+
+```sh
+pnpm install
+pnpm run setup
+pnpm stack:up
+pnpm smoke --mode=container
+pnpm stack:down
+```
+
+Then confirm host development against the real image:
+
+```sh
+pnpm infra:up
+pnpm dev          # in a second terminal: pnpm smoke
+pnpm infra:down
+```
+
+The full record is in [docs/preparation-record.md](docs/preparation-record.md).
+
+## Documentation
+
+| Document                                                 | Content                                                                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service                                  |
+| [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                         |
+| [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                     |
+| [docs/preparation-record.md](docs/preparation-record.md) | Baseline record: what was prepared, third-party resources and licenses, decisions, deferred areas                   |
+| [AGENTS.md](AGENTS.md)                                   | Binding team instructions (identical to `CLAUDE.md`)                                                                |
+| [infra/README.md](infra/README.md)                       | Compose files, images, published ports, data volume                                                                 |
+| Workspace READMEs                                        | `apps/web`, `apps/api`, `services/gateway`, `packages/ui`, `packages/contracts`, `packages/config`, `db/migrations` |

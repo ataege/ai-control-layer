@@ -1,0 +1,44 @@
+packages:
+  - apps/*
+  - packages/*
+  - services/*
+
+# pnpm 11 reads settings from this file (not .npmrc).
+engineStrict: true
+
+# pnpm deploy is used by the API Dockerfile; workspace packages are not injected.
+forceLegacyDeploy: true
+
+# Build scripts must be approved explicitly in pnpm 11. false = known and intentionally skipped.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  sharp: false
+  "@scarf/scarf": false
+  "@nestjs/core": false
+
+# Single source of truth for versions shared by more than one workspace.
+catalog:
+  typescript: 6.0.3
+  turbo: 2.11.6
+  eslint: 10.11.0
+  "@eslint/js": 10.0.1
+  typescript-eslint: 8.71.0
+  eslint-config-prettier: 10.1.8
+  eslint-config-next: 16.3.8
+  globals: 17.13.0
+  prettier: 3.9.9
+  prettier-plugin-tailwindcss: 0.8.1
+  "@types/node": 24.19.0
+  vitest: 5.0.3
+  vite: 8.3.2
+  ajv: 8.20.0
+  react: 19.3.0
+  react-dom: 19.3.0
+  "@types/react": 19.3.0
+  "@types/react-dom": 19.3.0
+  lucide-react: 1.50.0
+
+minimumReleaseAgeExclude:
+  - lucide-react@1.50.0
+  - supertest@7.3.1

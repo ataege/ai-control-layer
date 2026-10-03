@@ -1,0 +1,7 @@
+# Optional override for debugging only: publishes the gateway on localhost.
+# Use it with `pnpm stack:up --debug` (and `pnpm stack:down --debug`).
+# Without this file the gateway is reachable only inside the Compose network.
+services:
+  gateway:
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"

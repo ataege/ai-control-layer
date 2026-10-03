@@ -1,0 +1,8 @@
+{
+  "status": "unavailable",
+  "requestId": "req-fixture-3",
+  "checks": {
+    "reachability": { "status": "down", "latencyMs": 3000, "reason": "timeout" },
+    "databaseReadiness": { "status": "down", "latencyMs": 3000, "reason": "timeout" }
+  }
+}

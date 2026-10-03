@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "readiness.schema.json",
+  "title": "ReadinessResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "service", "checks"],
+  "properties": {
+    "status": { "enum": ["ok", "unavailable"] },
+    "service": { "enum": ["api", "gateway"] },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["database"],
+      "properties": {
+        "database": { "$ref": "#/$defs/dependencyCheck" }
+      }
+    }
+  },
+  "$defs": {
+    "dependencyCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["up", "down"] },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

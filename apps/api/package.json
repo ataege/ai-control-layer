@@ -1,0 +1,52 @@
+{
+  "name": "api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "nest start --watch --preserveWatchOutput",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "migration:create": "node scripts/typeorm-cli.mjs create",
+    "migration:generate": "node scripts/typeorm-cli.mjs generate",
+    "migration:show": "node scripts/typeorm-cli.mjs show",
+    "migration:run": "node scripts/typeorm-cli.mjs run",
+    "migration:revert": "node scripts/typeorm-cli.mjs revert"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@nestjs/config": "12.0.1",
+    "@nestjs/core": "12.1.2",
+    "@nestjs/platform-express": "12.1.2",
+    "@nestjs/swagger": "12.0.2",
+    "@nestjs/terminus": "12.1.0",
+    "@nestjs/typeorm": "12.0.2",
+    "@workspace/contracts": "workspace:*",
+    "pg": "8.23.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "typeorm": "1.1.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "12.0.8",
+    "@nestjs/schematics": "12.0.6",
+    "@nestjs/testing": "12.1.2",
+    "@types/express": "5.0.6",
+    "@types/node": "catalog:",
+    "@types/supertest": "7.2.1",
+    "@workspace/config": "workspace:*",
+    "eslint": "catalog:",
+    "supertest": "7.3.1",
+    "ts-node": "10.9.2",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

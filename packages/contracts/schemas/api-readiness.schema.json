@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "api-readiness.schema.json",
+  "title": "ApiReadinessResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "details"],
+  "properties": {
+    "status": { "enum": ["ok", "error", "shutting_down"] },
+    "info": { "$ref": "#/$defs/indicatorMap" },
+    "error": { "$ref": "#/$defs/indicatorMap" },
+    "details": { "$ref": "#/$defs/indicatorMap" }
+  },
+  "$defs": {
+    "indicatorMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status"],
+        "properties": {
+          "status": { "enum": ["up", "down"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}

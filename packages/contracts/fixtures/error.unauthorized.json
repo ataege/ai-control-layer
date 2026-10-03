@@ -1,0 +1,7 @@
+{
+  "error": { "code": "unauthorized", "message": "Missing or invalid service token." },
+  "statusCode": 401,
+  "requestId": "req-fixture-4",
+  "timestamp": "2026-01-01T00:00:00.000Z",
+  "path": "/internal/ping"
+}

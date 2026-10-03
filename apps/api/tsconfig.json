@@ -1,0 +1,4 @@
+{
+  "extends": "@workspace/config/tsconfig/nestjs.json",
+  "include": ["src"]
+}

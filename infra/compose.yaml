@@ -1,0 +1,133 @@
+# Local development stack. Run through the root scripts (pnpm infra:up / pnpm stack:up), which call
+#   docker compose --project-directory <repo root> --env-file .env -f infra/compose.yaml ...
+# Relative paths therefore resolve from the repository root.
+#
+# - Default (no profile): PostgreSQL only. web, api and gateway run on the host.
+# - Profile "full": web, api and gateway run in containers as well.
+#
+# Secrets come from the root .env only (created by `pnpm run setup`); none are written here.
+name: starter
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-starter}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run pnpm run setup first}"
+      POSTGRES_DB: ${POSTGRES_DB:-starter}
+    ports:
+      # Published on localhost only, for host development and database tools.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # PostgreSQL 18 images keep their data under /var/lib/postgresql (not .../data).
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # TCP on purpose: the socket answers before first-start initialisation has finished.
+      test:
+        ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -p 5432 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  gateway:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: infra/docker/gateway.Dockerfile
+    restart: unless-stopped
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: "8080"
+      GATEWAY_SERVICE_TOKEN: "${GATEWAY_SERVICE_TOKEN:?GATEWAY_SERVICE_TOKEN is not set - run pnpm run setup first}"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-starter}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run pnpm run setup first}"
+      POSTGRES_DB: ${POSTGRES_DB:-starter}
+      DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    # No "ports": the gateway is reachable only inside the Compose network.
+    # infra/compose.debug.yaml publishes it on localhost for debugging.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Liveness probe built into the binary; the runtime image needs no curl or wget.
+      test: ["CMD", "/usr/local/bin/gateway", "-healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  api:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: "3001"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-starter}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run pnpm run setup first}"
+      POSTGRES_DB: ${POSTGRES_DB:-starter}
+      GATEWAY_URL: http://gateway:8080
+      GATEWAY_SERVICE_TOKEN: "${GATEWAY_SERVICE_TOKEN:?GATEWAY_SERVICE_TOKEN is not set - run pnpm run setup first}"
+      GATEWAY_TIMEOUT_MS: ${GATEWAY_TIMEOUT_MS:-3000}
+      DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-3000}
+      # The browser origin of the published web port.
+      CORS_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:${API_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/api/health/live').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    # Deliberately no GATEWAY_SERVICE_TOKEN and no POSTGRES_* here: the web app must never hold them.
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      API_UPSTREAM_URL: http://api:3001
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  postgres-data:

@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/turbo/schema.json",
+  "ui": "stream",
+  "envMode": "strict",
+  "agentGuidance": false,
+  "globalDependencies": ["pnpm-workspace.yaml"],
+  "globalEnv": ["NODE_ENV"],
+  "globalPassThroughEnv": [
+    "GOROOT",
+    "GOPATH",
+    "GOCACHE",
+    "GOMODCACHE",
+    "GOFLAGS",
+    "GOPROXY",
+    "GOTOOLCHAIN",
+    "CGO_ENABLED"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "bin/**"]
+    },
+    "typecheck": { "dependsOn": ["^build"], "outputs": [] },
+    "lint": { "dependsOn": ["^build"], "outputs": [] },
+    "test": { "dependsOn": ["^build"], "outputs": [] }
+  }
+}

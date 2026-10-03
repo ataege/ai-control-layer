@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "requestId": "req-fixture-1",
+  "checks": {
+    "reachability": { "status": "up", "latencyMs": 4, "upstreamStatus": 200 },
+    "databaseReadiness": { "status": "up", "latencyMs": 6, "upstreamStatus": 200 }
+  }
+}

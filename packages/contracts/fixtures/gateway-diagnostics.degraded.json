@@ -1,0 +1,13 @@
+{
+  "status": "degraded",
+  "requestId": "req-fixture-2",
+  "checks": {
+    "reachability": { "status": "up", "latencyMs": 4, "upstreamStatus": 200 },
+    "databaseReadiness": {
+      "status": "down",
+      "latencyMs": 9,
+      "upstreamStatus": 503,
+      "reason": "not_ready"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Workspace wrapper so pnpm and turbo can drive the Go module. Nothing here is part of the Go build.",
+  "scripts": {
+    "dev": "node scripts/go.mjs dev",
+    "build": "node scripts/go.mjs build",
+    "test": "node scripts/go.mjs test",
+    "lint": "node scripts/go.mjs lint",
+    "typecheck": "node scripts/go.mjs typecheck",
+    "format": "node scripts/go.mjs format",
+    "format:check": "node scripts/go.mjs format:check"
+  }
+}

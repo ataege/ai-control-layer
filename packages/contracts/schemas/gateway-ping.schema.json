@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gateway-ping.schema.json",
+  "title": "GatewayPingResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "service"],
+  "properties": {
+    "status": { "const": "ok" },
+    "service": { "const": "gateway" }
+  }
+}

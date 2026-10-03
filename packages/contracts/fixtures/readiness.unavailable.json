@@ -1,0 +1,5 @@
+{
+  "status": "unavailable",
+  "service": "gateway",
+  "checks": { "database": { "status": "down", "message": "database unreachable" } }
+}

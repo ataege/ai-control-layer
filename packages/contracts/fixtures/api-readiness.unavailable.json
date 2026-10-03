@@ -1,0 +1,6 @@
+{
+  "status": "error",
+  "info": {},
+  "error": { "database": { "status": "down", "message": "database unreachable" } },
+  "details": { "database": { "status": "down", "message": "database unreachable" } }
+}

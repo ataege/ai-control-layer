@@ -1,0 +1,10 @@
+{
+  "$schema": "../../node_modules/turbo/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": { "cache": false },
+    "typecheck": { "cache": false },
+    "lint": { "cache": false },
+    "test": { "cache": false }
+  }
+}

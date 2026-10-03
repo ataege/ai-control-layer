@@ -1,0 +1,42 @@
+{
+  "name": "hackathon-starter",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.10.0",
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "infra:up": "node scripts/compose.mjs infra-up",
+    "infra:down": "node scripts/compose.mjs infra-down",
+    "stack:up": "node scripts/compose.mjs stack-up",
+    "stack:down": "node scripts/compose.mjs stack-down",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "node scripts/dev.mjs web",
+    "dev:api": "node scripts/dev.mjs api",
+    "dev:gateway": "node scripts/dev.mjs gateway",
+    "lint": "turbo run lint",
+    "format": "prettier --write . && pnpm --filter gateway run format",
+    "format:check": "prettier --check . && pnpm --filter gateway run format:check",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "build": "turbo run build",
+    "verify": "node scripts/verify.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "check:instructions": "node scripts/check-instructions.mjs",
+    "db:migration:create": "node scripts/with-env.mjs pnpm --filter api run migration:create",
+    "db:migration:generate": "node scripts/with-env.mjs pnpm --filter api run migration:generate",
+    "db:migration:show": "node scripts/with-env.mjs pnpm --filter api run migration:show",
+    "db:migration:run": "node scripts/with-env.mjs pnpm --filter api run migration:run",
+    "db:migration:revert": "node scripts/with-env.mjs pnpm --filter api run migration:revert"
+  },
+  "prettier": "@workspace/config/prettier",
+  "devDependencies": {
+    "@workspace/config": "workspace:*",
+    "prettier": "catalog:",
+    "prettier-plugin-tailwindcss": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  }
+}

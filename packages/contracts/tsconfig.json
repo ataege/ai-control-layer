@@ -1,0 +1,4 @@
+{
+  "extends": "@workspace/config/tsconfig/node-library.json",
+  "include": ["src", "test"]
+}

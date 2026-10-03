@@ -1,0 +1,52 @@
+# db/migrations
+
+This directory intentionally contains no migration files.
+
+## Where migrations live
+
+TypeORM migrations are owned by the API and live in `apps/api/src/database/migrations`.
+They cannot live here: the TypeORM CLI and `tsc` cannot compile migration classes outside the API
+package (verified: `TS6059` "file is not under rootDir", and the `typeorm` import cannot be resolved
+from outside the package under pnpm's strict `node_modules`).
+
+There is one migration owner and one toolchain for the shared PostgreSQL instance. The Go gateway
+adds no migration framework; schema changes for tables it reads also go through the API migrations.
+
+Nothing runs migrations automatically. The API starts with `synchronize: false` and
+`migrationsRun: false`, so tables only appear after an explicit command.
+
+## Commands (from the repository root)
+
+```sh
+pnpm db:migration:show              # list migrations and whether they ran
+pnpm db:migration:create <Name>     # empty migration file
+pnpm db:migration:generate <Name>   # migration from the difference between entities and the database
+pnpm db:migration:run               # apply pending migrations
+pnpm db:migration:revert            # undo the most recent migration
+```
+
+They need the root `.env` (`pnpm run setup`) and, except for `create`, a running PostgreSQL
+(`pnpm infra:up`).
+
+## Adding the first entity and migration
+
+1. Create the entity class in the API module that owns it (`apps/api/src/<module>/<name>.entity.ts`).
+2. Add the class to the `entities` array in `apps/api/src/database/typeorm-options.ts`. The Nest runtime
+   and the CLI share this file.
+3. Run `pnpm db:migration:generate <Name>`. The file is written to `apps/api/src/database/migrations`.
+4. Review the generated SQL, run `pnpm format`, then apply it with `pnpm db:migration:run`.
+5. Commit the entity and the migration together.
+
+## Expected behaviour with zero entities
+
+With no entities, `pnpm db:migration:generate <Name>` prints
+
+```
+No changes in database schema were found - cannot generate a migration. To create a new empty migration use "typeorm migration:create" command
+```
+
+and exits with a non-zero code. That is correct for the starter.
+
+TypeORM keeps its bookkeeping in a table named `migrations` in the `public` schema.
+`db:migration:show` creates that table, empty, when it is missing (observed on an empty database);
+`run` and `revert` also create it if it is missing. `generate` and `create` do not create it.
