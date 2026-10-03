@@ -9,6 +9,8 @@ import { LoadingState } from "@workspace/ui/components/loading-state";
 import { ErrorState } from "@workspace/ui/components/error-state";
 import { RunTimeline } from "@/components/run-timeline";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import { Alert, AlertTitle, AlertDescription } from "@workspace/ui/components/alert";
+import { InfoIcon, AlertCircleIcon, CheckCircleIcon, PlayCircleIcon, PauseCircleIcon } from "lucide-react";
 
 export default function RunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -110,7 +112,6 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
     <div className="space-y-6 max-w-4xl mx-auto">
       <PageHeader
         title={`Task Run ${run?.id}`}
-        description={`Status: ${run?.status}`}
       />
       
       {/* If we have an error during polling but still have run data, show it here without unmounting the real events */}
@@ -121,6 +122,57 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
             <p className="text-sm">{error}</p>
           </CardContent>
         </Card>
+      )}
+
+      {run && (
+        <div>
+          {run.status === 'pending' && (
+            <Alert>
+              <InfoIcon className="h-4 w-4" />
+              <AlertTitle>Active</AlertTitle>
+              <AlertDescription>Preparing execution.</AlertDescription>
+            </Alert>
+          )}
+          {run.status === 'running' && (
+            <Alert>
+              <PlayCircleIcon className="h-4 w-4" />
+              <AlertTitle>Active</AlertTitle>
+              <AlertDescription>Executing tasks.</AlertDescription>
+            </Alert>
+          )}
+          {run.status === 'paused' && (
+            <Alert>
+              <PauseCircleIcon className="h-4 w-4" />
+              <AlertTitle>Awaiting Approval</AlertTitle>
+              <AlertDescription>Execution is paused, waiting for reviewer approval.</AlertDescription>
+            </Alert>
+          )}
+          {run.status === 'completed' && (
+            <Alert className="border-green-500/50 text-green-600 bg-green-50/50">
+              <CheckCircleIcon className="h-4 w-4 !text-green-600" />
+              <AlertTitle>Completed</AlertTitle>
+              <AlertDescription>The task finished successfully.</AlertDescription>
+            </Alert>
+          )}
+          {run.status === 'failed' && (
+            <Alert variant="destructive">
+              <AlertCircleIcon className="h-4 w-4" />
+              <AlertTitle>Stopped</AlertTitle>
+              <AlertDescription>
+                {run.terminalReason 
+                  ? `Execution stopped: ${run.terminalReason}` 
+                  : 'Attention required: Unknown outcome'}
+              </AlertDescription>
+            </Alert>
+          )}
+          {!['pending', 'running', 'paused', 'completed', 'failed'].includes(run.status) && (
+            <Alert variant="destructive">
+              <AlertCircleIcon className="h-4 w-4" />
+              <AlertTitle>Attention Required</AlertTitle>
+              <AlertDescription>Unknown outcome.</AlertDescription>
+            </Alert>
+          )}
+        </div>
       )}
 
       <div className="grid gap-6 md:grid-cols-2">

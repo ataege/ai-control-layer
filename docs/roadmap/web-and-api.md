@@ -1115,7 +1115,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     disclosure channel)
   - Blocked by: nothing
 
-- [ ] **WEB-10 · Show the run's waiting and terminal states with their reasons**
+- [x] **WEB-10 · Show the run's waiting and terminal states with their reasons**
   - **Report 1.1 change:** Cite Journey 3 (recover, cancel or investigate) of report 1.1.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-4.5 h)
   - Depends on: WEB-06 · Needs: X-11 · Provides: nothing
