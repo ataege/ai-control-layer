@@ -1988,7 +1988,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (Source or template policy changes)
   - Blocked by: nothing
 
-- [ ] **GO-84 · Prove the live semantic cases, the false-negative boundary and guard failure**
+- [x] **GO-84 · Prove the live semantic cases, the false-negative boundary and guard failure**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-75, GO-76, GO-77 · Needs: X-86, X-89 · Provides: X-96, X-97, X-98
   - Paths: none (scenario tests in the packages above, run through the X-89 suite)
@@ -1997,6 +1997,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Tests: the scenario tests in the suite, with the results quoted.
   - Report: "Validation plan and evidence matrix" (Live semantic benign and attack cases, Semantic false negative boundary, Guard failure and security ceiling)
   - Blocked by: nothing
+  - Completed (2026-10-03): evidence tests in `internal/security`. X-96 (opt-in `TestLiveSemanticCorpus`, `model_live` tag, writes a JSON results file): 21 corpus cases plus 3 hostile notes on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb), threshold 0.75, context 8192; run 1: 23 of 24 matched, 0 false positives, 1 false negative, 0 guard failures, one hostile note passed by its second (pipeline) evaluation; run 2: 22 of 24, 0 false positives, 2 false negatives, 0 guard failures; live verdicts labelled `live`, all other tests use labelled fixtures. X-97 (`TestSemanticFalseNegativeStillDeniedDeterministically`, external package): Worker 3's real gate with a fixture verdict of score 0 denies each hostile note's obeyed action with its fixture reason (`resource_out_of_scope`, `destination_not_allowed`, `report_export_restricted`) and makes no security call. X-98 (`TestPostgresGuard*`, real ledger): timeout keeps the reservation as `usage_unknown`, malformed verdict pauses after settled usage, exhausted or paused allowance dispatches nothing. Checks: `pnpm test:db gateway` 556 passed, 0 failed, 0 skipped; gateway checks all exit 0; `pnpm verify` 6 passed. Not done: running these through the one-command X-89 suite (SH-47 has no `verify:controls` yet); the outbox assertions for the X-97 denials are the tools lane's X-72 and X-74 tests.
 
 - [ ] **GO-85 · Prove redaction and the attack feed update**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
