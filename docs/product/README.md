@@ -381,7 +381,7 @@ implement the replay after its prerequisites land; no replay code exists yet.
 
 ### GO-03: local provider direction
 
-On 3 October 2026, the user adopted report 1.2’s primary local-model path, replacing the earlier OpenAI `gpt-5.6-sol` choice. The user selected Ollama on a separate MacBook with an M1 Pro and 16 GB RAM. The user selected `qwen3.5:4b` as the current provisional model candidate; it may change after testing. It is not a frozen model contract. The hardware information is user-reported, not a measured performance result. GO-03 and SH-04 must record hardware fit, client choice, agent/security purpose accounting, reported token usage, call counts, request duration and reservation rules. No local-model integration or live call has been verified.
+On 3 October 2026, the user adopted report 1.2’s primary local-model path, replacing the earlier OpenAI `gpt-5.6-sol` choice. The user selected Ollama on a separate MacBook with an M1 Pro and 16 GB RAM. The user selected `qwen3.5:4b` as the current provisional model candidate; it may change after testing. It is not a frozen model contract. The hardware information is user-reported, not a measured performance result. GO-03 and SH-04 must record hardware fit, client choice, agent/security purpose accounting, reported token usage, call counts, request duration and reservation rules. The Go connectivity diagnostic passed on the developer M2/8 GiB machine; its exact outcome and limits are recorded in `services/gateway/README.md`. Production runtime governance and the shared model/accounting decision remain unverified.
 
 #### GO-03 implementation input (proposal, pending SH-04)
 
@@ -399,3 +399,7 @@ Official references checked on 3 October 2026: [chat API](https://docs.ollama.co
 Before GO-06: record the installed Ollama version, exact model identifier and digest, context/output settings, reachable endpoint and authenticated transport arrangement through infrastructure. Run an agent-response and semantic-verdict fixture on the M1 Pro machine, recording latency and memory fit. Ollama on the other machine is a network dependency of Go; do not assume this developer machine's localhost reaches it. GO-03, SH-04 and X-04 remain incomplete.
 
 Model candidate reference: [Ollama qwen3.5:4b](https://ollama.com/library/qwen3.5:4b), checked on 3 October 2026. The installed model digest and agent/security suitability must be verified on the presentation machine. A model change before the freeze updates this decision and its checks; after admission it must obey the immutable passport and active model allowlist rather than silently substitute another model.
+
+#### GO-06 developer connection evidence
+
+On 3 October 2026 at 14:56:15 UTC, the developer M2/8 GiB machine completed two explicit synthetic Go provider calls through Ollama 0.35.1 to `qwen3.5:4b` (ID `2a654d98e6fb`), with `think: false`. Both passed the diagnostic response schema and reported 38 input and 6 output tokens; the command exited 0. The gateway README records the build, command and measured durations. This establishes developer-machine connectivity only; GO-03/SH-04 model/accounting adoption is still pending. It does not establish a semantic security verdict, task reservations or presentation-machine readiness.

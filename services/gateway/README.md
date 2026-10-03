@@ -158,11 +158,60 @@ SIGINT/SIGTERM cancel the local request; remote inference termination is not gua
 Two `PASS` records and exit code 0 prove these diagnostic calls completed. They do not prove an
 agent workflow, semantic detection quality, durable task budgets or concurrency enforcement. Save
 the installed Ollama version, model digest, commit and command outcome with the live evidence.
-This machine's provider-double tests do not replace that evidence; GO-06 stays open until it exists.
+Provider-double tests do not replace live evidence; GO-06 status and its shared decision
+prerequisites are recorded in the roadmap.
 
 If Go runs on a different machine, infrastructure must provide the trusted reachable endpoint
 and access arrangement. This task does not expose Ollama on the network or merge another owner's
 feature branch.
+
+### Developer-machine live result (2026-10-03)
+
+Observed at `2026-10-03T14:56:15Z`, build `c8b6f55675110226c4f47d679f1309bce8fd49b4`,
+on Apple M2 with 8 GiB memory, Ollama 0.35.1, model `qwen3.5:4b`, ID `2a654d98e6fb`.
+The command below exited 0; both completed responses satisfied the diagnostic schema and usage
+checks. This is local loopback connectivity evidence, not presentation-machine, semantic-detection
+or task-budget evidence. No provider credential is applicable to this local diagnostic.
+
+```sh
+MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway run ./cmd/modelcheck
+```
+
+| Purpose  | Input tokens | Output tokens | Go wall time (ns) | Provider time (ns) | Outcome |
+| -------- | ------------ | ------------- | ----------------- | ------------------ | ------- |
+| agent    | 38           | 6             | 8752003584        | 8726185917         | PASS    |
+| security | 38           | 6             | 333830375         | 332697500          | PASS    |
+
+Each call used `think: false`, context 4096, output ceiling 256, deadline 30 seconds and 1 MiB
+request/response limits. These are diagnostic settings. The durations are two observations, not
+a benchmark, a throughput estimate or proof of a maximum latency. The configured model remains
+a provisional choice, and the shared model/accounting decision remains pending GO-03/SH-04.
+
+## Integration handoff review (2026-10-03)
+
+Read-only review of `origin/feat/fd-catalog-and-tests` at `538fed4`: `config/README.md`,
+`config/policy.yaml`, the catalog entities and their migration. These are draft inputs to GO-72/73,
+not an implemented activation protocol or frozen contract. The branch is not merged here.
+
+| Go reader        | Draft storage                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------- |
+| Catalog content  | `app.control_catalog_revisions`: immutable source text, digest and JSON content                          |
+| Accepted feed    | `app.signature_feed_revisions`: immutable content, unique issuer/revision                                |
+| Current snapshot | `app.control_catalog_pointer`: singleton ID 1, requested/validated/active catalog IDs and active feed ID |
+
+Before implementation, freeze the feed issuer/digest binding (policy currently names a revision
+while storage distinguishes issuers), integer upper bounds across TypeScript and Go, and the
+activation transaction that binds the exact validated candidate and feed. Reject an enabled
+signature control with no accepted feed rather than treating it as an empty rule set. Go must read
+a coherent snapshot and fail closed on a missing pointer or active revision. Threshold comparison,
+action-proposal redaction and feed grammar/trust remain explicitly open in the draft.
+
+Decision 4 is settled on `origin/main` at `8170ba5`: Go checks the service identity and a signed,
+short-lived `X-Operator-Context` JWT, then independently authorizes the command's organization and
+run. This settles the transport mechanism, not the frozen claim schema, signing algorithm, issuer,
+audience or key handoff. GO-62 mirrors the agreed operator-context contract when it lands; GO-21
+uses it without treating a valid signature alone as object authorization. No operator-context
+schema is currently present in `packages/contracts` on that main commit.
 
 ## Proposed tool results and idempotency (GO-07)
 

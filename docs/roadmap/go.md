@@ -359,7 +359,8 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     16 GB RAM; `qwen3.5:4b` is a provisional candidate and may change after testing.
     A Go client and accounting proposal is recorded under GO-03 in the product README.
     The final model freeze, measured hardware fit, endpoint, reservation strategy and SH-04 adoption
-    remain open. Runtime integration and live calls are not yet verified.
+    remain open. The local Go connectivity diagnostic passed on M2/8 GiB; this does not freeze
+    the model/accounting decision or verify runtime governance.
   - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
@@ -479,11 +480,17 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     The standalone `cmd/modelcheck` command and strict model environment loader are ready for
     the other machine: two synthetic agent/security-purpose requests with schema validation,
     explicit ceilings and safe diagnostic output. Its command is in the gateway README.
-    GO-06 stays open: GO-03/SH-04 adoption, runtime infrastructure integration and live
-    presentation-machine outcomes remain unverified. These checks do not prove semantic guard quality.
+    Developer-machine connection verification is complete: on 2026-10-03 at 14:56:15 UTC,
+    build `c8b6f55`, M2/8 GiB, Ollama 0.35.1 and `qwen3.5:4b` ID `2a654d98e6fb`,
+    `MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway run ./cmd/modelcheck`
+    exited 0 with two PASS records. Each reported 38 input and 6 output tokens; measured wall
+    times were 8752003584 ns (agent) and 333830375 ns (security). See the gateway README.
+    GO-06 remains open only for its GO-03/SH-04 model/accounting decision prerequisites;
+    presentation-machine rollout belongs to SH-45/X-84, and governed reservations and guard
+    quality belong to their later tasks. These two calls do not prove semantic guard quality.
     Verification: `pnpm --filter gateway run test` passed, including the model package;
-    `pnpm verify` passed all six steps (6 passed, 0 failed, 0 skipped). No live model or smoke
-    check ran; startup/service wiring is not changed in this diagnostic-preparation step.
+    `pnpm verify` passed all six steps (6 passed, 0 failed, 0 skipped). The live model diagnostic
+    above passed; stack smoke was not run. No startup model dispatch is introduced.
   - Report: "Relative implementation milestones and critical dependencies" (Proposed 24-hour
     implementation sequence, Hours 0-2); "Technical architecture and service ownership";
     "Architecture and chart reading guide" (Figure 1)
