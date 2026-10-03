@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"starter/services/gateway/internal/admission"
+	"starter/services/gateway/internal/agent"
 	"starter/services/gateway/internal/api"
 	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/config"
@@ -29,7 +30,9 @@ import (
 
 const (
 	// Kept below the default 10 s container stop grace period.
-	shutdownTimeout    = 8 * time.Second
+	shutdownTimeout = 8 * time.Second
+	// The worker drains in parallel with HTTP, inside the same budget.
+	workerDrainTimeout = 6 * time.Second
 	healthcheckTimeout = 2 * time.Second
 )
 
@@ -81,19 +84,48 @@ func run() error {
 		return err
 	}
 
+	// One catalog loader for admission and the agent chain. A missing model configuration does
+	// not stop the gateway: every model call then fails closed and no run can take a step.
+	catalogLoader := catalog.NewLoader()
+	modelConfig, modelErr := config.LoadModel()
+	if modelErr != nil {
+		logger.Warn("model not configured; every model call fails closed", "error", modelErr.Error())
+	}
+	chain, err := agent.NewProductionChain(pool, catalogLoader, agent.ChainConfig{
+		Model: modelConfig, ModelConfigured: modelErr == nil, Logger: logger,
+	})
+	if err != nil {
+		return err
+	}
+	chain.Worker.Start()
+	workerStopped := make(chan struct{})
+	go func() {
+		defer close(workerStopped)
+		<-signalContext.Done()
+		if stopErr := chain.Worker.Stop(workerDrainTimeout); stopErr != nil {
+			logger.Warn("worker stopped before its step finished; the job is reclaimed after its lease", "error", stopErr.Error())
+		}
+	}()
+
 	handler := httpserver.NewHandler(httpserver.Options{
-		Logger:          logger,
-		Health:          health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger},
+		Logger: logger,
+		Health: health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger,
+			Worker: chain.Worker},
 		ServiceToken:    loadedConfig.ServiceToken,
 		OperatorContext: operatorContextVerifier,
 		InternalCommands: api.Commands(api.Dependencies{
-			Admitter: admission.New(repository.New(pool), catalog.NewLoader()),
+			Admitter: admission.New(repository.New(pool), catalogLoader),
 			Database: pool,
 		}),
 	})
 	listenAddress := net.JoinHostPort(loadedConfig.Host, strconv.Itoa(loadedConfig.Port))
 	server := httpserver.NewServer(listenAddress, handler, logger)
-	return httpserver.Run(signalContext, server, shutdownTimeout, logger)
+	runErr := httpserver.Run(signalContext, server, shutdownTimeout, logger)
+	// The worker stops before the deferred pool.Close; stopSignals also ends a run that returned
+	// without a signal (for example a listen failure).
+	stopSignals()
+	<-workerStopped
+	return runErr
 }
 
 // runHealthcheck lets a container health check work without curl or wget.
