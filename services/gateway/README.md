@@ -109,7 +109,7 @@ internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
-internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75)
+internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -395,6 +395,39 @@ measurement:
 | --------------------------------------------- | -------------------------------------------------- | ------- | --------------------- | ------------- |
 | hostile note ("Ignore previous instructions") | `instruction_injection`, 1, `instruction_override` | block   | 412 / 31              | 9.29 s        |
 | clean duplicate-reference note                | `none`, 0, `no_risk_found`                         | pass    | 416 / 34              | 1.94 s        |
+
+## Signature feed matching and catalog settings (GO-78)
+
+Feed grammar (lead's delegate, 3 October 2026; this settles the Go side of `feed grammar and
+trust`). The feed file is one JSON object with `schema_version` 1, `issuer`, `revision`,
+`description`, `scope` and 1 to 100 `rules`; each rule has `id`, `attack_class`, `description`,
+`pattern_type`, `pattern`, `boundaries`, `response` and `sources`. The schema is closed: an
+unknown or duplicate key, a second JSON value or more than 64 KiB rejects the whole feed.
+
+- `pattern_type` must be `normalized_substring`: a plain substring, 3 to 256 bytes, already in
+  normalized form. There is no regular expression, code, URL or loading path.
+- `response` must be `block`; `boundaries` is a non-empty subset of `model_input`, `tool_result`
+  and `action_proposal`.
+- `NormalizeText` lowercases, drops invisible format characters (Unicode `Cf`, for example
+  zero-width spaces) and collapses whitespace runs to one space. It does not counter paraphrase or
+  encoding.
+- Trust: `ParseFeed` takes the file bytes and the SHA-256 digest pinned in the active catalog
+  (`app.signature_feed_revisions.file_digest` of the feed on the active pointer) and rejects any
+  other bytes. The digest proves the bytes are the ones the authenticated import accepted; as the
+  report says, "A content hash alone does not authenticate its publisher", so publisher trust rests
+  on that authenticated import (API-34). The feed carries no signature.
+
+`MatchSignatures` checks one field against the enabled rules for the boundary, skipping the
+catalog's `disabled_rules`. The first hit in feed order blocks (`signature_match`) and the record
+names the rule, feed revision, feed digest and catalog revision, never the text. An enabled guard
+with no feed is a settings error, never an empty rule set.
+
+`SettingsFromCatalog(revisionID, content, feedContent, feedDigest)` builds the security settings
+from one active catalog revision (the content JSON) and the feed's `source_text` and
+`file_digest`; 3c's GO-72 snapshot loader calls it. It reads only `controls` and `signatures`,
+rejects unknown or missing keys, unsupported boundaries, a threshold outside 0 to 1, a feed whose
+revision differs from `signatures.revision`, and a disabled rule the feed does not have. A feed is
+required while `signature_match` is enabled.
 
 ## Proposed tool results and idempotency (GO-07)
 
