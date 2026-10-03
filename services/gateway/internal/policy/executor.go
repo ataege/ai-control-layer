@@ -19,7 +19,7 @@ import (
 // Action status values the executor writes after the gate's decision.
 const (
 	actionStatusExecuting = "executing"
-	actionStatusExecuted  = "executed"
+	actionStatusExecuted  = string(contracts.ActionSucceeded) // X-09 "succeeded"
 	actionStatusFailed    = "failed"
 )
 
