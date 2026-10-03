@@ -1575,7 +1575,7 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     storyboard and proof checks" (beat 5); challenge concern Sensitive data exposure
   - Blocked by: nothing
 
-- [ ] **GO-72 · Check the active catalog revision before every evaluation and dispatch**
+- [x] **GO-72 · Check the active catalog revision before every evaluation and dispatch**
   - **Report 1.2 change:** Figure 3 names this module the "Trusted active snapshot loader"; the external signature feed reaches it.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-15, GO-19 · Needs: X-79, X-80, X-81 · Provides: X-82
@@ -1596,11 +1596,25 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     revisions and feed in a rolled-back transaction): a threshold change is in the next snapshot
     with the new revision id; five fail-closed cases; a disabled signature control needs no feed;
     lowered and raised catalogs against a passport. Checks: gateway five checks PASS; `go test -race
-./internal/catalog` ok; `pnpm verify` 6 passed. Missing half: the gate (lane w3), the worker
-    and model path (f3) and the security controls (c1) must call `Loader.Active` before every
-    evaluation and dispatch and record both revisions; the readiness change ("no valid catalog,
-    not ready") waits on a readiness contract change; no path imports the signature feed yet, so
-    the active snapshot is unavailable while the policy enables signature matching.
+./internal/catalog` ok; `pnpm verify` 6 passed.
+  - Completed (2026-10-03): every decision path now reads the active snapshot before it decides:
+    admission (`admission.go`), each agent step with `catalog.EffectiveFor` (`agent/loop.go`), each
+    model call against the narrowed limits (`agent/chain.go`, lane f3), the gate's scope and security
+    settings (`policy/scope.go`, `policy/security_check.go`, lane w3) and the judge evaluation
+    (`evaluation.go`); actions and control assessments record the admission and evaluated revisions.
+    Readiness: `catalog.Readiness` loads the same snapshot at start and every second and
+    `health.Handler.Catalog` makes `/health/ready` `503` (schema unchanged, like the worker check) while
+    no enforceable catalog is active. Tests: `TestPostgresReadinessFollowsTheEnforceableCatalog` (not
+    ready before a check, with no active revision and with signature matching but no feed; ready with
+    the next good revision), `TestPostgresReadinessWatchLogsOnlyChanges`,
+    `TestReadinessCoversTheCatalog` (503 with the database up, `"check":"catalog"` logged).
+    `GOFLAGS=-p=3 pnpm test:db --fresh` on go/3c (main e50e186): gateway 932 passed, api 27 passed, 0
+    failed, 0 skipped; `pnpm verify` 6 passed. Live: on the 3c private database (revision 291 with feed
+    134 activated by `pnpm catalog:activate`) readiness answered 200 and logged "an enforceable control
+    catalog is active". Done-when evidence is GO-86's live run (a rule change changed the next decision
+    with the new revision recorded, raised budgets left the passport unchanged, a lowered budget refused
+    the next security call); a threshold-only change is shown by
+    `TestPostgresActiveSnapshotFollowsThePointer`, not live (the live score was 1.0).
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 

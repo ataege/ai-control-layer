@@ -340,6 +340,10 @@ export type SafeEventDecision =
   "allow" | "deny" | "approval_required" | "redact" | "approved" | "rejected";
 
 /** X-12: a sanitized event. The summary is a closed set of masked metadata, never raw content. */
+/** Fixed kinds of a rejected final answer (X-13 rejectionCause). */
+export type RejectionCause =
+  "not_json" | "extra_text" | "code_fence" | "wrong_status" | "wrong_fields" | "unknown_report";
+
 export interface SafeEvent {
   /** Decimal string of the event cursor. */
   eventId: string;
@@ -369,6 +373,8 @@ export interface SafeEvent {
     inputSource: "judge" | null;
     /** The evaluation id of a control evaluation; its control assessments carry the same id. */
     evaluationId: string | null;
+    /** Why a final answer was rejected (fixed kind, never its text); null on every other event. */
+    rejectionCause: RejectionCause | null;
   };
   occurredAt: string;
 }

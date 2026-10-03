@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,68 @@ func TestParseAcceptsOnlyTheNarrowFormat(t *testing.T) {
 		if _, reason := Parse(answer); reason != contracts.ReasonInvalidArguments {
 			t.Errorf("%s: reason %q", name, reason)
 		}
+	}
+}
+
+// Lead decision: an answer that is exactly one code fence around the object is accepted, with the
+// same strict check inside; every other fence use, and every other rejection, names its cause.
+func TestCodeFenceRuleAndCauses(t *testing.T) {
+	object := `{"status":"completed","report_ids":["` + firstReport + `"]}`
+	accepted := []string{
+		"```json\n" + object + "\n```",
+		"```\n" + object + "\n```",
+		"  \n```json\n" + object + "\n```\n ",
+		"```json " + object + " ```",
+		"```" + object + "```",
+	}
+	for _, answer := range accepted {
+		result, reason := Parse(answer)
+		if reason != "" || !reflect.DeepEqual(result.ReportIDs, []string{firstReport}) || Cause(answer) != "" {
+			t.Errorf("%q: result %v reason %q cause %q", answer, result, reason, Cause(answer))
+		}
+	}
+	rejected := map[string]struct{ answer, cause string }{
+		"text before the fence":       {"Here it is:\n```json\n" + object + "\n```", CauseExtraText},
+		"text after the fence":        {"```json\n" + object + "\n```\nDone.", CauseCodeFence},
+		"two fences":                  {"```json\n" + object + "\n```\n```json\n" + object + "\n```", CauseCodeFence},
+		"unclosed fence":              {"```json\n" + object, CauseCodeFence},
+		"other language tag":          {"```javascript\n" + object + "\n```", CauseCodeFence},
+		"text inside the fence":       {"```json\nResult: " + object + "\n```", CauseExtraText},
+		"array inside the fence":      {"```json\n[" + object + "]\n```", CauseExtraText},
+		"empty fence":                 {"```json\n```", CauseNotJSON},
+		"prose":                       {"The reconciliation is done.", CauseNotJSON},
+		"empty":                       {"", CauseNotJSON},
+		"broken JSON":                 {`{"status":"completed",`, CauseNotJSON},
+		"oversized":                   {object + strings.Repeat(" ", 5000), CauseNotJSON},
+		"text after the object":       {object + " Thanks!", CauseExtraText},
+		"other status":                {`{"status":"failed","report_ids":["` + firstReport + `"]}`, CauseWrongStatus},
+		"missing status":              {`{"report_ids":["` + firstReport + `"]}`, CauseWrongStatus},
+		"extra field":                 {`{"status":"completed","report_ids":["` + firstReport + `"],"summary":"x"}`, CauseWrongFields},
+		"duplicate key":               {`{"status":"completed","status":"completed","report_ids":["` + firstReport + `"]}`, CauseWrongFields},
+		"no reports":                  {`{"status":"completed","report_ids":[]}`, CauseWrongFields},
+		"not an id":                   {`{"status":"completed","report_ids":["internal report"]}`, CauseWrongFields},
+		"repeated report":             {`{"status":"completed","report_ids":["` + firstReport + `","` + firstReport + `"]}`, CauseWrongFields},
+		"fenced object, wrong status": {"```json\n" + `{"status":"failed","report_ids":["` + firstReport + `"]}` + "\n```", CauseWrongStatus},
+	}
+	for name, testCase := range rejected {
+		if _, reason := Parse(testCase.answer); reason != contracts.ReasonInvalidArguments {
+			t.Errorf("%s: reason %q", name, reason)
+		}
+		if cause := Cause(testCase.answer); cause != testCase.cause {
+			t.Errorf("%s: cause %q, want %q", name, cause, testCase.cause)
+		}
+	}
+}
+
+// Every cause Cause can return, and the caller's unknown_report, is an X-13 rejectionCause value.
+func TestCausesAreTheContractValues(t *testing.T) {
+	for _, cause := range []string{CauseNotJSON, CauseExtraText, CauseCodeFence, CauseWrongStatus, CauseWrongFields, CauseUnknownReport} {
+		if !slices.Contains(contracts.RejectionCauses, cause) {
+			t.Errorf("cause %q is not a contract value", cause)
+		}
+	}
+	if len(contracts.RejectionCauses) != 6 {
+		t.Errorf("contract values %v, want the six causes", contracts.RejectionCauses)
 	}
 }
 
@@ -145,6 +208,12 @@ func TestPostgresValidateChecksEveryReportBelongsToTheRun(t *testing.T) {
 		if err != nil || reason != contracts.ReasonResourceOutOfScope || reference != "" {
 			t.Errorf("%s: reference %q reason %q err %v", name, reference, reason, err)
 		}
+	}
+	// A fenced answer is stored in the canonical form, without the fence.
+	fenced := "```json\n" + answerFor(world.ownReports[0]) + "\n```"
+	if reference, reason, err := Validate(ctx, world.outer, world.organizationID, world.runID, fenced); err != nil || reason != "" ||
+		reference != `{"report_ids":["`+world.ownReports[0]+`"]}` {
+		t.Errorf("fenced answer: reference %q reason %q err %v", reference, reason, err)
 	}
 	if _, reason, _ := Validate(ctx, world.outer, world.organizationID, world.runID, "All done."); reason != contracts.ReasonInvalidArguments {
 		t.Errorf("prose: %q", reason)

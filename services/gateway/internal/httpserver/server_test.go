@@ -200,6 +200,43 @@ func TestReadinessCoversTheWorker(t *testing.T) {
 	}
 }
 
+// GO-72: "With no valid initial catalog, the gateway is not ready." Like the worker, the catalog
+// has no field in the readiness schema: the database check stays truthful and the status drops.
+func TestReadinessCoversTheCatalog(t *testing.T) {
+	for _, testCase := range []struct {
+		name           string
+		catalog        fakeWorker
+		wantStatus     int
+		wantStatusText string
+	}{
+		{name: "enforceable catalog active", catalog: fakeWorker{ready: true}, wantStatus: http.StatusOK, wantStatusText: "ok"},
+		{name: "no enforceable catalog", catalog: fakeWorker{ready: false}, wantStatus: http.StatusServiceUnavailable, wantStatusText: "unavailable"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			var logOutput bytes.Buffer
+			logger := logging.New(&logOutput, slog.LevelDebug)
+			handler := NewHandler(Options{
+				Logger: logger,
+				Health: health.Handler{Database: fakePinger{}, DatabaseTimeout: time.Second, Logger: logger,
+					Worker: fakeWorker{ready: true}, Catalog: testCase.catalog},
+				ServiceToken: logging.NewSecret(testServiceToken),
+			})
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+			var body health.ReadinessResponse
+			decodeStrict(t, recorder, &body)
+			want := health.ReadinessResponse{Status: testCase.wantStatusText, Service: "gateway",
+				Checks: health.ReadinessChecks{Database: health.DependencyCheck{Status: "up"}}}
+			if recorder.Code != testCase.wantStatus || body != want {
+				t.Errorf("status %d body %+v, want %d %+v", recorder.Code, body, testCase.wantStatus, want)
+			}
+			if logged := strings.Contains(logOutput.String(), `"check":"catalog"`); logged == testCase.catalog.ready {
+				t.Errorf("catalog failure logged = %v for ready = %v: %s", logged, testCase.catalog.ready, logOutput.String())
+			}
+		})
+	}
+}
+
 // slowPinger blocks until the readiness deadline cancels the context.
 type slowPinger struct{}
 

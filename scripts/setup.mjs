@@ -214,12 +214,16 @@ const prerequisitesMet = reportPrerequisites();
 const envFileReady = prepareEnvFile();
 
 printHeading("Next steps");
-console.log("  pnpm install        install dependencies");
-console.log("  pnpm infra:up       start PostgreSQL in Docker (host development mode)");
-console.log("  pnpm dev            run web, api and gateway on the host");
-console.log("  pnpm smoke          check the running services");
-console.log("  pnpm stack:up       or run everything in containers instead");
-console.log("  pnpm verify         lint, typecheck, test and build");
+// The first-run order of the README's "Quick start"; `pnpm install` already ran before setup.
+console.log("  pnpm infra:up           start PostgreSQL in Docker (host development mode)");
+console.log("  pnpm db:migration:run   apply the migrations");
+console.log("  pnpm db:roles           give the gateway's database role its password");
+console.log("  pnpm db:seed            load the synthetic demo records and the policy catalog");
+console.log("  ollama pull qwen3.5:4b  then set MODEL_NAME in .env (docs/setup.md, section 7)");
+console.log("  pnpm dev                run web, api and gateway on the host");
+console.log("  pnpm smoke              check the running services");
+console.log("  pnpm reset:demo         later: restore the demo data");
+console.log("  pnpm verify             lint, typecheck, test and build");
 
 if (!prerequisitesMet || !envFileReady) {
   console.log("");

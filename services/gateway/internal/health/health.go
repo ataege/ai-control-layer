@@ -15,7 +15,7 @@ import (
 const databaseUnreachableMessage = "database unreachable"
 
 // ReadinessReporter is a background component readiness covers, such as the worker loop
-// (decision 5). The readiness schema has no field for it, so a component that is not ready
+// (decision 5) or the active control catalog (GO-72). The readiness schema has no field for it, so a component that is not ready
 // makes the whole response unavailable while the database check still reports its real result.
 type ReadinessReporter interface {
 	Ready() bool
@@ -34,6 +34,8 @@ type Handler struct {
 	Logger          *slog.Logger
 	// Worker is nil when the process runs no worker loop.
 	Worker ReadinessReporter
+	// Catalog reports whether an enforceable control catalog is active; nil skips the check.
+	Catalog ReadinessReporter
 }
 
 // Live reports that the process is running; it never touches dependencies.
@@ -41,8 +43,8 @@ func (handler Handler) Live(responseWriter http.ResponseWriter, _ *http.Request)
 	WriteJSON(responseWriter, http.StatusOK, LivenessResponse{Status: StatusOK, Service: ServiceName})
 }
 
-// Ready reports whether PostgreSQL answers a ping within DatabaseTimeout and, when a worker is
-// configured, whether its loop is running.
+// Ready reports whether PostgreSQL answers a ping within DatabaseTimeout and, when configured,
+// whether the worker loop is running and an enforceable control catalog is active.
 func (handler Handler) Ready(responseWriter http.ResponseWriter, request *http.Request) {
 	pingContext, cancelPing := context.WithTimeout(request.Context(), handler.DatabaseTimeout)
 	defer cancelPing()
@@ -62,6 +64,14 @@ func (handler Handler) Ready(responseWriter http.ResponseWriter, request *http.R
 	if handler.Worker != nil && !handler.Worker.Ready() {
 		logging.FromContext(request.Context(), handler.Logger).Warn("readiness check failed",
 			"check", "worker", "error", "worker loop not running")
+		WriteJSON(responseWriter, http.StatusServiceUnavailable, ReadinessResponse{
+			Status: StatusUnavailable, Service: ServiceName, Checks: databaseUp,
+		})
+		return
+	}
+	if handler.Catalog != nil && !handler.Catalog.Ready() {
+		logging.FromContext(request.Context(), handler.Logger).Warn("readiness check failed",
+			"check", "catalog", "error", "no enforceable control catalog is active")
 		WriteJSON(responseWriter, http.StatusServiceUnavailable, ReadinessResponse{
 			Status: StatusUnavailable, Service: ServiceName, Checks: databaseUp,
 		})

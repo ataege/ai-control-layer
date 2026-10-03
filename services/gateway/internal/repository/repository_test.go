@@ -318,6 +318,7 @@ func TestInvalidInputIsRejectedBeforeDatabaseWork(t *testing.T) {
 		"zero catalog":              {OrganizationID: organizationID, EventType: contracts.EventRunQueued, CatalogRevisionID: pointer(int64(0))},
 		"unknown effect":            {OrganizationID: organizationID, EventType: contracts.EventActionSucceeded, MaskedSummary: contracts.MaskedSummary{Effect: pointer("email_sent")}},
 		"unknown alternative":       {OrganizationID: organizationID, EventType: contracts.EventActionDenied, MaskedSummary: contracts.MaskedSummary{AlternativeTemplate: pointer(contracts.ReportTemplate("public_v1"))}},
+		"free-text rejection cause": {OrganizationID: organizationID, EventType: contracts.EventActionDenied, MaskedSummary: contracts.MaskedSummary{RejectionCause: pointer("the model wrote: fraud")}},
 	}
 	for name, event := range invalidEvents {
 		if _, err := tx.AppendEvent(ctx, event); !errors.Is(err, ErrInvalid) {
