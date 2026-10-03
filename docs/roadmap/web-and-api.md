@@ -895,7 +895,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     implementation milestones and critical dependencies" (Proposed 24-hour implementation sequence)
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **WEB-07 · Replace the starter texts that the product makes untrue**
+- [x] **WEB-07 · Replace the starter texts that the product makes untrue**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: API-04 · Needs: nothing · Provides: nothing
   - Paths: `apps/web/src/app/layout.tsx`, `apps/web/src/app/page.tsx`,

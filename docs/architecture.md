@@ -243,8 +243,7 @@ listed in the README.
 | `src/openapi.ts`      | Swagger UI at `/api/docs`, document at `/api/docs-json`.                                                                                                               |
 
 The HTTP server has request, header and keep-alive timeouts and shuts down gracefully on
-`SIGTERM` / `SIGINT`. CORS allows only the origins in `CORS_ALLOWED_ORIGINS` and only `GET`,
-`HEAD` and `OPTIONS`.
+`SIGTERM` / `SIGINT`. CORS allows only the origins in `CORS_ALLOWED_ORIGINS` and configured methods (e.g. `GET`, `POST`, `OPTIONS`).
 
 ### `services/gateway`
 
@@ -304,6 +303,7 @@ telemetry (`architecture specification version`). When the first code of a produ
 
 | Module | Owner service | Responsibility | Contracts | Tables |
 | ------ | ------------- | -------------- | --------- | ------ |
+| Tasks  | API           | Stores task runs and their events, forwards setup options | X-07, X-11, X-12, API-12 | `run`, `run_event` |
 
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"
