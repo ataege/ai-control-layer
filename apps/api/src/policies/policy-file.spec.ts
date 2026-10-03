@@ -42,6 +42,48 @@ function issuePaths(validation: PolicyFileValidation): string[] {
 }
 
 describe("validatePolicyFile", () => {
+  it("accepts configurable accounting limits and keeps older v1 policies valid", () => {
+    const changed = validatePolicyFile(
+      sampleWith({
+        "budgets.agent_output_tokens": 128,
+        "budgets.security_output_tokens": 64,
+        "budgets.input_template_tokens": 800,
+      }),
+    );
+    expect(changed.valid).toBe(true);
+    if (changed.valid) {
+      expect(changed.policy.budgets).toMatchObject({
+        agent_output_tokens: 128,
+        security_output_tokens: 64,
+        input_template_tokens: 800,
+      });
+    }
+    expect(
+      validatePolicyFile(
+        sampleWith({
+          "budgets.agent_output_tokens": REMOVE,
+          "budgets.security_output_tokens": REMOVE,
+          "budgets.input_template_tokens": REMOVE,
+        }),
+      ).valid,
+    ).toBe(true);
+  });
+
+  it.each(["agent_output_tokens", "security_output_tokens", "input_template_tokens"])(
+    "rejects invalid accounting values for %s",
+    (key) => {
+      for (const value of [0, -1, 1.5, null, Number.MAX_SAFE_INTEGER + 1]) {
+        expect(issuePaths(validatePolicyFile(sampleWith({ [`budgets.${key}`]: value })))).toContain(
+          `budgets.${key}`,
+        );
+      }
+      const text = samplePolicyBytes
+        .toString("utf8")
+        .replace(new RegExp(`${key}: [0-9]+`), `${key}: 0x100`);
+      expect(issuePaths(validatePolicyFile(textBytes(text)))).toContain(`budgets.${key}`);
+    },
+  );
+
   it("accepts the documented sample and digests its exact bytes", () => {
     const validation = validatePolicyFile(samplePolicyBytes);
 

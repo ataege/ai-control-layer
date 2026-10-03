@@ -74,7 +74,8 @@ a valid file under this schema, because these keys are required:
 
 The schema is closed. A missing required key, a key that is not listed here, a value of the wrong
 type or a value outside its allowed set rejects the whole file. Strings are case-sensitive. No key
-has a default: every key in the tables is required.
+has a default, except the three backward-compatible GO-06 accounting additions below.
+All other keys in the tables are required.
 
 ### Top level
 
@@ -103,17 +104,29 @@ list is denied before dispatch (`model_not_allowed`), even on a previously admit
 
 `budgets`, all positive integers written in plain decimal digits (zero, negative or fractional values, and spellings such as `24.0`, `0x18` or `0o30`, reject the file):
 
-| Key                       | Sample | Meaning                                                                                 |
-| ------------------------- | ------ | --------------------------------------------------------------------------------------- |
-| `calls_total`             | 24     | Model calls per run across both purposes.                                               |
-| `calls_agent`             | 12     | Ceiling for agent-purpose calls. Must not exceed `calls_total`.                         |
-| `calls_security`          | 12     | Ceiling for security-purpose (semantic check) calls. Must not exceed `calls_total`.     |
-| `tokens_total`            | 20000  | Input and output tokens per run across both purposes.                                   |
-| `request_timeout_seconds` | 20     | Deadline for one model request. Must be shorter than `run_expiry_minutes` (in seconds). |
-| `local_max_concurrency`   | 2      | Concurrent local model requests.                                                        |
-| `run_expiry_minutes`      | 15     | Run lifetime from admission.                                                            |
-| `tool_attempts`           | 12     | Governed tool attempts per run, safe retries included.                                  |
-| `corrections`             | 2      | Bounded feedback rounds after a denied proposal.                                        |
+| Key                       | Sample | Meaning                                                                                                                        |
+| ------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `calls_total`             | 24     | Model calls per run across both purposes.                                                                                      |
+| `calls_agent`             | 12     | Ceiling for agent-purpose calls. Must not exceed `calls_total`.                                                                |
+| `calls_security`          | 12     | Ceiling for security-purpose (semantic check) calls. Must not exceed `calls_total`.                                            |
+| `tokens_total`            | 20000  | Input and output tokens per run across both purposes.                                                                          |
+| `agent_output_tokens`     | 512    | Maximum agent output, sent as Ollama `options.num_predict`. Optional in older v1 revisions; Go defaults to 512.                |
+| `security_output_tokens`  | 256    | Maximum semantic-guard output. Optional in older v1 revisions; Go defaults to 256.                                             |
+| `input_template_tokens`   | 1024   | Conservative template allowance added to the JSON UTF-8 input byte count. Optional in older v1 revisions; Go defaults to 1024. |
+| `request_timeout_seconds` | 20     | Deadline for one model request. Must be shorter than `run_expiry_minutes` (in seconds).                                        |
+| `local_max_concurrency`   | 2      | Concurrent local model requests.                                                                                               |
+| `run_expiry_minutes`      | 15     | Run lifetime from admission.                                                                                                   |
+| `tool_attempts`           | 12     | Governed tool attempts per run, safe retries included.                                                                         |
+| `corrections`             | 2      | Bounded feedback rounds after a denied proposal.                                                                               |
+
+Counts must also fit a JavaScript safe integer; request timeout is at most 86,400 seconds.
+The user adopted the accounting settings above on 3 October 2026 for GO-06. Every accounted
+request uses `think: false` and `stream: false`. Agent and security share `tokens_total`.
+Input reservation includes system messages, conversation history, tool results, tool calls,
+tool definitions and response schemas. Valid completed usage settles both reported counts;
+missing counts and timeout retain the whole reservation as `usage_unknown`. An overrun records
+the full measured usage and pauses further dispatch. There is no automatic timeout retry.
+The byte estimate is conservative on the measured fixtures, not a proven tokenizer bound.
 
 The purpose sub-limits are ceilings, "not reserved entitlements": "Both purposes count toward the same
 totals." Each sub-limit must be less than or equal to `calls_total`; their sum may exceed it. A call is

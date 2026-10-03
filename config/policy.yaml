@@ -21,6 +21,10 @@ budgets:
   calls_agent: 12
   calls_security: 12
   tokens_total: 20000
+  # GO-06 accounting decision: JSON UTF-8 input bytes plus template allowance and capped output.
+  agent_output_tokens: 512
+  security_output_tokens: 256
+  input_template_tokens: 1024
   request_timeout_seconds: 20
   local_max_concurrency: 2
   run_expiry_minutes: 15

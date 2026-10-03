@@ -293,7 +293,8 @@ waiting on PostgreSQL answers 503 at once instead of holding up the drain.
 
 ## Product modules
 
-None yet. The intended product design is the report (version 1.2) and the architecture specification,
+The first implemented product module is the Ollama transport below. The intended product design
+is the report (version 1.2) and the architecture specification,
 [docs/product/project-architecture.md](product/project-architecture.md) (overview in
 [docs/product](product/README.md)); it is a design, not implemented code. The specification's
 repository structure differs from this repository: migrations stay in
@@ -302,9 +303,16 @@ repository structure differs from this repository: migrations stay in
 `deployment network`, and it predates report 1.2's hybrid controls, catalog, feed, reporting and
 telemetry (`architecture specification version`). When the first code of a product module lands, add a row here in the same change.
 
-| Module                                              | Owner service | Responsibility                                                                                                                                                                                                                                                                                                                          | Contracts                                                           | Tables                                                                                         |
-| --------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Policies (control catalog), `apps/api/src/policies` | NestJS        | Immutable `policy.yaml` and signature-feed revisions and the single active-version pointer (API-31, SH-43); the explicit import command `pnpm policy:import` validates the file and stores a revision (API-32). The authenticated reload (API-33) and the feed import (API-34) are not built yet. Go reads the active revision (GO-72). | Policy activation and catalog revision, draft in `config/README.md` | `app.control_catalog_revisions`, `app.signature_feed_revisions`, `app.control_catalog_pointer` |
+| Module                                              | Owner service | Responsibility                                                                                                                              | Contracts                                                           | Tables                                                                                         |
+| --------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `services/gateway/internal/model`                   | Go            | Bounded Ollama transport, reservation estimation and accounted calls; explicit diagnostics only, not a worker or admission route.           | Native Ollama `/api/chat`; internal Go types                        | Uses the model token ledger                                                                    |
+| `services/gateway/internal/budget`                  | Go            | Atomic shared reservations, durable unknown usage, one-time reconciliation and overrun pause.                                               | Internal Go store API                                               | `runtime.model_token_budgets`, `runtime.model_token_reservations`                              |
+| Policies (control catalog), `apps/api/src/policies` | NestJS        | Immutable policy and feed revisions, active pointer and explicit `pnpm policy:import`; authenticated reload and feed import remain pending. | Policy activation and catalog revision, draft in `config/README.md` | `app.control_catalog_revisions`, `app.signature_feed_revisions`, `app.control_catalog_pointer` |
+
+Go test support (GO-20), `services/gateway/internal/testdb`, is development infrastructure rather
+than a runtime product feature. It provides bounded explicit PostgreSQL connections and UUID
+fixture identifiers for database-backed tests, through the existing X-24 `pnpm test:db` command.
+It owns no tables, performs no schema creation or migrations, and is not used by gateway startup.
 
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"

@@ -4,8 +4,8 @@
 project report, `docs/product/task-passport-project-report.docx` (version 1.2, "Official requirements and hybrid security controls", 3 October 2026; lines marked
 "Report 1.2 change" amend a task and win over older text and "Report 1.1 change" lines), the architecture specification
 `docs/product/project-architecture.md`, and the repository at commit `789bcd7`. Lines marked
-"Report 1.1 change" amend the task they sit in; where they disagree with the older fields, they win. Nothing in it is implemented: every
-task is open and every sync point it provides is unreached. Sizes are estimates, not a schedule. The
+"Report 1.1 change" amend the task they sit in; where they disagree with the older fields, they win. The task statuses below record implementation progress; unticked tasks and unrecorded sync
+points remain open. Sizes are estimates, not a schedule. The
 spine, `docs/roadmap/README.md`, is the contract for this file: its milestones, tiers, sync points
 (X), shared tasks (SH), open decisions, task format and definition of done apply here unchanged.
 
@@ -105,7 +105,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 | GO-03 | P    | A    | Go implementer (report role: Implementer 3, agent runtime) with the lead (infrastructure)  | S, 0.5-1.5 h | Decide: Go input to decision 6 (provider client, reservation sizing, usage)                 | nothing                                                                                                                                                       |
 | GO-04 | P    | A    | Go implementer (report role: Implementer 4, enforcement)                                   | S, 1-2 h     | Decide: canonical argument representation and action digest                                 | nothing                                                                                                                                                       |
 | GO-05 | P    | A    | Go implementer (a module the report's team table does not name)                            | S, 0.5-1 h   | Decide: how the labelled action replay enters a run and is marked                           | nothing                                                                                                                                                       |
-| GO-06 | M0   | A    | Go implementer (report role: Implementer 3, agent runtime)                                 | S, 2-4 h     | Bring up the model provider connection from Go                                              | `decision 6 in docs/product/README.md`                                                                                                                        |
+| GO-06 | M0   | A    | Go implementer (report role: Implementer 3, agent runtime)                                 | S, 2-4 h     | Bring up the model provider connection from Go                                              | None (completed GO-06 scope)                                                                                                                                  |
 | GO-07 | M0   | A    | Go implementer (report role: Implementer 5, tool adapters)                                 | S, 1-2 h     | Record the tool-result contract and each tool's idempotency rule                            | `canonical arguments`                                                                                                                                         |
 | GO-08 | M1   | A    | Go implementer (report role: Implementer 3, agent runtime)                                 | M, 3-6 h     | Claim durable jobs with a lease in one worker                                               | nothing                                                                                                                                                       |
 | GO-09 | M1   | B    | Go implementer (report role: Implementer 3, agent runtime)                                 | S, 1-3 h     | Cover the worker in graceful shutdown and readiness                                         | `worker readiness`                                                                                                                                            |
@@ -282,13 +282,22 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Work: Options: (1) reject the whole response as a denied proposal with a stable reason code and
     bounded correction feedback that counts toward the limits; (2) an explicitly defined policy that
     stores every proposed action and states which one is evaluated and what happens to the others.
-    No proposal is recorded. Either way "the worker should not silently execute an arbitrary
-    subset". What the decision 6 provider can constrain (GO-03) may narrow the options. Owner per
+    Outcome agreed with the user on 2026-10-03: option (1), recorded under "Go runtime decisions"
+    in `docs/product/README.md`. No adapter executes; safe rejection feedback is bounded by the
+    correction limit, and exhausted corrections stop the run. The proposed reason code
+    `multiple_actions_not_supported` waits for the X-13 freeze. Provider constraints (GO-03)
+    supplement the runtime rejection. "The worker should not silently execute an arbitrary
+    subset". Owner per
     the spine's open-items table (`multiple-action responses`): the Go implementer;
     `docs/product/README.md` records no numbered decision for it.
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner (document
     owner), by M1 at the latest.
   - Tests: none (a decision).
+  - Status: decision recorded and statically verified. On 2026-10-03, after installing the
+    pinned dependencies and selecting Node.js 24.18.0, `pnpm verify` passed all six steps
+    (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
+    blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
+    the decision-record review and completion requirements of this roadmap.
   - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
     should be rejected or handled by an explicitly defined policy"); "Design decision record" (One
     action per model step)
@@ -306,12 +315,22 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     without settled usage keeps its reservation; a local demo effect whose completion record is
     absent did not commit, if effect and completion share one transaction as SH-06 settles; an
     attempt with no recorded outcome otherwise is an unknown outcome); (2) another mechanism the
-    owner proposes. No proposal is recorded. The constraints the outcome needs reach SH-27 through
+    owner proposes. Outcome agreed with the user on 2026-10-03: option (1), recorded under
+    "GO-02: durable attempts and worker recovery" in `docs/product/README.md`. Pre-dispatch records
+    prove intent only; unresolved model reservations remain held, successful actions are not
+    replayed, and unknown tool outcomes pause for attention. Local no-effect recovery depends on
+    SH-06's shared transaction and establishing that the former worker can no longer commit.
+    The constraints the outcome needs reach SH-27 through
     the shared review in SH-14. Owner per the spine's open-items table (`dispatched attempts`):
     the Go implementer; `docs/product/README.md` records no numbered decision for it.
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner, by M3 at the
     latest and before SH-27 writes the tables.
   - Tests: none (a decision).
+  - Status: decision recorded and statically verified. On 2026-10-03, after installing the
+    pinned dependencies and selecting Node.js 24.18.0, `pnpm verify` passed all six steps
+    (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
+    blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
+    the decision-record review and completion requirements of this roadmap.
   - Report: "Threat model limits and unresolved design choices" ("Durable worker recovery requires
     identifiable dispatched attempts"); "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: nothing
@@ -335,6 +354,13 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Done when: these points are recorded with decision 6 in `docs/product/README.md` by the
     document owner, as part of SH-04's outcome.
   - Tests: none (a decision).
+  - Status: the user adopted report 1.2’s primary local-model path on 2026-10-03, replacing
+    the earlier OpenAI selection. The user selected Ollama on a separate M1 Pro MacBook with
+    16 GB RAM; `qwen3.5:4b` is a provisional candidate and may change after testing.
+    A Go client and accounting proposal is recorded under GO-03 in the product README.
+    The final model freeze, measured hardware fit, endpoint, reservation strategy and SH-04 adoption
+    remain open. The local Go connectivity diagnostic passed on M2/8 GiB; this does not freeze
+    the model/accounting decision or verify runtime governance.
   - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
@@ -351,8 +377,13 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     arguments, recipient, affected resources, relevant versions, exact outbound content, passport
     reference, policy version and expiry"), and how a change is detected. Options: (1) one
     canonical encoding for every supported argument type, defined in Go, with a digest over the
-    encoded action; (2) a canonical form per tool's typed arguments, with a digest over each. No
-    proposal is recorded. Either option rejects inputs that have more than one representation, uses
+    encoded action; (2) a canonical form per tool's typed arguments, with a digest over each.
+    Outcome agreed with the user on 2026-10-03: typed canonical encoding per tool and SHA-256 over
+    the complete versioned canonical action, recorded under "GO-04: canonical arguments and action
+    digest" in `docs/product/README.md`. Input field order and insignificant JSON whitespace do
+    not affect the digest; strict decoding rejects unknown and duplicate fields. Content is
+    preserved, and lists keep their order unless X-09 explicitly defines a set. Either option
+    rejects inputs that have more than one representation, uses
     no floating-point values and treats the digest as change detection only: "hashing a request
     does not authenticate its author or make its contents authorized". The outcome feeds X-09 at
     the M0 freeze (SH-10). Owner per the spine's open-items table (`canonical arguments`):
@@ -362,6 +393,11 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner before the M0
     freeze, so X-09 can carry it.
   - Tests: none (a decision).
+  - Status: decision recorded and statically verified. On 2026-10-03, after installing the
+    pinned dependencies and selecting Node.js 24.18.0, `pnpm verify` passed all six steps
+    (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
+    blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
+    the decision-record review and completion requirements of this roadmap.
   - Report: "Exact action approval versioning and execution rechecks" ("Canonicalization must be
     defined deliberately"); "Technical architecture and service ownership" ("Go remains the
     authority for action canonicalization and execution"); "Terminology for developers and
@@ -383,12 +419,17 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     Options: (1) a Go-side command or labelled runtime test that substitutes one stored prohibited
     proposal for the next model step of a named run; (2) an operation the interface triggers
     through NestJS, which needs the conditional sync point X-65 (the replay trigger through NestJS)
-    and a facade operation on the other side. No proposal is recorded. Owner per the spine's
+    and a facade operation on the other side. The user chose a labelled Go runtime scenario test
+    (option 1) on 2026-10-03 and owns replay through the SH-07 Go ownership update. Owner per the spine's
     open-items table (`replay entry`): the Go implementer;
     `docs/product/README.md` records no numbered decision for it.
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner before the M0
     freeze, so X-12 carries the replay label.
   - Tests: none (a decision).
+  - Status: option (1), a labelled Go runtime scenario test, was chosen with the user on 2026-10-03
+    and recorded under "GO-05: replay entry and labels" in `docs/product/README.md`. The user is
+    the replay owner and sole Go implementer; SH-07 remains open for shared-track staffing.
+    No replay runtime code is implemented.
   - Report: "Live demonstration storyboard and proof checks" (Reliable demonstrations without
     invented behavior); "Illustrative invoice scenario and future domain adaptations" (Scene 2 a
     hostile instruction in a business document)
@@ -407,7 +448,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-06 · Bring up the model provider connection from Go**
+- [x] **GO-06 · Bring up the model provider connection from Go**
   - **Report 1.2 change:** Bring up the local model connection (for example Ollama) from X-84; by the M0 exit an agent request and a security-purpose request can be made within recorded limits.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: SH-04, GO-03 · Needs: X-01, X-04 · Provides: nothing
@@ -433,10 +474,26 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     become a failure, never a model output; neither the credential nor a request body appears in
     log or error text. `pnpm --filter gateway run test`; the live request run by hand, with its
     result quoted and the credential not printed.
+  - Completed (2026-10-03): bounded native Ollama transport, local preflight, trusted central
+    accounting settings, durable PostgreSQL shared reservations, unknown usage retention,
+    one-time late reconciliation and full overrun pause are implemented. The user adopted
+    reservation = JSON UTF-8 input bytes + 1024 template tokens + capped output; agent 512,
+    security 256, shared initial total 20000, think false and stream false. Values are editable
+    through the existing policy/catalog import. The catalog branch was merged as an intentional
+    dependency; the only merge conflict preserved both architecture module rows.
+    Four explicit qwen3.5:4b estimator fixtures passed. A live catalog-backed budget diagnostic
+    returned measured usage and correct refunds for both purposes; final used 62, reserved 0.
+    Exact commands, fixture outcomes and hardware limits are in the gateway README.
+    This completes the user's expanded GO-06 accounting acceptance. Worker/admission wiring,
+    call-count/concurrency enforcement, full catalog activation, semantic detection and the
+    presentation-machine check remain their own later tasks; there is no startup dispatch.
+    Verification: `pnpm verify` passed 6/6; `pnpm test:db` passed both sides with no skipped
+    database tests; `go -C services/gateway test -race ./... -count=1 -timeout=60s` passed with
+    PostgreSQL enabled; `pnpm smoke` passed 21/21 in host mode.
   - Report: "Relative implementation milestones and critical dependencies" (Proposed 24-hour
     implementation sequence, Hours 0-2); "Technical architecture and service ownership";
     "Architecture and chart reading guide" (Figure 1)
-  - Blocked by: `decision 6 in docs/product/README.md`
+  - Blocked by: nothing for this completed developer-machine/accounting scope
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
@@ -456,6 +513,9 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     ("Each tool returns an explicit field allowlist; protected values remain
     opaque references"; "Each action needs a stable identifier and a defined idempotency rule").
   - Tests: none at the record; GO-17, GO-23, GO-31 to GO-33 and GO-53 test it.
+  - Status: a proposed tool-result field allowlist and idempotency/retry rules are recorded in
+    `services/gateway/README.md`. This task remains open until SH-10 freezes typed arguments and
+    X-06 field rules, including which protected fields may appear in reviewed outbound content.
   - Report: "Relative implementation milestones and critical dependencies" (Critical path and
     sensible reductions); "Illustrative passport and interface contracts" (Narrow final result and
     context boundary); "Durable state idempotency audit and uncertain outcomes"
@@ -849,7 +909,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     valid ones")
   - Blocked by: nothing
 
-- [ ] **GO-20 · Build the Go PostgreSQL test harness on the X-24 command**
+- [x] **GO-20 · Build the Go PostgreSQL test harness on the X-24 command**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: nothing · Needs: X-24 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`,
@@ -870,6 +930,18 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: the harness's own test: a round trip passes with the database up; the X-24 command fails
     with the database down; without configuration `pnpm --filter gateway run test` lists the test
     as skipped. The X-24 command; `pnpm --filter gateway run test`.
+  - Completed (2026-10-03): `internal/testdb` provides the shared explicit pool/ping helper and
+    UUID fixture identifiers. Budget and native Ollama PostgreSQL tests use it. Absent optional
+    settings visibly skip; required, partial, invalid and unreachable settings fail safely.
+    No schemas, tables or seeds are created. The gateway wrapper uses `go test -count=1 -v ./...`
+    to name skips and avoid cached database outcomes. The old independent URL is removed so X-24
+    discovery stays database-free. The user's accepted runtime schema review inputs and the
+    remaining GO-07 contract blockers are recorded in the gateway README.
+    Verification: optional `pnpm --filter gateway run test` lists 12 database skips; PostgreSQL
+    round-trip/rollback and `go -C services/gateway test -race ./... -count=1 -timeout=60s` pass.
+    `pnpm test:db` passes Go and API with no skips; after stopping test PostgreSQL, `pnpm test:db gateway`
+    correctly exits 1. `pnpm verify` passes all six steps. No service wiring is changed, so no
+    additional smoke was run for GO-20.
   - Report: "Atomic allowances hard limits and estimated cost" ("the application must choose and
     verify the appropriate transaction boundaries"); "Validation plan and evidence matrix"
     (Interpreting results honestly)
