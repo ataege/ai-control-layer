@@ -266,6 +266,12 @@ func TestPostgresEvaluateRecordsEvidenceAndStoresNoAction(t *testing.T) {
 	if count(`SELECT count(*) FROM runtime.control_assessments WHERE evaluation_id = $1 AND action_id IS NULL`, response.EvaluationID) == 0 {
 		t.Error("no control records for the evaluation")
 	}
+	// The event names its evaluation, so its assessments (and their security calls) can be joined.
+	if count(`SELECT count(*) FROM runtime.audit_events AS event
+		JOIN runtime.control_assessments AS assessment ON assessment.evaluation_id::text = event.masked_summary->>'evaluationId'
+		WHERE event.run_id = $1 AND event.masked_summary->>'inputSource' = 'judge'`, passport.RunID) == 0 {
+		t.Error("the control.evaluated event does not join its control records")
+	}
 	if count(`SELECT count(*) FROM runtime.audit_events WHERE run_id = $1 AND masked_summary::text LIKE '%Ignore previous%'`, passport.RunID) != 0 {
 		t.Error("the inspected text reached an event")
 	}

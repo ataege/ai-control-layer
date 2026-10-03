@@ -367,6 +367,8 @@ export interface SafeEvent {
     actorId: string | null;
     /** "judge" for a control evaluation of submitted input (GO-82); null for agent decisions. */
     inputSource: "judge" | null;
+    /** The evaluation id of a control evaluation; its control assessments carry the same id. */
+    evaluationId: string | null;
   };
   occurredAt: string;
 }

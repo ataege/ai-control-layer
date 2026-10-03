@@ -158,7 +158,8 @@
         "alternativeTemplate",
         "safeMessage",
         "actorId",
-        "inputSource"
+        "inputSource",
+        "evaluationId"
       ],
       "properties": {
         "purpose": {
@@ -309,6 +310,17 @@
           "anyOf": [
             {
               "enum": ["judge"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evaluationId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
             },
             {
               "type": "null"
