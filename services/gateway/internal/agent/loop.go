@@ -59,6 +59,7 @@ type LoopDependencies struct {
 	Corrections CorrectionCounter
 	Steps       StepCounter
 	Contexts    *ContextStore
+	Telemetry   *Telemetry
 	Logger      *slog.Logger
 }
 
@@ -72,7 +73,7 @@ type Loop struct {
 func NewLoop(dependencies LoopDependencies) (*Loop, error) {
 	if dependencies.Runs == nil || dependencies.Stepper == nil || dependencies.Gate == nil || dependencies.Executor == nil ||
 		dependencies.Inspector == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
-		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Logger == nil {
+		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Telemetry == nil || dependencies.Logger == nil {
 		return nil, ErrInvalid
 	}
 	return &Loop{dependencies: dependencies, now: time.Now}, nil
@@ -94,7 +95,9 @@ func (loop *Loop) Handle(ctx context.Context, job worker.Job) (worker.Outcome, e
 		if err := ctx.Err(); err != nil {
 			return worker.Outcome{}, err
 		}
+		stepStarted := time.Now()
 		end, proceed, err := loop.step(ctx, runIdentity)
+		loop.recordSpans(ctx, runIdentity, Span{Phase: PhaseTotal, Duration: time.Since(stepStarted), Failed: err != nil})
 		if err != nil {
 			return worker.Outcome{}, err
 		}
@@ -114,6 +117,7 @@ func (loop *Loop) Handle(ctx context.Context, job worker.Job) (worker.Outcome, e
 // loop continues, or an error that leaves the job unchanged.
 func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, bool, error) {
 	runs := loop.dependencies.Runs
+	lookupStarted := time.Now()
 	state, err := runs.RunState(ctx, run.OrganizationID, run.RunID)
 	if err != nil {
 		return runEnd{}, false, err
@@ -151,6 +155,7 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonAllowanceExhausted}, false, nil
 	}
 	stepNumber := stepsTaken + 1
+	loop.recordSpans(ctx, run, Span{Phase: PhasePolicyLookup, Duration: time.Since(lookupStarted)})
 
 	entries, err := loop.dependencies.Contexts.List(ctx, run.OrganizationID, run.RunID)
 	if err != nil {
@@ -158,6 +163,9 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	}
 	agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: passport.Scope.AllowedModels}
 	result, err := loop.dependencies.Stepper.Step(ctx, agentRun, buildTaskContext(passport, entries))
+	if result.CallID != "" {
+		loop.recordSpans(ctx, run, Span{Phase: PhaseProvider, Duration: result.Duration, Failed: err != nil, ModelCallID: result.CallID})
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return runEnd{}, false, ctx.Err()
@@ -196,10 +204,16 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 	if err != nil {
 		return runEnd{}, false, err
 	}
+	gateStarted := time.Now()
 	decision := loop.dependencies.Gate.Evaluate(ctx, run, policy.Proposal{
 		ActionID: actionID, StepNumber: stepNumber, IdempotencyKey: idempotencyKey,
 		Tool: string(proposal.Tool), RawArguments: proposal.Arguments,
 	})
+	gateSpan := Span{Phase: PhaseDeterministic, Duration: time.Since(gateStarted)}
+	if decision.ActionStored {
+		gateSpan.ActionID = actionID
+	}
+	loop.recordSpans(ctx, run, gateSpan)
 	switch decision.Outcome {
 	case policy.OutcomeAllow:
 	case policy.OutcomeApprovalRequired:
@@ -210,7 +224,10 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return loop.correct(ctx, run, passport, stepNumber, proposedCall(proposal), decision)
 	}
 
+	executionStarted := time.Now()
 	execution := loop.dependencies.Executor.Execute(ctx, run, actionID)
+	loop.recordSpans(ctx, run, Span{Phase: PhaseCommit, Duration: time.Since(executionStarted),
+		Failed: execution.Status != policy.ExecutionSucceeded, ActionID: actionID})
 	switch execution.Status {
 	case policy.ExecutionSucceeded:
 	case policy.ExecutionPaused:
@@ -223,7 +240,16 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 	}
 
 	inspection, err := loop.dependencies.Inspector.Inspect(ctx, agentRun, string(proposal.Tool), execution.Result)
+	evaluationID, idErr := newUUID()
+	if idErr != nil {
+		return runEnd{}, false, idErr
+	}
 	if err != nil || inspection.Outcome == InspectionPause {
+		// Nothing is released; the decisions and timing are still recorded as evidence.
+		if recordErr := loop.dependencies.Telemetry.RecordInspection(ctx, run.OrganizationID, run.RunID, actionID,
+			passport.AdmissionCatalogRevisionID, evaluationID, inspection.Evidence); recordErr != nil {
+			loop.dependencies.Logger.Warn("inspection evidence not recorded", "run_id", run.RunID, "error", recordErr.Error())
+		}
 		reason := inspection.Reason
 		if err != nil || !reason.Valid() {
 			reason = contracts.ReasonSecurityEvaluatorUnavailable
@@ -237,7 +263,8 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 	if err != nil {
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}, false, nil
 	}
-	if err = loop.dependencies.Contexts.AppendToolStep(ctx, run.OrganizationID, run.RunID, stepNumber, actionID, call, inspection); err != nil {
+	if err = loop.dependencies.Contexts.AppendToolStep(ctx, run.OrganizationID, run.RunID, stepNumber, actionID, call, inspection,
+		passport.AdmissionCatalogRevisionID, evaluationID); err != nil {
 		return runEnd{}, false, err
 	}
 	return runEnd{}, true, nil
@@ -309,6 +336,16 @@ func proposedCall(proposal contracts.ActionProposal) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+// recordSpans writes timing best effort: telemetry is evidence, never a reason to stop or retry a
+// run, so a failed write is logged and the step goes on.
+func (loop *Loop) recordSpans(ctx context.Context, run policy.RunIdentity, spans ...Span) {
+	writeContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	if err := loop.dependencies.Telemetry.RecordSpans(writeContext, run.OrganizationID, run.RunID, spans); err != nil {
+		loop.dependencies.Logger.Warn("timing not recorded", "run_id", run.RunID, "error", err.Error())
+	}
 }
 
 // endRun records the run's status change with its event. A change another writer already made

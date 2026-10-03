@@ -394,6 +394,22 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Performance telemetry (GO-80)
+
+`agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the
+tool-result inspection's decisions to `runtime.control_assessments`. Per step the loop records
+`policy_lookup` (run, passport and step count), `provider` (agent call, Go wall time, with its
+`model_calls` id), `deterministic` (the gate decision, with the action when one was stored),
+`commit` (the executor's attempt and local effect), the inspection's `deterministic` and
+`semantic` controls with each security call's `provider` time, and `total` (the whole step).
+`failed` marks errored spans. Spans are best effort: a failed write is logged and never stops or
+retries a run. Control assessments of a released result commit in the same transaction as its
+context entries; those of a paused inspection are written on their own. Rows hold ids, outcomes,
+codes, revisions, the validated verdict (category, score, reason code) and durations, never
+inspected text, prompts or model output. Semantic rows carry their verdict source (`live` or
+`fixture`) and the `security`-purpose call they came from. `approval_wait` follows with GO-40;
+the concurrency slot with GO-79; queue depth is read from `runtime.jobs`.
+
 ## Bounded agent loop (GO-11)
 
 `agent.Loop` is the `worker.Handler` for `contracts.JobKindAgentStep` jobs. Per claim it runs up

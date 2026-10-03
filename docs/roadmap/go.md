@@ -729,13 +729,22 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     investigate)
   - Blocked by: nothing
 
-- [ ] **GO-80 · Instrument performance telemetry**
+- [x] **GO-80 · Instrument performance telemetry**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-10, GO-19 · Needs: X-79, X-85 · Provides: X-95 (part: instrumentation)
   - Paths: the model gateway and worker packages
   - Work: Measure monotonic durations separately for policy lookup, deterministic controls, semantic evaluation, provider request, approval waiting and local commit, plus total handling latency, queue depth, concurrency and errors, per model purpose. Keep untrusted confidential input out of the timing records. Observed durations stay distinct from cost estimates.
   - Done when: each agent and security call and each gate decision has its timing record, readable for the summary and export.
   - Tests: unit tests with a fake clock; a database-backed test through the X-24 command.
+  - Completed (2026-10-03): `agent.Telemetry` on go/f3 writes `runtime.timing_records` per step
+    (policy lookup, agent provider call with its `model_calls` id, gate decision, executor commit,
+    step total) and, for each tool-result inspection, the deterministic and semantic controls, each
+    security call's provider time and one `runtime.control_assessments` row per control decision
+    (semantic rows with verdict source and the security call id), committed with the step's context
+    entries. No inspected text is stored. Test
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: see
+    the GO-80 commit. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
+    depth is read from `runtime.jobs` by the summary.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 

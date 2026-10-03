@@ -139,7 +139,7 @@ func (world *loopWorld) remove(t *testing.T) {
 		return
 	}
 	for _, table := range []string{
-		"runtime.context_entries", "runtime.audit_events", "runtime.execution_attempts", "runtime.actions",
+		"runtime.context_entries", "runtime.control_assessments", "runtime.timing_records", "runtime.audit_events", "runtime.execution_attempts", "runtime.actions",
 		"runtime.model_calls", "runtime.jobs", "runtime.runs", "runtime.passports", "demo.invoices", "demo.vendors",
 	} {
 		if _, err = transaction.Exec(ctx, "DELETE FROM "+table+" WHERE organization_id = $1", world.organizationID); err != nil {
@@ -317,6 +317,7 @@ func newTestLoopWithSecurity(t *testing.T, world *loopWorld, stepper ModelSteppe
 		Corrections: policy.NewCorrectionCounter(world.pool),
 		Steps:       budget.NewCallLog(world.pool),
 		Contexts:    NewContextStore(world.pool),
+		Telemetry:   NewTelemetry(world.pool),
 		Logger:      slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
 	})
 	if err != nil {
@@ -632,5 +633,57 @@ func TestModelFailuresEndTheRunClosed(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertRunEnded(t, world, testCase.status, testCase.reason)
+	}
+}
+
+// GO-80: every phase of a step has a timing record, the inspection's decisions become control
+// assessments linked to the metered security call, and no inspected text is stored with them.
+func TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText(t *testing.T) {
+	world := newLoopWorld(t, passportOptions{})
+	stepper := &scriptedStepper{callLog: budget.NewCallLog(world.pool), script: []func([]model.Message) (StepResult, error){
+		readInvoice(world.invoiceWithNote), finalAnswer,
+	}}
+	if _, err := newTestLoop(t, world, stepper).Handle(context.Background(), world.job()); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	rows, err := world.pool.Query(ctx, `SELECT phase, count(*) FROM runtime.timing_records WHERE organization_id = $1 GROUP BY phase`, world.organizationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phases := map[string]int{}
+	for rows.Next() {
+		var phase string
+		var count int
+		_ = rows.Scan(&phase, &count)
+		phases[phase] = count
+	}
+	rows.Close()
+	// Two steps: two lookups, two agent provider calls plus one security call, one gate decision,
+	// one executed read, the controls of one inspection and two step totals.
+	for phase, minimum := range map[string]int{PhasePolicyLookup: 2, PhaseProvider: 3, PhaseDeterministic: 2, PhaseCommit: 1, PhaseSemantic: 1, PhaseTotal: 2} {
+		if phases[phase] < minimum {
+			t.Errorf("phase %s has %d timing records, want at least %d (all: %v)", phase, phases[phase], minimum, phases)
+		}
+	}
+	var semanticRows, linkedCalls, deterministicRows int
+	if err = world.pool.QueryRow(ctx, `SELECT
+			count(*) FILTER (WHERE control_class = 'semantic'),
+			count(*) FILTER (WHERE control_class = 'semantic' AND security_model_call_id IS NOT NULL AND verdict_source = 'fixture'),
+			count(*) FILTER (WHERE control_class = 'deterministic')
+		FROM runtime.control_assessments WHERE organization_id = $1 AND admission_catalog_revision_id = 1`, world.organizationID).
+		Scan(&semanticRows, &linkedCalls, &deterministicRows); err != nil {
+		t.Fatal(err)
+	}
+	if semanticRows != 1 || linkedCalls != 1 || deterministicRows == 0 {
+		t.Fatalf("assessments: semantic %d (linked %d), deterministic %d", semanticRows, linkedCalls, deterministicRows)
+	}
+	var leaked int
+	if err = world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.control_assessments
+		WHERE organization_id = $1 AND (verdict::text ILIKE '%INV104%' OR reason_code ILIKE '%INV104%')`, world.organizationID).Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Fatal("inspected note text reached the control assessments")
 	}
 }
