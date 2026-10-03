@@ -43,7 +43,8 @@ pnpm stack:down                # stops everything, keeps the data volume
 Inside the Compose network the services use container wiring instead of the `.env` host values:
 `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432`, `GATEWAY_URL=http://gateway:8080`,
 `API_UPSTREAM_URL=http://api:3001`, and for the gateway only
-`MODEL_BASE_URL=http://host.docker.internal:11434` (the host's Ollama; unverified). The api and gateway images themselves set `API_HOST` /
+`MODEL_BASE_URL=http://host.docker.internal:11434` (the host's Ollama; reachable on Docker Desktop for macOS, see
+"Verification status" in the root `README.md`). The api and gateway images themselves set `API_HOST` /
 `GATEWAY_HOST` to `0.0.0.0`, so they are reachable inside any container network; on the host the
 default stays `127.0.0.1`.
 
@@ -69,10 +70,11 @@ pnpm stack:down --debug
 
 ## Secrets
 
-`POSTGRES_PASSWORD` and `GATEWAY_SERVICE_TOKEN` are read from the root `.env` (or the real
+`POSTGRES_PASSWORD`, `GATEWAY_SERVICE_TOKEN`, `AUTH_JWT_SECRET` (api only) and
+`OPERATOR_CONTEXT_SIGNING_KEY` (api and gateway) are read from the root `.env` (or the real
 environment) at start time. They are never written into these files or baked into an image, and
 Compose stops with a clear message when one is missing. The `web` container receives neither the
-service token nor any `POSTGRES_*` or `MODEL_*` variable, and `pnpm dev` / `pnpm dev:web` strip the same
+service token, the two signing secrets nor any `POSTGRES_*` or `MODEL_*` variable, and `pnpm dev` / `pnpm dev:web` strip the same
 variables from the environment of the web process on the host. Nested `.env` files (for example
 `apps/web/.env.local`) are excluded from the build context as well.
 
@@ -82,6 +84,26 @@ Database files live in the named volume `starter_postgres-data`, mounted at `/va
 (the layout used by the PostgreSQL 18 images). The `down` scripts never remove it. `POSTGRES_USER`,
 `POSTGRES_PASSWORD` and `POSTGRES_DB` only take effect when the volume is first created; to start
 over with new values, remove the volume yourself with `docker volume rm starter_postgres-data`.
+
+## Several checkouts on one machine
+
+The Compose project is named `starter` in `compose.yaml`, so every checkout (for example a second
+git worktree) drives the same containers and the same volume by default. A worktree with its own
+`.env` then has a different `POSTGRES_PASSWORD` from the existing volume, and its `down` commands
+would stop the other checkout's database. To keep a second checkout separate, add two lines to its
+untracked `.env`:
+
+```sh
+COMPOSE_PROJECT_NAME=starter-<suffix>   # own containers, network and volume
+POSTGRES_PORT=55440                     # any free host port
+```
+
+`scripts/compose.mjs` passes `--env-file .env` on every call, so `up` and `down` both use that
+project name, and `pnpm dev` and `pnpm smoke` read the same port. Check the resolved name before the
+first `up` with
+`docker compose --project-directory . --env-file .env -f infra/compose.yaml config | head -1`. The
+web, API and gateway host ports (3000, 3001, 8080) are still shared: run one stack at a time, or
+change them as described in "Changing ports" in the root `README.md`.
 
 ## Health checks
 
