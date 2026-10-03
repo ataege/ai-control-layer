@@ -197,7 +197,9 @@ export type ReasonCode =
   | "decision_unavailable"
   | "content_blocked"
   | "content_too_large"
-  | "limit_not_allowed";
+  | "limit_not_allowed"
+  | "run_not_active"
+  | "approval_rejected";
 
 /** The four registered tools. */
 export type ToolName = "read_invoice" | "read_vendor" | "create_report" | "queue_report";
@@ -361,6 +363,10 @@ export interface SafeEvent {
     replaySource: string | null;
     alternativeTemplate: ReportTemplate | null;
     safeMessage: string | null;
+    /** The verified operator who caused the event when it is not the run's agent (an evaluation). */
+    actorId: string | null;
+    /** "judge" for a control evaluation of submitted input (GO-82); null for agent decisions. */
+    inputSource: "judge" | null;
   };
   occurredAt: string;
 }
