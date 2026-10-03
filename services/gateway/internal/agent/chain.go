@@ -42,7 +42,11 @@ type ChainConfig struct {
 	// is missing or invalid; every model call then fails closed.
 	Model           config.Model
 	ModelConfigured bool
-	Logger          *slog.Logger
+	// VerdictSource labels the semantic verdicts: empty means live (the real local model). A test
+	// that drives the chain with a fixture provider sets security.VerdictFixture, so its verdicts
+	// are never recorded as live detection (guardrail 9).
+	VerdictSource security.VerdictSource
+	Logger        *slog.Logger
 }
 
 // ProductionChain is the governed execution chain of the gateway process, built once. The judge
@@ -90,8 +94,12 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	if err != nil {
 		return nil, err
 	}
+	verdictSource := chainConfig.VerdictSource
+	if verdictSource == "" {
+		verdictSource = security.VerdictLive
+	}
 	evaluator, err := security.NewSemanticEvaluator(securityCaller, security.EvaluatorOptions{
-		Model: modelName, ContextTokens: security.MinEvaluatorContextTokens, Source: security.VerdictLive,
+		Model: modelName, ContextTokens: security.MinEvaluatorContextTokens, Source: verdictSource,
 	})
 	if err != nil {
 		return nil, err
@@ -114,7 +122,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 		Runs: repository.New(pool), Stepper: stepper, Gate: gate, Executor: executor, Inspector: resultInspector,
 		Catalog: catalogSource, Scopes: scopes, Corrections: policy.NewCorrectionCounter(pool), Steps: budget.NewPostgresStore(pool),
 		Contexts: NewContextStore(pool), Telemetry: NewTelemetry(pool), Recovery: NewRecovery(pool, budget.NewPostgresStore(pool)),
-		Logger: chainConfig.Logger,
+		Results: PoolFinalResults{Pool: pool}, Logger: chainConfig.Logger,
 	})
 	if err != nil {
 		return nil, err
@@ -184,6 +192,11 @@ func (caller *CatalogAccountedCaller) Call(ctx context.Context, runID, callID st
 	active, err := caller.accounting.Active(ctx)
 	if err != nil {
 		return model.AccountedResult{}, err
+	}
+	// Both reads must describe the same revision: a reload between them would mix the limits of one
+	// revision with the output ceilings of another, so the call is refused and nothing dispatched.
+	if active.RevisionID != snapshot.RevisionID {
+		return model.AccountedResult{}, catalog.ErrUnavailable
 	}
 	settings := active.Settings
 	if !slices.Contains(snapshot.Limits.AllowedModels, caller.modelName) {

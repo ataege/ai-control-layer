@@ -159,3 +159,30 @@ func TestModelGatewayDeadlineRetainsTheReservationAndSlot(t *testing.T) {
 		t.Fatalf("the process slot was released at once after a timeout (in use %d)", held)
 	}
 }
+
+// otherRevisionAccounting reports an accounting projection of another revision than the snapshot.
+type otherRevisionAccounting struct{}
+
+func (otherRevisionAccounting) Active(ctx context.Context) (config.AccountingCatalog, error) {
+	accounting, _ := fixedAccounting{}.Active(ctx)
+	accounting.RevisionID = 2
+	return accounting, nil
+}
+
+func TestModelGatewayRefusesACallAcrossTwoCatalogRevisions(t *testing.T) {
+	pool := testdb.Open(t)
+	run := budgettest.OpenRun(t, pool, budgettest.Limits(20000))
+	var hits atomic.Int64
+	provider := providerDouble(t, func(writer http.ResponseWriter, request *http.Request) {
+		hits.Add(1)
+		fmt.Fprint(writer, fixtureAnswer)
+	})
+	caller := NewCatalogAccountedCaller(provider, budgettest.NewDispatchRecordingStore(pool), otherRevisionAccounting{},
+		gatewaySnapshot([]string{"test-fixture"}, 20, 2), pool, "test-fixture")
+	if _, err := caller.Call(context.Background(), run.RunID, testdb.ID(t), agentRequest()); !errors.Is(err, catalog.ErrUnavailable) {
+		t.Fatalf("mixed revisions: %v", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatal("a call across two catalog revisions was dispatched")
+	}
+}
