@@ -243,6 +243,15 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   `config/attack-signatures.json` (with a new feed revision), then `pnpm policy:import` and
   `pnpm catalog:activate`, or let the running gateway activate the requested revision within a second
   or two. An invalid file is rejected and the last accepted revision stays active.
+- One change at a time: change one value, run `pnpm policy:import`, wait for the gateway's log line
+  `catalog revision validated and activated` (or `pnpm catalog:activate` printing the activated
+  revision, or `/health/ready` answering 200), then make the next change. The gateway validates only
+  the latest requested revision, so a second import before the first is activated replaces it: a good
+  edit followed at once by a bad one leaves the revision from before both active.
+- A real change moves the active revision, and an action approved or allowed under the previous
+  revision is then refused with `source_policy_changed`, so do not change the configuration during
+  a review wait. Re-importing an unchanged file creates a new revision today as well; after lane
+  c1's importer fix it is a no-op.
 - Show the same input before and after (the judge input path once the API lands; until then a test
   or replay against the new revision). **[API pending]** the revision view (WEB-29).
 
