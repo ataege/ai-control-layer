@@ -91,22 +91,34 @@ func (results PoolFinalResults) Validate(ctx context.Context, organizationID, ru
 // finalAnswerRejectedMessage is the fixed feedback after a rejected final answer.
 const finalAnswerRejectedMessage = "The final answer was not accepted: reply with only the required JSON object naming reports this run created."
 
+// ContinuationReader finds the decided action a continuation resumes (policy.Approvals).
+type ContinuationReader interface {
+	DecidedActionFor(ctx context.Context, organizationID, runID string) (policy.DecidedAction, bool, error)
+}
+
+// correctionsExhaustedMessage is the fixed operator message when the correction limit stops a run.
+const correctionsExhaustedMessage = "The task used up its corrections after repeated denials, so the run is stopped."
+
+// rejectedActionMessage is the fixed feedback after a reviewer rejected the waited-for action.
+const rejectedActionMessage = "The reviewer rejected this action; it was not run."
+
 // LoopDependencies are the components the loop drives. Every one is required.
 type LoopDependencies struct {
-	Runs        *repository.Repository
-	Stepper     ModelStepper
-	Gate        ActionGate
-	Executor    ActionExecutor
-	Inspector   ResultInspector
-	Catalog     CatalogSource
-	Scopes      policy.ScopeReader
-	Corrections CorrectionCounter
-	Steps       StepCounter
-	Contexts    *ContextStore
-	Telemetry   *Telemetry
-	Recovery    *Recovery
-	Results     FinalResultValidator
-	Logger      *slog.Logger
+	Runs          *repository.Repository
+	Stepper       ModelStepper
+	Gate          ActionGate
+	Executor      ActionExecutor
+	Inspector     ResultInspector
+	Catalog       CatalogSource
+	Scopes        policy.ScopeReader
+	Corrections   CorrectionCounter
+	Steps         StepCounter
+	Contexts      *ContextStore
+	Telemetry     *Telemetry
+	Recovery      *Recovery
+	Results       FinalResultValidator
+	Continuations ContinuationReader
+	Logger        *slog.Logger
 }
 
 // Loop is the bounded agent loop: the handler of contracts.JobKindAgentStep jobs (GO-11).
@@ -120,7 +132,7 @@ func NewLoop(dependencies LoopDependencies) (*Loop, error) {
 	if dependencies.Runs == nil || dependencies.Stepper == nil || dependencies.Gate == nil || dependencies.Executor == nil ||
 		dependencies.Inspector == nil || dependencies.Catalog == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
 		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Telemetry == nil || dependencies.Recovery == nil ||
-		dependencies.Results == nil || dependencies.Logger == nil {
+		dependencies.Results == nil || dependencies.Continuations == nil || dependencies.Logger == nil {
 		return nil, ErrInvalid
 	}
 	return &Loop{dependencies: dependencies, now: time.Now}, nil
@@ -138,6 +150,8 @@ type runEnd struct {
 	purpose string
 	// resultReference is the validated final result stored with a completion (GO-26).
 	resultReference *string
+	// resumed marks the return from a review wait to running (run.resumed).
+	resumed bool
 }
 
 // Handle runs model steps for the job's run until the run ends, waits, or the claim's step bound
@@ -208,8 +222,23 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 			return runEnd{}, false, err
 		}
 	case contracts.RunRunning:
+	case contracts.RunAwaitingApproval:
+		// GO-40: a continuation resumes the run once the waited-for action has been decided; until
+		// then the run keeps waiting and no worker holds it.
+		decided, found, err := loop.dependencies.Continuations.DecidedActionFor(ctx, run.OrganizationID, run.RunID)
+		if err != nil {
+			return runEnd{}, false, err
+		}
+		if !found {
+			return runEnd{}, false, nil
+		}
+		if err = loop.transition(ctx, run, runEnd{status: contracts.RunRunning, actionID: decided.ActionID, resumed: true}); errors.Is(err, repository.ErrInvalidTransition) {
+			return runEnd{}, true, nil
+		} else if err != nil {
+			return runEnd{}, false, err
+		}
 	default:
-		// Terminal, waiting for review or paused: this job has nothing to do.
+		// Terminal or paused: this job has nothing to do.
 		return runEnd{}, false, nil
 	}
 
@@ -230,6 +259,11 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		return runEnd{}, false, err
 	}
 	effective := catalog.EffectiveFor(passport, snapshot)
+	// GO-40: a decided, waited-for action is handled before any new model request: the approved
+	// stored action executes (never a new proposal), a rejected or expired one is a counted denial.
+	if handled, end, proceed, err := loop.continueDecidedAction(ctx, run, passport, effective, snapshot.Security); handled {
+		return end, proceed, err
+	}
 	stepsTaken, err := loop.dependencies.Steps.CountAgentCalls(ctx, run.OrganizationID, run.RunID)
 	if err != nil {
 		return runEnd{}, false, err
@@ -264,7 +298,7 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	case StepRejected:
 		// GO-01: the whole response is denied and recorded as a denial event; no subset runs.
 		// It counts as a correction, like any other denial.
-		if err = loop.recordRejection(ctx, run, result.RejectReason); err != nil {
+		if err = loop.recordRejection(ctx, run, result.RejectReason, ""); err != nil {
 			return runEnd{}, false, err
 		}
 		rejection := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(result.RejectReason)}
@@ -278,7 +312,7 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		}
 		if reason != "" {
 			// A rejected final answer is a denial like any other: recorded and counted as a correction.
-			if err = loop.recordRejection(ctx, run, reason); err != nil {
+			if err = loop.recordRejection(ctx, run, reason, ""); err != nil {
 				return runEnd{}, false, err
 			}
 			rejection := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(reason)}
@@ -324,6 +358,13 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return loop.correct(ctx, run, effective, stepNumber, proposedCall(proposal), decision, "")
 	}
 
+	return loop.executeAllowed(ctx, run, agentRun, passport, settings, stepNumber, actionID, proposal)
+}
+
+// executeAllowed runs an allowed or approved stored action through the executor, inspects its
+// result and stores the step's context.
+func (loop *Loop) executeAllowed(ctx context.Context, run policy.RunIdentity, agentRun Run, passport contracts.Passport,
+	settings security.Settings, stepNumber int, actionID string, proposal contracts.ActionProposal) (runEnd, bool, error) {
 	executionStarted := time.Now()
 	execution := loop.dependencies.Executor.Execute(ctx, run, actionID)
 	loop.recordSpans(ctx, run, Span{Phase: PhaseCommit, Duration: time.Since(executionStarted),
@@ -383,7 +424,7 @@ func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, effective
 	}
 	verdict := policy.CheckCorrections(used, int(effective.Corrections))
 	if !verdict.Continue {
-		return runEnd{status: contracts.RunStopped, reason: contractReason(verdict.StopReason)}, false, nil
+		return runEnd{status: contracts.RunStopped, reason: contractReason(verdict.StopReason), message: correctionsExhaustedMessage}, false, nil
 	}
 	scope, err := loop.dependencies.Scopes.LoadScope(ctx, run)
 	if err != nil {
@@ -403,20 +444,59 @@ func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, effective
 	return runEnd{}, true, nil
 }
 
-// recordRejection writes the denial event of a whole rejected response, which has no action.
-func (loop *Loop) recordRejection(ctx context.Context, run policy.RunIdentity, reason contracts.ReasonCode) error {
+// recordRejection writes a denial event the correction counter counts: a whole rejected response or
+// final answer (no action), or a waited-for action a reviewer rejected or that expired.
+func (loop *Loop) recordRejection(ctx context.Context, run policy.RunIdentity, reason contracts.ReasonCode, actionID string) error {
 	runID := run.RunID
 	decision := contracts.DecisionDeny
 	if !reason.Valid() {
 		reason = contracts.ReasonDecisionUnavailable
 	}
+	event := repository.NewEvent{OrganizationID: run.OrganizationID, RunID: &runID, EventType: contracts.EventActionDenied,
+		Decision: &decision, ReasonCode: &reason}
+	if actionID != "" {
+		event.ActionID = &actionID
+	}
 	return loop.dependencies.Runs.InTransaction(ctx, func(tx repository.Tx) error {
-		_, err := tx.AppendEvent(ctx, repository.NewEvent{
-			OrganizationID: run.OrganizationID, RunID: &runID, EventType: contracts.EventActionDenied,
-			Decision: &decision, ReasonCode: &reason,
-		})
+		_, err := tx.AppendEvent(ctx, event)
 		return err
 	})
+}
+
+// continueDecidedAction handles the waited-for action of a resumed run once (GO-40). It reports
+// whether it handled one; a step already in the context was handled before.
+func (loop *Loop) continueDecidedAction(ctx context.Context, run policy.RunIdentity, passport contracts.Passport, effective catalog.Effective,
+	settings security.Settings) (bool, runEnd, bool, error) {
+	decided, found, err := loop.dependencies.Continuations.DecidedActionFor(ctx, run.OrganizationID, run.RunID)
+	if err != nil {
+		return true, runEnd{}, false, err
+	}
+	if !found {
+		return false, runEnd{}, false, nil
+	}
+	handled, err := loop.dependencies.Contexts.HasStep(ctx, run.OrganizationID, run.RunID, decided.StepNumber)
+	if err != nil {
+		return true, runEnd{}, false, err
+	}
+	if handled {
+		return false, runEnd{}, false, nil
+	}
+	proposal := contracts.ActionProposal{Tool: contracts.ToolName(decided.Tool), Arguments: decided.CanonicalArguments}
+	if decided.Status == contracts.ActionApproved && decided.GrantOpen {
+		agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: effective.AllowedModels}
+		end, proceed, err := loop.executeAllowed(ctx, run, agentRun, passport, settings, decided.StepNumber, decided.ActionID, proposal)
+		return true, end, proceed, err
+	}
+	reason, message := contracts.ReasonApprovalExpired, ""
+	if decided.Status == contracts.ActionRejected {
+		reason, message = contracts.ReasonApprovalRequired, rejectedActionMessage
+	}
+	if err = loop.recordRejection(ctx, run, reason, decided.ActionID); err != nil {
+		return true, runEnd{}, false, err
+	}
+	denial := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(reason), ActionID: decided.ActionID}
+	end, proceed, err := loop.correct(ctx, run, effective, decided.StepNumber, proposedCall(proposal), denial, message)
+	return true, end, proceed, err
 }
 
 // proposedCall is the stored form of a denied call as the model sent it: the tool and its
@@ -470,6 +550,9 @@ func (loop *Loop) endRun(ctx context.Context, run policy.RunIdentity, end runEnd
 func (loop *Loop) transition(ctx context.Context, run policy.RunIdentity, end runEnd) error {
 	runID := run.RunID
 	event := repository.NewEvent{OrganizationID: run.OrganizationID, RunID: &runID, EventType: eventFor(end.status)}
+	if end.resumed {
+		event.EventType = contracts.EventRunResumed
+	}
 	var reason *contracts.ReasonCode
 	if end.status.NeedsReason() {
 		reasonCode := end.reason
@@ -559,7 +642,7 @@ func stepErrorEnd(err error) runEnd {
 // refusalEnd maps an executor refusal (a fresh check failed before dispatch).
 func refusalEnd(reason contracts.ReasonCode) runEnd {
 	switch reason {
-	case contracts.ReasonRunCancelled:
+	case contracts.ReasonRunCancelled, contracts.ReasonRunExpired:
 		return runEnd{status: contracts.RunStopped, reason: reason}
 	case contracts.ReasonAllowanceExhausted:
 		return runEnd{status: contracts.RunPaused, reason: reason}
