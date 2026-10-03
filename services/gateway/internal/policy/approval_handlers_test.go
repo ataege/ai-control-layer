@@ -52,7 +52,7 @@ func TestApprovalHandlerAcceptsOnlyTheDecision(t *testing.T) {
 		{"a replacement content", `{"decision":"approve","content":"other"}`, true, nil, http.StatusBadRequest, false},
 		{"no decision", `{}`, true, nil, http.StatusBadRequest, false},
 		{"not JSON", `approve`, true, nil, http.StatusBadRequest, false},
-		{"unknown decision value", `{"decision":"maybe"}`, true, ErrApprovalInvalid, http.StatusBadRequest, true},
+		{"unknown decision value", `{"decision":"maybe"}`, true, nil, http.StatusBadRequest, false},
 		{"no operator context", `{"decision":"approve"}`, false, nil, http.StatusUnauthorized, false},
 		{"not a reviewer", `{"decision":"approve"}`, true, ErrNotReviewer, http.StatusForbidden, true},
 		{"expired", `{"decision":"approve"}`, true, ErrApprovalExpired, http.StatusConflict, true},

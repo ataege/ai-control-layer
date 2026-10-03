@@ -18,13 +18,12 @@ import (
 // ReviewerRole is the membership role an operator needs to decide an approval (lead decision).
 const ReviewerRole = "reviewer"
 
-// ApprovalChoice is the X-10 decision: approve or reject one stored action, nothing else. It is
-// handler-local until 3c adds ApprovalDecision to internal/contracts.
-type ApprovalChoice string
+// ApprovalChoice is the X-10 decision: approve or reject one stored action, nothing else.
+type ApprovalChoice = contracts.ApprovalChoice
 
 const (
-	ApprovalApprove ApprovalChoice = "approve"
-	ApprovalReject  ApprovalChoice = "reject"
+	ApprovalApprove = contracts.ApprovalApprove
+	ApprovalReject  = contracts.ApprovalReject
 )
 
 // Approval decision failures. Each one stores no grant.

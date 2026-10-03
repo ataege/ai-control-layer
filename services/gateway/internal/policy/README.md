@@ -44,7 +44,8 @@ Argument shapes (proposed for X-09; renamed here if X-09 freezes different names
    they get no `runtime.actions` row, only the denial event (`invalid_arguments`).
 2. The passport scope of the verified run and the active catalog revision (`ScopeReader`;
    `PassportScopeReader` reads the stored passport through 3c's `repository.Passport`, decoded
-   strictly against X-08, and the active revision through `config.ReadActiveAccountingCatalog`).
+   strictly against X-08, and the active revision through 3c's `catalog.Loader`, the single
+   active-snapshot source).
    A lookup failure, an invalid stored passport or a scope of another organization or run denies.
 3. The action is stored (`proposed`) and committed before any further check.
 4. Passport expiry, the passport's tools, then its resources: the invoice of `read_invoice`, the
@@ -176,9 +177,9 @@ the field limit, the signature rules and then the metered semantic check at the
 - `pause` or any failure: deny with the reason (`security_evaluator_unavailable` when none), which
   the worker treats as a pause.
 
-`CatalogSecuritySettings` loads the settings of the action's evaluated revision with
-`security.SettingsFromCatalog` (the revision's content and the active pointer's feed with its pinned
-digest); a missing or unenforceable revision pauses. Every control record of the check is written
+`CatalogSecuritySettings` returns the settings of the active snapshot from 3c's `catalog.Loader`
+when it is the action's evaluated revision; a different active revision, or a missing or
+unenforceable snapshot (for example signature matching enabled with no feed bound), pauses. Every control record of the check is written
 to `runtime.control_assessments` in the decision's transaction (one evaluation id, the action, the
 admission and evaluated revisions, matched rule and feed revision, verdict and source for semantic
 rows), never the inspected text.
@@ -189,7 +190,7 @@ Routes (mounted by 3c's `internal/api` behind the service token and the verified
 context): `ApprovalRoutePattern` (`POST /internal/actions/{actionId}/approval`, `ApprovalHandler`)
 and `ReviewRoutePattern` (`GET /internal/actions/{actionId}/review`, `ReviewHandler`).
 
-- The body is X-10 only, `{"decision":"approve"|"reject"}`; any other field or a missing decision is
+- The body is X-10 only (`contracts.ApprovalDecision`), `{"decision":"approve"|"reject"}`; any other field or a missing decision is
   `400` and nothing is decided.
 - Reviewer authority comes from `app.memberships` for the verified user and organization (role
   `reviewer`, migration `1791110000000` grants the gateway read only); a signed claim alone never

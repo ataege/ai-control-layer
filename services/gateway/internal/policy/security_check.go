@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/security"
 )
 
@@ -68,47 +68,29 @@ func (evaluator *SecurityActionEvaluator) EvaluateAction(ctx context.Context, ru
 	return check, security.ErrEvaluatorUnavailable
 }
 
-// CatalogSecuritySettings loads a revision's security settings from the control catalog: the
-// revision's content and the feed on the active pointer, validated by security.SettingsFromCatalog.
-// A missing or invalid revision is an error, never default settings.
-type CatalogSecuritySettings struct{ pool *pgxpool.Pool }
-
-// NewCatalogSecuritySettings returns a loader on the given pool. It creates nothing.
-func NewCatalogSecuritySettings(pool *pgxpool.Pool) *CatalogSecuritySettings {
-	return &CatalogSecuritySettings{pool: pool}
+// CatalogSecuritySettings returns the security settings of the active catalog snapshot through
+// 3c's catalog.Loader, the single active-snapshot source. The action's evaluated revision must be
+// the active one: a different active revision means the action needs a fresh evaluation, so the
+// check pauses instead of judging it under other rules.
+type CatalogSecuritySettings struct {
+	pool   *pgxpool.Pool
+	loader *catalog.Loader
 }
 
-// SettingsFor reads the revision and the active feed in one read-only transaction.
+// NewCatalogSecuritySettings returns a settings source with its own parse cache. It creates
+// nothing in the database.
+func NewCatalogSecuritySettings(pool *pgxpool.Pool) *CatalogSecuritySettings {
+	return &CatalogSecuritySettings{pool: pool, loader: catalog.NewLoader()}
+}
+
+// SettingsFor returns the active snapshot's settings when it is the given revision.
 func (source *CatalogSecuritySettings) SettingsFor(ctx context.Context, revisionID int64) (security.Settings, error) {
 	if source.pool == nil {
 		return security.Settings{}, ErrSecuritySettingsUnavailable
 	}
-	var settings security.Settings
-	err := pgx.BeginTxFunc(ctx, source.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		var content []byte
-		if err := tx.QueryRow(ctx, `SELECT content FROM app.control_catalog_revisions WHERE id = $1`, revisionID).Scan(&content); err != nil {
-			return err
-		}
-		var feedContent *string
-		var feedDigest *string
-		err := tx.QueryRow(ctx,
-			`SELECT feed.source_text, feed.file_digest
-			   FROM app.control_catalog_pointer AS pointer
-			   LEFT JOIN app.signature_feed_revisions AS feed ON feed.id = pointer.active_feed_revision_id
-			  WHERE pointer.id = 1`).Scan(&feedContent, &feedDigest)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-		var feedBytes []byte
-		var digest string
-		if feedContent != nil && feedDigest != nil {
-			feedBytes, digest = []byte(*feedContent), *feedDigest
-		}
-		settings, err = security.SettingsFromCatalog(revisionID, content, feedBytes, digest)
-		return err
-	})
-	if err != nil {
+	snapshot, err := source.loader.Active(ctx, source.pool)
+	if err != nil || snapshot.RevisionID != revisionID {
 		return security.Settings{}, ErrSecuritySettingsUnavailable
 	}
-	return settings, nil
+	return snapshot.Security, nil
 }
