@@ -1411,7 +1411,7 @@ this side starts and reviews.
     storyboard and proof checks" (Proposed demo sequence, beat 7)
   - Blocked by: `review payload read`; `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **WEB-15 · Add the cancel control that says cancellation is not a reversal**
+- [x] **WEB-15 · Add the cancel control that says cancellation is not a reversal**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: API-21, WEB-10 · Needs: nothing · Provides: X-43 (part: the cancel operation on the
     browser path)
@@ -1424,6 +1424,20 @@ this side starts and reviews.
     already committed effects and explain that cancellation is not a reversal mechanism" (Journey 3).
   - Tests: specs: the confirmation states the limitation; after the cancelled state arrives, earlier
     effects still render; a browser check, quoted: `pnpm --filter web run test`.
+  - Completed (2026-10-04, lane 3c on web/approval): `components/approval/cancel-run-button.tsx`
+    (`CancelRunButton`, for the run page to mount; also on the review page) opens a confirmation that
+    states the limitation ("stops future work … does not reverse anything already done: reports already
+    created and messages already queued stay recorded"), sends `POST /api/runs/{id}/cancel` with `{}`
+    through the new same-origin route `app/api/runs/[id]/cancel/route.ts`, and shows the state the
+    server recorded (stopped, or stopping before the next step for a running run; never more); a
+    finished run offers no cancel. Client `lib/clients/actions-client.ts` `cancelRun` (a lost connection
+    is "unconfirmed", never "nothing happened"). Tests: `cancel-run-text.test.ts` (the confirmation
+    states the limitation; the reported state never exceeds the server's), `actions-client.test.ts`
+    (empty command, unknown run). Browser check (headless Chromium against the real stack: web 3110, API
+    3111, gateway 8110, demo operator): run 87d0ed10 awaiting approval, Cancel run → confirmation text
+    as above → one request `POST /api/runs/87d0ed10-…/cancel` body `{}` → "Cancellation recorded. The
+    run is stopped. Work already done is not reversed and stays listed."; the run is `stopped` /
+    `run_cancelled`, and its 2 reports and the outbox (1) are unchanged.
   - Report: "Users operating model and proposed user journeys" (Journey 3 recover cancel or
     investigate); "Validation plan and evidence matrix" (Interpreting results honestly:
     "Cancellation can prevent future dispatches but cannot retract information already sent or undo
