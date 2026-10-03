@@ -1800,6 +1800,7 @@ handoff from X-62, and RS-09 submits.
 ### NestJS (report role: Implementer 2)
 
 - [ ] **API-27 · Supply the NestJS part of the technical handoff**
+  - NestJS text supplied (2026-10-04): apps/api/README.md now describes explicit setup/seed/reset, stored-session demonstration identity, environment names, product modules, Go authority, public operations and exact separate run/usage contracts. docs/api-facade-handoff.md records web shape/after-cursor handoffs, X-91 CLI ownership, lead-owned form/reload decisions and current smoke failures. API lint/typecheck/build exited 0; API unit tests: "370 passed"; database tests: "67 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Real web/API identity flow returned 200/200/200/401. Current overall smoke: "22 passed, 8 failed, 6 skipped"; not passed. The task stays open for the required teammate clean-checkout setup evidence and integration owner's final-build incorporation; Docker/browser/live-model rehearsal not claimed.
   - **Report 1.2 change:** Adds the policy file, catalog reload, security summary and audit export.
   - **Report 1.1 change:** Adds the report templates and projection rules.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 0.5-1.5 h)

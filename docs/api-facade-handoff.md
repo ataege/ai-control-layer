@@ -5,6 +5,10 @@ NestJS supplies the service token and signed operator context only to the privat
 the browser supplies record references, never identity. Go authorizes objects and owns effects.
 Run state and usage are separate responses; no combined wire shape exists.
 
+`GET /api/auth/me` serves only the verified user's id/email/name and the current membership's
+organizationId/roles, with no-store. The merged web's sign-in/profile/sign-out/revoked-profile
+HTTP check returned 200/200/200/401. See the API README for setup and current check limitations.
+
 | Public route                                                                       | Response contract                                                        | Additional access check                                                           |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `POST /api/runs`                                                                   | `StartRunResponse`                                                       | Go admission                                                                      |
@@ -47,3 +51,11 @@ route reports that aggregate result as degraded. The shared readiness contract h
 worker field. Decision 11 explicitly retains that shape: worker/catalog unavailability is represented
 by upstream HTTP 503, even when its database check is up. The API preserves this as degraded;
 API-15's browser presentation remains the web owner's verification task, with no invented worker field.
+
+Open integration decisions: the user left API-12 form options and API-33 authenticated policy
+reload with the lead. The merged web still expects draft combined RunView and cursor query naming;
+its owner must adopt the separate shared RunState/RunUsage and events after parameter.
+Host smoke after the web merge reports 22 passed, 8 failed, 6 skipped: / and /components redirect
+to login, whereas smoke expects 200 and therefore cannot scan those pages' assets. The API routes
+and real web/API identity flow passed, but this is not a passing overall smoke run. The script/web
+owners must reconcile public-page policy and smoke expectations before the local profile follow-up is pushed.
