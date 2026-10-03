@@ -802,8 +802,8 @@ one minimized `read_invoice` result whose internal note is the semantically chec
 writes no row. The passport, gate, effect and commit are outside the measured operation.
 
 ```sh
-node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark            # semantic off and fixture
-MODEL_NAME=qwen3.5:4b node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark --live
+pnpm benchmark                              # semantic off and fixture
+MODEL_NAME=qwen3.5:4b pnpm benchmark --live
 ```
 
 Flags: `--samples` (300) and `--warmup` (20) for the two configurations without a model,

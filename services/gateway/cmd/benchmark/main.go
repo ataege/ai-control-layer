@@ -165,7 +165,7 @@ func run(ctx context.Context, settings options, output io.Writer) error {
 	lookup := newPolicyLookup(pool)
 	activeSettings, accounting, err := lookup.load(ctx)
 	if err != nil {
-		return errors.New("no enforceable active control catalog; run `pnpm policy:import` (or `pnpm db:seed`) first")
+		return errors.New("no enforceable active control catalog: apply pending migrations (`pnpm db:migration:run`), then import the policy and its signature feed (`pnpm policy:import`)")
 	}
 	input, workload, err := buildWorkload()
 	if err != nil {
