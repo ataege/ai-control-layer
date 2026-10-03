@@ -557,7 +557,7 @@ the same machine was not touched (see [infra/README.md](infra/README.md)).
 **SH-30: deployment procedure rehearsal**
 
 On the presentation machine itself (Apple M1 Pro, 16 GB, Ollama 0.35.1), following
-[docs/setup.md](docs/setup.md) section 8 from a fresh `git clone` of commit `88317a3` in a
+the draft of [docs/setup.md](docs/setup.md) section 8 against a fresh `git clone` of commit `88317a3` (which predates the section) in a
 temporary directory. Because the everyday checkout's `starter` project was running, the clone's
 `.env` set `COMPOSE_PROJECT_NAME=starter-rehearsal` and `POSTGRES_PORT=55441`, as the procedure
 describes.
