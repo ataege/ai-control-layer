@@ -131,7 +131,7 @@ internal/contracts/   Go mirrors of the runtime wire contracts and strict decodi
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
-internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76)
+internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76), action check (GO-77 part)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
@@ -614,6 +614,31 @@ f3's wiring (GO-76 in the loop); the tests here cover the function with the labe
 ledger doubles: clean note passes unchanged, hostile note withheld while the invoice fields
 return, signature hit before any semantic call, secrets masked before the classifier, whole-field
 semantic redaction, and every guard failure pausing with no result.
+
+## Action proposal check (security part of GO-77)
+
+`Inspector.EvaluateAction(ctx, ActionInput{RunID, ActionID, Tool, CanonicalArguments}, Settings)`
+is what Worker 3's gate calls for a stored proposal that its deterministic scope and provenance
+checks already allow or send to review (Figure 6). It returns `no_objection`, `block` or `pause`,
+never "allow": `no_objection` only means these controls add no restriction.
+
+1. Field limit: canonical arguments over `MaxFieldBytes - 128` bytes (or a tool name over 64) block
+   with `content_too_large`, so the semantic check always sees the whole proposal.
+2. Signatures on the tool name and every decoded string of the arguments (keys included), so a
+   JSON escape cannot hide a pattern.
+3. The semantic check on `Proposed tool call: <tool>` plus the canonical arguments, metered as a
+   security call. A hit blocks in either mode, because an action cannot be partly redacted.
+
+There are no secret rules at this boundary (`secret_pattern` does not support it). Invalid
+arguments (not one JSON object, duplicate keys), a missing run or tool, or any guard failure pause
+with `security_evaluator_unavailable` or `security_allowance_exhausted` and an error. The
+assessment carries the records and the semantic call for persistence.
+
+`internal/security` does not import `internal/policy`. The gate's adapter for
+`policy.ActionEvaluator` loads the active `Settings` (from `SettingsFromCatalog`) and maps:
+`no_objection` to `policy.OutcomeAllow` (no change to the deterministic decision), `block` to
+`policy.OutcomeDeny` with the reason code, and `pause` to the returned error, which the gate already
+turns into a deny.
 
 ## Worker and job lease (GO-08)
 

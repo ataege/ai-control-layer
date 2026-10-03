@@ -799,7 +799,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Blocked by: nothing
   - Completed (2026-10-03): `internal/policy/executor.go` (5a60018, X-11 run status in c07ca60) dispatches an allowed action by its id to Worker 2's `tools.Runner`: fresh checks (status allowed, run running without a cancel request, stored passport unexpired, digest recomputed from the stored arguments), the attempt counted against `limits.toolAttempts` under a run-row lock and committed before dispatch, then `RunEffect` plus the final action status in one transaction; an adapter error rolls back and closes the attempt as aborted (paused), a failed commit is `outcome_unknown`; the worker receives `tools.MinimizeForModel` output only. Checks: `pnpm test:db gateway` 269 passed, 0 failed, 0 skipped at 5a60018 with the 7 executor database tests (executes once with one succeeded attempt; changed digest, denied or unknown action, cancelled run and expired passport reach no adapter; attempt limit; adapter error pauses); `pnpm verify` 6/6. GO-45 replaces the attempt step with the reservation, claim and approval consumption.
 
-- [ ] **GO-74 · Apply deterministic content controls to designated fields**
+- [x] **GO-74 · Apply deterministic content controls to designated fields**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 3-5 h, this roadmap's estimate)
   - Depends on: GO-23 · Needs: X-78, X-86 · Provides: nothing
   - Paths: the enforcement package from GO-12
@@ -808,8 +808,9 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: unit tests for each pattern, span validation and oversized content; a test that redaction leaves the source restriction unchanged.
   - Report: "Hybrid security controls and managed attack signatures"; "Validation plan and evidence matrix" (Redaction control)
   - Blocked by: `redaction rules`
+  - Completed (2026-10-03): `internal/security` (f25b173, field-limit order a0672e9): `ApplyContentRules` with password keyword and URL credential, API token, IBAN (mod-97) and payment card (Luhn) rules; spans validated (bounds, non-empty, UTF-8 boundaries) and merged; `redact` masks as `[REDACTED:<kind>]` (`content_redacted`), `block` withholds (`content_blocked`); fields over 4096 bytes or invalid UTF-8 withheld whole (`content_too_large`); the trusted `SourceRef` passes through unchanged; records carry rule and catalog revision, never text. Designated fields `tool_result_text`, `internal_note`, `model_input_text` (lead's delegate). Checks: `pnpm --filter gateway run format:check|lint|typecheck|test|build` all exit 0, the six corpus secret cases give exactly their fixture spans and the other cases and hostile notes none; `pnpm verify` 6 passed. Model context and broad logs receive only the inspected text once f3 wires GO-76 into the loop.
 
-- [ ] **GO-75 · Build the semantic security evaluator behind the metered model gateway**
+- [x] **GO-75 · Build the semantic security evaluator behind the metered model gateway**
   - Owner: Go implementer (report role: Implementer 4, enforcement, and Implementer 3, agent runtime) · Tier: A · Size: M (estimate 4-8 h, this roadmap's estimate)
   - Depends on: GO-10 · Needs: X-79, X-84, X-85, X-86 · Provides: nothing
   - Paths: a new package, named at M0 by the Go implementer; the model gateway package from GO-10
@@ -818,6 +819,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: parser and threshold tests with stubbed verdicts (labelled as stubs); timeout and malformed-output tests; one live local-model call recorded separately.
   - Report: "Hybrid security controls and managed attack signatures"; "Relative implementation milestones and critical dependencies" (Hours 2-6); "Delivery scope and six person ownership" (Implementer 4: "Implement the semantic-verdict boundary")
   - Blocked by: `classifier prompt and verdict schema`; `decision 6 in docs/product/README.md`
+  - Completed (2026-10-03): `SemanticEvaluator` (5883988, context 8192 in a0672e9): one security-purpose call through `model.AccountedCaller` (reserved before dispatch), fixed instruction, untrusted text between nonce markers, strict `ParseVerdict` ({risk_category, score 0 to 1, reason_code}), `score >= threshold` applied in Go, one attempt and no retry; refused reservation is `security_allowance_exhausted`, timeout, transport, unknown usage and malformed verdict are `security_evaluator_unavailable`, both pause with no text. Checks: gateway checks all exit 0 with stub verdicts labelled as fixtures; live opt-in `GO_SECURITY_LIVE=1 ... go test -tags=model_live ./internal/security -run '^TestLiveSemanticEvaluator$'` PASS on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb): hostile note blocked (score 1), clean note passed (score 0). Not verified here: the latency rows in `runtime.timing_records` and the assessment rows, which the caller persists (GO-80, f3); the ledger usage row is written by `AccountedCaller`.
 
 - [ ] **GO-76 · Inspect tool results before they enter the agent context**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
@@ -828,6 +830,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: a worker test with the hostile and clean fixtures asserting what the next model request contains; a guard-failure test that pauses the run.
   - Report: "Architecture and chart reading guide" (Figure 10); "The enforcement loop and data minimization" (Minimize information before it enters the model)
   - Blocked by: nothing
+  - Progress (2026-10-03): the pipeline function is done (91d15c7): `Inspector.InspectToolResult` runs the field limit and secret rules, signatures, then the semantic check on `internal_note.text` only (redacted text) over every string of the minimized result; blocked values become `[WITHHELD:<reason>]` while permitted values return, a guard failure withholds everything (`paused`); classification and sources unchanged. Checks: gateway checks all exit 0 (clean note unchanged, hostile note withheld, signature before semantic, secrets masked before the classifier, guard failures pause); `pnpm verify` 6 passed. Missing half (f3): calling it from the worker loop, pausing the run, persisting the records, and the worker test of the next model request's contents.
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
@@ -1260,7 +1263,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Report: "Architecture and chart reading guide" (Figure 6); "The enforcement loop and data minimization"
   - Blocked by: nothing
 
-- [ ] **GO-78 · Match the signature-feed rules**
+- [x] **GO-78 · Match the signature-feed rules**
   - **Report 1.2 change:** Figure 6 applies the known-signature checks to action proposals too ("Fast typed schema scope and known-signature checks"), and Figure 10 to tool results ("Fast field size and signature checks").
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-72, GO-76 · Needs: X-87, X-88 · Provides: nothing
@@ -1270,6 +1273,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: unit tests for the supported grammar; a test that rejects an unsupported rule.
   - Report: "Hybrid security controls and managed attack signatures" (Trusted historical attack feed)
   - Blocked by: `feed grammar and trust`
+  - Completed (2026-10-03): `ParseFeed`, `MatchSignatures`, `NormalizeText` and `SettingsFromCatalog` (b456a3f; field-limit order a0672e9): closed feed grammar of `normalized_substring` rules with `block` response, no regex or code; feed bytes pinned to `file_digest`; first enabled, not-disabled rule in feed order blocks with `signature_match`, recording rule, feed revision, digest and catalog revision; an enabled guard without a feed is an error. Checks: gateway checks all exit 0, including the sample rule blocking its phrase (case, whitespace and zero-width variants), the same input passing under a later revision that disables it, a new feed revision's rule hit, and rejection of regex, unnormalized, duplicate and unknown-key rules; `pnpm verify` 6 passed. Reading the feed row from PostgreSQL is 3c's GO-72 loader, which calls `SettingsFromCatalog`.
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
