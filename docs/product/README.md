@@ -163,7 +163,7 @@ writes each outcome down here when it is settled.
    Go implementer.
 5. **Background worker in Go. Settled by the report:** durable jobs in PostgreSQL, claimed with a lease
    and released during an approval wait, and no message broker; one worker process is the report's
-   simple option. The worker must be covered by graceful shutdown and the readiness check. Owner: the Go
+   simple option. The worker must be covered by graceful shutdown and the readiness check: decided and on `main` (item 11: `/health/ready` answers 503 while the worker loop is not running). Owner: the Go
    implementer.
 6. **Model provider. Provider type settled by report 1.2; model decided by the lead's delegate on
    3 October 2026: `qwen3.5:4b` through Ollama, with `think: false`.** "The primary self-contained
@@ -366,6 +366,11 @@ anything else is a decision, not an implemented behaviour.
     `917859c`). It is a team setting, not a sponsor requirement, and the other budget values keep the
     report's illustrative numbers.
 
+30. **Who may cancel a run (GO-41).** Any verified operator of the organization may cancel its runs,
+    with no extra role: cancelling only restricts and never grants. On `main`: the cancel command
+    (`POST /internal/runs/{runId}/cancel`, mounted by `api.Commands`, GO-41 ticked). The decision's
+    note in `docs/roadmap/go.md` is commit `98fe339` on branch `go/3c`, not on `main` yet.
+
 Live end-to-end completions (3 October 2026), with where each is recorded. All used `qwen3.5:4b`, and
 none is final-build evidence (X-59):
 
@@ -447,6 +452,23 @@ Each item is open until the document owner records the outcome here; the roadmap
 - `judge access`: how judges reach the running layer, the test suite and the configuration files.
 - `researcher role` and `shared-track assignment`: the two staffing items above.
 
+### Status of the roadmap's open items named on 3 October 2026
+
+Checked against `main` at fdd464f. "Decided" means recorded in this file.
+
+| Open item                | Status                                                                                                                                                                                                                       | Where recorded                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `final result format`    | Decided, amended for one enclosing code fence; the amendment is not on `main` yet                                                                                                                                            | Item 21                                                               |
+| `worker readiness`       | Decided and on `main`                                                                                                                                                                                                        | Item 11, decision 5                                                   |
+| `model call retries`     | Decided: no automatic retries                                                                                                                                                                                                | Item 24                                                               |
+| `command timeout budget` | **Open**: no decision is recorded. The web proxy allows 10 s, `GATEWAY_TIMEOUT_MS` defaults to 3000 ms in `apps/api/src/config/environment.ts` and the gateway's write timeout is 30 s                                       | Nowhere                                                               |
+| `passport report fields` | **Open**: no decision is recorded. The passport contract on `main` already uses plural `reportTemplates`, `projectionRules` and `recipientReferences`, so the code has chosen a shape; the lead's delegate should confirm it | Passport contract (`packages/contracts/schemas/passport.schema.json`) |
+| `canonical arguments`    | Decided and implemented                                                                                                                                                                                                      | GO-04 below; `internal/policy/canonical.go`                           |
+| `dispatched attempts`    | Decided; implemented per the roadmap ticks                                                                                                                                                                                   | GO-02 below                                                           |
+| `redaction rules`        | Decided                                                                                                                                                                                                                      | Items 8 and 25                                                        |
+| GO-02, GO-03 status      | GO-02 decided and implemented per ticks; GO-03 frozen                                                                                                                                                                        | GO-02 below; decision 6                                               |
+| Who may cancel (GO-41)   | Decided                                                                                                                                                                                                                      | Item 30                                                               |
+
 ## Go runtime decisions
 
 ### Go ownership update (SH-07, Go part)
@@ -478,7 +500,7 @@ does not automatically transfer that shared work to the user.
 
 ### GO-01: multiple-action model responses
 
-**Decided with the user on 3 October 2026; implementation pending.** Owner: go
+**Decided with the user on 3 October 2026; implemented on `main`** (`services/gateway/internal/agent/step.go` rejects a multiple-action response with `multiple_actions_not_supported`; the GO-47 live run's first step shows it). Owner: go
 (Implementer 3). Source: report, "The enforcement loop and data minimization" and
 "Design decision record" (one action per model step).
 
@@ -502,7 +524,7 @@ no adapter; correction and exhaustion scenarios must show their counted usage an
 
 ### GO-02: durable attempts and worker recovery
 
-**Decided with the user on 3 October 2026; implementation pending.** Owner: go
+**Decided with the user on 3 October 2026; implemented per the roadmap ticks on `main`** (GO-08 leases, GO-45 claim, GO-49 recovery of expired leases, GO-53 failures, safe retries and unknown outcomes; the researcher did not trace the code). Owner: go
 (Implementer 3). Source: report, "Durable state idempotency audit and uncertain outcomes" and
 "Threat model limits and unresolved design choices".
 
@@ -523,8 +545,7 @@ Recovery follows the recorded outcome:
 
 - A successful action is not executed again. Resume from its persisted result and continuation.
 - An unsettled model attempt retains its unresolved reservation. It is not blindly resent or
-  treated as zero usage; any permitted new model attempt follows the separately agreed retry
-  policy, fresh run checks and a new reservation.
+  treated as zero usage; any permitted new model attempt would need fresh run checks and a new reservation; the retry policy is decided in item 24: there are no automatic model-call retries in the MVP.
 - For local `create_report` and `queue_report` effects, absence of a completion record establishes
   that the effect did not commit only after the old transaction has ended and only if SH-06 adopts
   the shared transaction for effect, completion and event. A safe retry uses the same action and
@@ -542,7 +563,7 @@ operator reconciliation operation; GO-61 must record that limitation.
 
 ### GO-04: canonical arguments and action digest
 
-**Decided with the user on 3 October 2026; implementation pending.** Owner: go
+**Decided with the user on 3 October 2026; implemented on `main`** (`services/gateway/internal/policy/canonical.go` computes the versioned canonical action and its SHA-256 digest; GO-12 is ticked). Owner: go
 (Implementer 4). Source: report, "Exact action approval versioning and execution rechecks",
 "Technical architecture and service ownership" and "Terminology for developers and presenters".
 
@@ -582,11 +603,11 @@ SH-10 and the action contract owner carry these requirements into X-09; SH-11 la
 schemas and fixtures before GO-12 implements the encoding. This decision does not settle the open
 `record versions` and `exact reviewed material` items. GO-12 tests equivalent representations,
 rejected inputs and a change to each material field; GO-43, GO-45 and GO-46 verify the approval
-and execution boundary. No canonicalization code or digest is implemented yet.
+and execution boundary. The canonicalization and digest are implemented (`internal/policy/canonical.go`).
 
 ### GO-05: replay entry and labels
 
-**Decided with the user on 3 October 2026; implementation pending.** Owner: the user, as the sole
+**Decided with the user on 3 October 2026; implemented on `main`** (`services/gateway/cmd/replay`, see item 28). Owner: the user, as the sole
 Go implementer recorded in the SH-07 Go ownership update above.
 Source: report, "Live demonstration storyboard and proof checks" (Reliable demonstrations without
 invented behavior) and "Illustrative invoice scenario and future domain adaptations" (Scene 2).
@@ -607,9 +628,11 @@ within that same run and allowance. A labelled provider test double used for rep
 distinct from a live model call, and its results are presented as test evidence.
 
 This chooses GO-05 option (1), without a NestJS replay trigger or X-65. GO-36 will
-implement the replay after its prerequisites land; no replay code exists yet.
+implement the replay; it is on `main` as `services/gateway/cmd/replay`.
 
 ### GO-03: local provider direction
+
+**Update, 3 October 2026 (evening): GO-03 is frozen; decision 6 above holds the model and hardware freeze (commit `452a358`, on `main`).** The text below is the earlier direction and proposal, kept as history; where it says "provisional", "not a frozen model contract", "must record" or "remain incomplete", decision 6 now governs. What stays open is whether the measured machine is the presentation machine (the user confirms; SH-45, SH-50).
 
 On 3 October 2026, the user adopted report 1.2’s primary local-model path, replacing the earlier OpenAI `gpt-5.6-sol` choice. The user selected Ollama on a separate MacBook with an M1 Pro and 16 GB RAM. The user selected `qwen3.5:4b` as the current provisional model candidate; it may change after testing. It is not a frozen model contract. The hardware information is user-reported, not a measured performance result. GO-03 and SH-04 must record hardware fit, client choice, agent/security purpose accounting, reported token usage, call counts, request duration and reservation rules. The Go connectivity diagnostic passed on the developer M2/8 GiB machine; its exact outcome and limits are recorded in `services/gateway/README.md`. Production runtime governance and the shared model/hardware freeze remain unverified; the user adopted the Go-side accounting rules recorded below.
 
