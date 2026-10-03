@@ -1151,6 +1151,17 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     (Journey 3).
   - Tests: specs: every state value of the contract has a view and an unknown value shows as unknown,
     never as success; a stopped run always shows its terminal reason: `pnpm --filter web run test`.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3): `RunStatePanel`
+    in `apps/web/src/components/run/run-state-panel.tsx` takes the persisted `RunState` (and the
+    recorded explanation from `terminalSafeMessage(events)`) and does no fetching; the model is
+    `describeRunState` in `labels.ts`. Every status of the contract has a business view, and the
+    view tells a justified interruption (paused at its allowance, waiting for a reviewer), an
+    uncertain result needing an operator (paused with `outcome_unknown`), a deliberate stop and a
+    failure apart; a paused, failed or stopped run always shows its terminal reason (or says none
+    was recorded and flags the contract problem); an unknown status shows as unknown, never as
+    success; a completed run lists the reports its final answer named. Specs over the run-state
+    fixtures pass (`pnpm --filter web run test`). Not done: mounting on the run page (WEB-06,
+    Batın's).
   - Report: "Users operating model and proposed user journeys" (Journey 2 review an exact outbound
     effect; Journey 3 recover cancel or investigate); "Mapping the proposal to the Goldman Sachs
     challenge" (Why successful work matters as much as blocked work)
