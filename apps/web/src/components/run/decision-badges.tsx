@@ -1,4 +1,5 @@
 import { Badge } from "@workspace/ui/components/badge";
+import { LabelBadge } from "@/components/labels";
 import type { ControlResult, DecisionBadge } from "./event-model";
 
 const RESULT_VARIANT: Record<ControlResult, "destructive" | "secondary" | "outline"> = {
@@ -30,20 +31,13 @@ export function DecisionBadges({ badges }: { badges: readonly DecisionBadge[] })
         >
           <span className="flex flex-wrap items-center gap-1.5">
             <Badge variant={RESULT_VARIANT[badge.result]}>{badge.text}</Badge>
-            {badge.sourceLabel !== null ? (
-              <Badge variant="secondary" title={badge.sourceLabel.full}>
-                {badge.sourceLabel.short}
-              </Badge>
-            ) : null}
+            {badge.sourceLabel !== null ? <LabelBadge label={badge.sourceLabel} detail /> : null}
             {badge.result === "not_applicable" ? (
               <span className="text-xs text-muted-foreground">
                 Nothing to classify here, so no model verdict was requested.
               </span>
             ) : null}
           </span>
-          {badge.sourceLabel !== null ? (
-            <span className="text-xs text-muted-foreground">{badge.sourceLabel.full}</span>
-          ) : null}
           {badge.basis === "reason_code" ? (
             <span className="text-xs text-muted-foreground">
               From the decision&apos;s reason code; the exact controls are on the security page.

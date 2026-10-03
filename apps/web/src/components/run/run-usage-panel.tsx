@@ -1,5 +1,6 @@
 import type { RunUsage } from "@workspace/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
+import { LabelBadge } from "@/components/labels";
 import { Badge } from "@workspace/ui/components/badge";
 import {
   Card,
@@ -31,11 +32,7 @@ export function UnknownUsageNotice({ view }: { view: UsageView }) {
     <Alert data-part="unknown-usage" data-uncertain="true">
       <AlertTitle className="flex flex-wrap items-center gap-2">
         Usage is uncertain
-        {view.uncertainLabel !== null ? (
-          <Badge variant="secondary" title={view.uncertainLabel.full}>
-            {view.uncertainLabel.short}
-          </Badge>
-        ) : null}
+        {view.uncertainLabel !== null ? <LabelBadge label={view.uncertainLabel} /> : null}
       </AlertTitle>
       <AlertDescription>
         <p>
@@ -43,7 +40,11 @@ export function UnknownUsageNotice({ view }: { view: UsageView }) {
           usable usage report. The tokens reserved for them stay held and are not counted as used or
           as zero; the true usage is unknown until it is reconciled.
         </p>
-        {view.uncertainLabel !== null ? <p>{view.uncertainLabel.full}.</p> : null}
+        {view.uncertainLabel !== null ? (
+          <p>
+            <LabelBadge label={view.uncertainLabel} detail />
+          </p>
+        ) : null}
       </AlertDescription>
     </Alert>
   );
