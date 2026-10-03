@@ -67,9 +67,11 @@ func (store *ContextStore) List(ctx context.Context, organizationID, runID strin
 	return entries, nil
 }
 
-// AppendToolStep stores one executed step, the call and its inspected result, in one transaction.
+// AppendToolStep stores one executed step in one transaction: the call, its inspected result and
+// the inspection's control assessments and timing (GO-80), so the evidence exists exactly when the
+// result entered the context.
 func (store *ContextStore) AppendToolStep(ctx context.Context, organizationID, runID string, stepNumber int, actionID string,
-	call json.RawMessage, result Inspection) error {
+	call json.RawMessage, result Inspection, admissionRevisionID int64, evaluationID string) error {
 	if store == nil || store.pool == nil {
 		return ErrContextStorage
 	}
@@ -92,6 +94,9 @@ func (store *ContextStore) AppendToolStep(ctx context.Context, organizationID, r
 		INSERT INTO runtime.context_entries(organization_id, run_id, step_number, kind, action_id, content, inspection_outcome, reason_code)
 		VALUES ($1, $2, $3, 'tool_result', $4, $5, $6, $7)`,
 		organizationID, runID, stepNumber, actionID, result.Content, string(result.Outcome), reason); err != nil {
+		return ErrContextStorage
+	}
+	if err = insertInspectionEvidence(ctx, transaction, organizationID, runID, actionID, admissionRevisionID, evaluationID, result.Evidence); err != nil {
 		return ErrContextStorage
 	}
 	if err = transaction.Commit(ctx); err != nil {

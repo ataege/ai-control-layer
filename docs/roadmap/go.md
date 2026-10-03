@@ -720,8 +720,7 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     classification, a hostile note withheld by signature or semantic verdict, a guard failure
     pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
     gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
-    the new one reverts and re-runs; `pnpm verify` 6 passed. Missing half: wiring into
-    `cmd/gateway/main.go` with w3's `policy.CatalogSecuritySettings` (next merge) and the live run,
+    the new one reverts and re-runs; `pnpm verify` 6 passed. The loop reads the active catalog before every model request and narrows the passport with `catalog.EffectiveFor` (GO-72; `TestTheActiveCatalogNarrowsEveryStep`). Missing half: wiring into `cmd/gateway/main.go` next to `catalog.WatchRequested` and the live run,
     which also needs the signature-feed import (c1, API-34).
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
@@ -729,13 +728,21 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     investigate)
   - Blocked by: nothing
 
-- [ ] **GO-80 · Instrument performance telemetry**
+- [x] **GO-80 · Instrument performance telemetry**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-10, GO-19 · Needs: X-79, X-85 · Provides: X-95 (part: instrumentation)
   - Paths: the model gateway and worker packages
   - Work: Measure monotonic durations separately for policy lookup, deterministic controls, semantic evaluation, provider request, approval waiting and local commit, plus total handling latency, queue depth, concurrency and errors, per model purpose. Keep untrusted confidential input out of the timing records. Observed durations stay distinct from cost estimates.
   - Done when: each agent and security call and each gate decision has its timing record, readable for the summary and export.
   - Tests: unit tests with a fake clock; a database-backed test through the X-24 command.
+  - Completed (2026-10-03): `agent.Telemetry` on go/f3 writes `runtime.timing_records` per step
+    (policy lookup, agent provider call with its `model_calls` id, gate decision, executor commit,
+    step total) and, for each tool-result inspection, the deterministic and semantic controls, each
+    security call's provider time and one `runtime.control_assessments` row per control decision
+    (semantic rows with verdict source and the security call id), committed with the step's context
+    entries. No inspected text is stored. Test
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
+    depth is read from `runtime.jobs` by the summary.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 

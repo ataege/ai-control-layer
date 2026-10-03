@@ -37,5 +37,5 @@ type Inspection struct {
 
 // ResultInspector checks a minimized tool result before it becomes model context (GO-76).
 type ResultInspector interface {
-	Inspect(ctx context.Context, run Run, tool string, result tools.MinimizedResult) (Inspection, error)
+	Inspect(ctx context.Context, run Run, tool string, result tools.MinimizedResult, settings security.Settings) (Inspection, error)
 }
