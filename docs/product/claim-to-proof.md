@@ -1,0 +1,147 @@
+# Claim-to-proof list (RS-05)
+
+Owner: researcher, document owner and presenter. Status: **every claim is a target.** No claim may
+appear in the presentation, the HackTribe description or the pitch until its proof column holds
+evidence from the final build (X-59): build identifier, fixture, observed outcome, timestamp and
+evidence location. Report: "Maintain a claim-to-proof list: each presentation claim names a demo
+step, observed record, or completed check." and "At feature freeze, replace placeholders with
+final-build screenshots and results, remove unsupported language, and explain remaining
+limitations."
+
+Beats refer to [storyboard.md](storyboard.md); requirement IDs to [requirements.md](requirements.md).
+Evidence IDs are sync points in `docs/roadmap/README.md`; the outcomes are recorded by SH-28, SH-31,
+SH-51 and recaptured by SH-32.
+
+## How a claim is written
+
+Every claim states "the integrated tools, data rules, projections and limits to which it applies"
+(report, "Threat model limits and unresolved design choices"). In this prototype that scope is: one
+invoice reconciliation workflow on synthetic records, four registered tools (`read_invoice`,
+`read_vendor`, `create_report`, `queue_report`), two classifications, two fixed templates
+(`internal_investigation_v1`, `vendor_reconciliation_v1`), the controls enabled in the submitted
+`policy.yaml`, the rules in the submitted signature feed, and one local model. A claim that leaves the
+scope out is rewritten.
+
+Status values: **target** (not built or not yet evidenced), **verified** (evidence from the final
+build recorded), **failed** (the check ran and did not pass), **cut** (removed from the claims). Failed
+and cut claims stay in this table; "Keep failed or unverified checks visible."
+
+## Claims
+
+| ID    | Claim, as it may be said                                                                                                                                                                                                       | Scope that must be stated with it                                                                                                                                                   | Proof (beat; evidence)                                   | Slide | Status |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----- | ------ |
+| CL-01 | Task Passport controls what an agent can do and where the information it uses can go. (Report's positioning statement.)                                                                                                        | The registered workflow, its four tools and two templates; not arbitrary tools or channels.                                                                                         | Beats 1 to 8; X-44, X-72, X-75                           | 1, 2  | target |
+| CL-02 | Every model request and tool effect in the demonstration passes through the Go gateway, which alone holds the model endpoint and tool access.                                                                                  | The registered tools and the configured local model. "Do not imply that routing selected tools through the gateway controls credentials or tools that remain accessible elsewhere." | Architecture (C-10); X-04, X-84; leak checks SH-23; X-50 | 3     | target |
+| CL-03 | A task is admitted only within the operator's verified authority; an over-broad request is rejected and no passport is created.                                                                                                | The seeded development demonstration operator and organization.                                                                                                                     | Beat 1; X-28                                             | 4     | target |
+| CL-04 | An out-of-scope record is denied before any adapter runs, and the excluded record is unchanged.                                                                                                                                | Records outside the passport, e.g. `invoice_B01`.                                                                                                                                   | Beat 9; X-37                                             | 4     | target |
+| CL-05 | A report built from the Internal only note inherits Internal only, and its export to the correct, permitted Atlas recipient is denied; the outbox stays empty.                                                                 | `internal_investigation_v1` and the trusted source classifications; the simulated outbox.                                                                                           | Beats 4, 5; X-72                                         | 6     | target |
+| CL-06 | Renaming the report or supplying a public label does not reset its restriction.                                                                                                                                                | The supported operations; depends on the open item `rename operation`.                                                                                                              | Beat 6; X-73                                             | 6     | target |
+| CL-07 | Ordinary approval cannot override the export restriction.                                                                                                                                                                      | Export of an Internal only report to a vendor.                                                                                                                                      | X-77                                                     | 6     | target |
+| CL-08 | The task still finishes: a new vendor report is rendered by the server from approved invoice fields only, with no internal note or model prose.                                                                                | `vendor_reconciliation_v1` and its projection rule (`vendor projection fields`).                                                                                                    | Beat 7; X-67, X-75                                       | 7     | target |
+| CL-09 | The reviewer approves the exact content and recipient; it is queued once, and a changed recipient or content invalidates the approval.                                                                                         | `queue_report` to the simulated outbox.                                                                                                                                             | Beat 8; X-44, X-45, X-51                                 | 7     | target |
+| CL-10 | Controls are hybrid: deterministic checks run first, and a separately metered semantic check can block or redact but never grants access.                                                                                      | The boundaries enabled in `policy.yaml` (`model_input`, `tool_result`, `action_proposal`).                                                                                          | Beats 3, 10; X-96, X-97                                  | 4, 5  | target |
+| CL-11 | In our labelled test set, the local model's semantic check blocked hostile tool-result text before it reached the agent.                                                                                                       | State the fixture count, model, configuration, false positives and false negatives. No extrapolation.                                                                               | Beat 10; X-96 (SH-50, GO-84)                             | 5, 9  | target |
+| CL-12 | If the semantic check times out, is unavailable, returns malformed output or runs out of allowance, the interaction pauses or is denied.                                                                                       | Required guards in the submitted configuration.                                                                                                                                     | X-98                                                     | 5     | target |
+| CL-13 | Configured secret patterns are redacted before the text reaches the model.                                                                                                                                                     | Only the configured pattern kinds (`redaction rules`); not universal PII detection.                                                                                                 | Beat 10; X-99                                            | 5     | target |
+| CL-14 | Known attack signatures come from a validated, versioned feed; adding or disabling a rule changes the next decision.                                                                                                           | The sample rules in the submitted feed (`prompt_ignore_previous_v1` and any accepted D-5 rules); text matching only.                                                                | Beats 10, 11; X-100                                      | 8     | target |
+| CL-15 | One documented policy file controls the guards, thresholds, block or redact, allowed models and budgets; a valid edit takes effect without a restart, an invalid edit is rejected and the last accepted revision stays active. | `config/policy.yaml` and its schema.                                                                                                                                                | Beat 11; X-101                                           | 4, 8  | target |
+| CL-16 | Removing a model or lowering a budget applies to the next dispatch; raising a limit never widens a running passport.                                                                                                           | The active catalog and the stored passport ceiling.                                                                                                                                 | X-102                                                    | 8     | target |
+| CL-17 | Agent and security calls are both metered: allowance is reserved before each dispatch, under shared and per-purpose limits, and concurrent requests cannot overspend.                                                          | Calls, tokens, request time and local concurrency of the local model.                                                                                                               | Beat 9; X-46, X-52, X-103                                | 8     | target |
+| CL-18 | Usage that the provider does not report stays reserved instead of being counted as zero.                                                                                                                                       | Reservations and usage records.                                                                                                                                                     | X-53                                                     | 8     | target |
+| CL-19 | Commercial API spending is handled by a documented estimated-cost rule.                                                                                                                                                        | Documentation only, labelled estimated, not implemented (D-6).                                                                                                                      | The reservations contract (X-79)                         | 10    | target |
+| CL-20 | Management sees a security summary, and authorized security users export sanitized, organization-scoped audit records as JSON or CSV.                                                                                          | Not tamper-proof (see "Claims to avoid"). Metrics refresh by authenticated polling, not streaming (D-8).                                                                            | Beat 12; X-93, X-94, X-104                               | 9     | target |
+| CL-21 | Telemetry separates deterministic gate time from semantic and model time.                                                                                                                                                      | Only measured numbers, with machine, model, warmup, payload size and concurrency.                                                                                                   | Beat 12; X-95, X-105                                     | 9     | target |
+| CL-22 | One documented command runs the automated suite of allowed, blocked, redacted, budget and exploit cases and writes machine-readable results.                                                                                   | The actual case count, pass and fail counts, and which cases are fixtures and which use the live model.                                                                             | Beat 12; X-89                                            | 9     | target |
+| CL-23 | Judges can send their own input through the same gates and see the decision.                                                                                                                                                   | The judge client and the live test entry.                                                                                                                                           | Beat 12; X-92, X-106, X-105                              | 8     | target |
+| CL-24 | Developers integrate through a small documented adapter contract.                                                                                                                                                              | Agent-to-model calls and registered tool proposals; agent-to-agent and agent-to-MCP are deferred (D-4).                                                                             | X-91                                                     | 10    | target |
+| CL-25 | A run waiting for approval survives a worker restart and does not repeat a completed effect.                                                                                                                                   | The PostgreSQL-backed job and the simulated outbox.                                                                                                                                 | X-54, X-51                                               | 10    | target |
+| CL-26 | Cancellation stops future dispatches.                                                                                                                                                                                          | "It cannot undo a committed effect, retract exposed information or prove local/provider computation stopped immediately."                                                           | X-55                                                     | 10    | target |
+| CL-27 | Another organization cannot read or act on a run.                                                                                                                                                                              | The seeded second organization.                                                                                                                                                     | X-56                                                     | 10    | target |
+| CL-28 | A business effect and its execution record commit together or not at all.                                                                                                                                                      | Local demo effects (report and outbox) only.                                                                                                                                        | X-57                                                     | 10    | target |
+| CL-29 | The whole system runs on our own machine with a local model and no paid services.                                                                                                                                              | The presentation machine and the chosen model (decision 6).                                                                                                                         | X-84; SH-45, SH-50                                       | 3, 10 | target |
+
+## Claims to avoid
+
+Checked against every slide, the description and the pitch script before submission. Quotes are from
+report 1.2.
+
+From "Claims the prototype should avoid" ("Mapping the proposal to the Goldman Sachs challenge"):
+
+- "Do not claim universal prompt-injection detection; demonstrate specific attempted actions being
+  constrained regardless of how the model reached them."
+- "Do not equate a spending estimate with a precise provider invoice, especially when reported usage
+  is incomplete."
+- "Do not describe a simulated outbox as live email delivery or an invoice report as a real payment
+  operation."
+- "Do not imply that routing selected tools through the gateway controls credentials or tools that
+  remain accessible elsewhere."
+- "Do not claim universal tracking of paraphrased secrets or encoded disclosures. The export guarantee
+  would be limited to trusted source classifications, stored lineage, and two constrained server
+  templates in the defined workflow."
+
+Semantic controls:
+
+- No detection-quality claim from fixtures: "Separate live-model observations would avoid presenting a
+  fixture as proof of semantic detection quality."
+- Thresholds: "The example thresholds demonstrate configurability, not calibrated probabilities,
+  universal attack detection or proven accuracy."
+- "Report a small synthetic evaluation with its fixture count and limitations; do not extrapolate to
+  universal prompt-injection prevention, production reliability, or financial savings."
+- InjecAgent: "Its historical model-specific attack rates are not used as estimates for the selected
+  prototype or current models."
+
+Information flow and data:
+
+- "A recipient allowlist does not prove that arbitrary free text is safe."
+- No "universal detection of personally identifiable information or encoded disclosure".
+- "The lineage mechanism covers fixed templates and registered adapters, not universal taint tracking
+  across every possible tool."
+- The data controls "do not establish that arbitrary text or information already known to a provider
+  is universally safe".
+- Fides: Task Passport "does not reproduce Fides or establish its formal guarantees".
+
+Effects, audit and security posture:
+
+- Cancellation "cannot undo a committed effect, retract exposed information or prove local/provider
+  computation stopped immediately."
+- "The simulated outbox does not demonstrate remote delivery, provider-side idempotency or recovery
+  from a real financial transaction."
+- Reporting is "not a tamper-proof, independently verified or legally sufficient audit system".
+- "Module separation inside trusted Go does not claim containment of a compromised process."
+- "Production readiness is a future validation effort, not a property established by the architecture
+  diagram or hackathon demonstration."
+- The prototype is "not a complete enterprise security platform".
+- The duplicate-reference report "does not determine fraud or authorize payment".
+
+Positioning and novelty:
+
+- "Task Passport should not be presented as inventing tool authorization, approvals, audit logging,
+  semantic guards, or information-flow control."
+- The "Qualification" column of the report's table "How the proposed product would be distinguished"
+  limits each comparison: deterministic task contracts, not inferred authority; stored labels for the
+  defined sources and templates only; complementary to content defenses; approval needs an authorized
+  reviewer and cannot declassify; estimated money stays uncertain; recovery only where a permitted
+  alternative exists; a finite suite, not a universal guarantee; spontaneous testing can expose
+  genuine failures.
+- No market statistics, latency figures or detection rates that were not measured on the final build
+  ("the report must not invent latency or detection results").
+
+Scope decisions recorded in the requirements sheet:
+
+- Agent-to-agent and agent-to-MCP integration are deferred, not delivered (D-4).
+- The signature feed shows that rules for code execution, unsafe deserialization and model-repository
+  supply-chain patterns can be carried and changed; it does not protect model-loading
+  infrastructure (D-5).
+- Metrics refresh by authenticated polling; do not say "streaming" or imply push updates unless X-60
+  is built (D-8).
+- Commercial API budgets are a documented estimated-cost rule, not an implemented ledger (D-6).
+
+## Wording checks at freeze
+
+1. Every sentence in the slides and the HackTribe description maps to a CL row with status verified,
+   or to a stated limitation.
+2. No sentence uses: "prevents all", "guarantees", "secure" without scope, "real-time streaming",
+   "tamper-proof", "production-ready", "detects any", "first", "novel", "invented".
+3. Every number on a slide has an evidence location from the final build.
+4. Replays, the simulated outbox, fixture verdicts and estimated cost carry their labels
+   ([storyboard.md](storyboard.md), "Labels").
