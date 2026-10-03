@@ -100,6 +100,8 @@ type Decision struct {
 	// AlternativeTemplate names the permitted continuation after an export denial (GO-29 offers
 	// it only when the passport permits it).
 	AlternativeTemplate string
+	// Review is the frozen review material of an approval request (GO-43).
+	Review *FrozenReview
 }
 
 // ScopeReader loads the passport scope and the active catalog revision for a verified run.
@@ -147,7 +149,15 @@ type Gate struct {
 	recorder      ActionRecorder
 	relationships RelationshipReader
 	evaluator     ActionEvaluator // nil until GO-77 is wired
+	freezer       ReviewFreezer   // nil: every approval request is denied
 	now           func() time.Time
+}
+
+// WithReviewFreezer sets the freezer for approval requests; without one, nothing can be reviewed,
+// so an action that needs approval is denied.
+func (gate *Gate) WithReviewFreezer(freezer ReviewFreezer) *Gate {
+	gate.freezer = freezer
+	return gate
 }
 
 // NewGate returns a gate. A nil evaluator means no semantic action check is configured yet; a nil
@@ -270,7 +280,19 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 	if containsTool(scope.ApprovalRequiredTools, arguments.Tool()) {
 		outcome, reason = OutcomeApprovalRequired, ReasonApprovalRequired
 	}
-	return gate.restrictSemantically(ctx, run, storedAction, stored(outcome, reason))
+	decision := gate.restrictSemantically(ctx, run, storedAction, stored(outcome, reason))
+	if decision.Outcome == OutcomeApprovalRequired {
+		// Nothing frozen means nothing to review: deny rather than request an unbound approval.
+		if gate.freezer == nil {
+			return stored(OutcomeDeny, ReasonDecisionUnavailable)
+		}
+		frozen, err := gate.freezer.Freeze(ctx, run, storedAction, scope)
+		if err != nil {
+			return stored(OutcomeDeny, ReasonDecisionUnavailable)
+		}
+		decision.Review = &frozen
+	}
+	return decision
 }
 
 // restrictSemantically applies the GO-77 check to a deterministic allow or approval requirement.

@@ -368,7 +368,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Enforcement (report role: Implementer 4)
 
-- [ ] **GO-04 · Decide: canonical argument representation and action digest**
+- [x] **GO-04 · Decide: canonical argument representation and action digest**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
@@ -403,6 +403,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     authority for action canonicalization and execution"); "Terminology for developers and
     presenters" (Canonical arguments)
   - Blocked by: nothing
+  - Completed (2026-10-03): the recorded decision is implemented by GO-12 in `internal/policy` (commits 2b7cc5c, 582eafd): typed strict decoding per tool, one canonical compact encoding, SHA-256 over the versioned canonical action. Evidence is in GO-12.
 
 ### Modules the report's team table does not name (Go implementer)
 
@@ -671,7 +672,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Enforcement (report role: Implementer 4)
 
-- [ ] **GO-12 · Canonicalize tool arguments and compute the action digest**
+- [x] **GO-12 · Canonicalize tool arguments and compute the action digest**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-04, GO-18 · Needs: X-09 · Provides: nothing
   - Paths: a new package for enforcement, named at M0 by the Go implementer
@@ -687,6 +688,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Report: "Exact action approval versioning and execution rechecks"; "Terminology for developers
     and presenters" (Canonical arguments)
   - Blocked by: `canonical arguments`
+  - Completed (2026-10-03): `internal/policy/canonical.go` (2b7cc5c, 582eafd, b6fb078; tool names and templates switched to `internal/contracts` in c07ca60). Strict decoding rejects invalid UTF-8, non-objects, unknown, case-variant and duplicate keys, missing or null fields, wrong types including numbers, trailing data, empty, over-long or control-character identifiers, unregistered templates, empty or repeated `source_invoice_ids` and a non-UUID `report_id`; the digest covers canonicalization version, action, run, tool, canonical arguments, passport, policy revision, recipient, affected resources with versions, outbound content and expiry. Checks: `go test -v ./internal/policy` 55 cases PASS (equivalent inputs give identical bytes for all four tools, 22 rejected inputs, 15 one-at-a-time material changes each change the digest); `pnpm verify` 6 passed, 0 failed, 0 skipped. Argument names match X-09 as frozen by 3c.
 
 - [x] **GO-13 · Admit a start-run request and issue the passport, run and job together**
   - **Report 1.2 change:** The passport adds approved model references, the admission catalog revision, shared limits with agent and security sub-limits, concurrency and run expiry; model selection is constrained by the catalog allowlist.
@@ -780,7 +782,7 @@ budget` item stays open (admission is one short transaction).
     (Interfaces and repository strategy)
   - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-15 · Store each proposed action and decide allow, deny or approval required**
+- [x] **GO-15 · Store each proposed action and decide allow, deny or approval required**
   - **Report 1.2 change:** Order per Figure 6: deterministic scope and provenance first, then the semantic check of GO-77 for otherwise permitted proposals.
   - **Report 1.1 change:** Report actions go through the provenance check (GO-63) before the policy decision; unknown report lineage is a denial.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
@@ -808,8 +810,9 @@ budget` item stays open (admission is one short transaction).
     contracts" (Decision and error semantics); "Architecture and chart reading guide" (Figures 5
     and 6)
   - Blocked by: nothing
+  - Completed (2026-10-03): `internal/policy/gate.go` and `recorder.go` (7775a96; contracts and repository switch c07ca60). `Gate.Evaluate` always returns a decision and every failure denies; Figure 6 order; the action is stored and committed before the decision, which updates its status and appends the X-12 event (`action.allowed`, `approval.requested`, `action.denied`, `report.export_denied`) through `repository.Tx.AppendEvent` in one transaction; malformed arguments get no action row, only the denial event. Checks: unit tables cover every denial in Tests with its X-13 code, fail-closed scope/revision/store/record failures, and store-before-decide call order; `pnpm test:db gateway` 430 passed, 0 failed, 0 skipped at c07ca60 including the three recorder database tests; `pnpm verify` 6/6. The reason codes are the X-13 constants of `internal/contracts` (no separate fixture comparison exists).
 
-- [ ] **GO-16 · Execute an allowed action through its registered adapter**
+- [x] **GO-16 · Execute an allowed action through its registered adapter**
   - **Report 1.1 change:** Done when quote: "Only registered adapters would be executable."; Figure 7 is now Figure 8.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-15, GO-17, GO-19, GO-23 · Needs: X-09 · Provides: nothing
@@ -830,6 +833,7 @@ budget` item stays open (admission is one short transaction).
   - Report: "Architecture and chart reading guide" (Figure 7); "The enforcement loop and data
     minimization"; "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: nothing
+  - Completed (2026-10-03): `internal/policy/executor.go` (5a60018, X-11 run status in c07ca60) dispatches an allowed action by its id to Worker 2's `tools.Runner`: fresh checks (status allowed, run running without a cancel request, stored passport unexpired, digest recomputed from the stored arguments), the attempt counted against `limits.toolAttempts` under a run-row lock and committed before dispatch, then `RunEffect` plus the final action status in one transaction; an adapter error rolls back and closes the attempt as aborted (paused), a failed commit is `outcome_unknown`; the worker receives `tools.MinimizeForModel` output only. Checks: `pnpm test:db gateway` 269 passed, 0 failed, 0 skipped at 5a60018 with the 7 executor database tests (executes once with one succeeded attempt; changed digest, denied or unknown action, cancelled run and expired passport reach no adapter; attempt limit; adapter error pauses); `pnpm verify` 6/6. GO-45 replaces the attempt step with the reservation, claim and approval consumption.
 
 - [ ] **GO-74 · Apply deterministic content controls to designated fields**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 3-5 h, this roadmap's estimate)
@@ -1230,7 +1234,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Enforcement (report role: Implementer 4)
 
-- [ ] **GO-28 · Check resource relationships and destinations at the gate**
+- [x] **GO-28 · Check resource relationships and destinations at the gate**
   - **Report 1.1 change:** `create_report` needs a permitted fixed template; `queue_report` an authorized report and recipient; the export restriction itself is GO-64.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-15 · Needs: X-06, X-09, X-20, X-33 · Provides: nothing
@@ -1254,6 +1258,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     passport and interface contracts" (Proposed tool argument boundaries; Concrete synthetic
     business example); "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
+  - Completed (2026-10-03): `internal/policy` (1eb72bb; the report check became GO-64's export verdict in 95dcc43). `read_vendor` needs a vendor of the organization linked to a passport invoice; `create_report` a registered and passport template and passport sources; `queue_report` a passport recipient reference that names this run; an unreadable relationship or a missing reader denies. Checks: `TestGateChecksArgumentRelationships` 12 cases PASS; `pnpm test:db gateway` 292 passed, 0 failed, 0 skipped at 1eb72bb with `TestPostgresRelationships` against real demo rows (vendor and report of another organization included); `pnpm verify` 6/6. Outbound use of a readable field is the report restriction of GO-64.
 
 - [ ] **GO-29 · Return structured denial feedback and stop at the correction limit**
   - **Report 1.1 change:** Tier A (the slice's safe continuation). After an export denial the feedback names `vendor_reconciliation_v1` only when the passport permits that template and its source set, and grants no new authority. Proof: the blocked export continues to the newly rendered vendor report in the same passport and run; exhausted or unauthorized recovery stops. Report: MVP Bounded recovery; Figure 6; beat 7.
@@ -1285,8 +1290,9 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "The enforcement loop and data minimization"; "Functional requirements MVP boundary and
     deferred scope" (Bounded recovery); "Live demonstration storyboard and proof checks" (beat 6)
   - Blocked by: nothing
+  - Progress (2026-10-03): the policy side is done (18402ab): `BuildDenialFeedback` (fixed safe message, the vendor template alternative only when the passport permits it and its sources, the passport's invoice references after an out-of-scope read, no protected value), `CorrectionCounter.CorrectionsUsed` from the run's durable denial events (malformed proposals included) and `CheckCorrections`. Checks: unit tests PASS; `pnpm test:db gateway` 439 passed, 0 failed, 0 skipped with `TestCorrectionCounterCountsEveryDenialOfTheRun`; `pnpm verify` 6/6. Missing: f3's loop calling them and stopping the run, and the beat-6 scenario through the labelled replay (GO-36).
 
-- [ ] **GO-64 · Deny a restricted report export at the gate before approval**
+- [x] **GO-64 · Deny a restricted report export at the gate before approval**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-15, GO-28, GO-63 · Needs: X-13 · Provides: nothing
   - Paths: the enforcement package from GO-12
@@ -1299,6 +1305,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "Report provenance and inherited restrictions" (Export checks and safe continuation);
     "Functional requirements MVP boundary and deferred scope" (Denied export)
   - Blocked by: nothing
+  - Completed (2026-10-03): for `queue_report`, after the resource checks and before the approval rule, the gate asks `provenance.LoadReport`, `provenance.CurrentInvoiceVersions` and `provenance.AuthorizeExport` for the registered vendor recipient in one read-only transaction (95dcc43). A refused export is a deny (`report_export_restricted`, `report_lineage_missing`, `resource_version_changed`), never an approval request, never reaches the semantic check, and its `report.export_denied` event names the reason with `lineageCheck` and the `vendor_reconciliation_v1` alternative (c07ca60). Checks: `TestRestrictedExportIsDeniedBeforeReview` PASS; `pnpm test:db gateway` 317 passed, 0 failed, 0 skipped at 95dcc43 with reports stored through `provenance.StoreReport` (internal restricted, no lineage, other run or organization, stale source version); `TestRecorderWritesAnExportDenialEvent` PASS at c07ca60; `pnpm verify` 6/6. Not verified here: the whole path with no outbox row, which comes with the approval flow (GO-44, GO-45); Worker 2's adapter re-checks at effect time.
 
 - [ ] **GO-66 · Prove the denied internal export on the Go side**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
@@ -1689,7 +1696,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Enforcement (report role: Implementer 4)
 
-- [ ] **GO-43 · Freeze the exact action for review**
+- [x] **GO-43 · Freeze the exact action for review**
   - **Report 1.1 change:** The frozen payload adds the report identifier, content hash, source manifest and its digest, classification, template and projection versions, exact recipient and exact outbound content: "Freeze the payload and bind its source records, template and projection to versions." The content is the stored server-rendered report.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 3-5 h)
   - Depends on: GO-12, GO-15, GO-33 · Needs: X-09, X-39 · Provides: nothing
@@ -1709,6 +1716,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Exact action approval versioning and execution rechecks"; "Users operating model and
     proposed user journeys" (Journey 2 review an exact outbound effect)
   - Blocked by: `record versions`
+  - Completed (2026-10-03): migration `1791080000000-AddReviewPayloads` (immutable `runtime.review_payloads`, gateway SELECT and INSERT) and `internal/policy/review.go` (7e844de). Before an approval request the gate freezes the tool, canonical arguments, passport, policy revision, the exact recipient (`tools.ResolveRecipientForReview` on the stored passport), and for `queue_report` the stored report with content, hash, template and projection versions, classification and its sorted source manifest with versions and digest; the review expires with the passport; `payload_digest` is SHA-256 over the canonical payload; no freezer or a failed freeze denies. `record versions` is exact integer equality (`StaleSources`). Checks: fresh database, 13 migrations run, revert and re-run of 1791080000000 succeeded; `pnpm test:db gateway` 461 passed, 0 failed, 0 skipped with `TestFreezeHoldsTheExactReviewedMaterial` (every field, stored digest equals recomputed, second freeze refused, UPDATE rejected), `TestSourceChangeAfterFreezeIsDetected`, `TestUnresolvableRecipientFreezesNothing` and `TestApprovalRequestEventHoldsNoReviewContent`; `pnpm verify` 6/6. The Go read endpoint for the review screen follows with GO-44.
 
 - [ ] **GO-44 · Accept the approval decision through the internal command**
   - **Report 1.1 change:** Name proposal `POST /internal/actions/:id/approval`; an approval cannot override an Internal only export denial.

@@ -124,6 +124,17 @@ func atlasRelationships() *fakeRelationships {
 	}
 }
 
+// fakeFreezer freezes successfully unless err is set, and counts its calls.
+type fakeFreezer struct {
+	err   error
+	calls int
+}
+
+func (freezer *fakeFreezer) Freeze(context.Context, RunIdentity, StoredAction, PassportScope) (FrozenReview, error) {
+	freezer.calls++
+	return FrozenReview{PayloadID: "frozen"}, freezer.err
+}
+
 func atlasScope() PassportScope {
 	return PassportScope{
 		OrganizationID:        testOrganizationID,
@@ -147,7 +158,7 @@ func proposal(tool, rawArguments string) Proposal {
 func newTestGate(scope PassportScope) (*Gate, *fakeScopes, *fakeRecorder) {
 	scopes := &fakeScopes{scope: scope, revision: 3}
 	recorder := &fakeRecorder{}
-	return NewGate(scopes, recorder, atlasRelationships(), nil), scopes, recorder
+	return NewGate(scopes, recorder, atlasRelationships(), nil).WithReviewFreezer(&fakeFreezer{}), scopes, recorder
 }
 
 func TestGateDecisions(t *testing.T) {
@@ -272,7 +283,7 @@ func TestSemanticCheckRestrictsButNeverGrants(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, &fakeRecorder{}, atlasRelationships(), testCase.evaluator)
+			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, &fakeRecorder{}, atlasRelationships(), testCase.evaluator).WithReviewFreezer(&fakeFreezer{})
 			decision := gate.Evaluate(context.Background(), testRun(), testCase.proposal)
 			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason {
 				t.Fatalf("decision = %s/%s, want %s/%s", decision.Outcome, decision.ReasonCode, testCase.wantOutcome, testCase.wantReason)
@@ -320,7 +331,7 @@ func TestGateChecksArgumentRelationships(t *testing.T) {
 			if testCase.relationships != nil {
 				relationships = testCase.relationships
 			}
-			gate := NewGate(&fakeScopes{scope: scope, revision: 3}, &fakeRecorder{}, relationships, nil)
+			gate := NewGate(&fakeScopes{scope: scope, revision: 3}, &fakeRecorder{}, relationships, nil).WithReviewFreezer(&fakeFreezer{})
 			decision := gate.Evaluate(context.Background(), testRun(), proposal(testCase.tool, testCase.arguments))
 			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason {
 				t.Fatalf("decision = %s/%s, want %s/%s", decision.Outcome, decision.ReasonCode, testCase.wantOutcome, testCase.wantReason)
@@ -345,7 +356,7 @@ func TestRestrictedExportIsDeniedBeforeReview(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			evaluator := &fakeEvaluator{outcome: OutcomeAllow}
 			recorder := &fakeRecorder{}
-			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, recorder, atlasRelationships(), evaluator)
+			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, recorder, atlasRelationships(), evaluator).WithReviewFreezer(&fakeFreezer{})
 			decision := gate.Evaluate(context.Background(), testRun(),
 				proposal("queue_report", `{"report_id":"`+testCase.reportID+`","recipient_reference":"`+testRecipient+`"}`))
 			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason ||
@@ -357,5 +368,41 @@ func TestRestrictedExportIsDeniedBeforeReview(t *testing.T) {
 				t.Fatal("a restricted export reached the semantic check")
 			}
 		})
+	}
+}
+
+func TestApprovalRequestNeedsFrozenReviewMaterial(t *testing.T) {
+	queue := proposal("queue_report", `{"report_id":"`+testReportID+`","recipient_reference":"`+testRecipient+`"}`)
+	cases := []struct {
+		name        string
+		freezer     *fakeFreezer
+		wantOutcome Outcome
+		wantReason  ReasonCode
+	}{
+		{"frozen material allows the request", &fakeFreezer{}, OutcomeApprovalRequired, ReasonApprovalRequired},
+		{"a failed freeze denies", &fakeFreezer{err: errors.New("recipient does not resolve")}, OutcomeDeny, ReasonDecisionUnavailable},
+		{"no freezer denies", nil, OutcomeDeny, ReasonDecisionUnavailable},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, &fakeRecorder{}, atlasRelationships(), nil)
+			if testCase.freezer != nil {
+				gate.WithReviewFreezer(testCase.freezer)
+			}
+			decision := gate.Evaluate(context.Background(), testRun(), queue)
+			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason {
+				t.Fatalf("decision = %s/%s, want %s/%s", decision.Outcome, decision.ReasonCode, testCase.wantOutcome, testCase.wantReason)
+			}
+			if testCase.wantOutcome == OutcomeApprovalRequired && (decision.Review == nil || decision.Review.PayloadID != "frozen") {
+				t.Fatal("the approval request does not reference its frozen material")
+			}
+		})
+	}
+	// An allowed read freezes nothing.
+	freezer := &fakeFreezer{}
+	gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, &fakeRecorder{}, atlasRelationships(), nil).WithReviewFreezer(freezer)
+	gate.Evaluate(context.Background(), testRun(), proposal("read_invoice", `{"invoice_id":"invoice_A01"}`))
+	if freezer.calls != 0 {
+		t.Fatal("an allowed read was frozen for review")
 	}
 }
