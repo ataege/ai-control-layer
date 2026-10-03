@@ -1,0 +1,46 @@
+{
+  "reportId": "3b532026-0d57-4c4c-8f0b-6f320ebd5d66",
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "version": 1,
+  "template": "internal_investigation_v1",
+  "templateVersion": 1,
+  "projectionRule": null,
+  "projectionRuleVersion": null,
+  "classification": "internal_only",
+  "destinationClass": "internal_reviewers",
+  "title": "Internal investigation",
+  "contentHash": "ded693a45abea8a7e5ad2f44e85da7d4f2eeb32fd25480f91eaa7e66be68d2e9",
+  "content": null,
+  "contentWithheld": true,
+  "lineage": [
+    {
+      "sourceKind": "invoice",
+      "sourceId": "invoice_A01",
+      "sourceVersion": 1,
+      "classification": "internal_only",
+      "consumedFields": [
+        "invoice_id",
+        "external_reference",
+        "currency",
+        "total_minor_units",
+        "issued_on",
+        "due_on",
+        "internal_note"
+      ]
+    },
+    {
+      "sourceKind": "invoice",
+      "sourceId": "invoice_A02",
+      "sourceVersion": 1,
+      "classification": "vendor_shareable",
+      "consumedFields": [
+        "invoice_id",
+        "external_reference",
+        "currency",
+        "total_minor_units",
+        "issued_on",
+        "due_on"
+      ]
+    }
+  ]
+}

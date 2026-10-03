@@ -281,6 +281,36 @@ func TestStoredRecordChecksRefuseWhatTheContractDoesNotAllow(t *testing.T) {
 			t.Fatalf("broken record %d was accepted", index)
 		}
 	}
+	// A semantic check that made no model call (c1: no free-text arguments) has no source, verdict
+	// or call, like the repository writer allows; with any of them, or another outcome, it is refused.
+	unclassified := semantic
+	unclassified.Outcome, unclassified.VerdictSource, unclassified.Verdict, unclassified.ReasonCode = "not_applicable", nil, nil, nil
+	if !validAssessment(unclassified) {
+		t.Fatal("a semantic not_applicable record without a verdict was refused")
+	}
+	for index, breakRecord := range []func(*AssessmentRecord){
+		func(record *AssessmentRecord) { record.Outcome = "pass" },
+		func(record *AssessmentRecord) {
+			record.Verdict = &VerdictSummary{RiskCategory: "none", Score: 0, ReasonCode: "no_risk_found"}
+		},
+		func(record *AssessmentRecord) { call := evaluationID; record.SecurityModelCallID = &call },
+	} {
+		record := unclassified
+		breakRecord(&record)
+		if validAssessment(record) {
+			t.Fatalf("broken unclassified record %d was accepted", index)
+		}
+	}
+	// A stored verdict needs all three keys with values; a missing score is never served as 0.
+	for _, stored := range []string{`{"risk_category":"none","reason_code":"no_risk_found"}`,
+		`{"risk_category":"none","score":null,"reason_code":"no_risk_found"}`, `{"score":0.1,"reason_code":"no_risk_found"}`} {
+		if _, err := decodeVerdict(stored); err == nil {
+			t.Fatalf("incomplete verdict accepted: %s", stored)
+		}
+	}
+	if verdict, err := decodeVerdict(`{"risk_category":"none","score":0,"reason_code":"no_risk_found"}`); err != nil || verdict.Score != 0 {
+		t.Fatalf("a measured score of 0 was refused: %v", err)
+	}
 	// The verdict decodes strictly: a stored key beyond the decided schema is never passed on.
 	if contracts.DecodeStrict([]byte(`{"risk_category":"a","score":0.1,"reason_code":"b","reasoning":"raw text"}`), &VerdictSummary{}) == nil {
 		t.Fatal("an extra verdict key was accepted")

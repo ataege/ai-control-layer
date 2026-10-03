@@ -307,6 +307,66 @@ func TestPostgresEvaluateRecordsEvidenceAndStoresNoAction(t *testing.T) {
 // c1's review finding: an inactive run spends nothing. A cancelled run, an expired passport and a
 // completed run are each denied before any model call, with no ledger reservation, for model
 // input, tool results and action proposals alike; the evidence still records the judge input and its actor.
+// A judge action proposal whose arguments are all constrained values gets a semantic record that
+// made no model call; its evidence is stored but not labelled with the security purpose.
+func TestPostgresEvidenceLabelsTheSecurityPurposeOnlyForAVerdict(t *testing.T) {
+	pool := testdb.Open(t)
+	outer, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = outer.Rollback(context.Background()) })
+	runtimeRepository := repository.New(outer)
+	operator := contracts.OperatorContext{UserID: testdb.ID(t), OrganizationID: testdb.ID(t), Roles: []string{"operator"}}
+	issuedAt := time.Now().UTC().Truncate(time.Microsecond)
+	passport := contracts.Passport{PassportID: testdb.ID(t), RunID: testdb.ID(t), OrganizationID: operator.OrganizationID,
+		ActorID: operator.UserID, TaskVersion: "reconcile_atlas_v1", AdmissionCatalogRevisionID: 1,
+		IssuedAt: issuedAt, ExpiresAt: issuedAt.Add(15 * time.Minute)}
+	if err := runtimeRepository.InTransaction(context.Background(), func(tx repository.Tx) error {
+		return tx.InsertAdmission(context.Background(), passport, repository.NewJob{ID: testdb.ID(t), Kind: contracts.JobKindAgentStep})
+	}); err != nil {
+		t.Fatalf("admission fixture: %v", err)
+	}
+	evaluator := New(Dependencies{Repository: runtimeRepository})
+	noFreeText := security.ControlRecord{Boundary: security.BoundaryActionProposal, Field: security.FieldActionProposalText,
+		ControlClass: security.ClassSemantic, ControlID: security.ControlSemanticInjection, Outcome: security.OutcomeNotApplicable,
+		ReasonCode: security.ReasonNoFreeTextArguments}
+	withVerdict := security.ControlRecord{Boundary: security.BoundaryActionProposal, Field: security.FieldActionProposalText,
+		ControlClass: security.ClassSemantic, ControlID: security.ControlSemanticInjection, Outcome: security.OutcomePass,
+		VerdictSource: security.VerdictFixture, Verdict: &security.Verdict{RiskCategory: "none", Score: 0.1, ReasonCode: "none"}}
+	for name, testCase := range map[string]struct {
+		record      security.ControlRecord
+		wantPurpose *string
+	}{
+		"no free text": {noFreeText, nil},
+		"a verdict":    {withVerdict, pointer("security")},
+	} {
+		evaluationID := testdb.ID(t)
+		result := outcome{decision: contracts.EvaluationAllow, records: []security.ControlRecord{testCase.record}}
+		if err := evaluator.recordEvidence(context.Background(), operator, passport.RunID, evaluationID, 1, 1, result, "Allowed."); err != nil {
+			t.Fatalf("%s: recordEvidence: %v", name, err)
+		}
+		var purpose *string
+		var assessments int
+		if err := outer.QueryRow(context.Background(), `SELECT event.masked_summary->>'purpose',
+			(SELECT count(*) FROM runtime.control_assessments WHERE evaluation_id = $2)
+			FROM runtime.audit_events AS event WHERE event.run_id = $1 AND event.masked_summary->>'evaluationId' = $2::text`,
+			passport.RunID, evaluationID).Scan(&purpose, &assessments); err != nil {
+			t.Fatalf("%s: read evidence: %v", name, err)
+		}
+		purposeText, wantText := "<none>", "<none>"
+		if purpose != nil {
+			purposeText = *purpose
+		}
+		if testCase.wantPurpose != nil {
+			wantText = *testCase.wantPurpose
+		}
+		if purposeText != wantText || assessments != 1 {
+			t.Errorf("%s: purpose %s (want %s), assessments %d", name, purposeText, wantText, assessments)
+		}
+	}
+}
+
 func TestPostgresInactiveRunsAreDeniedBeforeAnyModelCall(t *testing.T) {
 	pool := testdb.Open(t)
 	outer, err := pool.Begin(context.Background())

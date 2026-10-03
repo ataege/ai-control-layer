@@ -18,6 +18,10 @@ import (
 // so every committed row is returned once. Rows of a long transaction appear when it finishes,
 // so pages are in id order within a window, not across windows: consumers sort by id.
 //
+// A long-running or idle-in-transaction session anywhere in the database holds the oldest running
+// transaction back, so High stops advancing: pages come back empty and nextCursor stays the same
+// until that session ends. Nothing is lost; the rows appear on the next read after it ends.
+//
 // Limitation: the comparison uses age(xmin), which is exact while a row is younger than about
 // two billion transactions; older rows (after transaction id wraparound) are not paged reliably.
 type windowCursor struct {

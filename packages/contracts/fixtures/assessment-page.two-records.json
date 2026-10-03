@@ -1,0 +1,49 @@
+{
+  "records": [
+    {
+      "assessmentId": "2",
+      "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "evaluationId": "6a0a71b2-9677-430a-8958-4fd79345d1f1",
+      "actionId": "9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a",
+      "securityModelCallId": null,
+      "boundary": "action_proposal",
+      "controlClass": "deterministic",
+      "controlId": "signature_match",
+      "outcome": "block",
+      "reasonCode": "signature_match",
+      "admissionCatalogRevisionId": 1,
+      "evaluatedCatalogRevisionId": 1,
+      "matchedRuleId": "sig_override_001",
+      "feedRevision": "feed_v1",
+      "verdictSource": null,
+      "verdict": null,
+      "inputSource": null,
+      "assessedAt": "2026-10-03T12:03:00.123456Z"
+    },
+    {
+      "assessmentId": "3",
+      "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "evaluationId": "7b911223-f38a-48f3-91b5-fbb942f0229a",
+      "actionId": null,
+      "securityModelCallId": "ea6bd0bf-d14e-4109-9889-1f0f8aa7c26d",
+      "boundary": "model_input",
+      "controlClass": "semantic",
+      "controlId": "semantic_injection",
+      "outcome": "block",
+      "reasonCode": "semantic_injection_detected",
+      "admissionCatalogRevisionId": 1,
+      "evaluatedCatalogRevisionId": 1,
+      "matchedRuleId": null,
+      "feedRevision": null,
+      "verdictSource": "live",
+      "verdict": {
+        "risk_category": "instruction_injection",
+        "score": 0.97,
+        "reason_code": "instruction_override"
+      },
+      "inputSource": "judge",
+      "assessedAt": "2026-10-03T12:10:00.5Z"
+    }
+  ],
+  "nextCursor": "v1.1746.1750.3"
+}

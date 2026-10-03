@@ -345,7 +345,11 @@ func (evaluator *Evaluator) recordEvidence(ctx context.Context, operator contrac
 			break
 		}
 	}
-	if slices.ContainsFunc(result.records, func(record security.ControlRecord) bool { return record.ControlClass == security.ClassSemantic }) {
+	// Only a semantic verdict (live or fixture) involved the security purpose; a semantic check that
+	// had no free text to classify made no model call and is not labelled as one.
+	if slices.ContainsFunc(result.records, func(record security.ControlRecord) bool {
+		return record.ControlClass == security.ClassSemantic && record.VerdictSource != ""
+	}) {
 		summary.Purpose = pointer("security")
 	}
 	return evaluator.dependencies.Repository.InTransaction(ctx, func(tx repository.Tx) error {

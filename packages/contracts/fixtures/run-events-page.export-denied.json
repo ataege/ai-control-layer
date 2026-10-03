@@ -1,0 +1,61 @@
+{
+  "events": [
+    {
+      "eventId": "41",
+      "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "actionId": "9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a",
+      "eventType": "report.export_denied",
+      "decision": "deny",
+      "reasonCode": "report_export_restricted",
+      "catalogRevisionId": 1,
+      "maskedSummary": {
+        "purpose": null,
+        "admissionCatalogRevisionId": null,
+        "matchedRule": null,
+        "feedRevision": null,
+        "reportId": "3b532026-0d57-4c4c-8f0b-6f320ebd5d66",
+        "template": "internal_investigation_v1",
+        "classification": "internal_only",
+        "lineageCheck": "passed",
+        "effect": "none",
+        "replaySource": null,
+        "alternativeTemplate": "vendor_reconciliation_v1",
+        "safeMessage": "This report inherits an Internal only restriction and cannot be sent to the vendor.",
+        "actorId": null,
+        "inputSource": null,
+        "evaluationId": null
+      },
+      "occurredAt": "2026-10-03T12:05:00Z"
+    },
+    {
+      "eventId": "42",
+      "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "actionId": "9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a",
+      "eventType": "report.safe_template_offered",
+      "decision": "deny",
+      "reasonCode": "report_export_restricted",
+      "catalogRevisionId": 1,
+      "maskedSummary": {
+        "purpose": null,
+        "admissionCatalogRevisionId": null,
+        "matchedRule": null,
+        "feedRevision": null,
+        "reportId": "3b532026-0d57-4c4c-8f0b-6f320ebd5d66",
+        "template": null,
+        "classification": null,
+        "lineageCheck": null,
+        "effect": "none",
+        "replaySource": null,
+        "alternativeTemplate": "vendor_reconciliation_v1",
+        "safeMessage": "This report inherits an Internal only restriction and cannot be sent to the vendor.",
+        "actorId": null,
+        "inputSource": null,
+        "evaluationId": null
+      },
+      "occurredAt": "2026-10-03T12:05:00Z"
+    }
+  ],
+  "nextCursor": "42"
+}

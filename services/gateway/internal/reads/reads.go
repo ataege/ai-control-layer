@@ -219,14 +219,27 @@ func writeJSON(responseWriter http.ResponseWriter, value any) {
 	_ = json.NewEncoder(responseWriter).Encode(value)
 }
 
+// snapshotBeginner is a pool that can open a transaction with options.
+type snapshotBeginner interface {
+	BeginTx(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error)
+}
+
 // readTransaction runs work in a short transaction that is always rolled back: reads never write.
+// On the pool it is REPEATABLE READ and READ ONLY, so every statement of one read (the summary's
+// counts) sees the same snapshot; an enclosing test transaction keeps its own.
 func readTransaction(ctx context.Context, database Beginner, work func(pgx.Tx) error) error {
 	if database == nil {
 		return errors.New("reads: no database")
 	}
 	ctx, cancel := context.WithTimeout(ctx, readTimeout)
 	defer cancel()
-	tx, err := database.Begin(ctx)
+	var tx pgx.Tx
+	var err error
+	if pool, isPool := database.(snapshotBeginner); isPool {
+		tx, err = pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	} else {
+		tx, err = database.Begin(ctx)
+	}
 	if err != nil {
 		return err
 	}
