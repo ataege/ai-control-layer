@@ -720,8 +720,7 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     classification, a hostile note withheld by signature or semantic verdict, a guard failure
     pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
     gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
-    the new one reverts and re-runs; `pnpm verify` 6 passed. Missing half: wiring into
-    `cmd/gateway/main.go` with w3's `policy.CatalogSecuritySettings` (next merge) and the live run,
+    the new one reverts and re-runs; `pnpm verify` 6 passed. The loop reads the active catalog before every model request and narrows the passport with `catalog.EffectiveFor` (GO-72; `TestTheActiveCatalogNarrowsEveryStep`). Missing half: wiring into `cmd/gateway/main.go` next to `catalog.WatchRequested` and the live run,
     which also needs the signature-feed import (c1, API-34).
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
@@ -729,13 +728,21 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     investigate)
   - Blocked by: nothing
 
-- [ ] **GO-80 · Instrument performance telemetry**
+- [x] **GO-80 · Instrument performance telemetry**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-10, GO-19 · Needs: X-79, X-85 · Provides: X-95 (part: instrumentation)
   - Paths: the model gateway and worker packages
   - Work: Measure monotonic durations separately for policy lookup, deterministic controls, semantic evaluation, provider request, approval waiting and local commit, plus total handling latency, queue depth, concurrency and errors, per model purpose. Keep untrusted confidential input out of the timing records. Observed durations stay distinct from cost estimates.
   - Done when: each agent and security call and each gate decision has its timing record, readable for the summary and export.
   - Tests: unit tests with a fake clock; a database-backed test through the X-24 command.
+  - Completed (2026-10-03): `agent.Telemetry` on go/f3 writes `runtime.timing_records` per step
+    (policy lookup, agent provider call with its `model_calls` id, gate decision, executor commit,
+    step total) and, for each tool-result inspection, the deterministic and semantic controls, each
+    security call's provider time and one `runtime.control_assessments` row per control decision
+    (semantic rows with verdict source and the security call id), committed with the step's context
+    entries. No inspected text is stored. Test
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
+    depth is read from `runtime.jobs` by the summary.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 
@@ -1240,6 +1247,17 @@ typecheck` PASS; `pnpm verify` 6 passed.
     reads return events in order with no gap or duplicate; no raw argument, review content or
     protected value leaves Go; the responses decode strictly against the X-11 and X-12 fixtures.
     `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Progress (2026-10-03): W2 lane, branch go/w2: package `internal/reads` serves
+    `GET /internal/runs/{runId}` (exactly X-11, via `repository.RunState`),
+    `GET /internal/runs/{runId}/events?after=&limit=` (X-12 page and `nextCursor`, via 3c's
+    `repository.RunEvents`) and `GET /internal/runs/{runId}/usage` (a Go-side draft of the X-29
+    usage: model calls per purpose by outcome, settled and held tokens, unknown usage as its own
+    count, the token ledger, tool attempts by outcome; no cost, since the local model has none).
+    Identity from `operatorcontext.FromContext` only; another organization's run is 404 with no
+    data. Tests: handler cases (401, 404, 400, 503, strict decode against the X-11 and X-12
+    fixtures) and PostgreSQL cases (usage values, other organization, gapless event paging,
+    reads as `task_passport_gateway`). Missing: the mount in `internal/api` (3c), the usage view in
+    `packages/contracts`, and `passport in the run view` (no passport is served).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
@@ -2477,6 +2495,18 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Work: Conditional. Only if `read path` chooses private Go endpoints: return organization-scoped control assessments, usage per purpose and timings for the summary and export, with stable codes and no raw protected content. Otherwise this task becomes "Dropped: `read path` chose runtime views".
   - Done when: NestJS reads the records it needs for X-93 and X-94 through this endpoint only for its own organization.
   - Tests: handler tests for organization scoping.
+  - Progress (2026-10-03): W2 lane, branch go/w2: `internal/reads` serves
+    `GET /internal/security/summary` (runs by status, events by type, decision and reason, control
+    assessments by control, outcome and verdict source, model usage per purpose, observed timings
+    per phase with count, failed, median, p95 and max microseconds),
+    `GET /internal/security/assessments?cursor=&limit=` (stable codes and revisions, the verdict
+    reduced to `risk_category`, `score`, `reason_code`; a stored row with any other verdict key is
+    refused, never passed on) and `GET /internal/security/events?cursor=&limit=` (X-12, including
+    events without a run). The organization-wide cursor windows rows by inserting transaction id
+    below the oldest running transaction, so each committed row is read exactly once without a
+    shared lock; the test commits a lower event id after a higher one and reads both, once each
+    (10 of 10 race runs). Timing rows were inserted by the test, since GO-80's writer is not on
+    main. Missing: the mount in `internal/api` (3c) and the record shapes in `packages/contracts`.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 

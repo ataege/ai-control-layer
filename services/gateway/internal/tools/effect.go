@@ -179,8 +179,9 @@ func verifyActionAndAttempt(ctx context.Context, tx pgx.Tx, request EffectReques
 }
 
 // completeAttempt records the outcome on the attempt and appends the outcome's safe events through
-// the shared X-12 event writer, all inside tx. repository.New(tx) begins a savepoint in tx, so
-// the events commit with the effect or not at all.
+// the shared X-12 event writer, all inside tx. repository.Join(tx) writes in tx itself (taking
+// the run lock that keeps a run's events in cursor order), so they commit with the effect or not
+// at all.
 func completeAttempt(ctx context.Context, tx pgx.Tx, request EffectRequest, outcome adapterOutcome) error {
 	tag, err := tx.Exec(ctx,
 		`UPDATE runtime.execution_attempts SET outcome = $1, completed_at = now()
@@ -203,20 +204,15 @@ func completeAttempt(ctx context.Context, tx pgx.Tx, request EffectRequest, outc
 		code := contracts.ReasonCode(outcome.result.ReasonCode)
 		reasonCode = &code
 	}
-	err = repository.New(tx).InTransaction(ctx, func(eventTx repository.Tx) error {
-		for _, record := range outcome.events {
-			if _, err := eventTx.AppendEvent(ctx, repository.NewEvent{
-				OrganizationID: request.OrganizationID, RunID: &runID, ActionID: &actionID,
-				EventType: record.eventType, Decision: record.decision, ReasonCode: reasonCode,
-				CatalogRevisionID: catalogRevisionID, MaskedSummary: record.summary,
-			}); err != nil {
-				return err
-			}
+	eventTx := repository.Join(tx)
+	for _, record := range outcome.events {
+		if _, err := eventTx.AppendEvent(ctx, repository.NewEvent{
+			OrganizationID: request.OrganizationID, RunID: &runID, ActionID: &actionID,
+			EventType: record.eventType, Decision: record.decision, ReasonCode: reasonCode,
+			CatalogRevisionID: catalogRevisionID, MaskedSummary: record.summary,
+		}); err != nil {
+			return fmt.Errorf("tools: append event: %w", err)
 		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("tools: append event: %w", err)
 	}
 	return nil
 }

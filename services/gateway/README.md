@@ -120,6 +120,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/policy`          | Go lane w3 (action gate and approvals)                        |
 | `internal/security`        | Go lane c1 (hybrid security controls)                         |
 | `internal/provenance`      | Go lane w2 (tools and provenance)                             |
+| `internal/reads`           | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -139,6 +140,7 @@ internal/contracts/   Go mirrors of the runtime wire contracts and strict decodi
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
+internal/reads/       operator reads: run state, usage and events; security summary, assessments and events (GO-24, GO-83)
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76), action check (GO-77 part)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
@@ -399,6 +401,22 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Performance telemetry (GO-80)
+
+`agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the
+tool-result inspection's decisions to `runtime.control_assessments`. Per step the loop records
+`policy_lookup` (run, passport and step count), `provider` (agent call, Go wall time, with its
+`model_calls` id), `deterministic` (the gate decision, with the action when one was stored),
+`commit` (the executor's attempt and local effect), the inspection's `deterministic` and
+`semantic` controls with each security call's `provider` time, and `total` (the whole step).
+`failed` marks errored spans. Spans are best effort: a failed write is logged and never stops or
+retries a run. Control assessments of a released result commit in the same transaction as its
+context entries; those of a paused inspection are written on their own. Rows hold ids, outcomes,
+codes, revisions, the validated verdict (category, score, reason code) and durations, never
+inspected text, prompts or model output. Semantic rows carry their verdict source (`live` or
+`fixture`) and the `security`-purpose call they came from. `approval_wait` follows with GO-40;
+the concurrency slot with GO-79; queue depth is read from `runtime.jobs`.
+
 ## Bounded agent loop (GO-11)
 
 `agent.Loop` is the `worker.Handler` for `contracts.JobKindAgentStep` jobs. Per claim it runs up
@@ -428,6 +446,12 @@ references plus the stored steps; then, by result:
   unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
   `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
 
+**Active catalog (GO-72).** Before every model request the loop reads the active snapshot
+(`catalog.Loader.Active` through `agent.PoolCatalog`) and narrows the passport with
+`catalog.EffectiveFor`: the allowed models, the agent step limit and the correction limit are the
+smaller of passport and catalog, and the snapshot's security settings drive that step's inspection.
+No active catalog dispatches nothing and leaves the job for a later claim.
+
 Run changes go through `repository.Tx.TransitionRun` with their event; a change another writer
 already made (a cancellation) is accepted. A cancelled claim context returns an error and leaves
 the job for lease expiry.
@@ -442,8 +466,8 @@ Corrections are stored as `correction` entries (migration `1791100000000-AllowCo
 so a restarted worker sends the same feedback.
 
 **Tool-result inspection (GO-76 at the worker).** `agent.SecurityInspector` sends every minimized
-result through c1's `security.Inspector.InspectToolResult` with the active settings (a
-`SettingsSource`; production uses the catalog reader). The invoice note is marked as an untrusted
+result through c1's `security.Inspector.InspectToolResult` with the settings of the catalog snapshot read for this
+step. The invoice note is marked as an untrusted
 path with its trusted source (invoice id, version, classification); untrusted text the adapter cannot
 place pauses the run. Only the inspection's `ResultJSON` enters the context; a result withheld whole
 becomes `{"withheld":true,"reason_code":...}`; a paused inspection pauses the run and releases

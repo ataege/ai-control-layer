@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/model"
 	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/repository"
+	"starter/services/gateway/internal/security"
 	"starter/services/gateway/internal/worker"
 )
 
@@ -48,6 +50,26 @@ type CorrectionCounter interface {
 	CorrectionsUsed(ctx context.Context, run policy.RunIdentity) (int, error)
 }
 
+// CatalogSource returns the active control catalog snapshot (catalog.Loader.Active), read before
+// every model request; it fails closed.
+type CatalogSource interface {
+	Active(ctx context.Context) (catalog.Snapshot, error)
+}
+
+// PoolCatalog reads the active snapshot through the shared loader on the gateway pool.
+type PoolCatalog struct {
+	Loader *catalog.Loader
+	Pool   catalog.Querier
+}
+
+// Active returns the active snapshot or catalog.ErrUnavailable.
+func (source PoolCatalog) Active(ctx context.Context) (catalog.Snapshot, error) {
+	if source.Loader == nil || source.Pool == nil {
+		return catalog.Snapshot{}, catalog.ErrUnavailable
+	}
+	return source.Loader.Active(ctx, source.Pool)
+}
+
 // LoopDependencies are the components the loop drives. Every one is required.
 type LoopDependencies struct {
 	Runs        *repository.Repository
@@ -55,10 +77,12 @@ type LoopDependencies struct {
 	Gate        ActionGate
 	Executor    ActionExecutor
 	Inspector   ResultInspector
+	Catalog     CatalogSource
 	Scopes      policy.ScopeReader
 	Corrections CorrectionCounter
 	Steps       StepCounter
 	Contexts    *ContextStore
+	Telemetry   *Telemetry
 	Logger      *slog.Logger
 }
 
@@ -71,8 +95,8 @@ type Loop struct {
 // NewLoop validates its dependencies.
 func NewLoop(dependencies LoopDependencies) (*Loop, error) {
 	if dependencies.Runs == nil || dependencies.Stepper == nil || dependencies.Gate == nil || dependencies.Executor == nil ||
-		dependencies.Inspector == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
-		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Logger == nil {
+		dependencies.Inspector == nil || dependencies.Catalog == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
+		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Telemetry == nil || dependencies.Logger == nil {
 		return nil, ErrInvalid
 	}
 	return &Loop{dependencies: dependencies, now: time.Now}, nil
@@ -94,7 +118,9 @@ func (loop *Loop) Handle(ctx context.Context, job worker.Job) (worker.Outcome, e
 		if err := ctx.Err(); err != nil {
 			return worker.Outcome{}, err
 		}
+		stepStarted := time.Now()
 		end, proceed, err := loop.step(ctx, runIdentity)
+		loop.recordSpans(ctx, runIdentity, Span{Phase: PhaseTotal, Duration: time.Since(stepStarted), Failed: err != nil})
 		if err != nil {
 			return worker.Outcome{}, err
 		}
@@ -114,6 +140,7 @@ func (loop *Loop) Handle(ctx context.Context, job worker.Job) (worker.Outcome, e
 // loop continues, or an error that leaves the job unchanged.
 func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, bool, error) {
 	runs := loop.dependencies.Runs
+	lookupStarted := time.Now()
 	state, err := runs.RunState(ctx, run.OrganizationID, run.RunID)
 	if err != nil {
 		return runEnd{}, false, err
@@ -142,22 +169,33 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	if !loop.now().Before(passport.ExpiresAt) {
 		return runEnd{status: contracts.RunStopped, reason: contracts.ReasonRunExpired}, false, nil
 	}
+	// GO-72: the active catalog narrows the immutable passport before every model request. A
+	// missing or invalid catalog dispatches nothing and leaves the job for a later claim.
+	snapshot, err := loop.dependencies.Catalog.Active(ctx)
+	if err != nil {
+		return runEnd{}, false, err
+	}
+	effective := catalog.EffectiveFor(passport, snapshot)
 	stepsTaken, err := loop.dependencies.Steps.CountAgentCalls(ctx, run.OrganizationID, run.RunID)
 	if err != nil {
 		return runEnd{}, false, err
 	}
-	if int64(stepsTaken) >= passport.Limits.CallsAgent {
+	if int64(stepsTaken) >= effective.CallsAgent {
 		// Alignment decision 7: an exhausted allowance pauses the run.
 		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonAllowanceExhausted}, false, nil
 	}
 	stepNumber := stepsTaken + 1
+	loop.recordSpans(ctx, run, Span{Phase: PhasePolicyLookup, Duration: time.Since(lookupStarted)})
 
 	entries, err := loop.dependencies.Contexts.List(ctx, run.OrganizationID, run.RunID)
 	if err != nil {
 		return runEnd{}, false, err
 	}
-	agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: passport.Scope.AllowedModels}
+	agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: effective.AllowedModels}
 	result, err := loop.dependencies.Stepper.Step(ctx, agentRun, buildTaskContext(passport, entries))
+	if result.CallID != "" {
+		loop.recordSpans(ctx, run, Span{Phase: PhaseProvider, Duration: result.Duration, Failed: err != nil, ModelCallID: result.CallID})
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return runEnd{}, false, ctx.Err()
@@ -173,12 +211,12 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 			return runEnd{}, false, err
 		}
 		rejection := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(result.RejectReason)}
-		return loop.correct(ctx, run, passport, stepNumber, nil, rejection)
+		return loop.correct(ctx, run, effective, stepNumber, nil, rejection)
 	case StepFinal:
 		// GO-26 adds the narrow final-result validation.
 		return runEnd{status: contracts.RunCompleted}, false, nil
 	case StepAction:
-		return loop.act(ctx, run, agentRun, passport, stepNumber, result.Proposal)
+		return loop.act(ctx, run, agentRun, passport, effective, snapshot.Security, stepNumber, result.Proposal)
 	default:
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}, false, nil
 	}
@@ -186,8 +224,8 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 
 // act sends one proposal through the gate, executes an allowed one, inspects its result and
 // stores the step's context.
-func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run, passport contracts.Passport, stepNumber int,
-	proposal contracts.ActionProposal) (runEnd, bool, error) {
+func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run, passport contracts.Passport, effective catalog.Effective,
+	settings security.Settings, stepNumber int, proposal contracts.ActionProposal) (runEnd, bool, error) {
 	actionID, err := newUUID()
 	if err != nil {
 		return runEnd{}, false, err
@@ -196,10 +234,16 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 	if err != nil {
 		return runEnd{}, false, err
 	}
+	gateStarted := time.Now()
 	decision := loop.dependencies.Gate.Evaluate(ctx, run, policy.Proposal{
 		ActionID: actionID, StepNumber: stepNumber, IdempotencyKey: idempotencyKey,
 		Tool: string(proposal.Tool), RawArguments: proposal.Arguments,
 	})
+	gateSpan := Span{Phase: PhaseDeterministic, Duration: time.Since(gateStarted)}
+	if decision.ActionStored {
+		gateSpan.ActionID = actionID
+	}
+	loop.recordSpans(ctx, run, gateSpan)
 	switch decision.Outcome {
 	case policy.OutcomeAllow:
 	case policy.OutcomeApprovalRequired:
@@ -207,10 +251,13 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return runEnd{status: contracts.RunAwaitingApproval, actionID: actionID}, false, nil
 	default:
 		// A denied action executes nothing (GO-29: bounded feedback while corrections remain).
-		return loop.correct(ctx, run, passport, stepNumber, proposedCall(proposal), decision)
+		return loop.correct(ctx, run, effective, stepNumber, proposedCall(proposal), decision)
 	}
 
+	executionStarted := time.Now()
 	execution := loop.dependencies.Executor.Execute(ctx, run, actionID)
+	loop.recordSpans(ctx, run, Span{Phase: PhaseCommit, Duration: time.Since(executionStarted),
+		Failed: execution.Status != policy.ExecutionSucceeded, ActionID: actionID})
 	switch execution.Status {
 	case policy.ExecutionSucceeded:
 	case policy.ExecutionPaused:
@@ -222,8 +269,17 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return runEnd{status: contracts.RunStopped, reason: contractReason(execution.ReasonCode)}, false, nil
 	}
 
-	inspection, err := loop.dependencies.Inspector.Inspect(ctx, agentRun, string(proposal.Tool), execution.Result)
+	inspection, err := loop.dependencies.Inspector.Inspect(ctx, agentRun, string(proposal.Tool), execution.Result, settings)
+	evaluationID, idErr := newUUID()
+	if idErr != nil {
+		return runEnd{}, false, idErr
+	}
 	if err != nil || inspection.Outcome == InspectionPause {
+		// Nothing is released; the decisions and timing are still recorded as evidence.
+		if recordErr := loop.dependencies.Telemetry.RecordInspection(ctx, run.OrganizationID, run.RunID, actionID,
+			passport.AdmissionCatalogRevisionID, evaluationID, inspection.Evidence); recordErr != nil {
+			loop.dependencies.Logger.Warn("inspection evidence not recorded", "run_id", run.RunID, "error", recordErr.Error())
+		}
 		reason := inspection.Reason
 		if err != nil || !reason.Valid() {
 			reason = contracts.ReasonSecurityEvaluatorUnavailable
@@ -237,7 +293,8 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 	if err != nil {
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}, false, nil
 	}
-	if err = loop.dependencies.Contexts.AppendToolStep(ctx, run.OrganizationID, run.RunID, stepNumber, actionID, call, inspection); err != nil {
+	if err = loop.dependencies.Contexts.AppendToolStep(ctx, run.OrganizationID, run.RunID, stepNumber, actionID, call, inspection,
+		passport.AdmissionCatalogRevisionID, evaluationID); err != nil {
 		return runEnd{}, false, err
 	}
 	return runEnd{}, true, nil
@@ -247,14 +304,14 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 // the run's durable denial events, so it survives a restart. While corrections remain, the
 // denied call (if any) and the fixed denial feedback join the context and the loop continues;
 // a permitted alternative in the feedback grants nothing, the next proposal is checked again.
-func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, passport contracts.Passport, stepNumber int,
+func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, effective catalog.Effective, stepNumber int,
 	call json.RawMessage, decision policy.Decision) (runEnd, bool, error) {
 	denialReason := contractReason(decision.ReasonCode)
 	used, err := loop.dependencies.Corrections.CorrectionsUsed(ctx, run)
 	if err != nil {
 		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
 	}
-	verdict := policy.CheckCorrections(used, int(passport.Limits.Corrections))
+	verdict := policy.CheckCorrections(used, int(effective.Corrections))
 	if !verdict.Continue {
 		return runEnd{status: contracts.RunStopped, reason: contractReason(verdict.StopReason)}, false, nil
 	}
@@ -309,6 +366,16 @@ func proposedCall(proposal contracts.ActionProposal) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+// recordSpans writes timing best effort: telemetry is evidence, never a reason to stop or retry a
+// run, so a failed write is logged and the step goes on.
+func (loop *Loop) recordSpans(ctx context.Context, run policy.RunIdentity, spans ...Span) {
+	writeContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	if err := loop.dependencies.Telemetry.RecordSpans(writeContext, run.OrganizationID, run.RunID, spans); err != nil {
+		loop.dependencies.Logger.Warn("timing not recorded", "run_id", run.RunID, "error", err.Error())
+	}
 }
 
 // endRun records the run's status change with its event. A change another writer already made
