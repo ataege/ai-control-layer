@@ -77,7 +77,13 @@ try {
     }),
   );
 
-  if (outcome.accepted) {
+  if (outcome.accepted && outcome.unchanged) {
+    // Nothing was written: the file equals the current revision, so work bound to it stays valid.
+    console.log(
+      `unchanged: revision ${outcome.revisionId} is already current (sha256 ${outcome.fileDigest}); nothing was written.`,
+    );
+    process.exitCode = 0;
+  } else if (outcome.accepted) {
     console.log(
       `Accepted ${policyFilePath} as catalog revision ${outcome.revisionId} (sha256 ${outcome.fileDigest}).`,
     );
@@ -93,6 +99,12 @@ try {
           : ` (revision ${outcome.activeRevisionId} stays active until then).`),
     );
     process.exitCode = 0;
+  } else if (outcome.pendingRevisionId !== undefined) {
+    // A valid file, refused only because the gateway has not checked the pending request yet.
+    console.error(
+      `Not imported: revision ${outcome.pendingRevisionId} is still being validated; wait for activation and retry (without a running gateway, run pnpm catalog:activate). Nothing was written.`,
+    );
+    process.exitCode = 1;
   } else {
     console.error(
       `Rejected ${policyFilePath} (policy_reload_rejected, sha256 ${outcome.fileDigest}):`,
