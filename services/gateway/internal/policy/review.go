@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/provenance"
@@ -122,40 +123,14 @@ func (freezer *PostgresReviewFreezer) Freeze(ctx context.Context, run RunIdentit
 	if err != nil || passport.PassportID != scope.PassportID {
 		return FrozenReview{}, ErrReviewUnavailable
 	}
-	arguments, err := DecodeArguments(action.Tool, action.CanonicalArguments)
-	if err != nil {
-		return FrozenReview{}, ErrReviewUnavailable
-	}
-	payload := ReviewPayload{
-		CanonicalizationVersion: CanonicalizationVersion,
-		ActionID:                action.ActionID,
-		RunID:                   run.RunID,
-		PassportID:              scope.PassportID,
-		PolicyRevisionID:        action.EvaluatedRevisionID,
-		Tool:                    action.Tool,
-		CanonicalArguments:      action.CanonicalArguments,
-		// The review cannot outlive the run: it expires with the passport.
-		ExpiresAt: scope.ExpiresAt.UTC().Format(time.RFC3339Nano),
-	}
-
+	expiresAt := scope.ExpiresAt.UTC().Format(time.RFC3339Nano) // the review cannot outlive the run
 	var frozen FrozenReview
 	err = freezer.repository.InTransaction(ctx, func(tx repository.Tx) error {
-		if queueArguments, isQueue := arguments.(QueueReportArguments); isQueue {
-			// Worker 2's rule, the same one queue_report applies; it loads the stored passport itself.
-			vendorID, address, reason, err := tools.ResolveRecipientForReview(ctx, tx.Raw(), run.OrganizationID, run.RunID,
-				queueArguments.RecipientReference)
-			if err != nil || reason != "" {
-				return ErrReviewUnavailable
-			}
-			payload.Recipient = &ReviewedRecipient{Reference: queueArguments.RecipientReference, VendorID: vendorID, Address: address}
-			report, err := provenance.LoadReport(ctx, tx.Raw(), run.OrganizationID, run.RunID, queueArguments.ReportID)
-			if err != nil {
-				return ErrReviewUnavailable
-			}
-			payload.Report, err = reviewedReport(report)
-			if err != nil {
-				return err
-			}
+		payload, report, err := buildReviewPayload(ctx, tx.Raw(), run, action, scope.PassportID, expiresAt)
+		if err != nil {
+			return err
+		}
+		if report != nil {
 			frozen.ReportID, frozen.Template, frozen.Classification = report.ID, report.TemplateName, report.Classification
 		}
 		digest, canonicalPayload, err := payload.Digest()
@@ -174,6 +149,45 @@ func (freezer *PostgresReviewFreezer) Freeze(ctx context.Context, run RunIdentit
 		return FrozenReview{}, ErrReviewUnavailable
 	}
 	return frozen, nil
+}
+
+// buildReviewPayload assembles the review material of a stored action from trusted rows in tx:
+// the recipient resolved by Worker 2's rule (it loads the stored passport itself) and the stored
+// report with its lineage. The executor rebuilds it the same way before an approved action runs
+// (GO-45), so any change since freezing changes the digest. The report is returned for the
+// event's safe references; it is nil for tools without one.
+func buildReviewPayload(ctx context.Context, tx pgx.Tx, run RunIdentity, action StoredAction, passportID, expiresAt string) (ReviewPayload, *provenance.StoredReport, error) {
+	arguments, err := DecodeArguments(action.Tool, action.CanonicalArguments)
+	if err != nil {
+		return ReviewPayload{}, nil, ErrReviewUnavailable
+	}
+	payload := ReviewPayload{
+		CanonicalizationVersion: CanonicalizationVersion,
+		ActionID:                action.ActionID,
+		RunID:                   run.RunID,
+		PassportID:              passportID,
+		PolicyRevisionID:        action.EvaluatedRevisionID,
+		Tool:                    action.Tool,
+		CanonicalArguments:      action.CanonicalArguments,
+		ExpiresAt:               expiresAt,
+	}
+	queueArguments, isQueue := arguments.(QueueReportArguments)
+	if !isQueue {
+		return payload, nil, nil
+	}
+	vendorID, address, reason, err := tools.ResolveRecipientForReview(ctx, tx, run.OrganizationID, run.RunID, queueArguments.RecipientReference)
+	if err != nil || reason != "" {
+		return ReviewPayload{}, nil, ErrReviewUnavailable
+	}
+	payload.Recipient = &ReviewedRecipient{Reference: queueArguments.RecipientReference, VendorID: vendorID, Address: address}
+	report, err := provenance.LoadReport(ctx, tx, run.OrganizationID, run.RunID, queueArguments.ReportID)
+	if err != nil {
+		return ReviewPayload{}, nil, ErrReviewUnavailable
+	}
+	if payload.Report, err = reviewedReport(report); err != nil {
+		return ReviewPayload{}, nil, err
+	}
+	return payload, &report, nil
 }
 
 // reviewedReport turns a stored report into its frozen form. Sources are sorted, so the manifest

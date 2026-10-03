@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"starter/services/gateway/internal/config"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/repository"
 )
 
@@ -19,11 +19,12 @@ var ErrScopeUnavailable = errors.New("passport scope unavailable")
 type PassportScopeReader struct {
 	pool       *pgxpool.Pool
 	repository *repository.Repository
+	catalogs   *catalog.Loader
 }
 
 // NewPassportScopeReader returns a reader on the given pool. It creates nothing.
 func NewPassportScopeReader(pool *pgxpool.Pool) *PassportScopeReader {
-	return &PassportScopeReader{pool: pool, repository: repository.New(pool)}
+	return &PassportScopeReader{pool: pool, repository: repository.New(pool), catalogs: catalog.NewLoader()}
 }
 
 // LoadScope returns the passport scope of the verified run. A passport that no longer fits its
@@ -55,15 +56,16 @@ func (reader *PassportScopeReader) LoadScope(ctx context.Context, run RunIdentit
 	}, nil
 }
 
-// ActiveCatalogRevision returns the active control-catalog revision, validated as enforceable;
-// a missing or invalid catalog is an error, never a default.
+// ActiveCatalogRevision returns the active control-catalog revision through catalog.Loader, the
+// single active-snapshot source, which validates the snapshot as enforceable; a missing or
+// invalid catalog is an error, never a default.
 func (reader *PassportScopeReader) ActiveCatalogRevision(ctx context.Context) (int64, error) {
 	if reader.pool == nil {
 		return 0, ErrScopeUnavailable
 	}
-	catalog, err := config.ReadActiveAccountingCatalog(ctx, reader.pool)
+	snapshot, err := reader.catalogs.Active(ctx, reader.pool)
 	if err != nil {
 		return 0, ErrScopeUnavailable
 	}
-	return catalog.RevisionID, nil
+	return snapshot.RevisionID, nil
 }

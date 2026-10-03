@@ -44,7 +44,8 @@ Argument shapes (proposed for X-09; renamed here if X-09 freezes different names
    they get no `runtime.actions` row, only the denial event (`invalid_arguments`).
 2. The passport scope of the verified run and the active catalog revision (`ScopeReader`;
    `PassportScopeReader` reads the stored passport through 3c's `repository.Passport`, decoded
-   strictly against X-08, and the active revision through `config.ReadActiveAccountingCatalog`).
+   strictly against X-08, and the active revision through 3c's `catalog.Loader`, the single
+   active-snapshot source).
    A lookup failure, an invalid stored passport or a scope of another organization or run denies.
 3. The action is stored (`proposed`) and committed before any further check.
 4. Passport expiry, the passport's tools, then its resources: the invoice of `read_invoice`, the
@@ -176,9 +177,9 @@ the field limit, the signature rules and then the metered semantic check at the
 - `pause` or any failure: deny with the reason (`security_evaluator_unavailable` when none), which
   the worker treats as a pause.
 
-`CatalogSecuritySettings` loads the settings of the action's evaluated revision with
-`security.SettingsFromCatalog` (the revision's content and the active pointer's feed with its pinned
-digest); a missing or unenforceable revision pauses. Every control record of the check is written
+`CatalogSecuritySettings` returns the settings of the active snapshot from 3c's `catalog.Loader`
+when it is the action's evaluated revision; a different active revision, or a missing or
+unenforceable snapshot (for example signature matching enabled with no feed bound), pauses. Every control record of the check is written
 to `runtime.control_assessments` in the decision's transaction (one evaluation id, the action, the
 admission and evaluated revisions, matched rule and feed revision, verdict and source for semantic
 rows), never the inspected text.
@@ -189,13 +190,14 @@ Routes (mounted by 3c's `internal/api` behind the service token and the verified
 context): `ApprovalRoutePattern` (`POST /internal/actions/{actionId}/approval`, `ApprovalHandler`)
 and `ReviewRoutePattern` (`GET /internal/actions/{actionId}/review`, `ReviewHandler`).
 
-- The body is X-10 only, `{"decision":"approve"|"reject"}`; any other field or a missing decision is
+- The body is X-10 only (`contracts.ApprovalDecision`), `{"decision":"approve"|"reject"}`; any other field or a missing decision is
   `400` and nothing is decided.
 - Reviewer authority comes from `app.memberships` for the verified user and organization (role
   `reviewer`, migration `1791110000000` grants the gateway read only); a signed claim alone never
   suffices, and a missing row or failed read denies.
 - `Approvals.Decide` locks the action of the operator's organization (another organization's action
-  is answered like a missing one), requires `awaiting_approval`, the frozen expiry still ahead, the
+  is answered like a missing one), refuses a stopped or cancel-stamped run (`409 run_cancelled`,
+  no grant, no continuation), requires `awaiting_approval`, the frozen expiry still ahead, the
   action digest recomputed from its stored arguments and the review payload digest recomputed from
   its stored content. Then one transaction writes the `runtime.approvals` row (bound to the action
   digest, the payload id, the reviewer and the frozen expiry), the action status `approved` or
@@ -204,3 +206,40 @@ and `ReviewRoutePattern` (`GET /internal/actions/{actionId}/review`, `ReviewHand
   `running` when it claims the job.
 - `Approvals.FrozenReviewFor` returns the frozen payload (exact content and recipient) to a reviewer
   of the organization only.
+
+## Executing an approved action (GO-45)
+
+The executor runs an `approved` action as well as an `allowed` one. Before anything is written it
+also checks that the active catalog revision is still the action's evaluated revision
+(`source_policy_changed` otherwise), and for an approved action:
+
+- the grant is approved, unconsumed and unexpired (`approval_expired` otherwise);
+- the frozen sources' versions equal the current ones (`resource_version_changed`);
+- the review material rebuilt from current rows with the same builder as the freeze (recipient
+  resolved again, stored report and lineage) has the frozen digest, so a changed address, content,
+  template or argument is `action_changed`.
+
+In the effect's transaction the grant is consumed by the attempt before `RunEffect` (the database
+guard allows one consumption of an approved, unexpired grant); nothing to consume means rollback
+and `approval_expired`. `recordAttempt` claims the action first (allowed or approved to
+`executing`), so a concurrent execution of the same action returns at once holding no lock, and
+only then counts the run's attempts under `FOR NO KEY UPDATE` on the run row, the lock the event
+writer also takes; the earlier order (run lock first) deadlocked with a running effect. A losing
+concurrent execution is refused (`action_changed`).
+
+## Retries and unknown outcomes (GO-53, executor half)
+
+GO-53 belongs to Worker 2, who owns the effect transaction; the executor half lives here, built on
+`tools.ClassifyRunError` and `tools.RetrySafe`:
+
+- `RunEffect` returns an error: the transaction is rolled back, so no local effect committed. A
+  retry-safe known no-effect failure releases the action (back to `allowed` or `approved`; a
+  consumed grant was rolled back with it) and retries once under the same action id, through the
+  normal checks and a new attempt that counts against the passport's limit. A precondition failure
+  (the stored action, attempt or passport no longer matches) fails the action with an
+  `action.failed` event and returns `stopped`, so the worker stops the run; no retry.
+- The commit fails: the stored status is read back. `executed` or `failed` means the commit landed
+  and the result is returned; otherwise the attempt stays open (the one-open-attempt index blocks
+  any second attempt), the action becomes `unknown` with an `action.unknown` event
+  (`outcome_unknown`), and the result is `paused`. Nothing re-runs it.
+- An adapter refusal (`Outcome` failed) is `failed` with its reason, never retried.

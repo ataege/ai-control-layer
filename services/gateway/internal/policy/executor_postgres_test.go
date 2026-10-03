@@ -235,11 +235,16 @@ func TestAdapterErrorRollsBackAndPauses(t *testing.T) {
 	if result.Status != ExecutionPaused {
 		t.Fatalf("status = %s, want paused", result.Status)
 	}
-	if got := world.attempts(t, actionID); len(got) != 1 || got[0] != attemptOutcomeAborted {
-		t.Fatalf("attempts = %v, want exactly one aborted attempt", got)
+	// A storage error after rollback is a known no-effect failure: retried once (GO-53), then the
+	// run pauses with the action allowed again; each try used an attempt.
+	if got := world.attempts(t, actionID); len(got) != 2 || got[0] != attemptOutcomeAborted || got[1] != attemptOutcomeAborted {
+		t.Fatalf("attempts = %v, want two aborted attempts", got)
 	}
-	if status := world.actionStatus(t, actionID); status != actionStatusExecuting {
-		t.Fatalf("action status = %s, want executing (paused for reconciliation)", status)
+	if runner.calls != 2 {
+		t.Fatalf("adapter calls = %d, want 2", runner.calls)
+	}
+	if status := world.actionStatus(t, actionID); status != actionStatusAllowed {
+		t.Fatalf("action status = %s, want allowed after the released retry", status)
 	}
 }
 
