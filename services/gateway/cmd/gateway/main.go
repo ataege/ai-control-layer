@@ -106,6 +106,7 @@ func run() error {
 			Admitter:  admission.New(runtimeRepository, catalog.NewLoader()),
 			Canceller: runtimeRepository,
 			Approvals: policy.NewApprovals(pool),
+			Runs:      runtimeRepository,
 			Database:  pool,
 		}),
 	})
