@@ -55,11 +55,21 @@ type Approvals interface {
 type RunReader interface {
 	reads.RunStateReader
 	reads.RunEventsReader
+	reads.PassportReader
 }
 
 // ControlEvaluator evaluates one interaction (X-91); *evaluation.Evaluator implements it.
 type ControlEvaluator interface {
 	Evaluate(ctx context.Context, operator contracts.OperatorContext, request contracts.ControlEvaluationRequest) (contracts.ControlEvaluationResponse, error)
+}
+
+// TaskOptionsRoutePattern serves the task form's choices (GO-25, API-12's TaskFormOptions).
+const TaskOptionsRoutePattern = "GET /internal/task-options"
+
+// TaskOptionsReader reads the form options of an organization; *admission.OptionsReader
+// implements it.
+type TaskOptionsReader interface {
+	TaskOptions(ctx context.Context, organizationID string) (contracts.TaskFormOptions, error)
 }
 
 // ControlEvaluateRoutePattern is the control evaluation adapter (X-91, GO-82).
@@ -75,6 +85,7 @@ type Dependencies struct {
 	Approvals Approvals
 	Runs      RunReader
 	Evaluator ControlEvaluator
+	Options   TaskOptionsReader
 	// Database serves the stored report read (GO-37); the gateway pool in production.
 	Database provenance.Beginner
 }
@@ -85,12 +96,14 @@ func Commands(dependencies Dependencies) []httpserver.InternalCommand {
 		{Pattern: StartRunRoutePattern, Handler: StartRunHandler(dependencies.Admitter)},
 		{Pattern: CancelRunRoutePattern, Handler: CancelRunHandler(dependencies.Canceller)},
 		{Pattern: ControlEvaluateRoutePattern, Handler: ControlEvaluateHandler(dependencies.Evaluator)},
+		{Pattern: TaskOptionsRoutePattern, Handler: TaskOptionsHandler(dependencies.Options)},
 		{Pattern: provenance.StoredReportRoutePattern, Handler: provenance.StoredReportHandler(dependencies.Database, StoredReportViewer)},
 		{Pattern: policy.ApprovalRoutePattern, Handler: policy.ApprovalHandler(dependencies.Approvals)},
 		{Pattern: policy.ReviewRoutePattern, Handler: policy.ReviewHandler(dependencies.Approvals)},
 		// Lane w2's GO-24 and GO-83 reads, organization-scoped through the verified operator.
 		{Pattern: reads.RunStateRoutePattern, Handler: reads.RunStateHandler(dependencies.Runs)},
 		{Pattern: reads.RunEventsRoutePattern, Handler: reads.RunEventsHandler(dependencies.Runs)},
+		{Pattern: reads.PassportRoutePattern, Handler: reads.PassportHandler(dependencies.Runs)},
 		{Pattern: reads.RunUsageRoutePattern, Handler: reads.RunUsageHandler(dependencies.Database)},
 		{Pattern: reads.SecuritySummaryRoutePattern, Handler: reads.SecuritySummaryHandler(dependencies.Database)},
 		{Pattern: reads.SecurityAssessmentsRoutePattern, Handler: reads.SecurityAssessmentsHandler(dependencies.Database)},
@@ -133,6 +146,26 @@ func StartRunHandler(admitter RunAdmitter) http.Handler {
 		default:
 			health.WriteJSON(responseWriter, http.StatusCreated, contracts.StartRunResponse{RunID: passport.RunID, PassportID: passport.PassportID})
 		}
+	})
+}
+
+// TaskOptionsHandler answers 200 with the task form options of the verified operator's
+// organization, or 503 when they cannot be read (no enforceable active catalog or storage): the
+// form never shows limits admission would not honour.
+func TaskOptionsHandler(reader TaskOptionsReader) http.Handler {
+	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		operator, verified := operatorcontext.FromContext(request.Context())
+		if !verified || reader == nil {
+			httpserver.WriteError(responseWriter, request, http.StatusUnauthorized, "unauthorized", "Missing or invalid operator context.")
+			return
+		}
+		options, err := reader.TaskOptions(request.Context(), operator.OrganizationID)
+		if err != nil {
+			httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, "unavailable",
+				"The task options are unavailable; no control catalog can be enforced right now.")
+			return
+		}
+		health.WriteJSON(responseWriter, http.StatusOK, options)
 	})
 }
 

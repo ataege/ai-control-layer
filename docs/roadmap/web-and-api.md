@@ -1119,6 +1119,16 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Tests: specs over the safe event fixtures: a denied attempt never renders as an effect; an event
     marked as replay always shows the label; an unknown event kind is shown as unknown, not dropped:
     `pnpm --filter web run test`; a browser check of the labelled replay (X-36), quoted.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3):
+    `RunEventTimeline` in `apps/web/src/components/run/run-event-timeline.tsx` takes the run's
+    `SafeEvent[]` (and optional `AssessmentRecord[]`) and does no fetching; the pure model is
+    `event-model.ts` (`describeEvent`, `summarizeEvents`). An attempt, its decision and a completed
+    effect are different rows (kind from the event type alone: a denied attempt is never an effect,
+    an unknown type is shown as unknown); a denial shows its reason code and sentence, the rule and
+    the permitted alternative; denied proposals and completed effects (reads, reports stored,
+    messages queued in the simulated outbox) are counted apart; a replay always carries its label.
+    Specs (`event-model.test.ts`, `run-event-timeline.test.ts`, contract fixtures) pass. Not done:
+    mounting on the run page (WEB-06, Batın's) and the browser check of the labelled replay.
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beats 5 and 6);
     "Users operating model and proposed user journeys" (Journey 3 recover cancel or investigate);
     "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second
@@ -1167,7 +1177,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Blocked by: nothing
   - Progress (2026-10-04): the explanation is built but not mounted. `apps/web/src/lib/admission-rejection.ts` reads an admission rejection from a failed start-run response (`admissionRejectionFromError`: a 4xx whose safe error body carries `resource_out_of_scope`, `destination_not_allowed`, `template_not_allowed`, `limit_not_allowed` or `invalid_arguments`; anything else is not explained as one) and names the form fields to change (`explainAdmissionRejection`). `apps/web/src/components/admission-rejection.tsx` exports `AdmissionRejectionNotice({rejection, onResubmit, isSubmitting})`: it shows the reason code, the server's safe message, what was unavailable and the fields to change, says no passport or run exists and that nothing was narrowed, and resubmits only when the operator presses its button (type "button", never a form submit). For the form's owner to mount in `task-form.tsx`: on a failed `startRun`, call `admissionRejectionFromError(result.error)`, keep every field state as it is, render the notice, and call the existing submit only from `onResubmit`. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (74 passed, 12 of them new: a rejection shows its code, message and the scope to change; a non-admission failure is not explained as one; rendering never calls `onResubmit`; the button is not a form submit; markup in a server message is escaped). Not done, so not ticked: the notice is not mounted in the form, and the browser check with an over-scope request has not run.
 
-- [ ] **WEB-12 · Render the report from the stored report and its registered template**
+- [x] **WEB-12 · Render the report from the stored report and its registered template**
   - **Report 1.1 change:** Renders both reports; beats 4 and 7.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: API-18, WEB-06 · Needs: X-64 · Provides: nothing
@@ -1183,6 +1193,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary); "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 3)
   - Blocked by: `stored report read`; `final result format`
+  - Completed (2026-10-04): lane web/reports. The page `apps/web/src/app/runs/[id]/reports/[reportId]/page.tsx` loads one stored report through the same-origin route `app/api/runs/[id]/reports/[reportId]/route.ts` (proxyUpstream to `GET /api/runs/{id}/reports/{reportId}`) and `lib/clients/reports-client.ts`, whose guard `isReportView` accepts only the two registered templates, a consistent withheld state, a 64-hex content hash and a non-empty source trail; anything else is an error ("Report cannot be shown"), never free text. `components/report/report-content.tsx` renders the title, report id, run id, version and template with its version from the stored fields only, the content as plain text (never markup), or, when `contentWithheld` is set, the statement "Content withheld" and no content, even if a body were present. Checks: `pnpm --filter web run lint` (0 errors; 3 warnings in files this lane does not own), `typecheck` and `test` (49 passed, 12 new: the guard against both report-view fixtures and tampered copies, the client with encoded ids and the API's 404, the rendering of both fixtures, a tampered withheld report, markup as text, the failure words, and the route's upstream path). Browser check, quoted: on a live run (qwen3.5:4b, development demonstration) the model read both invoices, created the internal report, was denied its export (`report_export_restricted`), created the vendor report and waited for approval; as the signed-in demo operator, `/api/runs/{run}/reports/{vendor report}` answered 200 (404 for an unknown id, 401 without a session) and the page at `/runs/{run}/reports/{vendor report}` showed "Vendor reconciliation", version 1, `vendor_reconciliation_v1 (version 1)` and its stored content ("invoice_A01: external reference INV104 … duplicate reference: yes"). Not here: the classification label and source trail (WEB-27), the denial explanation (WEB-28), and marking a queued report's outbox entry as simulated, which is event data that `ReportView` does not carry (WEB-13 and the run timeline); the link from the run page is Batın's mount.
 
 - [ ] **WEB-13 · Label the simulated outbox, replays and the development demonstration**
   - **Report 1.1 change:** Label quote: "Do not describe a simulated outbox as live email delivery or an invoice report as a real payment operation."
@@ -1238,6 +1249,16 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Work: Show allowed, blocked and redacted decisions with their rule, reason code, revision and model purpose. Blocked text is withheld and never shown as consumed by the agent; a guard failure is a visible pause.
   - Done when: the hostile-note run shows the block before context and the clean run shows its allow.
   - Tests: `pnpm --filter web run test` with the contract fixtures.
+  - Progress (2026-10-04): `DecisionBadges` (`decision-badges.tsx`) is part of the WEB-09 timeline:
+    each event shows the controls that decided it as deterministic, signature or semantic badges
+    with the result, rule and revisions; a semantic verdict says live or fixture ("fixture verdict,
+    not detection quality"), a semantic check with nothing to classify shows not applicable, and a
+    blocked or redacted text is shown as withheld, never as consumed by the agent; a guard failure
+    shows "Nothing was released and the run is paused". Exact controls come from stored
+    `AssessmentRecord`s joined on the evaluation id; without them only a reason code that names
+    one control (signature_match, semantic_injection_detected, ...) produces a badge, never a
+    guessed one (no run-scoped assessment read exists in the API yet). Specs pass. Not done: the
+    hostile-note and clean runs on the page (WEB-06, Batın's).
   - Report: "Live demonstration storyboard and proof checks" (beat 10); "Users operating model and proposed user journeys" (Journey 3)
   - Blocked by: nothing
 
