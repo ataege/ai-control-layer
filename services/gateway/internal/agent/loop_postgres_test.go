@@ -39,6 +39,16 @@ type loopWorld struct {
 	vendorID                 string
 	repository               *repository.Repository
 	recordedReasons, applied []string
+	// results validates final answers; nil uses acceptingFinalResults.
+	results FinalResultValidator
+}
+
+// acceptingFinalResults is a labelled test stand-in that accepts every final answer with a fixed
+// reference, for tests that are not about the final-result check (GO-26 has its own tests).
+type acceptingFinalResults struct{}
+
+func (acceptingFinalResults) Validate(context.Context, string, string, string) (string, contracts.ReasonCode, error) {
+	return `{"report_ids":["00000000-0000-4000-8000-000000000001"]}`, "", nil
 }
 
 // passportOptions adjust the admitted passport for one test.
@@ -345,6 +355,10 @@ func newTestLoopWithSecurity(t *testing.T, world *loopWorld, stepper ModelSteppe
 func newTestLoopWithCatalog(t *testing.T, world *loopWorld, stepper ModelStepper, securityModel ModelCaller, catalogSource CatalogSource) *Loop {
 	t.Helper()
 	scopes := testScopes{repository: world.repository}
+	var results FinalResultValidator = acceptingFinalResults{}
+	if world.results != nil {
+		results = world.results
+	}
 	recordedSecurity, err := NewRecordingCaller(budget.NewCallLog(world.pool), securityModel, "test-fixture")
 	if err != nil {
 		t.Fatal(err)
@@ -371,6 +385,8 @@ func newTestLoopWithCatalog(t *testing.T, world *loopWorld, stepper ModelStepper
 		Steps:       budget.NewPostgresStore(world.pool),
 		Contexts:    NewContextStore(world.pool),
 		Telemetry:   NewTelemetry(world.pool),
+		Recovery:    NewRecovery(world.pool, budget.NewPostgresStore(world.pool)),
+		Results:     results,
 		Logger:      slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
 	})
 	if err != nil {
