@@ -89,7 +89,11 @@ func validControlRecord(record security.ControlRecord) bool {
 	}
 	switch record.ControlClass {
 	case security.ClassSemantic:
-		if record.VerdictSource != security.VerdictLive && record.VerdictSource != security.VerdictFixture {
+		// A semantic check that made no model call (outcome not_applicable, for example "no free-text
+		// arguments") has no verdict to label; the table's check allows exactly that case.
+		unclassified := record.Outcome == security.OutcomeNotApplicable && record.VerdictSource == "" &&
+			record.Verdict == nil && record.SecurityModelCallID == ""
+		if !unclassified && record.VerdictSource != security.VerdictLive && record.VerdictSource != security.VerdictFixture {
 			return false
 		}
 		return record.Verdict == nil || (!math.IsNaN(record.Verdict.Score) && !math.IsInf(record.Verdict.Score, 0))
