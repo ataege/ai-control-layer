@@ -136,3 +136,17 @@ func (store *ContextStore) AppendCorrection(ctx context.Context, organizationID,
 	}
 	return nil
 }
+
+// HasStep reports whether the run's context already holds an entry of the step.
+func (store *ContextStore) HasStep(ctx context.Context, organizationID, runID string, stepNumber int) (bool, error) {
+	if store == nil || store.pool == nil {
+		return false, ErrContextStorage
+	}
+	var exists bool
+	err := store.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM runtime.context_entries
+		WHERE organization_id = $1 AND run_id = $2 AND step_number = $3)`, organizationID, runID, stepNumber).Scan(&exists)
+	if err != nil {
+		return false, ErrContextStorage
+	}
+	return exists, nil
+}

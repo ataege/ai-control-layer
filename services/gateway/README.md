@@ -428,8 +428,31 @@ following GO-02's recovery rules:
   (`{"withheld":true,"reason_code":"outcome_unknown"}`), so the model continues without the action
   being executed again.
 
-Awaiting-approval, paused, stopped and completed runs keep their state and reason. The reads of
-actions and attempts are read-only.
+Awaiting-approval, paused, stopped and completed runs keep their state and reason. A waiting run
+resumes its original stored action after a restart (GO-40). The reads of actions and attempts are
+read-only.
+
+## Review wait and resume (GO-40)
+
+When the gate sends an action to review, the loop moves the run to `awaiting_approval` with the
+action id and writes `run.awaiting_approval` in the same transaction, and the claim completes: no
+job holds a lease while the run waits, so the wait survives the browser closing and the worker
+stopping.
+
+- **Decision.** `policy.Approvals.Decide` (w3) records the decision and enqueues the continuation
+  job. The next claim finds the decided action (`DecidedActionFor`), moves the run back to
+  `running` with `run.resumed`, then runs the usual run check (cancel request, passport expiry). An
+  approved action with an open grant executes as the original stored action (same id and digest;
+  never a new proposal), through the executor's recheck.
+- **Rejection or expiry.** Nothing executes. The run continues on the blocked-action path: a denial
+  with `approval_required` (rejected; `approval_rejected` once 3c's reason reaches main) or
+  `approval_expired`, counted as a correction, with fixed feedback to the model.
+- **Undecided approvals.** `agent.ApprovalExpiry`, started by `cmd/gateway`, calls
+  `policy.Approvals.ExpireOverdue` every 5 s. Each closure, its event and the continuation job commit
+  together in policy, so an approval nobody decides closes at its expiry while no worker holds the
+  run.
+- **Corrections exhausted.** When the correction limit stops a run, the stop carries the fixed
+  message "The task used up its corrections after repeated denials, so the run is stopped."
 
 ## Production chain and gateway wiring (GO-11, GO-09)
 
@@ -922,6 +945,12 @@ Fixtures: `hostile_note_redirect_record_v1` (reads `invoice_B01`), `hostile_note
   `UNEXPECTED` (for example `decision_unavailable` when the active catalog cannot be loaded). Exit 2:
   not run (usage, unknown run or fixture, live run, or a report the fixture needs is missing).
 
+It needs an enforceable active catalog with its signature feed, like the gateway itself. Until the
+feed import is on `main`, load `config/attack-signatures.json` into `app.signature_feed_revisions`
+and the pointer's `active_feed_revision_id` by hand. Checked on 2026-10-03 on a private test
+database that way: all three fixtures printed the expected denial, exit 0, with every action and
+event labelled and no execution attempt.
+
 ## Performance benchmark (GO-81)
 
 `cmd/benchmark` measures one permitted operation: the policy lookup (active catalog revision and
@@ -1004,7 +1033,8 @@ runtime repository (`internal/repository`) exists; it moves there if that fits.
   so its lease expires and it is claimed again; the worker cannot tell what the handler committed.
   Replay safety after such a reclaim is GO-02's rule, implemented in GO-49.
 - **Status values** (Go-internal, not the X-11 run state): `queued`, `running`, `completed`,
-  `failed`. GO-40 adds the review-wait status. Production code only updates jobs; the gateway role
+  `failed`. A review wait has no job status: the claim completes and the decision enqueues a new
+  job (GO-40). Production code only updates jobs; the gateway role
   has no `DELETE` on them.
 - `attempt_count` counts claims. It is not a dispatch attempt: `model_calls` and
   `execution_attempts` are the dispatch records (GO-02).

@@ -114,6 +114,8 @@ func run() error {
 		return err
 	}
 	chain.Worker.Start()
+	// Overdue approvals close as expired while no worker holds their run (GO-40).
+	go chain.Expiry.Run(signalContext)
 	workerStopped := make(chan struct{})
 	go func() {
 		defer close(workerStopped)
