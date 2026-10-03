@@ -1137,7 +1137,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     challenge" (Why successful work matters as much as blocked work)
   - Blocked by: nothing
 
-- [ ] **WEB-11 · Explain an admission rejection and require explicit resubmission**
+- [x] **WEB-11 · Explain an admission rejection and require explicit resubmission**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 1-2.5 h)
   - Depends on: WEB-05 · Needs: X-13 · Provides: nothing
   - Paths: `apps/web/src/app` (the task setup page from WEB-05)

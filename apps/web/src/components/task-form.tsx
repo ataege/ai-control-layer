@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ProductClient, getSafeMessage } from "@/lib/product-client";
+import { ProductClient, getSafeMessage, getErrorCode } from "@/lib/product-client";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
@@ -17,6 +17,7 @@ export function TaskForm() {
   const [options, setOptions] = React.useState<TaskFormOptions | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [errorCode, setErrorCode] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   // Form State
@@ -70,6 +71,7 @@ export function TaskForm() {
     
     setIsSubmitting(true);
     setError(null);
+    setErrorCode(null);
 
     try {
       const result = await ProductClient.startRun({
@@ -86,6 +88,7 @@ export function TaskForm() {
 
       if (!result.ok) {
         setError(getSafeMessage(result.error));
+        setErrorCode(getErrorCode(result.error) || null);
         return;
       }
 
@@ -231,8 +234,17 @@ export function TaskForm() {
           </div>
 
           {error && (
-            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
+              <div className="font-semibold mb-1">Admission Rejected</div>
+              <div>{error}</div>
+              {errorCode && (
+                <div className="mt-2 text-xs bg-destructive/10 inline-block px-2 py-1 rounded font-mono">
+                  Authority / Scope Limit: {errorCode}
+                </div>
+              )}
+              <div className="mt-2 text-xs opacity-80">
+                Please narrow your request scope or limits and resubmit.
+              </div>
             </div>
           )}
         </CardContent>

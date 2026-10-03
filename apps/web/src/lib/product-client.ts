@@ -51,6 +51,15 @@ export function getSafeMessage(error: FetchJsonError | string): string {
   return REASON_CODE_MESSAGES[error.kind] || "An unknown error occurred.";
 }
 
+export function getErrorCode(error: FetchJsonError | string): string | undefined {
+  if (typeof error === "string") return error;
+  if (error.kind === "http") {
+    const code = (error.body as { error?: { code?: string } })?.error?.code;
+    return code || (error.status === 401 ? "unauthorized" : undefined);
+  }
+  return error.kind;
+}
+
 // Type Guards for frozen contracts
 function isStartRunResponse(data: unknown): data is StartRunResponse {
   return typeof data === "object" && data !== null && 
