@@ -43,8 +43,8 @@ if (
 if (selectedServiceNames.some((serviceName) => serviceName !== "gateway")) {
   console.error("[dev] building @workspace/contracts...");
   const contractsBuildExitCode = await runCommand(
-    process.platform === "win32" ? "npx.cmd" : "npx",
-    ["pnpm", "--filter", "@workspace/contracts", "run", "build"],
+    "pnpm",
+    ["--filter", "@workspace/contracts", "run", "build"],
     { env: environment, cwd: repositoryRoot },
   );
   if (contractsBuildExitCode !== 0) {
@@ -55,21 +55,38 @@ if (selectedServiceNames.some((serviceName) => serviceName !== "gateway")) {
   }
 }
 
-// Mirrors the web block in infra/compose.yaml: the web app must never hold the
-// service token or the database credentials, so its child gets a filtered environment.
-const WEB_FORBIDDEN_VARIABLE_PATTERN = /^(GATEWAY_SERVICE_TOKEN$|POSTGRES_)/;
-const webEnvironment = Object.fromEntries(
-  Object.entries(environment).filter(
-    ([variableName]) => !WEB_FORBIDDEN_VARIABLE_PATTERN.test(variableName),
+// Mirrors infra/compose.yaml: only the gateway receives the local model settings, only the API
+// holds the session signing secret, and the web app holds no server secret at all.
+const GATEWAY_ONLY_VARIABLE_PATTERN = /^MODEL_/;
+const API_ONLY_VARIABLE_PATTERN = /^AUTH_JWT_SECRET$/;
+const WEB_FORBIDDEN_VARIABLE_PATTERN =
+  /^(GATEWAY_SERVICE_TOKEN$|OPERATOR_CONTEXT_SIGNING_KEY$|POSTGRES_)/;
+
+// Copies the environment without the variables that match any of the given patterns.
+function environmentWithout(...forbiddenPatterns) {
+  return Object.fromEntries(
+    Object.entries(environment).filter(
+      ([variableName]) => !forbiddenPatterns.some((pattern) => pattern.test(variableName)),
+    ),
+  );
+}
+
+const environmentByService = {
+  web: environmentWithout(
+    GATEWAY_ONLY_VARIABLE_PATTERN,
+    API_ONLY_VARIABLE_PATTERN,
+    WEB_FORBIDDEN_VARIABLE_PATTERN,
   ),
-);
+  api: environmentWithout(GATEWAY_ONLY_VARIABLE_PATTERN),
+  gateway: environmentWithout(API_ONLY_VARIABLE_PATTERN),
+};
 
 const services = selectedServiceNames.map((serviceName) => ({
   name: serviceName,
-  command: process.platform === "win32" ? "npx.cmd" : "npx",
-  commandArguments: ["pnpm", "--filter", serviceName, "run", "dev"],
+  command: "pnpm",
+  commandArguments: ["--filter", serviceName, "run", "dev"],
   cwd: repositoryRoot,
-  env: serviceName === "web" ? webEnvironment : environment,
+  env: environmentByService[serviceName],
 }));
 
 process.exit(await superviseServices(services, { env: environment }));

@@ -12,6 +12,14 @@ until the team assigns the role.
 | [project-architecture.md](project-architecture.md)                     | Architecture specification: system architecture, task execution flow and report information flow as Mermaid source, service ownership, routes, modules, data ownership, interfaces, tools and key checks. Proposed design; kept verbatim (listed in `.prettierignore`).                                                                                                                                                                                                                                                                                                                                                                                                               |
 | [competition-rules.pdf](competition-rules.pdf)                         | Terms and conditions of the "AI Control Layer" competition. The PDF prints the start and end times as 11:00 PM; the team lead confirmed that both are 11:00 AM: start no earlier than 11:00 on 3 October 2026, submission no later than 11:00 on 4 October 2026. `AGENTS.md`, "Current phase", summarizes the rules.                                                                                                                                                                                                                                                                                                                                                                  |
 | [competition-criteria.pdf](competition-criteria.pdf)                   | The detailed challenge criteria ("AI Control Layer", supplied as `CRIETRIA AI Control Layer.pdf`; the report cites it as [S10]): the control layer, centralized policy engine, deterministic and semantic controls, budget governance, historical attack mitigation, security reporting and a self-testing suite; judges run the tests, submit ad-hoc prompts, edit configuration and inspect telemetry; no paid subscriptions are provided. Its weights (30/20/20/15/15) differ from the rules (30/20/20/20/10) for the self-testing suite and practicality (`scoring weights`).                                                                                                     |
+| [organizer-questions.md](organizer-questions.md)                       | RS-01: the organizer message, why each question is asked, the verbatim answer table and the proposed pre-event disclosure.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| [requirements.md](requirements.md)                                     | RS-03: every requirement of the rules [S9], criteria [S10], general HackYeah rules [S11] and FAQ [S12], with roadmap coverage, the report-vs-official differences D-1 to D-10 with outcomes, the proposed sample signatures and gaps.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| [storyboard.md](storyboard.md)                                         | RS-04: the twelve demo beats in three segments with proofs, captures, replay use, judge interactions, labels and fallbacks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| [claim-to-proof.md](claim-to-proof.md)                                 | RS-05: every presentation claim with its scope, proof and status, and the claims to avoid.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| [submission-checklist.md](submission-checklist.md)                     | RS-09: HackTribe fields, freeze record, description skeleton, submit and after-deadline steps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| [presentation.md](presentation.md)                                     | RS-08: the ten-slide content with final-build placeholders.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| [source-register.md](source-register.md)                               | RS-06: sources S1 to S15 with what was checked, and licenses of everything added after the starter.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| [comparison.md](comparison.md)                                         | RS-07: comparison with existing controls from primary pages and the OWASP LLM Top 10 2025 mapping.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 The report lists its internal sources as `project-architecture.md`, `project-architecture.mmd`,
 `task-execution-flow.mmd`, `report-information-flow.mmd`, `hybrid-security-flow.mmd` and
@@ -87,22 +95,29 @@ version and export denial fields alongside those contracts." The web + API imple
 them in `packages/contracts`; each recorded owner decides its contract's shape after a quick shared
 review, and Go stays the authority for action canonicalization and artifact classification.
 
-| Contract                                                                                                                                                                  | Owner        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| Start-run request                                                                                                                                                         | not recorded |
-| Passport representation                                                                                                                                                   | not recorded |
-| Action proposal                                                                                                                                                           | not recorded |
-| Approval decision                                                                                                                                                         | not recorded |
-| Run state                                                                                                                                                                 | not recorded |
-| Safe event                                                                                                                                                                | not recorded |
-| Report and lineage summary (report 1.1: "Shared schemas should define supported requests, report lineage summaries and errors")                                           | not recorded |
-| Authenticated operator context (repository addition, not in the report's list; depends on decision 7)                                                                     | not recorded |
-| Policy activation and catalog revision, including the `policy.yaml` schema (report 1.2)                                                                                   | not recorded |
-| Semantic verdict, the guard result (report 1.2: "a schema-validated risk category, score in the configured numeric range and a bounded reason code")                      | not recorded |
-| Per-purpose reservations and usage (report 1.2)                                                                                                                           | not recorded |
-| Security summary and audit export record (report 1.2)                                                                                                                     | not recorded |
-| Telemetry fields (report 1.2)                                                                                                                                             | not recorded |
-| Control evaluation adapter, `POST /internal/control/evaluate` (report 1.2: "a documented Go client/HTTP contract for governed model calls and registered tool proposals") | not recorded |
+| Contract                                                                                                                                                                  | Owner                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Start-run request                                                                                                                                                         | web + API implementer                                                       |
+| Passport representation                                                                                                                                                   | Go implementer                                                              |
+| Action proposal                                                                                                                                                           | Go implementer                                                              |
+| Approval decision                                                                                                                                                         | web + API implementer                                                       |
+| Run state                                                                                                                                                                 | Go implementer                                                              |
+| Safe event                                                                                                                                                                | Go implementer                                                              |
+| Report and lineage summary (report 1.1: "Shared schemas should define supported requests, report lineage summaries and errors")                                           | Go implementer                                                              |
+| Authenticated operator context (repository addition, not in the report's list; depends on decision 7)                                                                     | web + API implementer, with the Go implementer (waits on decisions 4 and 7) |
+| Policy activation and catalog revision, including the `policy.yaml` schema (report 1.2)                                                                                   | web + API implementer                                                       |
+| Semantic verdict, the guard result (report 1.2: "a schema-validated risk category, score in the configured numeric range and a bounded reason code")                      | Go implementer                                                              |
+| Per-purpose reservations and usage (report 1.2)                                                                                                                           | Go implementer                                                              |
+| Security summary and audit export record (report 1.2)                                                                                                                     | web + API implementer                                                       |
+| Telemetry fields (report 1.2)                                                                                                                                             | Go implementer                                                              |
+| Control evaluation adapter, `POST /internal/control/evaluate` (report 1.2: "a documented Go client/HTTP contract for governed model calls and registered tool proposals") | Go implementer                                                              |
+
+Owners recorded by the lead on 2026-10-03 (SH-07, contract part). The owner decides the shape after
+the quick shared review; anyone may draft. Because the Go implementer owns most contracts and is
+also building GO-06, the web + API side drafts the Go-owned contracts in `packages/contracts` on its
+branch for the Go implementer's approval. A contract is frozen when its owner approves the draft and
+it is merged into `main` through SH-11; until then it is a draft, and nothing built on it counts as
+done. The M0 freeze (SH-10) is this per-contract approval, not one meeting.
 
 Proposed reason vocabulary (reports 1.1 and 1.2): `resource_out_of_scope`, `destination_not_allowed`,
 `report_export_restricted`, `report_lineage_missing`, `source_policy_changed`, `template_not_allowed`,
@@ -130,8 +145,19 @@ writes each outcome down here when it is settled.
    to commit the report or outbox effect, trusted lineage, runtime completion and associated events",
    which matches the report's recommendation. The starter still has one database user. Owner: the lead
    (database roles, by default).
-3. **Browser to API path. Settled: same-origin forwarder.** One same-origin route handler in Next.js forwards an allowlist of top-level API prefixes, the session cookie and a fixed set of headers, and streams the response. Owner: the web + API implementer.
-4. **Operator context to Go. Settled: signed, short-lived JWT.** NestJS encodes the operator context (userId, organizationId, roles) into a JWT signed symmetrically using `GATEWAY_SERVICE_TOKEN` with a short expiry (e.g., 1 minute). Go verifies the signature to ensure integrity and authenticity. Owner: the web + API implementer.
+3. **Browser to API path. Open.** The Next.js proxy forwards no cookies or authorization headers and
+   buffers a JSON response with a ten second timeout. The report allows authenticated polling before
+   server-sent events. Proposed, not decided: one same-origin route handler that forwards an allowlist
+   of top-level API prefixes, the session cookie and a fixed set of headers, and streams the response.
+   Owner: the web + API implementer.
+4. **Operator context to Go. Settled with decision 7 by the lead on 2026-10-03.** NestJS turns the
+   verified operator context (actor, organization, roles) into a short-lived signed JWT and sends it to
+   Go in an `X-Operator-Context` header on every runtime command, next to the service token. Go verifies
+   the signature, the expiry and the service identity before it acts, and still authorizes each command
+   against its organization and run itself. This matches the architecture's "signed, short-lived
+   operator context containing the user and organization". Not implemented yet; the signing key is an
+   API and gateway secret, never sent to the browser (SH-20). Owner: the web + API implementer with the
+   Go implementer.
 5. **Background worker in Go. Settled by the report:** durable jobs in PostgreSQL, claimed with a lease
    and released during an approval wait, and no message broker; one worker process is the report's
    simple option. The worker must be covered by graceful shutdown and the readiness check. Owner: the Go
@@ -143,11 +169,17 @@ writes each outcome down here when it is settled.
    ("Choose a local model that runs on the actual machine"), the runtime and the accounting rule
    (tokens where reported, calls, request duration; optional estimated commercial cost) are open. Owner:
    the Go implementer with the lead (infrastructure).
-7. **Authentication mechanism. Settled: HttpOnly Cookie + JWT.** NestJS
-   authenticates users and checks organization membership ("AuthModule: login/session verification,
-   organization membership and role checks"); one seeded operator stands in for onboarding in a
-   clearly labelled development demonstration. The credential mechanism uses an HttpOnly cookie containing a symmetrically signed JWT, providing a secure, stateless session. Owner: the web + API
-   implementer.
+7. **Authentication mechanism. Settled by the lead on 2026-10-03: an HttpOnly cookie carrying a
+   signed JWT.** NestJS (`AuthModule`) checks the operator's credential, then issues a JWT signed with a
+   symmetric key and sets it in an HttpOnly cookie that browser JavaScript cannot read; NestJS also
+   checks organization membership and roles. The seeded operator is a development demonstration user,
+   created by an explicit seed command and labelled "Development Demonstration" in the interface. Not in
+   the repository yet: no implementation of this has been pushed, so guardrail 2 still applies
+   (`UnimplementedAuthProvider` answers 501 until the real provider lands). Details the web + API
+   implementer fixes in the implementation: password hashing, token lifetime, cookie attributes,
+   logout (a stateless JWT cannot be revoked before it expires, so keep its lifetime short) and the
+   signing-key variable, generated by `pnpm run setup` and never sent to the browser (SH-20). Owner:
+   the web + API implementer.
 8. **Reuse of pre-event work. Open.** The report says not to presume that pre-event code or prepared
    assets are eligible. The competition rules say work starts no earlier than 11:00 on 3 October 2026
    and say nothing about reusing prepared code. Report 1.2: "The criteria allow pre-existing agents,
@@ -161,7 +193,9 @@ writes each outcome down here when it is settled.
 Each item is open until the document owner records the outcome here; the roadmap cites them in
 "Blocked by" (`docs/roadmap/README.md`, "Open decisions and blockers").
 
-- `read path`: Settled: NestJS calls corresponding private Go endpoints using the `GatewayClientService` to fetch run and event data, ensuring Go remains the sole authority for runtime state access.
+- `read path`: the architecture reads authorized runtime views ("NestJS has read access only to
+  authorized runtime views needed for the interface"); the report also says NestJS calls "corresponding
+  private Go endpoints".
 - `report storage`: lineage in `runtime` (`report_lineage`) per the architecture, or with the reports in
   `demo` per the report; context manifests appear only in the report.
 - `internal report rendering`: whether the internal report may hold model-written text and so needs a

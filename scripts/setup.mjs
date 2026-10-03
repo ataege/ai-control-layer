@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // First-time setup (`pnpm run setup`): reports prerequisites and prepares the root .env.
 // It installs nothing, never overwrites a non-empty value and never prints a secret.
-import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 
 import { readCommandOutput } from "./lib/commands.mjs";
+import { GENERATED_SECRETS } from "./lib/generated-secrets.mjs";
 import { printHeading, printStatus } from "./lib/output.mjs";
 import {
   fromRepositoryRoot,
@@ -15,12 +15,6 @@ import {
 } from "./lib/repo-root.mjs";
 
 const MINIMUM_GO_VERSION = "1.27";
-
-// Keys that setup fills with a random local secret (URL-safe base64, 4 chars per 3 bytes).
-const GENERATED_SECRETS = {
-  POSTGRES_PASSWORD: () => randomBytes(24).toString("base64url"), // 32 characters
-  GATEWAY_SERVICE_TOKEN: () => randomBytes(36).toString("base64url"), // 48 characters
-};
 
 // ---------------------------------------------------------------- versions
 
@@ -138,7 +132,7 @@ function planEnvFile(exampleContent, existingContent) {
   const appendedKeys = [];
 
   // Fill generated keys that are present but empty, in place.
-  for (const [secretKey, generateSecret] of Object.entries(GENERATED_SECRETS)) {
+  for (const [secretKey, { generate: generateSecret }] of Object.entries(GENERATED_SECRETS)) {
     if (!(secretKey in currentValues) || currentValues[secretKey] !== "") continue;
     const emptyAssignment = new RegExp(
       `^([ \\t]*(?:export[ \\t]+)?${escapeForRegExp(secretKey)}[ \\t]*=)[ \\t]*(?:""|'')?[ \\t]*(?=\\r?$)`,
@@ -155,7 +149,7 @@ function planEnvFile(exampleContent, existingContent) {
   const missingKeys = Object.keys(exampleValues).filter((key) => !(key in currentValues));
   if (missingKeys.length > 0) {
     const appendedLines = missingKeys.map((missingKey) => {
-      const generateSecret = GENERATED_SECRETS[missingKey];
+      const generateSecret = GENERATED_SECRETS[missingKey]?.generate;
       if (generateSecret) generatedKeys.push(missingKey);
       else appendedKeys.push(missingKey);
       return `${missingKey}=${generateSecret ? generateSecret() : exampleValues[missingKey]}`;
