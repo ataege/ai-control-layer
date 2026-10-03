@@ -141,3 +141,23 @@ provenance again at effect time, so an approval can never override the restricti
 
 f3's agent loop calls these after each denial and stops the run through
 `repository.Tx.TransitionRun`; it keeps no counter of its own.
+
+## Frozen review material (GO-43)
+
+When the deterministic outcome (after the semantic check) is `approval_required`, the gate asks its
+`ReviewFreezer` before recording the decision. Without a freezer, or when freezing fails, the
+action is denied (`decision_unavailable`): nothing frozen means nothing to review.
+
+`PostgresReviewFreezer` builds a `ReviewPayload` from trusted rows in one transaction and inserts
+it into `runtime.review_payloads` (migration `1791080000000`, immutable rows, gateway SELECT and
+INSERT only): the tool and canonical arguments, the passport and policy revision, the exact
+recipient (Worker 2's `tools.ResolveRecipientForReview` on the stored passport's scope), and for
+`queue_report` the stored report exactly as it would be queued (id, version, template and
+projection versions, classification, content hash, content) with its sorted source manifest
+(versions and consumed fields) and the manifest's digest. The review expires with the passport.
+
+`payload_digest` is SHA-256 over the payload's canonical JSON, so a change to any material field is
+detectable; the action's own digest stays untouched. `StaleSources` compares the frozen source
+versions with the current ones by exact integer equality (the `record versions` rule), which GO-45
+uses for `resource_version_changed`. The content and the address stay in restricted storage: the
+`approval.requested` event carries only the report id, template and classification.
