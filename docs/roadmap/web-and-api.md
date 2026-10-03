@@ -944,7 +944,8 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-16 · Check role and object access on every read and command**
+- [x] **API-16 · Check role and object access on every read and command**
+  - Done (2026-10-04): per the lead's facade split, NestJS verifies the session/current app membership and reviewer roles before Go; Go remains the authoritative organization/object check and its 404 is preserved. Database-backed tests seed two organizations in rollback-only app transactions and authenticate via real scrypt credentials and stored hashed sessions. They cover state, usage, events, report, review, approval, cancellation and judge forwarding, foreign-object 404, current-role revocation and deleted membership refusal before Go. The Go side in these database tests is explicitly a labelled contract fixture, not runtime execution. Checks: API lint, typecheck and build exited 0; API unit tests: "319 passed"; `pnpm test:db api`: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". No test writes runtime or demo state.
   - **Report 1.2 change:** Roles add the configuration operator (policy reload) and the security reader (audit export); the policy administrator edits "the validated central policy file".
   - **Report 1.1 change:** Roles: "approval cannot widen the passport or override a source restriction"; the policy administrator role is to "Maintain versioned policies, trusted source classifications, and the two permitted template manifests".
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
