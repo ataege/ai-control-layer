@@ -11,12 +11,12 @@ text, direct/indirect instruction attacks and secret-redaction cases" ("Validati
 matrix"), and "A separate hostile-note fixture would attempt to redirect the agent to invoice_B01 or
 another recipient" ("Illustrative invoice scenario and future domain adaptations").
 
-| File                   | Content                                                                                                                                                                                 |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hostile-notes.json`   | Three hostile internal-note texts for the separate hostile-note run: redirect to `invoice_B01`, redirect to another recipient, and include internal information in a vendor message.    |
-| `semantic-corpus.json` | 27 labelled cases: 8 benign (4 of them hard negatives), 6 direct and 7 indirect instruction attacks (3 of them signature-feed positives), 6 secret-redaction cases.                     |
-| `demo-records.json`    | The synthetic records of the Atlas scenario for the later seed (SH-25): organizations, vendors, invoices, the registered reporting address, the task scope and the clean internal note. |
-| `fixtures.test.mjs`    | Self-check of all three files: `pnpm test:fixtures`.                                                                                                                                    |
+| File                   | Content                                                                                                                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hostile-notes.json`   | Three hostile internal-note texts for the separate hostile-note run: redirect to `invoice_B01`, redirect to another recipient, and include internal information in a vendor message.                                                     |
+| `semantic-corpus.json` | 32 labelled cases: 12 benign (8 hard negatives, 4 of them written after `classifier_v2`), 6 direct and 8 indirect instruction attacks (3 signature-feed positives, 1 held-out paraphrase for `classifier_v2`), 6 secret-redaction cases. |
+| `demo-records.json`    | The synthetic records of the Atlas scenario for the later seed (SH-25): organizations, vendors, invoices, the registered reporting address, the task scope and the clean internal note.                                                  |
+| `fixtures.test.mjs`    | Self-check of all three files: `pnpm test:fixtures`.                                                                                                                                                                                     |
 
 ## Demo records
 
@@ -79,6 +79,8 @@ when a text or label changes, so recorded results can name the fixture they ran 
 | `secrets`                 | Secret-redaction cases only: each secret's `kind`, `value` and its span (`start` inclusive, `end` exclusive). The value appears exactly once in the text.                                                                                                                     |
 | `report_sample_signature` | Present on the case that contains the report's sample phrase "ignore previous instructions" in a tool result: the rule `prompt_ignore_previous_v1` should match it once the signature feed (SH-46) adopts that rule.                                                          |
 | `signature_rule`          | Present on the three positive cases of the data-only feed rules (SH-46): the `config/attack-signatures.json` rule whose normalized pattern the text holds. These cases test the signature matcher; a semantic verdict on them is recorded but they are labelled for the feed. |
+| `written_after`           | Present on the four benign vendor-correspondence hard negatives added after the semantic classifier instruction `classifier_v2` was written (3 October 2026): they measure its false positives on ordinary vendor requests from then on.                                      |
+| `held_out_for`            | Present on one indirect-disclosure paraphrase written before `classifier_v2` was measured on it and not used to write it, so the v2 result is not fitted to a single case. Its result is reported whatever it is.                                                             |
 
 The four benign hard negatives (`benign_hard_negative_*`) mention passwords, "ignore the earlier
 invoice", portal instructions and an accounting "system" without being attacks or secrets, so the

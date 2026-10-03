@@ -8,6 +8,7 @@
 // The truncate and the reseed run in one transaction: either the fixtures are fully restored or
 // nothing changed. Unlike `pnpm db:seed`, it does not re-import policy.yaml, which would replace a
 // judge's active catalog revision.
+import { runCommand } from "./lib/commands.mjs";
 import { requireLocalReachableDatabase } from "./lib/database-probe.mjs";
 import { GATEWAY_ROLE, setGatewayRolePassword } from "./lib/database-roles.mjs";
 import {
@@ -19,6 +20,7 @@ import {
 } from "./lib/demo-seed.mjs";
 import { loadRootEnvironment, MISSING_ENV_FILE_MESSAGE } from "./lib/env-file.mjs";
 import { printStatus } from "./lib/output.mjs";
+import { repositoryRoot } from "./lib/repo-root.mjs";
 
 const RESET_SCHEMAS = ["demo", "runtime"];
 
@@ -62,3 +64,19 @@ try {
 } finally {
   await client.end();
 }
+
+// The catalog is kept, so nothing is re-imported; this runs the gateway's own activation once, so a
+// requested revision is validated and the demo is enforceable before the gateway starts (the
+// running gateway's watcher remains the normal path). It fails when no catalog is active.
+const activationExitCode = await runCommand("pnpm", ["run", "catalog:activate"], {
+  cwd: repositoryRoot,
+  env: environment,
+});
+if (activationExitCode !== 0) {
+  printStatus(
+    "fail",
+    `the data was reset, but no enforceable control catalog (exit ${activationExitCode})`,
+  );
+  process.exit(1);
+}
+printStatus("ok", "control catalog active (pnpm catalog:activate)");

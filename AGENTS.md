@@ -159,7 +159,7 @@ Always write `pnpm run setup`. Bare `pnpm setup` is a pnpm built-in that edits t
 
 One workspace at a time: `pnpm --filter <name> run lint|typecheck|test|build`, where `<name>` is `web`, `api`, `gateway` or `@workspace/contracts`. `@workspace/ui` has only `lint` and `typecheck`, and `@workspace/config` has no scripts.
 
-No migration exists yet. The migration owner adds the first one with the first table (see `docs/team-workflow.md`). Report 1.2 names the test and reset commands `make verify-controls` and `make reset-demo`; the lead decided on 2026-10-03 that they are thin targets in a root `Makefile` that only call the pnpm scripts `verify:controls` and `reset:demo`, so the logic stays in the root `package.json` and `make` is optional (`test command` in `docs/roadmap/README.md`). Nothing runs migrations or creates tables at application startup.
+The migrations in `apps/api/src/database/migrations` create the `app`, `runtime` and `demo` schemas and the service database roles; the migration owner adds and orders every new one (see `docs/team-workflow.md`). From a clean checkout run `pnpm db:migration:run`, `pnpm db:roles` and `pnpm db:seed` after `pnpm infra:up`; `README.md`, "Quick start", has the full order. Report 1.2 names the test and reset commands `make verify-controls` and `make reset-demo`; the lead decided on 2026-10-03 that they are thin targets in a root `Makefile` that only call the pnpm scripts `verify:controls` and `reset:demo`, so the logic stays in the root `package.json` and `make` is optional (`test command` in `docs/roadmap/README.md`). Nothing runs migrations or creates tables at application startup.
 
 ## Implementation workflow
 
