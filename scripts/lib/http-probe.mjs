@@ -1,13 +1,19 @@
-// Bounded HTTP GET used by the smoke checks. Never throws: failures are returned as data.
+// Bounded HTTP request (GET unless told otherwise) used by the smoke checks. Redirects are not followed,
+// so a redirect is seen as the status the server sent. Never throws: failures are returned as data.
 
 /**
- * @returns {Promise<{ reached: boolean, status?: number, headers?: Headers, bodyText?: string,
- *   bodyJson?: unknown, failure?: string }>}
+ * @returns {Promise<{ reached: boolean, status?: number, headers?: Headers, setCookies?: string[],
+ *   bodyText?: string, bodyJson?: unknown, failure?: string }>}
  */
-export async function probeHttp(url, { headers = {}, timeoutMs = 5000 } = {}) {
+export async function probeHttp(
+  url,
+  { headers = {}, timeoutMs = 5000, method = "GET", body } = {},
+) {
   try {
     const response = await fetch(url, {
+      method,
       headers,
+      body,
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -16,6 +22,7 @@ export async function probeHttp(url, { headers = {}, timeoutMs = 5000 } = {}) {
       reached: true,
       status: response.status,
       headers: response.headers,
+      setCookies: response.headers.getSetCookie(),
       bodyText,
       bodyJson: parseJsonOrUndefined(bodyText),
     };

@@ -1,10 +1,11 @@
-import { fetchJson, postJson, FetchJsonResult } from "./fetch-json";
+import { fetchJson, postJson, FetchJsonResult, FetchJsonOptions } from "./fetch-json";
 import type {
+  RunEventsPage,
+  RunState,
+  RunUsage,
   StartRunRequest,
   StartRunResponse,
   TaskFormOptions,
-  RunView,
-  SanitizedEvent,
 } from "@workspace/contracts";
 
 export const REASON_CODE_MESSAGES: Record<string, string> = {
@@ -41,7 +42,7 @@ export function getSafeMessage(error: FetchJsonError | string): string {
     return REASON_CODE_MESSAGES[error] || "An unknown error occurred.";
   }
   if (error.kind === "http") {
-    const code = (error.body as { error?: { code?: string } } | undefined)?.error?.code;
+    const code = (error.body as { error?: { code?: string } })?.error?.code;
     if (code === "unauthorized") return "Invalid credentials.";
     if (code) return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
     if (error.status === 401) return "Invalid credentials.";
@@ -49,6 +50,15 @@ export function getSafeMessage(error: FetchJsonError | string): string {
   if (error.kind === "network") return "The server could not be reached.";
   if (error.kind === "timeout") return "The request timed out.";
   return REASON_CODE_MESSAGES[error.kind] || "An unknown error occurred.";
+}
+
+export function getErrorCode(error: FetchJsonError | string): string | undefined {
+  if (typeof error === "string") return error;
+  if (error.kind === "http") {
+    const code = (error.body as { error?: { code?: string } })?.error?.code;
+    return code || (error.status === 401 ? "unauthorized" : undefined);
+  }
+  return error.kind;
 }
 
 // Type Guards for frozen contracts
@@ -67,18 +77,99 @@ function isTaskFormOptions(data: unknown): data is TaskFormOptions {
   return typeof data === "object" && data !== null && "templates" in data && "vendors" in data;
 }
 
-function isRunView(data: unknown): data is RunView {
-  return typeof data === "object" && data !== null && "id" in data && "status" in data;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isSanitizedEventsResponse(
-  data: unknown,
-): data is { events: SanitizedEvent[]; nextCursor?: string } {
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * The X-11 run state the API returns for GET /api/runs/:id. The status is only required to be a
+ * string: an unknown status is shown as unknown by the page, never rejected here or shown as success.
+ */
+export function isRunState(data: unknown): data is RunState {
+  if (!isRecord(data)) return false;
+  const reference = data.resultReference;
   return (
-    typeof data === "object" &&
-    data !== null &&
-    "events" in data &&
-    Array.isArray((data as Record<string, unknown>).events)
+    typeof data.runId === "string" &&
+    typeof data.passportId === "string" &&
+    typeof data.status === "string" &&
+    (data.terminalReason === null || typeof data.terminalReason === "string") &&
+    (reference === null ||
+      (isRecord(reference) &&
+        Array.isArray(reference.reportIds) &&
+        reference.reportIds.every((reportId) => typeof reportId === "string")))
+  );
+}
+
+function isLedgerTokens(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.limit === null || isNumber(value.limit)) &&
+    isNumber(value.reserved) &&
+    isNumber(value.used)
+  );
+}
+
+function isPurposeUsage(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.purpose === "agent" || value.purpose === "security") &&
+    [
+      "dispatched",
+      "completed",
+      "failed",
+      "usageUnknown",
+      "inFlight",
+      "settledTokens",
+      "heldTokens",
+      "usageUnknownReservations",
+    ].every((field) => isNumber(value[field]))
+  );
+}
+
+/** The X-29 usage the API returns for GET /api/runs/:id/usage. */
+export function isRunUsage(data: unknown): data is RunUsage {
+  if (!isRecord(data)) return false;
+  const { ledger, toolAttempts } = data;
+  return (
+    typeof data.runId === "string" &&
+    Array.isArray(data.modelCalls) &&
+    data.modelCalls.every(isPurposeUsage) &&
+    (ledger === null ||
+      (isRecord(ledger) &&
+        typeof ledger.paused === "boolean" &&
+        isLedgerTokens(ledger.tokens) &&
+        isLedgerTokens(ledger.agentTokens) &&
+        isLedgerTokens(ledger.securityTokens) &&
+        isRecord(ledger.calls) &&
+        isNumber(ledger.calls.limit) &&
+        isNumber(ledger.requestTimeoutMilliseconds) &&
+        isNumber(ledger.maxConcurrentCalls) &&
+        isNumber(ledger.callsInFlight))) &&
+    isRecord(toolAttempts) &&
+    ["total", "succeeded", "failed", "aborted", "open"].every((field) =>
+      isNumber(toolAttempts[field]),
+    )
+  );
+}
+
+/** The X-30 event page the API returns for GET /api/runs/:id/events. */
+export function isRunEventsPage(data: unknown): data is RunEventsPage {
+  return (
+    isRecord(data) &&
+    typeof data.nextCursor === "string" &&
+    Array.isArray(data.events) &&
+    data.events.every(
+      (event) =>
+        isRecord(event) &&
+        typeof event.eventId === "string" &&
+        typeof event.eventType === "string" &&
+        typeof event.occurredAt === "string" &&
+        isRecord(event.maskedSummary),
+    )
   );
 }
 
@@ -123,18 +214,30 @@ export class ProductClient {
     return enforceGuard(result, isTaskFormOptions);
   }
 
-  static async getRun(id: string): Promise<FetchJsonResult<RunView>> {
-    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
-    return enforceGuard(result, isRunView);
+  /** The persisted run state (X-11), exactly as the API returns it. */
+  static async getRun(id: string, options?: FetchJsonOptions): Promise<FetchJsonResult<RunState>> {
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`, options);
+    return enforceGuard(result, isRunState);
   }
 
+  /** The run's model usage and allowance ledger (X-29). */
+  static async getUsage(
+    id: string,
+    options?: FetchJsonOptions,
+  ): Promise<FetchJsonResult<RunUsage>> {
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/usage`, options);
+    return enforceGuard(result, isRunUsage);
+  }
+
+  /** One page of sanitized events after the cursor (the API's query parameter is `after`). */
   static async getRunEvents(
     id: string,
-    cursor?: string,
-  ): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
-    const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`);
-    return enforceGuard(result, isSanitizedEventsResponse);
+    after?: string,
+    options?: FetchJsonOptions,
+  ): Promise<FetchJsonResult<RunEventsPage>> {
+    const query = after ? `?after=${encodeURIComponent(after)}` : "";
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${query}`, options);
+    return enforceGuard(result, isRunEventsPage);
   }
 
   static async signIn(credentials: {

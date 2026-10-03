@@ -24,13 +24,14 @@ import { Textarea } from "@workspace/ui/components/textarea";
 import { Loader2 } from "lucide-react";
 import {
   BOUNDARIES,
+  INACTIVE_RUN_STATUSES,
   JudgeClient,
   MAX_TEXT_LENGTH,
   TOOLS,
   buildEvaluationRequest,
   type EvaluationOutcome,
 } from "@/lib/clients/judge-client";
-import { ProductClient, getSafeMessage } from "@/lib/product-client";
+import { getSafeMessage } from "@/lib/product-client";
 import { EvaluationResult, FailureNotice } from "./evaluation-result";
 
 const BOUNDARY_LABELS: Record<ControlBoundary, string> = {
@@ -46,6 +47,7 @@ export function JudgeConsole() {
   const [runNotice, setRunNotice] = React.useState<string | null>(null);
   const [runError, setRunError] = React.useState<string | null>(null);
   const [isStartingRun, setIsStartingRun] = React.useState(false);
+  const [runStatus, setRunStatus] = React.useState<string | null>(null);
 
   const [kind, setKind] = React.useState<ControlBoundary>("model_input");
   const [text, setText] = React.useState("");
@@ -58,32 +60,16 @@ export function JudgeConsole() {
   // The input that produced the shown outcome, labelled as the judge's own input.
   const [submitted, setSubmitted] = React.useState<ControlEvaluationRequest | null>(null);
 
+  async function refreshRunStatus(id: string) {
+    setRunStatus(await JudgeClient.getRunStatus(id));
+  }
+
   async function startDedicatedRun() {
     setIsStartingRun(true);
     setRunError(null);
     setRunNotice(null);
     try {
-      const optionsResult = await ProductClient.getOptions();
-      if (!optionsResult.ok) {
-        setRunError(getSafeMessage(optionsResult.error));
-        return;
-      }
-      const { templates, invoices, destinations, approvalRequirements, vendors } =
-        optionsResult.data;
-      const firstTemplate = templates[0];
-      const firstInvoice = invoices[0];
-      const firstDestination = destinations[0];
-      if (!firstTemplate || !firstInvoice || !firstDestination) {
-        setRunError("The task options are incomplete, so no judge run can be started.");
-        return;
-      }
-      const startResult = await ProductClient.startRun({
-        template: firstTemplate.id,
-        vendorId: vendors[0]?.id,
-        invoiceIds: [firstInvoice.id],
-        destination: firstDestination.id,
-        approvalRequirement: approvalRequirements[0]?.id,
-      });
+      const startResult = await JudgeClient.startRun();
       if (!startResult.ok) {
         setRunError(getSafeMessage(startResult.error));
         return;
@@ -92,6 +78,7 @@ export function JudgeConsole() {
       setRunNotice(
         "Dedicated judge run started. Evaluations spend this run's security allowance, not a demo run's.",
       );
+      await refreshRunStatus(startResult.data.runId);
     } finally {
       setIsStartingRun(false);
     }
@@ -110,6 +97,7 @@ export function JudgeConsole() {
     try {
       setSubmitted(built.request);
       setOutcome(await JudgeClient.evaluate(built.request));
+      await refreshRunStatus(built.request.runId);
     } finally {
       setIsEvaluating(false);
     }
@@ -157,6 +145,13 @@ export function JudgeConsole() {
             Start a dedicated judge run
           </Button>
           {runNotice && <p className="text-sm text-muted-foreground">{runNotice}</p>}
+          {runStatus && (
+            <p className="text-sm" data-testid="judge-run-status">
+              Run status (from the gateway): <code>{runStatus}</code>
+              {INACTIVE_RUN_STATUSES.includes(runStatus) &&
+                " — a finished run refuses evaluations (run_not_active)."}
+            </p>
+          )}
           {runError && (
             <p className="text-sm text-destructive" role="alert">
               {runError}

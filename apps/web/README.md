@@ -7,7 +7,9 @@ Next.js App Router front end (React, strict TypeScript, Tailwind CSS v4). UI pri
 
 | Route          | Purpose                                                            |
 | -------------- | ------------------------------------------------------------------ |
-| `/`            | Starter overview and links to the other pages                      |
+| `/`            | Task form and a plain explanation of admission, passport and run   |
+| `/login`       | Sign in as the seeded development demonstration operator           |
+| `/tasks/new`   | The task form on its own page                                      |
 | `/components`  | Showcase of every shared primitive and generic component           |
 | `/diagnostics` | Live health of the API, the gateway and their database connections |
 

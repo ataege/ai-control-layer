@@ -44,6 +44,17 @@ func TestPostgresTaskOptionsOfferOnlyTheOrganizationsRecords(t *testing.T) {
 		if invoice.Number != "INV104" || invoice.Date != "2026-09-01" || invoice.Amount != 125000 {
 			t.Errorf("invoice %+v: want INV104, 2026-09-01, 125000", invoice)
 		}
+		// Each invoice names its vendor, and that vendor is one the form offers.
+		wantVendor := fixture.vendorID
+		switch invoice.ID {
+		case fixture.otherInvoiceID:
+			wantVendor = fixture.otherVendorID
+		case "invoice_s01_" + strings.TrimPrefix(fixture.vendorID, "vendor_atlas_"):
+			wantVendor = fixture.silentVendorID
+		}
+		if invoice.VendorID != wantVendor || !slices.Contains(wantVendors, invoice.VendorID) {
+			t.Errorf("invoice %s: vendor %q, want %q", invoice.ID, invoice.VendorID, wantVendor)
+		}
 	}
 	if len(invoiceIDs) != 4 || slices.Contains(invoiceIDs, fixture.foreignInvoice) ||
 		!slices.Contains(invoiceIDs, fixture.invoiceIDs[0]) || !slices.Contains(invoiceIDs, fixture.otherInvoiceID) {
@@ -68,8 +79,15 @@ func TestPostgresTaskOptionsOfferOnlyTheOrganizationsRecords(t *testing.T) {
 	modelCalls, timeoutSeconds := options.Limits.MaxModelCalls, options.Limits.MaxTimeoutSeconds
 	approval := options.ApprovalRequirements[0].ID
 	vendorID := options.Vendors[0].ID
+	// The invoices of the chosen vendor, grouped by the offered vendorId.
+	var vendorInvoices []string
+	for _, invoice := range options.Invoices {
+		if invoice.VendorID == vendorID {
+			vendorInvoices = append(vendorInvoices, invoice.ID)
+		}
+	}
 	if _, err := fixture.admitter.Admit(ctx, fixture.operator, contracts.StartRunRequest{
-		Template: options.Templates[0].ID, VendorID: &vendorID, InvoiceIDs: fixture.invoiceIDs,
+		Template: options.Templates[0].ID, VendorID: &vendorID, InvoiceIDs: vendorInvoices,
 		Destination: options.Destinations[0].ID, ApprovalRequirement: &approval,
 		Limits: &contracts.StartRunLimits{ModelCalls: &modelCalls, TimeoutSeconds: &timeoutSeconds},
 	}); err != nil {
