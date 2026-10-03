@@ -6,12 +6,15 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 // Context entry kinds (runtime.context_entries.kind).
 const (
 	entryAssistantCall = "assistant_call"
 	entryToolResult    = "tool_result"
+	entryCorrection    = "correction"
 )
 
 // ErrContextStorage hides driver errors of the context store.
@@ -89,6 +92,38 @@ func (store *ContextStore) AppendToolStep(ctx context.Context, organizationID, r
 		INSERT INTO runtime.context_entries(organization_id, run_id, step_number, kind, action_id, content, inspection_outcome, reason_code)
 		VALUES ($1, $2, $3, 'tool_result', $4, $5, $6, $7)`,
 		organizationID, runID, stepNumber, actionID, result.Content, string(result.Outcome), reason); err != nil {
+		return ErrContextStorage
+	}
+	if err = transaction.Commit(ctx); err != nil {
+		return ErrContextStorage
+	}
+	return nil
+}
+
+// AppendCorrection stores a denied step in one transaction: the denied call when there was a
+// single one (call may be nil) and the denial feedback the model receives next.
+func (store *ContextStore) AppendCorrection(ctx context.Context, organizationID, runID string, stepNumber int,
+	call json.RawMessage, feedback json.RawMessage, reason contracts.ReasonCode) error {
+	if store == nil || store.pool == nil {
+		return ErrContextStorage
+	}
+	transaction, err := store.pool.Begin(ctx)
+	if err != nil {
+		return ErrContextStorage
+	}
+	defer func() { _ = transaction.Rollback(ctx) }()
+	if call != nil {
+		if _, err = transaction.Exec(ctx, `
+			INSERT INTO runtime.context_entries(organization_id, run_id, step_number, kind, content)
+			VALUES ($1, $2, $3, 'assistant_call', $4)`, organizationID, runID, stepNumber, call); err != nil {
+			return ErrContextStorage
+		}
+	}
+	// A denied action may have no stored row (malformed arguments), so these rows carry no action
+	// reference; the denial event links the action where one exists.
+	if _, err = transaction.Exec(ctx, `
+		INSERT INTO runtime.context_entries(organization_id, run_id, step_number, kind, content, reason_code)
+		VALUES ($1, $2, $3, 'correction', $4, $5)`, organizationID, runID, stepNumber, feedback, string(reason)); err != nil {
 		return ErrContextStorage
 	}
 	if err = transaction.Commit(ctx); err != nil {

@@ -43,16 +43,23 @@ type StepCounter interface {
 	CountAgentCalls(ctx context.Context, organizationID, runID string) (int, error)
 }
 
+// CorrectionCounter counts the run's denials from its durable events (policy.CorrectionCounter).
+type CorrectionCounter interface {
+	CorrectionsUsed(ctx context.Context, run policy.RunIdentity) (int, error)
+}
+
 // LoopDependencies are the components the loop drives. Every one is required.
 type LoopDependencies struct {
-	Runs      *repository.Repository
-	Stepper   ModelStepper
-	Gate      ActionGate
-	Executor  ActionExecutor
-	Inspector ResultInspector
-	Steps     StepCounter
-	Contexts  *ContextStore
-	Logger    *slog.Logger
+	Runs        *repository.Repository
+	Stepper     ModelStepper
+	Gate        ActionGate
+	Executor    ActionExecutor
+	Inspector   ResultInspector
+	Scopes      policy.ScopeReader
+	Corrections CorrectionCounter
+	Steps       StepCounter
+	Contexts    *ContextStore
+	Logger      *slog.Logger
 }
 
 // Loop is the bounded agent loop: the handler of contracts.JobKindAgentStep jobs (GO-11).
@@ -64,7 +71,8 @@ type Loop struct {
 // NewLoop validates its dependencies.
 func NewLoop(dependencies LoopDependencies) (*Loop, error) {
 	if dependencies.Runs == nil || dependencies.Stepper == nil || dependencies.Gate == nil || dependencies.Executor == nil ||
-		dependencies.Inspector == nil || dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Logger == nil {
+		dependencies.Inspector == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
+		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Logger == nil {
 		return nil, ErrInvalid
 	}
 	return &Loop{dependencies: dependencies, now: time.Now}, nil
@@ -159,14 +167,18 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 
 	switch result.Kind {
 	case StepRejected:
-		// GO-01: the whole response is denied and recorded; no subset runs. Until GO-29's
-		// bounded correction, the run stops with the reason.
-		return runEnd{status: contracts.RunStopped, reason: result.RejectReason}, false, nil
+		// GO-01: the whole response is denied and recorded as a denial event; no subset runs.
+		// It counts as a correction, like any other denial.
+		if err = loop.recordRejection(ctx, run, result.RejectReason); err != nil {
+			return runEnd{}, false, err
+		}
+		rejection := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(result.RejectReason)}
+		return loop.correct(ctx, run, passport, stepNumber, nil, rejection)
 	case StepFinal:
 		// GO-26 adds the narrow final-result validation.
 		return runEnd{status: contracts.RunCompleted}, false, nil
 	case StepAction:
-		return loop.act(ctx, run, agentRun, stepNumber, result.Proposal)
+		return loop.act(ctx, run, agentRun, passport, stepNumber, result.Proposal)
 	default:
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}, false, nil
 	}
@@ -174,7 +186,8 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 
 // act sends one proposal through the gate, executes an allowed one, inspects its result and
 // stores the step's context.
-func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run, stepNumber int, proposal contracts.ActionProposal) (runEnd, bool, error) {
+func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run, passport contracts.Passport, stepNumber int,
+	proposal contracts.ActionProposal) (runEnd, bool, error) {
 	actionID, err := newUUID()
 	if err != nil {
 		return runEnd{}, false, err
@@ -193,8 +206,8 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		// Figure 7: persist the wait; the worker releases the job. GO-40 resumes the stored action.
 		return runEnd{status: contracts.RunAwaitingApproval, actionID: actionID}, false, nil
 	default:
-		// A denied action executes nothing. Until GO-29's correction feedback, the run stops.
-		return runEnd{status: contracts.RunStopped, reason: contractReason(decision.ReasonCode)}, false, nil
+		// A denied action executes nothing (GO-29: bounded feedback while corrections remain).
+		return loop.correct(ctx, run, passport, stepNumber, proposedCall(proposal), decision)
 	}
 
 	execution := loop.dependencies.Executor.Execute(ctx, run, actionID)
@@ -228,6 +241,74 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return runEnd{}, false, err
 	}
 	return runEnd{}, true, nil
+}
+
+// correct applies the passport's correction limit after a denial (GO-29). The count comes from
+// the run's durable denial events, so it survives a restart. While corrections remain, the
+// denied call (if any) and the fixed denial feedback join the context and the loop continues;
+// a permitted alternative in the feedback grants nothing, the next proposal is checked again.
+func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, passport contracts.Passport, stepNumber int,
+	call json.RawMessage, decision policy.Decision) (runEnd, bool, error) {
+	denialReason := contractReason(decision.ReasonCode)
+	used, err := loop.dependencies.Corrections.CorrectionsUsed(ctx, run)
+	if err != nil {
+		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
+	}
+	verdict := policy.CheckCorrections(used, int(passport.Limits.Corrections))
+	if !verdict.Continue {
+		return runEnd{status: contracts.RunStopped, reason: contractReason(verdict.StopReason)}, false, nil
+	}
+	scope, err := loop.dependencies.Scopes.LoadScope(ctx, run)
+	if err != nil {
+		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
+	}
+	feedback, err := json.Marshal(policy.BuildDenialFeedback(decision, scope))
+	if err != nil {
+		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
+	}
+	if err = loop.dependencies.Contexts.AppendCorrection(ctx, run.OrganizationID, run.RunID, stepNumber, call, feedback, denialReason); err != nil {
+		return runEnd{}, false, err
+	}
+	return runEnd{}, true, nil
+}
+
+// recordRejection writes the denial event of a whole rejected response, which has no action.
+func (loop *Loop) recordRejection(ctx context.Context, run policy.RunIdentity, reason contracts.ReasonCode) error {
+	runID := run.RunID
+	decision := contracts.DecisionDeny
+	if !reason.Valid() {
+		reason = contracts.ReasonDecisionUnavailable
+	}
+	return loop.dependencies.Runs.InTransaction(ctx, func(tx repository.Tx) error {
+		_, err := tx.AppendEvent(ctx, repository.NewEvent{
+			OrganizationID: run.OrganizationID, RunID: &runID, EventType: contracts.EventActionDenied,
+			Decision: &decision, ReasonCode: &reason,
+		})
+		return err
+	})
+}
+
+// proposedCall is the stored form of a denied call as the model sent it: the tool and its
+// arguments when they are a small JSON object, otherwise an empty object. It is model output shown
+// back to the model, never authority.
+func proposedCall(proposal contracts.ActionProposal) json.RawMessage {
+	arguments := json.RawMessage(`{}`)
+	trimmed := bytes.TrimSpace(proposal.Arguments)
+	if len(trimmed) > 0 && len(trimmed) <= 4096 && trimmed[0] == '{' && json.Valid(trimmed) {
+		arguments = trimmed
+	}
+	tool := string(proposal.Tool)
+	if len(tool) == 0 || len(tool) > 64 {
+		tool = "unknown_tool"
+	}
+	encoded, err := json.Marshal(struct {
+		Tool      string          `json:"tool"`
+		Arguments json.RawMessage `json:"arguments"`
+	}{Tool: tool, Arguments: arguments})
+	if err != nil {
+		return nil
+	}
+	return encoded
 }
 
 // endRun records the run's status change with its event. A change another writer already made
@@ -364,6 +445,7 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 		passport.TaskVersion, strings.Join(passport.Scope.InvoiceIDs, ", "), strings.Join(passport.Scope.VendorIDs, ", "),
 		strings.Join(templates, ", "), strings.Join(passport.Scope.RecipientReferences, ", "))
 	messages := []model.Message{{Role: "user", Content: task}}
+	previousCallStep := 0
 	for _, entry := range entries {
 		switch entry.Kind {
 		case entryAssistantCall:
@@ -377,8 +459,17 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 			messages = append(messages, model.Message{Role: "assistant", ToolCalls: []model.ToolCall{
 				{Function: model.FunctionCall{Name: call.Tool, Arguments: compactJSON(call.Arguments)}},
 			}})
+			previousCallStep = entry.StepNumber
 		case entryToolResult:
 			messages = append(messages, model.Message{Role: "tool", Content: string(compactJSON(entry.Content))})
+		case entryCorrection:
+			// The answer to the denied call of the same step, or, after a rejected response that
+			// had no single call, a message to the model.
+			role := "user"
+			if previousCallStep == entry.StepNumber {
+				role = "tool"
+			}
+			messages = append(messages, model.Message{Role: role, Content: string(compactJSON(entry.Content))})
 		}
 	}
 	return messages

@@ -710,16 +710,19 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     reason; a permitted read runs and its minimized result reaches the next model request; the
     steps and their order can be reconstructed from the stored records. The X-24 command;
     `pnpm --filter gateway run test`.
-  - Progress (2026-10-03): `agent.Loop` and the append-only `runtime.context_entries` (migration
-    `1791070000000-AddAgentContextEntries`, approved by the lead) are on go/f3 (faac792). Every
-    model request is preceded by the run check (cancellation, expiry, agent steps); proposals go
-    through the real gate and executor; inspected results are stored and reach the next request; a
-    restarted loop continues without re-executing. Database tests with the real repository, gate,
-    executor and `tools.Runner` and a labelled scripted stepper pass; `pnpm test:db` gateway "416
-    passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 13 migrations run, the new one
-    reverts and re-runs; `pnpm verify` 6 passed. Missing half: the live run of the done-when, with
-    w3's `PassportScopeReader`, c1's `InspectToolResult` replacing the interim fail-closed guard,
-    GO-29 correction and admission (GO-13), and the wiring into `cmd/gateway/main.go`.
+  - Progress (2026-10-03): `agent.Loop` with the append-only `runtime.context_entries` (faac792) now
+    uses the production pieces on go/f3: c1's `InspectToolResult` through `agent.SecurityInspector`
+    (the interim guard is removed), GO-29's correction counter, limit and denial feedback (stored as
+    `correction` entries, migration `1791100000000-AllowContextCorrections`), and
+    `agent.RecordingCaller` recording each security call in `model_calls` before dispatch. Database
+    tests with the real repository, gate, executor, `tools.Runner` and inspector (labelled scripted
+    stepper and fixture security model) pass, including a clean note passing with its
+    classification, a hostile note withheld by signature or semantic verdict, a guard failure
+    pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
+    gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
+    the new one reverts and re-runs; `pnpm verify` 6 passed. Missing half: wiring into
+    `cmd/gateway/main.go` with w3's `policy.CatalogSecuritySettings` (next merge) and the live run,
+    which also needs the signature-feed import (c1, API-34).
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
     (Figure 4); "Users operating model and proposed user journeys" (Journey 3 recover cancel or
@@ -1455,7 +1458,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
-- [ ] **GO-77 · Apply the semantic risk check to otherwise permitted action proposals**
+- [x] **GO-77 · Apply the semantic risk check to otherwise permitted action proposals**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: GO-15, GO-75 · Needs: nothing · Provides: nothing
   - Paths: the enforcement package from GO-12
@@ -1464,6 +1467,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Tests: gate tests with a permissive and a blocking stubbed verdict (labelled as stubs).
   - Report: "Architecture and chart reading guide" (Figure 6); "The enforcement loop and data minimization"
   - Blocked by: nothing
+  - Completed (2026-10-03): policy side in `internal/policy/security_check.go` with c1's `security.Inspector.EvaluateAction` (c1 commit 64a8278, merged from go/c1). The gate calls it only after a deterministic allow or approval requirement; `no_objection` keeps the outcome, `block` denies with the control's reason before any review material is frozen, `pause` or a failure denies (`security_evaluator_unavailable`), which the worker treats as a pause; settings come from `security.SettingsFromCatalog` for the evaluated revision; every control record is written to `runtime.control_assessments` in the decision transaction. Checks: `TestDeterministicDenialRunsNoSecurityCheck` (a forbidden action gets no security check), `TestStubbedSemanticBlockStopsAPermittedActionBeforeReview` (labelled stub verdict; nothing frozen), `TestSemanticCheckRestrictsButNeverGrants` and `TestSecurityActionCheckThroughTheGate` with the real inspector and the real sample feed (clean no objection, signature block, missing evaluator and unloadable settings pause, review never skipped) PASS; `pnpm test:db gateway` 565 passed, 0 failed, 0 skipped including `TestSecurityRecordsAreWrittenWithTheDecision`; `pnpm verify` 6/6. Not verified here: a live semantic verdict and its `security_model_call_id` foreign key (needs the metered evaluator wired by the worker lane), and `CatalogSecuritySettings` against an imported catalog revision in the database.
 
 - [x] **GO-78 · Match the signature-feed rules**
   - **Report 1.2 change:** Figure 6 applies the known-signature checks to action proposals too ("Fast typed schema scope and known-signature checks"), and Figure 10 to tool results ("Fast field size and signature checks").
@@ -1730,7 +1734,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     boundary)
   - Blocked by: `stored report read`; `final result format`; `report storage`
 
-- [ ] **GO-38 · Connect with the Go database roles from X-35**
+- [x] **GO-38 · Connect with the Go database roles from X-35**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: SH-06 · Needs: X-35 · Provides: nothing
   - Paths: `services/gateway/internal/config/config.go`,
@@ -1747,6 +1751,19 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Tests: configuration tests for the new variables (problems named, values never printed);
     database-backed: the Go role cannot write `app` records, and an adapter cannot write outside its
     `demo` tables. The X-24 command; `pnpm --filter gateway run test`.
+  - Completed (2026-10-03): W2 lane, branch go/w2, 3c7f880 (grants) and this commit (connection). The
+    gateway connects as `task_passport_gateway` with `POSTGRES_GATEWAY_PASSWORD` (logging.Secret,
+    generated by `pnpm run setup`, gateway-only in dev and Compose) and refuses to start without it,
+    naming the fix; `pnpm db:roles` (explicit, idempotent, owner, also run by `pnpm reset:demo`) sets
+    the role's login password. Grant audit: no grant missing. Checks: config tests (problem named, no
+    value echoed); a SET LOCAL ROLE test runs the Atlas scenario and a GO-55 fault as the role while
+    app writes, invoice updates, DELETE, TRUNCATE and CREATE TABLE fail with permission denied;
+    login from the host with the generated password works and a wrong one is refused; the gateway
+    without the variable exits 1; `pnpm smoke` (host mode, dev stack on 3200/3201/8280, gateway on the
+    role) 26 passed, 0 failed, 7 skipped (owner-password checks: my test container's password is
+    under 16 characters; log checks: host mode); `pnpm verify` 6/6; `pnpm test:db gateway` 551
+    passed, 0 skipped. Not run: `pnpm smoke --mode=container` (the shared Compose project `starter`
+    would disturb the other lanes).
   - Report: "Architecture and chart reading guide"; "Data ownership and the transition from starter
     to product"; "Technical architecture and service ownership" (Proposed ownership)
   - Blocked by: `decision 2 in docs/product/README.md`
@@ -1923,7 +1940,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `record versions`
   - Completed (2026-10-03): migration `1791080000000-AddReviewPayloads` (immutable `runtime.review_payloads`, gateway SELECT and INSERT) and `internal/policy/review.go` (7e844de). Before an approval request the gate freezes the tool, canonical arguments, passport, policy revision, the exact recipient (`tools.ResolveRecipientForReview` on the stored passport), and for `queue_report` the stored report with content, hash, template and projection versions, classification and its sorted source manifest with versions and digest; the review expires with the passport; `payload_digest` is SHA-256 over the canonical payload; no freezer or a failed freeze denies. `record versions` is exact integer equality (`StaleSources`). Checks: fresh database, 13 migrations run, revert and re-run of 1791080000000 succeeded; `pnpm test:db gateway` 461 passed, 0 failed, 0 skipped with `TestFreezeHoldsTheExactReviewedMaterial` (every field, stored digest equals recomputed, second freeze refused, UPDATE rejected), `TestSourceChangeAfterFreezeIsDetected`, `TestUnresolvableRecipientFreezesNothing` and `TestApprovalRequestEventHoldsNoReviewContent`; `pnpm verify` 6/6. The Go read endpoint for the review screen follows with GO-44.
 
-- [ ] **GO-44 · Accept the approval decision through the internal command**
+- [x] **GO-44 · Accept the approval decision through the internal command**
   - **Report 1.1 change:** Name proposal `POST /internal/actions/:id/approval`; an approval cannot override an Internal only export denial.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-21, GO-43 · Needs: X-10, X-13, X-18, X-39 · Provides: X-40
@@ -1949,6 +1966,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     interface contracts" (Proposed browser and runtime operations); "Users operating model and
     proposed user journeys" (Journey 2 review an exact outbound effect)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Completed (2026-10-03): `internal/policy/approvals.go` and `approval_handlers.go`, migration `1791110000000-GrantGatewayMembershipRead` (lead decisions: reviewer role `reviewer` in `app.memberships`, routes `POST /internal/actions/{actionId}/approval` and `GET /internal/actions/{actionId}/review`, the run state moved by f3's worker). Reviewer authority, action integrity, frozen payload integrity and expiry are checked; the approvals row, the action status, the `approval.decided` event and the continuation job commit in one transaction or not at all. Checks: fresh database, 15 migrations run, revert and re-run of 1791110000000 succeeded; `pnpm test:db gateway` 642 passed, 0 failed, 0 skipped with `TestReviewerApprovalStoresTheGrantAndTheContinuationTogether` (and a second decision fails), `TestRejectionClosesTheApprovalAndContinues`, `TestApprovalRefusalsStoreNoGrant` (non-reviewer, a reviewer claim without the membership role, reviewer of another organization, expired, altered action, an injected continuation failure: no grant, no job, still awaiting) , `TestFrozenReviewIsReadOnlyByReviewers` and `TestGatewayRoleReadsMembershipsButCannotWriteThem`; `TestApprovalHandlerAcceptsOnlyTheDecision` (a body with a payload or replacement content is 400 and reaches no decision) PASS; `pnpm verify` 6/6. Pending other lanes: 3c mounts the two handlers in `api.Commands` and X-10 `contracts.ApprovalDecision` (1c12eb9 on go/3c) replaces the handler-local type once on main.
 
 - [ ] **GO-45 · Recheck before execution and claim the attempt in one transaction**
   - **Report 1.2 change:** Figure 8: when the required action guard assessment is not current, the action returns to the budgeted semantic action check (GO-77) instead of executing.
@@ -2328,7 +2346,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (Source or template policy changes)
   - Blocked by: nothing
 
-- [ ] **GO-84 · Prove the live semantic cases, the false-negative boundary and guard failure**
+- [x] **GO-84 · Prove the live semantic cases, the false-negative boundary and guard failure**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-75, GO-76, GO-77 · Needs: X-86, X-89 · Provides: X-96, X-97, X-98
   - Paths: none (scenario tests in the packages above, run through the X-89 suite)
@@ -2337,6 +2355,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Tests: the scenario tests in the suite, with the results quoted.
   - Report: "Validation plan and evidence matrix" (Live semantic benign and attack cases, Semantic false negative boundary, Guard failure and security ceiling)
   - Blocked by: nothing
+  - Completed (2026-10-03): evidence tests in `internal/security`. X-96 (opt-in `TestLiveSemanticCorpus`, `model_live` tag, writes a JSON results file): 21 corpus cases plus 3 hostile notes on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb), threshold 0.75, context 8192; run 1: 23 of 24 matched, 0 false positives, 1 false negative, 0 guard failures, one hostile note passed by its second (pipeline) evaluation; run 2: 22 of 24, 0 false positives, 2 false negatives, 0 guard failures; live verdicts labelled `live`, all other tests use labelled fixtures. X-97 (`TestSemanticFalseNegativeStillDeniedDeterministically`, external package): Worker 3's real gate with a fixture verdict of score 0 denies each hostile note's obeyed action with its fixture reason (`resource_out_of_scope`, `destination_not_allowed`, `report_export_restricted`) and makes no security call. X-98 (`TestPostgresGuard*`, real ledger): timeout keeps the reservation as `usage_unknown`, malformed verdict pauses after settled usage, exhausted or paused allowance dispatches nothing. Checks: `pnpm test:db gateway` 556 passed, 0 failed, 0 skipped; gateway checks all exit 0; `pnpm verify` 6 passed. Not done: running these through the one-command X-89 suite (SH-47 has no `verify:controls` yet); the outbox assertions for the X-97 denials are the tools lane's X-72 and X-74 tests.
 
 - [ ] **GO-85 · Prove redaction and the attack feed update**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)

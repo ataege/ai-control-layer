@@ -42,12 +42,14 @@ func TestNoStaleReportIsQueuedAfterASourceOrTemplateChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The lineage is current (projection version 1); only the report's stored projection policy
+	// version (v0) is stale, so only that check can deny it.
 	world.exec(t, `INSERT INTO runtime.report_lineage (organization_id, run_id, report_id, source_kind, source_id, source_version,
 	                 source_classification, consumed_fields, template, template_version, projection_rule, projection_rule_version)
-	               VALUES ($1, $2, $3, 'invoice', $4, 1, 'vendor_shareable', ARRAY['currency'], 'vendor_reconciliation_v1', 1, 'vendor_invoice_fields_v1', 0)`,
+	               VALUES ($1, $2, $3, 'invoice', $4, 1, 'vendor_shareable', ARRAY['currency'], 'vendor_reconciliation_v1', 1, 'vendor_invoice_fields_v1', 1)`,
 		world.organizationID, world.runID, oldReportID, world.invoiceA02)
 	projectionChanged := queue(oldReportID)
-	t.Logf("evidence X-76: projection version no longer registered -> %s %s; outbox rows %d", projectionChanged.Outcome, projectionChanged.ReasonCode, world.outboxRows(t))
+	t.Logf("evidence X-76: projection policy version no longer registered -> %s %s; outbox rows %d", projectionChanged.Outcome, projectionChanged.ReasonCode, world.outboxRows(t))
 
 	if sourceChanged.ReasonCode != ReasonResourceVersionChanged || projectionChanged.ReasonCode != ReasonTemplateNotAllowed || world.outboxRows(t) != 0 {
 		t.Fatalf("source change %+v, projection change %+v, outbox %d", sourceChanged, projectionChanged, world.outboxRows(t))

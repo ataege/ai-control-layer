@@ -17,6 +17,7 @@ type passportScope struct {
 	InvoiceIDs           []string `json:"invoiceIds"`
 	VendorIDs            []string `json:"vendorIds"`
 	ReportTemplates      []string `json:"reportTemplates"`
+	ProjectionRules      []string `json:"projectionRules"`
 	RecipientReferences  []string `json:"recipientReferences"`
 	InternalNoteReadable bool     `json:"internalNoteReadable"`
 }
@@ -40,6 +41,10 @@ func (current scope) allowsTemplate(template string) bool {
 	return slices.Contains(current.passport.ReportTemplates, template)
 }
 
+func (current scope) allowsProjection(projection string) bool {
+	return slices.Contains(current.passport.ProjectionRules, projection)
+}
+
 func (current scope) allowsRecipientReference(reference string) bool {
 	return slices.Contains(current.passport.RecipientReferences, reference)
 }
@@ -54,11 +59,12 @@ func loadScope(ctx context.Context, tx pgx.Tx, request EffectRequest) (scope, er
 		   FROM runtime.passports AS passport
 		   JOIN runtime.runs AS run
 		     ON run.passport_id = passport.id AND run.organization_id = passport.organization_id
-		  WHERE passport.id = $1 AND passport.organization_id = $2 AND run.id = $3`,
+		  WHERE passport.id = $1 AND passport.organization_id = $2 AND run.id = $3
+		    AND run.cancel_requested_at IS NULL AND run.status NOT IN ('cancelled', 'completed', 'failed')`,
 		request.PassportID, request.OrganizationID, request.RunID,
 	).Scan(&rawScope, &unexpired)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return scope{}, fmt.Errorf("%w: no passport for this run and organization", errPrecondition)
+		return scope{}, fmt.Errorf("%w: no passport for this active run and organization", errPrecondition)
 	}
 	if err != nil {
 		return scope{}, fmt.Errorf("tools: read passport: %w", err)

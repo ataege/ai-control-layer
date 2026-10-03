@@ -69,10 +69,12 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		Host: reader.stringOr("GATEWAY_HOST", "127.0.0.1"),
 		Port: reader.port("GATEWAY_PORT", 8080),
 		Postgres: Postgres{
-			Host:     reader.stringOr("POSTGRES_HOST", "localhost"),
-			Port:     reader.port("POSTGRES_PORT", 5432),
-			User:     reader.required("POSTGRES_USER"),
-			Password: logging.NewSecret(reader.required("POSTGRES_PASSWORD")),
+			Host: reader.stringOr("POSTGRES_HOST", "localhost"),
+			Port: reader.port("POSTGRES_PORT", 5432),
+			// The gateway's own role (X-35, CreateServiceRoles); the bootstrap user that runs the
+			// migrations is not the gateway's user (GO-38). Fail closed without its password.
+			User:     GatewayDatabaseRole,
+			Password: logging.NewSecret(reader.requiredWithFix("POSTGRES_GATEWAY_PASSWORD", gatewayRolePasswordFix)),
 			Database: reader.required("POSTGRES_DB"),
 		},
 		DatabaseTimeout: reader.milliseconds("DATABASE_TIMEOUT_MS", 3000),
@@ -118,6 +120,23 @@ func (reader *environmentReader) stringOr(name, fallback string) string {
 		return strings.TrimSpace(value)
 	}
 	return fallback
+}
+
+// GatewayDatabaseRole is the database role the gateway connects as. Its name is fixed by the
+// CreateServiceRoles migration and is never configurable.
+const GatewayDatabaseRole = "task_passport_gateway"
+
+// gatewayRolePasswordFix names the steps that give the gateway role its login password.
+const gatewayRolePasswordFix = "run `pnpm run setup`, then `pnpm db:migration:run`, then `pnpm db:roles`"
+
+// requiredWithFix is required with the steps that fix a missing value in its problem text.
+func (reader *environmentReader) requiredWithFix(name, fix string) string {
+	value, isSet := reader.lookup(name)
+	if !isSet || strings.TrimSpace(value) == "" {
+		reader.addProblem(name + " is required: " + fix)
+		return ""
+	}
+	return value
 }
 
 // required rejects blank values but returns the value untrimmed:

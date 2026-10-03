@@ -69,8 +69,16 @@ type ReviewedSource struct {
 }
 
 // Digest is SHA-256 over the payload's canonical JSON. It detects any change to the reviewed
-// material; it never authenticates or authorizes.
+// material; it never authenticates or authorizes. The arguments are re-canonicalized first, so a
+// payload read back from jsonb (which reorders object keys) hashes the same as when it was frozen.
 func (payload ReviewPayload) Digest() ([sha256.Size]byte, []byte, error) {
+	arguments, err := DecodeArguments(payload.Tool, payload.CanonicalArguments)
+	if err != nil {
+		return [sha256.Size]byte{}, nil, err
+	}
+	if payload.CanonicalArguments, err = CanonicalArguments(arguments); err != nil {
+		return [sha256.Size]byte{}, nil, err
+	}
 	canonicalPayload, err := compactJSON(payload)
 	if err != nil {
 		return [sha256.Size]byte{}, nil, err
@@ -133,9 +141,9 @@ func (freezer *PostgresReviewFreezer) Freeze(ctx context.Context, run RunIdentit
 	var frozen FrozenReview
 	err = freezer.repository.InTransaction(ctx, func(tx repository.Tx) error {
 		if queueArguments, isQueue := arguments.(QueueReportArguments); isQueue {
-			// Worker 2's rule, the same one queue_report applies, on the stored passport's scope.
+			// Worker 2's rule, the same one queue_report applies; it loads the stored passport itself.
 			vendorID, address, reason, err := tools.ResolveRecipientForReview(ctx, tx.Raw(), run.OrganizationID, run.RunID,
-				passport.Scope, queueArguments.RecipientReference)
+				queueArguments.RecipientReference)
 			if err != nil || reason != "" {
 				return ErrReviewUnavailable
 			}

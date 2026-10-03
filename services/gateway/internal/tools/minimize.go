@@ -37,6 +37,9 @@ func MinimizeForModel(tool string, result EffectResult) (MinimizedResult, error)
 	if result.Outcome != OutcomeSucceeded {
 		return MinimizedResult{}, fmt.Errorf("tools: unknown outcome %q", result.Outcome)
 	}
+	if result.ModelFacing == nil {
+		return MinimizedResult{}, errors.New("tools: a succeeded result without content")
+	}
 	switch tool {
 	case ToolReadInvoice:
 		var invoice InvoiceResult

@@ -64,13 +64,19 @@ func TestCreateReportWithoutTheNoteIsStillInternalOnly(t *testing.T) {
 }
 
 func TestCreateReportRefusesUnauthorizedSourcesTemplatesAndLabels(t *testing.T) {
-	world := openWorld(t, func(world *testWorld) passportScope { return scenarioScope(world, true) })
+	// invoice_C01 is listed in the scope but belongs to the other organization, so only the
+	// organization filter of the SQL can refuse it.
+	world := openWorld(t, func(world *testWorld) passportScope {
+		passport := scenarioScope(world, true)
+		passport.InvoiceIDs = append(passport.InvoiceIDs, world.invoiceC01)
+		return passport
+	})
 	cases := map[string]struct {
 		arguments map[string]any
 		reason    string
 	}{
 		"out-of-scope invoice":  {map[string]any{"template": "internal_investigation_v1", "source_invoice_ids": []string{world.invoiceA01, world.invoiceB01}}, ReasonResourceOutOfScope},
-		"other organization":    {map[string]any{"template": "internal_investigation_v1", "source_invoice_ids": []string{world.invoiceC01}}, ReasonResourceOutOfScope},
+		"other organization":    {map[string]any{"template": "internal_investigation_v1", "source_invoice_ids": []string{world.invoiceA01, world.invoiceC01}}, ReasonResourceOutOfScope},
 		"unregistered template": {map[string]any{"template": "public_summary_v1", "source_invoice_ids": []string{world.invoiceA01}}, ReasonTemplateNotAllowed},
 	}
 	for name, testCase := range cases {
@@ -142,5 +148,20 @@ func TestCreateVendorReportFromTheApprovedProjection(t *testing.T) {
 	}
 	if decision := provenance.AuthorizeExport(stored, provenance.DestinationRegisteredVendor, versions); !decision.Allowed {
 		t.Fatalf("vendor report export = %+v, want allowed", decision)
+	}
+}
+
+func TestVendorReportNeedsTheProjectionRuleInThePassport(t *testing.T) {
+	world := openWorld(t, func(world *testWorld) passportScope {
+		passport := scenarioScope(world, true)
+		passport.ProjectionRules = nil
+		return passport
+	})
+	request := world.proposeAction(t, world.nextStep(), ToolCreateReport, map[string]any{
+		"template": provenance.VendorReconciliationV1.Name, "source_invoice_ids": []string{world.invoiceA01},
+	})
+	result, err := Runner{}.RunEffect(context.Background(), world.tx, request)
+	if err != nil || result.ReasonCode != ReasonTemplateNotAllowed {
+		t.Fatalf("result = %+v, %v; want template_not_allowed", result, err)
 	}
 }
