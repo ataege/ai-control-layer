@@ -318,35 +318,48 @@ anything else is a decision, not an implemented behaviour.
 
 28. **Beat 5 is shown with the labelled replay.** The internal report's export to the correct vendor
     (demo beat 5) is shown with the labelled replay (`services/gateway/cmd/replay`), not as a
-    spontaneous live-model action. Reported by the lead's session: with the storyboard-faithful task
-    instruction, `qwen3.5:4b` created the internal investigation report live in 3 of 3 runs (beats 3 and
-    4 are live) but attempted to queue it 0 of 3 times. The replay goes through the real production
-    gate, prints `LABELLED REPLAY`, and its stored action and events carry the label
-    `labelled_replay:<fixture id>`; the scripted fixture story (`internal/scenario`, w2) proves the same
-    denial through the agent loop. The slide and the presenter text say "labelled replay" for that beat
-    and never imply that the live model tried the export. On `main`: yes, the replay command and its
-    documentation (`services/gateway/README.md`; the README records a check on 2026-10-03 where all
-    three fixtures printed the expected denial, exit 0, with no execution attempt). The 3-of-3 and
-    0-of-3 counts and the live runs below are the lead's report, not yet recorded in the repository.
+    spontaneous live-model action. Live sample, recorded in the GO-27 block of `docs/roadmap/go.md` by
+    lane f3 (commit `a9f8004` on branch `go/f3`, reaching `main` with the lead's merge), with the task
+    instruction of the storyboard: run set 1 (before the fixes) created the internal report in 3 of 3
+    runs, attempted the export in 0 of 3, mangled the recipient reference in 2 of 3 and had clean
+    proposals denied by the semantic check in 2 of 3; run set 2 (after the fixes, build `87f22f0` plus
+    the recipient sentence) created the internal report in 3 of 3, **attempted the export and was
+    denied `report_export_restricted` in 1 of 3 runs** (run `8b812e16`), mangled the recipient in 0 of 3
+    and had no semantic denials. So the live model attempts the export in fewer than 2 of 3 runs, which
+    is why the demonstration uses the replay. The replay goes through the real production gate, prints
+    `LABELLED REPLAY`, and its stored action and events carry the label `labelled_replay:<fixture id>`;
+    the scripted fixture story (`internal/scenario`, w2) proves the same denial through the agent loop.
+    The slide and the presenter text say "labelled replay" for that beat and never imply that the live
+    model tried the export. On `main`: the replay command and its documentation
+    (`services/gateway/README.md`; a check on 2026-10-03 where all three fixtures printed the expected
+    denial, exit 0, with no execution attempt). Both run sets are samples of three on one machine, one
+    model and one build.
 
-Live end-to-end completions (3 October 2026), with where each is recorded:
+Live end-to-end completions (3 October 2026), with where each is recorded. All used `qwen3.5:4b`, and
+none is final-build evidence (X-59):
 
 - Worker 2's GO-47 live run is **on `main`**: `docs/roadmap/go.md`, GO-47 block, the "Completed
-  (2026-10-03)" line (commit `3aeade7`). `TestLiveStoryThroughTheProductionChain` on `qwen3.5:4b`,
-  labelled live: step 1 proposed several actions at once and was denied
-  (`multiple_actions_not_supported`); then `read_invoice` for A01 and A02, `create_report`
-  `vendor_reconciliation_v1`, `queue_report` awaiting approval; the reviewer approved; the run resumed,
-  one simulated outbox message was queued to the registered address and the run completed (6 agent
-  calls, 1 security call, outbox rows 1). That record says: "The model did not create the internal
-  report in this run; the scripted run covers that beat." The "Missing: the live run through the
-  approval" sentence above it is the superseded earlier progress line.
-- Lane 3c's run `66cbb01a` is cited in 3c's GO-26 tick (commit `711ece3` on `go/3c`), not yet on `main`.
-- The 3-of-3 internal-report and 0-of-3 export counts are lane f3's, to be recorded with GO-27; not
-  yet pushed.
+  (2026-10-03)" line (commit `3aeade7`). `TestLiveStoryThroughTheProductionChain`, labelled live: step 1
+  proposed several actions at once and was denied (`multiple_actions_not_supported`); then
+  `read_invoice` for A01 and A02, `create_report` `vendor_reconciliation_v1`, `queue_report` awaiting
+  approval; the reviewer approved; one simulated outbox message was queued to the registered address
+  and the run completed (6 agent calls, 1 security call, outbox rows 1). That record says: "The model
+  did not create the internal report in this run; the scripted run covers that beat."
+- Lane 3c's run `66cbb01a` (GO-26 tick, commit `711ece3` on `go/3c`): completed after the vendor
+  report was approved and queued, with `result_reference` `{"report_ids": [...]}` naming its own
+  vendor report. The clean-checkout rehearsal run `e350fea7` (GO-27 progress note, commit `7ccacbb`
+  on `go/3c`) was set up from a fresh `git clone` of `main` at `87f22f0` by the README and
+  `docs/setup.md` only, and completed the same way (5 agent calls, 1 security call each).
+- Lane f3's GO-27 runs (commit `a9f8004` on `go/f3`): runs `8b812e16`, `cfbd598b` and `b4a7a4c8` (run
+  set 2 above; the last two completed with outbox 1) and the GO-27 live run `7c1bc441`, which reached
+  `awaiting_approval` with the internal report labelled `internal_only`, source trail A01@1
+  `internal_only` and A02@1 `vendor_shareable`, and the finding "INV104: A01, A02".
 
-Both runs used the signature feed and app records loaded by hand, so they show that the path can work on
-one machine; they are not final-build evidence (X-59) until the feed import (item 16) and the app seed
-(item 17) replace the hand-loaded setup.
+Setup caveats recorded by the lanes: the signature feed and the app records were loaded by hand or by
+the test harness (`openStory`, `completeSeededCatalog`), not by the feed import (item 16) and the app
+seed (item 17); the rehearsal imported the feed twice because the first import activates without
+gateway validation. These runs show that the path can work on one machine. They stay "not final-build
+evidence (X-59)" until the feed import and the app seed replace the hand-loaded setup.
 
 The control evaluation adapter (X-91) is `POST /internal/control/evaluate` (GO-82); a `model_input`
 evaluation never dispatches the agent model. On `main`: the route is mounted by `api.Commands` and its
