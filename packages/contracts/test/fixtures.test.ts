@@ -254,6 +254,8 @@ export const typedSamples = {
       replaySource: null,
       alternativeTemplate: null,
       safeMessage: "Requested invoice is outside the task's authority.",
+      actorId: null,
+      inputSource: null,
     },
     occurredAt: "2026-10-03T11:59:00Z",
   } satisfies SafeEvent,

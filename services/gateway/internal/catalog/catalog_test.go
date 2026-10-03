@@ -166,3 +166,26 @@ func TestParseLimitsFailsClosed(t *testing.T) {
 		t.Errorf("valid catalog rejected: %v", err)
 	}
 }
+
+func TestParseLimitsReadsTheAccountingFieldsWithTheirDefaults(t *testing.T) {
+	limits, err := ParseLimits([]byte(policyContent))
+	if err != nil || limits.AgentOutputTokens != 512 || limits.SecurityOutputTokens != 256 || limits.InputTemplateTokens != 1024 {
+		t.Fatalf("policy values: %+v %v", limits, err)
+	}
+	withoutAccounting := strings.Replace(policyContent,
+		`"agent_output_tokens": 512, "security_output_tokens": 256, "input_template_tokens": 1024,`, ``, 1)
+	limits, err = ParseLimits([]byte(withoutAccounting))
+	if err != nil || limits.AgentOutputTokens != 512 || limits.SecurityOutputTokens != 256 || limits.InputTemplateTokens != 1024 {
+		t.Fatalf("defaults: %+v %v", limits, err)
+	}
+	limits, err = ParseLimits([]byte(strings.Replace(policyContent, `"agent_output_tokens": 512`, `"agent_output_tokens": 128`, 1)))
+	if err != nil || limits.AgentOutputTokens != 128 {
+		t.Fatalf("edited value: %+v %v", limits, err)
+	}
+	for name, value := range map[string]string{"null": "null", "zero": "0", "negative": "-5", "fraction": "1.5", "text": `"512"`} {
+		content := strings.Replace(policyContent, `"security_output_tokens": 256`, `"security_output_tokens": `+value, 1)
+		if _, err := ParseLimits([]byte(content)); !errors.Is(err, ErrUnavailable) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
