@@ -2177,7 +2177,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
-- [ ] **GO-47 · Prove the legitimate task on the Go side**
+- [x] **GO-47 · Prove the legitimate task on the Go side**
   - **Report 1.1 change:** Work: internal report, denied export, vendor report, review, one outbox row; the reviewed bytes match the simulated queued content. Done when adds Implementer 5's first integrated deliverable, "The stored vendor report uses only approved invoice fields and creates one matching outbox effect." Beat 8.
   - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-27, GO-40, GO-45, GO-29, GO-64, GO-65 · Needs: X-16, X-34 · Provides: X-44, X-67 (part: reviewed outbox effect)
@@ -2208,6 +2208,15 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     semantic check (`semantic_injection_detected`) and stopped at the correction limit, outbox 0
     each time. Missing: the live run through the approval, after c1 limits the action-proposal
     semantic check to free-text arguments.
+  - Completed (2026-10-03): with c1's fix on `main` (855ae20, merged), the live run went through
+    the approval. `TestLiveStoryThroughTheProductionChain` (`qwen3.5:4b`, labelled live): step 1
+    proposed several actions at once and was denied (`multiple_actions_not_supported`); then
+    read_invoice A01 and A02, create_report `vendor_reconciliation_v1` (vendor_shareable, no
+    internal note), queue_report awaiting approval; the reviewer approved; the run resumed, the
+    approved action executed and queued one simulated outbox message to the registered address,
+    and the run completed (6 agent calls, 1 security call, 1 live verdict, outbox rows 1). The
+    model did not create the internal report in this run; the scripted run covers that beat.
+    Both runs: one outbox row, approved and to the trusted recipient.
   - Report: "Validation plan and evidence matrix" (critical check Legitimate task); "Live
     demonstration storyboard and proof checks" (beat 7)
   - Blocked by: nothing
@@ -2352,6 +2361,13 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     `semantic_on_live` 5, 0 errors, p50 16,204,307 µs, provider p50 15,456,473 µs. The full table
     is in the gateway README. `go test ./cmd/benchmark`: ok. GO-80's recorded spans were empty
     (its writer is on go/f3, not `main`).
+  - Rerun (2026-10-03, quiet machine, at the lead's request):
+    `MODEL_NAME=qwen3.5:4b pnpm benchmark --live` at 3aeade7, load average 12.03 at the start
+    and 10.11 at the end (below 15 throughout): `semantic_off` 300 samples, total p50 1,311 µs,
+    p95 3,452 µs (deterministic p50 77 µs); `semantic_on_fixture` 300, p50 1,288 µs (semantic
+    13 µs); `semantic_on_live` 10, p50 1,930,552 µs, provider p50 1,919,761 µs, gateway overhead
+    p50 5,367 µs; 0 errors. The gateway README holds the table; it replaces the loaded-machine
+    numbers for the slides.
   - Report: "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: `measurement method`
 
