@@ -6,8 +6,9 @@ import { TooltipProvider } from "@workspace/ui/components/tooltip";
 import { AppNavigation } from "@/components/app-navigation";
 
 export const metadata: Metadata = {
-  title: { default: "Starter", template: "%s | Starter" },
-  description: "A generic full-stack project starter.",
+  title: { default: "Task Passport", template: "%s | Task Passport" },
+  description:
+    "Delegate one bounded job to an agent under visible controls over its actions, information and spend. Synthetic records only.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
