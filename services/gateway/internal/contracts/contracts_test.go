@@ -32,6 +32,7 @@ var fixtureTargets = map[string]func() any{
 	"run-state.running.json":                           func() any { return new(RunState) },
 	"run-state.paused-allowance.json":                  func() any { return new(RunState) },
 	"run-state.stopped-cancelled.json":                 func() any { return new(RunState) },
+	"run-state.completed.json":                         func() any { return new(RunState) },
 	"safe-event.export-denied.json":                    func() any { return new(SafeEvent) },
 	"safe-event.admission-rejected.json":               func() any { return new(SafeEvent) },
 	"operator-context.operator.json":                   func() any { return new(OperatorContext) },

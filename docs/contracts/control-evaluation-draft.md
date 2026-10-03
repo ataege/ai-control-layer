@@ -1,5 +1,13 @@
 # DRAFT: control evaluation contract (X-91) and live test entry (X-106)
 
+> **X-91 landed (2026-10-03, GO-82).** The frozen contract is
+> `packages/contracts/schemas/control-evaluation-request.schema.json` and
+> `control-evaluation-response.schema.json` (camelCase, lead decision), mirrored in
+> `services/gateway/internal/contracts`. Differences from this draft, decided by the lead: no `model`,
+> `maxOutputTokens`, `output`, `usage` or `timings_ms` (the evaluate call never dispatches the agent
+> model; timings belong to GO-80); `actionId` is always null (evaluated actions are decisions only:
+> nothing is stored as an action or executed). The X-106 section below is still a draft.
+
 > **X-91 (the Go part) approved as the base by the lead on 2026-10-03; X-106 waits on its owner,
 > the web + API implementer.**
 

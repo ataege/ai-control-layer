@@ -1318,6 +1318,25 @@ typecheck` PASS; `pnpm verify` 6 passed.
     field or lacks a reference is rejected and the run does not complete; a valid result completes
     the run with its recorded reason; the persisted result holds no free text the format does not
     allow. `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Progress (2026-10-03): `final result format` decided by the lead: the model's final answer is
+    exactly `{"status":"completed","report_ids":[...]}` naming one or two reports this run created
+    in its organization; nothing else, no prose. `internal/runresult.Validate` parses it strictly
+    (unknown or repeated keys, text around it, other statuses, more than two or repeated ids and
+    non-uuid ids are `invalid_arguments`) and checks every id is a `demo.reports` row of this run
+    and organization (another run's, another organization's or an unknown report is
+    `resource_out_of_scope`); it returns the canonical reference `{"report_ids":[...]}`.
+    `repository.RunTransition.ResultReference` persists it in `runtime.runs.result_reference` in the
+    same transaction as the transition to completed (refused for any other target or for a
+    reference outside the format), and X-11 `RunState.resultReference {reportIds}` exposes it
+    (schema, fixtures including a completed run, TS, Go). `runresult.FinalAnswerInstruction` is the
+    one wording for the agent prompt. Tests: 14 rejected formats, two valid ones, the instruction's
+    example parses; PostgreSQL: own reports validated, a sibling run's report (same organization),
+    another organization's and an unknown report rejected; a rejected final answer leaves the run
+    running and a forged or misplaced reference is refused; the validated reference completes the
+    run and reads back unchanged with no prose. Missing half: lane f3 calls `Validate` in the
+    loop's StepFinal, counts a rejection as a correction (GO-29, lead decision) and adds the
+    instruction to the agent prompt; then a reconciliation run completes only with a validated
+    result.
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary); "The enforcement loop and data minimization"; "Threat model limits and unresolved
     design choices" ("Final-output validation requires an output format and a data rule")
@@ -2518,7 +2537,7 @@ gateway` and `pnpm verify` as quoted in the commit. On the seeded test database 
     (Proposed browser and runtime operations)
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`
 
-- [ ] **GO-82 · Serve the control evaluation adapter contract**
+- [x] **GO-82 · Serve the control evaluation adapter contract**
   - **Report 1.2 change:** The judge reaches this endpoint through the NestJS live test entry (Figure 2; API-38, X-106).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-21, GO-76, GO-77 · Needs: X-79 · Provides: X-91
@@ -2526,6 +2545,30 @@ gateway` and `pnpm verify` as quoted in the commit. On the seeded test database 
   - Work: `POST /internal/control/evaluate`: "a documented Go client/HTTP contract for governed model calls and registered tool proposals". A call names a passport or run, a metered purpose, an allowed model and bounded input and output; a tool proposal names its registered adapter and typed arguments. It runs the same gates as the invoice agent; "the caller cannot issue a grant", and it exposes no shell, HTTP or model credentials.
   - Done when: a benign and an adversarial call through the endpoint receive the same decisions the agent path gives, and an unauthenticated call is rejected.
   - Tests: handler tests with the shared envelope; a database-backed test through the X-24 command.
+  - Completed (2026-10-03): `POST /internal/control/evaluate` (X-91, camelCase, landed in
+    `packages/contracts` and `internal/contracts`), behind the service token and the verified
+    operator context. `internal/evaluation` reuses lane f3's production chain: `model_input` runs
+    the content rules, the signatures and the semantic check at that boundary (never the agent
+    model); `tool_result` runs `chain.Inspector`; `action_proposal` runs the agent path's gate
+    (`chain.Scopes`, the relationships, `policy.NewSecurityActionEvaluator(chain.Inspector,
+chain.Settings)`) with a recorder and freezer that store nothing, so evaluated actions are
+    decisions only: nothing is stored as an action, executed or counted as a correction. The
+    evidence, an X-12 `control.evaluated` event and the control records keyed by the evaluation id
+    (through `repository.Tx.InsertControlRecords`), commits in one transaction; without it the
+    answer is 503. Every decision answers 200; a body outside X-91 is 400, another organization's
+    run 404. Tests: the three boundaries with the real security controls and a labelled fixture
+    model (benign allowed, signature and semantic attacks denied, secret redacted, oversized
+    blocked, no guard or a failing guard denied), a decision-only gate double, request validation,
+    a PostgreSQL test (evidence stored, inspected text in no event, no action row, another
+    organization not found) and route tests (200, 400, 404, 503, identity field refused, no
+    credentials 401). Checks: gateway five checks exit 0; `pnpm test:db gateway` and `pnpm verify`
+    as quoted in the commit. Live (gateway binary with the production chain, local qwen3.5:4b): a
+    hostile tool result was denied with `signature_match` (rule prompt_ignore_previous_v1, feed_v1),
+    an out-of-scope `read_invoice` proposal with `resource_out_of_scope` and no stored action, and
+    three `control.evaluated` events with their assessments were recorded. Not shown live: a
+    benign semantic allow. Under a machine load average of 50-90 the security call timed out
+    (usage unknown), and the evaluation correctly denied with `security_evaluator_unavailable`. The
+    benign allow is shown with the labelled fixture model.
   - Report: "Technical architecture and service ownership" (Small integration boundary); "Illustrative passport and interface contracts" (Proposed browser and runtime operations)
   - Blocked by: nothing
 
