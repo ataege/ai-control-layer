@@ -103,6 +103,14 @@ func (atlasRelationships) ReportExport(_ context.Context, _, _, reportID string)
 	return policy.ExportVerdict{}, nil
 }
 
+// stubReviewFreezer stands in for the stored review payload (GO-43): the gate denies every
+// approval request without a freezer, and this test is about the verdict, not the payload.
+type stubReviewFreezer struct{}
+
+func (stubReviewFreezer) Freeze(context.Context, policy.RunIdentity, policy.StoredAction, policy.PassportScope) (policy.FrozenReview, error) {
+	return policy.FrozenReview{PayloadID: "00000000-0000-4000-8000-000000000001"}, nil
+}
+
 // gateEvaluator adapts security.EvaluateAction to policy.ActionEvaluator the way the README
 // describes: no_objection keeps the deterministic decision, block denies, pause is an error.
 type gateEvaluator struct {
@@ -110,19 +118,19 @@ type gateEvaluator struct {
 	settings  security.Settings
 }
 
-func (evaluator gateEvaluator) EvaluateAction(ctx context.Context, run policy.RunIdentity, action policy.StoredAction) (policy.Outcome, policy.ReasonCode, error) {
+func (evaluator gateEvaluator) EvaluateAction(ctx context.Context, run policy.RunIdentity, action policy.StoredAction) (policy.ActionCheck, error) {
 	assessment, err := evaluator.inspector.EvaluateAction(ctx, security.ActionInput{
 		RunID: run.RunID, ActionID: action.ActionID, Tool: string(action.Tool), CanonicalArguments: action.CanonicalArguments,
 	}, evaluator.settings)
 	switch {
 	case err != nil:
-		return "", "", err
+		return policy.ActionCheck{Records: assessment.Records}, err
 	case assessment.Decision == security.ActionBlock:
-		return policy.OutcomeDeny, policy.ReasonCode(assessment.ReasonCode), nil
+		return policy.ActionCheck{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(assessment.ReasonCode), Records: assessment.Records}, nil
 	case assessment.Decision == security.ActionNoObjection:
-		return policy.OutcomeAllow, "", nil
+		return policy.ActionCheck{Outcome: policy.OutcomeAllow, Records: assessment.Records}, nil
 	}
-	return "", "", security.ErrEvaluatorUnavailable
+	return policy.ActionCheck{Records: assessment.Records}, security.ErrEvaluatorUnavailable
 }
 
 // sampleSettings builds the settings the way GO-72 will: the sample policy's content and the
@@ -210,7 +218,8 @@ func TestSemanticFalseNegativeStillDeniedDeterministically(t *testing.T) {
 	provider := &permissiveProvider{}
 	caller, _ := model.NewAccountedCaller(provider, boundaryLedger{}, model.DefaultAccountingSettings())
 	evaluator, _ := security.NewSemanticEvaluator(caller, security.EvaluatorOptions{Model: "fixture", ContextTokens: security.MinEvaluatorContextTokens, Source: security.VerdictFixture})
-	gate := policy.NewGate(atlasScopes{}, &decisionRecorder{}, atlasRelationships{}, gateEvaluator{inspector: security.NewInspector(evaluator), settings: sampleSettings(t)})
+	gate := policy.NewGate(atlasScopes{}, &decisionRecorder{}, atlasRelationships{}, gateEvaluator{inspector: security.NewInspector(evaluator), settings: sampleSettings(t)}).
+		WithReviewFreezer(stubReviewFreezer{})
 	permitted := policy.Proposal{ActionID: boundaryActionID, StepNumber: 1, IdempotencyKey: "boundary:step-1", Tool: "read_invoice", RawArguments: json.RawMessage(`{"invoice_id":"invoice_A01"}`)}
 	if decision := gate.Evaluate(context.Background(), run, permitted); decision.Outcome != policy.OutcomeAllow || provider.calls != 1 {
 		t.Fatalf("control: decision = %s/%s, security calls = %d", decision.Outcome, decision.ReasonCode, provider.calls)
