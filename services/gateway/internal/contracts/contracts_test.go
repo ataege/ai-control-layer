@@ -59,6 +59,18 @@ var fixturesCoveredElsewhere = map[string]string{
 	"gateway-diagnostics.ok.json":          "API only",
 	"gateway-diagnostics.degraded.json":    "API only",
 	"gateway-diagnostics.unavailable.json": "API only",
+	// Go-owned read contracts (lane w2), decoded by internal/reads' TestReadContractFixturesMatchTheGoTypes.
+	"run-usage.ledger.json":                          "internal/reads",
+	"run-usage.no-ledger.json":                       "internal/reads",
+	"run-events-page.export-denied.json":             "internal/reads",
+	"assessment-record.semantic-judge.json":          "internal/reads",
+	"assessment-record.semantic-not-applicable.json": "internal/reads",
+	"assessment-page.two-records.json":               "internal/reads",
+	"assessment-page.empty.json":                     "internal/reads",
+	"security-event-page.judge.json":                 "internal/reads",
+	"security-summary.judge-split.json":              "internal/reads",
+	"report-view.vendor.json":                        "internal/reads",
+	"report-view.internal-withheld.json":             "internal/reads",
 }
 
 func readFile(t *testing.T, path string) []byte {

@@ -1,0 +1,20 @@
+{
+  "assessmentId": "4",
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "evaluationId": "6a0a71b2-9677-430a-8958-4fd79345d1f1",
+  "actionId": "9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a",
+  "securityModelCallId": null,
+  "boundary": "action_proposal",
+  "controlClass": "semantic",
+  "controlId": "semantic_injection",
+  "outcome": "not_applicable",
+  "reasonCode": "no_free_text_arguments",
+  "admissionCatalogRevisionId": 1,
+  "evaluatedCatalogRevisionId": 1,
+  "matchedRuleId": null,
+  "feedRevision": null,
+  "verdictSource": null,
+  "verdict": null,
+  "inputSource": null,
+  "assessedAt": "2026-10-03T12:03:00.123456Z"
+}

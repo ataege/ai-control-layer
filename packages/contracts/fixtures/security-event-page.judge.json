@@ -1,0 +1,33 @@
+{
+  "events": [
+    {
+      "eventId": "57",
+      "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+      "actionId": null,
+      "eventType": "control.evaluated",
+      "decision": "deny",
+      "reasonCode": "semantic_injection_detected",
+      "catalogRevisionId": 1,
+      "maskedSummary": {
+        "purpose": "security",
+        "admissionCatalogRevisionId": 1,
+        "matchedRule": null,
+        "feedRevision": null,
+        "reportId": null,
+        "template": null,
+        "classification": null,
+        "lineageCheck": null,
+        "effect": "none",
+        "replaySource": null,
+        "alternativeTemplate": null,
+        "safeMessage": "The security check found instruction-like content and withheld it.",
+        "actorId": "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+        "inputSource": "judge",
+        "evaluationId": "7b911223-f38a-48f3-91b5-fbb942f0229a"
+      },
+      "occurredAt": "2026-10-03T12:10:00.5Z"
+    }
+  ],
+  "nextCursor": "v1.1750.0.0"
+}
