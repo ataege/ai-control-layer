@@ -768,6 +768,13 @@ reservation stuck as `reserved`; if the settlement still fails, the call is mark
 a process slot is bounded on its own by one request period, and the provider's request deadline
 starts only once the slot is held.
 
+**Refused reservations are logged.** `budget.ReserveWithin` refuses with a
+`budget.ReservationRefusal` naming the limit (`token_total`, `purpose_tokens`, `calls_total`,
+`purpose_calls`, `concurrency_slot`, `ledger_paused`), the requested estimate, the limit and what
+remained; it unwraps to `ErrExhausted`, `ErrConcurrencyLimit` or `ErrPaused`. The production chain
+logs each refusal of either purpose as `model reservation refused` with the run and call ids, the
+purpose, `limit_kind`, `limit`, `estimate_tokens` and `remaining`: references and numbers only.
+
 **Limitation: unknown calls hold their slots.** A `usage_unknown` reservation keeps its ledger slot
 until a trusted late settlement (`Reconcile`). Such calls normally pause the run; a run that kept
 going with all `max_concurrent_calls` slots held by unknown calls would requeue every second
