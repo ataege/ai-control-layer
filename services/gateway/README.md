@@ -12,6 +12,9 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 | `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                            |
 | `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable`. |
 | `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                |
+| `POST /internal/runs/{runId}/cancel`            | GO-41: records a cancellation; `200` X-11 run state, `404` unknown or another organization's run.                 |
+| `POST /internal/actions/{actionId}/approval`    | GO-44 (lane w3): approve or reject one stored action (X-10).                                                      |
+| `GET /internal/actions/{actionId}/review`       | GO-44 (lane w3): the frozen review payload, for a reviewer of the organization.                                   |
 
 Internal product commands are registered through `httpserver.Options.InternalCommands`, which
 always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
@@ -147,7 +150,7 @@ internal/repository/  runtime passports, runs, jobs and X-12 events (gap-free pe
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
 internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)
-internal/catalog/     trusted active snapshot loader: pointer, limits, security settings, effective limits (GO-72)
+internal/catalog/     trusted active snapshot loader (GO-72) and catalog activation: validate, acknowledge or reject a requested revision (GO-73)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -400,6 +403,22 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Performance telemetry (GO-80)
+
+`agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the
+tool-result inspection's decisions to `runtime.control_assessments`. Per step the loop records
+`policy_lookup` (run, passport and step count), `provider` (agent call, Go wall time, with its
+`model_calls` id), `deterministic` (the gate decision, with the action when one was stored),
+`commit` (the executor's attempt and local effect), the inspection's `deterministic` and
+`semantic` controls with each security call's `provider` time, and `total` (the whole step).
+`failed` marks errored spans. Spans are best effort: a failed write is logged and never stops or
+retries a run. Control assessments of a released result commit in the same transaction as its
+context entries; those of a paused inspection are written on their own. Rows hold ids, outcomes,
+codes, revisions, the validated verdict (category, score, reason code) and durations, never
+inspected text, prompts or model output. Semantic rows carry their verdict source (`live` or
+`fixture`) and the `security`-purpose call they came from. `approval_wait` follows with GO-40;
+the concurrency slot with GO-79; queue depth is read from `runtime.jobs`.
+
 ## Bounded agent loop (GO-11)
 
 `agent.Loop` is the `worker.Handler` for `contracts.JobKindAgentStep` jobs. Per claim it runs up
@@ -429,6 +448,12 @@ references plus the stored steps; then, by result:
   unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
   `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
 
+**Active catalog (GO-72).** Before every model request the loop reads the active snapshot
+(`catalog.Loader.Active` through `agent.PoolCatalog`) and narrows the passport with
+`catalog.EffectiveFor`: the allowed models, the agent step limit and the correction limit are the
+smaller of passport and catalog, and the snapshot's security settings drive that step's inspection.
+No active catalog dispatches nothing and leaves the job for a later claim.
+
 Run changes go through `repository.Tx.TransitionRun` with their event; a change another writer
 already made (a cancellation) is accepted. A cancelled claim context returns an error and leaves
 the job for lease expiry.
@@ -443,8 +468,8 @@ Corrections are stored as `correction` entries (migration `1791100000000-AllowCo
 so a restarted worker sends the same feedback.
 
 **Tool-result inspection (GO-76 at the worker).** `agent.SecurityInspector` sends every minimized
-result through c1's `security.Inspector.InspectToolResult` with the active settings (a
-`SettingsSource`; production uses the catalog reader). The invoice note is marked as an untrusted
+result through c1's `security.Inspector.InspectToolResult` with the settings of the catalog snapshot read for this
+step. The invoice note is marked as an untrusted
 path with its trusted source (invoice id, version, classification); untrusted text the adapter cannot
 place pauses the run. Only the inspection's `ResultJSON` enters the context; a result withheld whole
 becomes `{"withheld":true,"reason_code":...}`; a paused inspection pauses the run and releases

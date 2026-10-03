@@ -22,12 +22,6 @@ const (
 // maximumApprovalBodyBytes bounds the approval body, which holds one short field.
 const maximumApprovalBodyBytes = 1 << 10
 
-// approvalDecisionBody is X-10: the decision only, never a replacement payload. Unknown fields are
-// rejected by the strict decoder, so a body carrying any payload stores no grant.
-type approvalDecisionBody struct {
-	Decision *ApprovalChoice `json:"decision"`
-}
-
 // ApprovalDecider is what the approval handler needs; *Approvals implements it.
 type ApprovalDecider interface {
 	Decide(ctx context.Context, operator contracts.OperatorContext, actionID string, choice ApprovalChoice) (ApprovalResult, error)
@@ -55,15 +49,17 @@ func ApprovalHandler(decider ApprovalDecider) http.Handler {
 			httpserver.WriteError(responseWriter, request, http.StatusUnauthorized, "unauthorized", "Missing or invalid operator context.")
 			return
 		}
-		var body approvalDecisionBody
+		// X-10: the decision only. The strict decoder rejects unknown fields, so a body carrying any
+		// payload stores no grant; a missing or unknown decision is rejected before deciding.
+		var body contracts.ApprovalDecision
 		if !httpserver.DecodeJSONBody(responseWriter, request, maximumApprovalBodyBytes, &body) {
 			return
 		}
-		if body.Decision == nil {
+		if !body.Decision.Valid() {
 			httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "bad_request", "The request body is not a valid command.")
 			return
 		}
-		result, err := decider.Decide(request.Context(), operator, request.PathValue("actionId"), *body.Decision)
+		result, err := decider.Decide(request.Context(), operator, request.PathValue("actionId"), body.Decision)
 		if err != nil {
 			writeApprovalError(responseWriter, request, err)
 			return
@@ -106,6 +102,8 @@ func writeApprovalError(responseWriter http.ResponseWriter, request *http.Reques
 		httpserver.WriteError(responseWriter, request, http.StatusConflict, string(contracts.ReasonApprovalExpired), "The approval has expired.")
 	case errors.Is(err, ErrApprovalChanged):
 		httpserver.WriteError(responseWriter, request, http.StatusConflict, string(contracts.ReasonActionChanged), "The action changed after it was frozen for review.")
+	case errors.Is(err, ErrApprovalRunStopped):
+		httpserver.WriteError(responseWriter, request, http.StatusConflict, string(contracts.ReasonRunCancelled), "The run is stopped or cancelled.")
 	case errors.Is(err, ErrApprovalClosed):
 		httpserver.WriteError(responseWriter, request, http.StatusConflict, "conflict", "The approval is already decided.")
 	default:

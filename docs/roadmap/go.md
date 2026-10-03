@@ -720,8 +720,7 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     classification, a hostile note withheld by signature or semantic verdict, a guard failure
     pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
     gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
-    the new one reverts and re-runs; `pnpm verify` 6 passed. Missing half: wiring into
-    `cmd/gateway/main.go` with w3's `policy.CatalogSecuritySettings` (next merge) and the live run,
+    the new one reverts and re-runs; `pnpm verify` 6 passed. The loop reads the active catalog before every model request and narrows the passport with `catalog.EffectiveFor` (GO-72; `TestTheActiveCatalogNarrowsEveryStep`). Missing half: wiring into `cmd/gateway/main.go` next to `catalog.WatchRequested` and the live run,
     which also needs the signature-feed import (c1, API-34).
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
@@ -729,13 +728,21 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     investigate)
   - Blocked by: nothing
 
-- [ ] **GO-80 · Instrument performance telemetry**
+- [x] **GO-80 · Instrument performance telemetry**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-10, GO-19 · Needs: X-79, X-85 · Provides: X-95 (part: instrumentation)
   - Paths: the model gateway and worker packages
   - Work: Measure monotonic durations separately for policy lookup, deterministic controls, semantic evaluation, provider request, approval waiting and local commit, plus total handling latency, queue depth, concurrency and errors, per model purpose. Keep untrusted confidential input out of the timing records. Observed durations stay distinct from cost estimates.
   - Done when: each agent and security call and each gate decision has its timing record, readable for the summary and export.
   - Tests: unit tests with a fake clock; a database-backed test through the X-24 command.
+  - Completed (2026-10-03): `agent.Telemetry` on go/f3 writes `runtime.timing_records` per step
+    (policy lookup, agent provider call with its `model_calls` id, gate decision, executor commit,
+    step total) and, for each tool-result inspection, the deterministic and semantic controls, each
+    security call's provider time and one `runtime.control_assessments` row per control decision
+    (semantic rows with verdict source and the security call id), committed with the step's context
+    entries. No inspected text is stored. Test
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
+    depth is read from `runtime.jobs` by the summary.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 
@@ -1851,7 +1858,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     versioning and execution rechecks"; "Architecture and chart reading guide" (Figure 6)
   - Blocked by: nothing
 
-- [ ] **GO-41 · Persist cancellation through the internal cancel command**
+- [x] **GO-41 · Persist cancellation through the internal cancel command**
   - **Report 1.1 change:** Figure 7; name proposal `POST /internal/runs/:id/cancel`.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-21 · Needs: X-11, X-13 · Provides: X-42
@@ -1870,6 +1877,22 @@ typecheck` PASS; `pnpm verify` 6 passed.
     changes nothing; after a cancel no model request or tool execution starts, including for a run
     waiting for approval; a repeated cancel is harmless. `pnpm --filter gateway run test`;
     database-backed cases through the X-24 command.
+  - Completed (2026-10-03): `POST /internal/runs/{runId}/cancel` in `internal/api`, behind the
+    service token and the verified operator context; body empty or `{}`; answers 200 with the X-11
+    run state, 404 for an unknown or another organization's run, 503 `decision_unavailable`
+    otherwise. `repository.Tx.RequestCancellation` locks the run, stamps `cancel_requested_at` once
+    with a `run.cancel_requested` event (additive X-12 type), and stops a run no worker is advancing
+    (queued, awaiting approval, paused) at once as `stopped` / `run_cancelled` with `run.stopped`; a
+    running run keeps its status and is stopped by the worker loop (lane f3), which, like the
+    executor (lane w3), refuses every dispatch once the stamp is set. A finished run and a repeated
+    cancel change nothing. No NestJS revocation record is written. Tests: repository (queued and
+    awaiting-approval runs stop with both events; a running run is stamped once and a repeat adds
+    nothing; a completed run is untouched; another organization's run changes nothing) and route
+    tests with a labelled double plus a PostgreSQL route test (another organization 404, own run
+    stopped). Checks: gateway five checks PASS; `go test -race ./internal/repository
+./internal/api` with PostgreSQL ok; contracts `test` PASS; `pnpm verify` 6 passed. Not covered
+    here: interrupting an in-flight model request (the loop stops at its next check), and the
+    approval command refusing a decision on a stopped run, which is lane w3's GO-44 check.
   - Report: "Atomic allowances hard limits and estimated cost" (Cancellation and time limits);
     "Illustrative passport and interface contracts" (Proposed browser and runtime operations);
     "Exact action approval versioning and execution rechecks" (Versioned policy and current
@@ -1963,7 +1986,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
   - Completed (2026-10-03): `internal/policy/approvals.go` and `approval_handlers.go`, migration `1791110000000-GrantGatewayMembershipRead` (lead decisions: reviewer role `reviewer` in `app.memberships`, routes `POST /internal/actions/{actionId}/approval` and `GET /internal/actions/{actionId}/review`, the run state moved by f3's worker). Reviewer authority, action integrity, frozen payload integrity and expiry are checked; the approvals row, the action status, the `approval.decided` event and the continuation job commit in one transaction or not at all. Checks: fresh database, 15 migrations run, revert and re-run of 1791110000000 succeeded; `pnpm test:db gateway` 642 passed, 0 failed, 0 skipped with `TestReviewerApprovalStoresTheGrantAndTheContinuationTogether` (and a second decision fails), `TestRejectionClosesTheApprovalAndContinues`, `TestApprovalRefusalsStoreNoGrant` (non-reviewer, a reviewer claim without the membership role, reviewer of another organization, expired, altered action, an injected continuation failure: no grant, no job, still awaiting) , `TestFrozenReviewIsReadOnlyByReviewers` and `TestGatewayRoleReadsMembershipsButCannotWriteThem`; `TestApprovalHandlerAcceptsOnlyTheDecision` (a body with a payload or replacement content is 400 and reaches no decision) PASS; `pnpm verify` 6/6. Pending other lanes: 3c mounts the two handlers in `api.Commands` and X-10 `contracts.ApprovalDecision` (1c12eb9 on go/3c) replaces the handler-local type once on main.
 
-- [ ] **GO-45 · Recheck before execution and claim the attempt in one transaction**
+- [x] **GO-45 · Recheck before execution and claim the attempt in one transaction**
   - **Report 1.2 change:** Figure 8: when the required action guard assessment is not current, the action returns to the budgeted semantic action check (GO-77) instead of executing.
   - **Report 1.2 change:** The recheck adds the active catalog revision and the required guard status: "required current semantic checks cannot be satisfied by a failed or stale assessment".
   - **Report 1.1 change:** The recheck adds current source and template policy and revocations, resource and report lineage preconditions and destination restrictions, with the new reason codes; Figure 8.
@@ -1988,6 +2011,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     reading guide" (Figure 7); "Relative implementation milestones and critical dependencies" (Hours
     10-14)
   - Blocked by: `record versions`
+  - Completed (2026-10-03): `internal/policy/executor.go`: approved actions run after rechecks of the active catalog revision (`source_policy_changed`), the open unexpired grant (`approval_expired`), the frozen source versions against the current ones (`resource_version_changed`) and the review material rebuilt from current rows against the frozen digest (recipient address, content, template, arguments: `action_changed`); the grant is consumed once by the attempt in the effect's transaction before `RunEffect`; attempts are counted under `FOR NO KEY UPDATE` on the run row (a `FOR UPDATE` lock deadlocked with a running effect's event insert in the concurrency test). Checks: `pnpm test:db gateway` 653 passed, 0 failed, 0 skipped with `TestApprovedActionExecutesOnceAndConsumesItsGrant` (one outbox row, the grant consumed by the attempt, a second execution refused), `TestApprovedActionRechecksBeforeExecution` (changed source version, changed recipient address, changed arguments, cancelled run, changed catalog revision: refused, no attempt, no outbox row), `TestExpiredOrRejectedGrantExecutesNothing` and `TestConcurrentExecutionsConsumeTheGrantOnce` (4 concurrent executions: one success, one outbox row, one consumption); `go test -race -count=10` on the concurrency and recheck tests against the database PASS; the exhausted attempt allowance is `TestAttemptLimitIsEnforced` (GO-16); `pnpm verify` 6/6. Not here: the guard re-run when the assessment is stale (Report 1.2 change) is covered by refusing a changed catalog revision, which hands the action back for a fresh evaluation; current revocations join in GO-52.
 
 - [ ] **GO-46 · Prove approval integrity**
   - **Report 1.1 change:** Adds a changed template or projection version; Report: Scene 4 precise human review and one simulated delivery.
@@ -2024,13 +2048,37 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     "Delivery scope and six person ownership" (Proposed team ownership)
   - Blocked by: nothing
 
-- [ ] **GO-73 · Validate and acknowledge a candidate catalog revision**
+- [x] **GO-73 · Validate and acknowledge a candidate catalog revision**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-72 · Needs: X-79 · Provides: X-83 (part: Go validation and acknowledgement)
   - Paths: the enforcement package from GO-12; the internal API package from GO-21
   - Work: "Go fetches and validates the candidate, acknowledges readiness, and the activation flow publishes its active-version pointer." An invalid candidate is never activated; the last-known-good revision stays in use.
   - Done when: a valid candidate is acknowledged and becomes active, and an invalid one is rejected with a reason while the old revision keeps deciding.
   - Tests: database-backed tests through the X-24 command for a valid and an invalid candidate.
+  - Completed (2026-10-03): the `catalog activation protocol` as the lead decided it.
+    `catalog.ActivateRequested` runs under a transaction-scoped advisory lock (one gateway instance
+    at a time), reads the pointer, and validates a requested revision that is not active and has not
+    already failed with the gateway's own parsers (limits plus `security.SettingsFromCatalog`, with
+    the feed found by the policy's `signatures.revision` and its pinned digest). Success sets
+    `validated_revision_id = active_revision_id = requested` and `active_feed_revision_id`, and
+    clears `last_error` in one transaction (Go's acknowledgement); failure writes a safe
+    `last_error` (`reason`, `code`, `message`, `revision_id`, `stage`; never file content) and keeps
+    the last good revision. `catalog.WatchRequested` runs it every second in `cmd/gateway` and
+    stops before the pool closes. Migration `1791120000000-GrantGatewayCatalogActivation` grants
+    the gateway role UPDATE on exactly those pointer columns. Tests (PostgreSQL, rolled-back
+    transaction): a valid request becomes active with its feed and the loader serves it; invalid
+    limits, an unknown disabled rule and a feed that was not imported are each rejected with their
+    code while the last good revision keeps deciding, and are not retried; a first revision with
+    signatures disabled needs no feed; a held lock gives `busy`; as `task_passport_gateway` the
+    activation works while requesting or importing a revision is `permission denied`. Checks:
+    gateway five checks PASS; `go test -race ./internal/catalog/...` ok; api `lint`, `typecheck`,
+    `test`, `build` PASS; `pnpm db:migration:run` applied the migration; `pnpm verify` 6 passed.
+    Live on the 55510 database with the gateway binary: `pnpm policy:import` of policy.yaml with
+    threshold 0.8 was accepted as revision 230, and within 2.5 s the pointer showed requested,
+    validated and active 230 with feed 134 and no error; a start-run command then admitted a
+    passport with admission revision 230; a second import naming feed_v9 (revision 231) was
+    rejected with `signature_feed_missing` while 230 stayed active. The feed row was inserted by
+    hand for that run, because the feed half of the import (c1) has not landed yet.
   - Report: "Central policy configuration and safe reload"
   - Blocked by: `catalog activation protocol`
 
@@ -2058,7 +2106,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
+- [x] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
   - **Report 1.1 change:** The review payload adds the report fields of GO-43; "Review payloads and source manifests need their own access rules".
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: SH-05, GO-21, GO-43 · Needs: X-09 · Provides: X-41
@@ -2077,6 +2125,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     second disclosure channel); "Users operating model and proposed user journeys" (Journey 2 review
     an exact outbound effect)
   - Blocked by: `read path`; `review payload read`
+  - Completed (2026-10-03): the read path chose private Go endpoints (lead decision); `policy.ReviewHandler` with `Approvals.FrozenReviewFor` serves `GET /internal/actions/{actionId}/review` (c8207de), mounted by 3c behind the service token and operator context (d5c5e8c). Checks: `pnpm test:db gateway` 694 passed, 0 failed, 0 skipped with `TestReviewEndpointServesTheFrozenPayloadToReviewersOnly` (evidence X-41: the reviewer's served report content and recipient address equal the stored frozen payload byte for byte; an operator without the reviewer role gets 403, a reviewer of another organization 404, no operator context 401, none of them with content) and `TestFrozenReviewIsReadOnlyByReviewers`; `pnpm verify` 6/6.
 
 ## M4: hours 14-18
 
@@ -2201,6 +2250,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     revocation); "Trusted authority and passport invariants"; "Threat model limits and unresolved
     design choices" ("Current revocation requires a single owner and reliable reads")
   - Blocked by: `revocation reads`; `decision 2 in docs/product/README.md`
+  - Progress (2026-10-03): blocked on SH-38/X-66 (web + API): `revocation reads` is not decided and no revocation table exists, so no reader is built (a reader that fails closed against a missing table would stop every run; lead decision).
 
 - [ ] **GO-53 · Handle known failures, safe retries and unknown outcomes**
   - **Report 1.1 change:** Figure 9.
@@ -2401,6 +2451,20 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     its action, or claim its resources.")
   - Tests: internal-boundary tests through the X-24 command: each cross-organization command and
     read is rejected, and the runtime rows are identical before and after.
+  - Progress (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
+    committed run (awaiting approval), an action awaiting approval, an internal report, a vendor and
+    invoices, and calls every mounted internal route with a valid service token and organization
+    B's verified operator context: start a run on A's invoices, cancel A's run, read A's report,
+    approve and reject A's action, read A's review. Each is rejected (start: 400 or 503, cancel and
+    report 404, approval and review 403 or 404), no response contains A's report text or vendor,
+    B gets no passport, and an md5 fingerprint of every row A owns in runtime.passports, runs, jobs,
+    actions, approvals, audit_events, review_payloads, demo.reports, outbox_messages, invoices and
+    vendors is identical before and after; A's own operator still reads the report (200) and
+    cancels the run (200). Checks: `pnpm test:db gateway` 688 passed, 0 failed, 0 skipped; gateway
+    five checks PASS; `pnpm verify` 6 passed. Missing half: lane w2's GO-24 run, usage and event
+    reads are not mounted yet; they join this test when they land. On the seeded test database the
+    cross-organization start-run gets 503 (its catalog binds no feed), so the scope rejection of
+    that call is shown by GO-13's tests instead.
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`

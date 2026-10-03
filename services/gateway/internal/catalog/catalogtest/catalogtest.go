@@ -5,7 +5,6 @@ package catalogtest
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -34,8 +33,8 @@ const PolicyContent = `{
 	"reports": {"enabled_templates": ["internal_investigation_v1", "vendor_reconciliation_v1"]}
 }`
 
-// InsertFeed stores the repository's config/attack-signatures.json as a feed revision with its
-// real digest, under a unique issuer, and returns its id.
+// InsertFeed stores the repository's config/attack-signatures.json as the trusted issuer's
+// feed_v1 with its real digest (or reuses an imported one) and returns its id.
 func InsertFeed(t *testing.T, transaction pgx.Tx) int64 {
 	t.Helper()
 	_, thisFile, _, _ := runtime.Caller(0)
@@ -45,13 +44,17 @@ func InsertFeed(t *testing.T, transaction pgx.Tx) int64 {
 		t.Fatalf("read the signature feed: %v", err)
 	}
 	digest := sha256.Sum256(feedBytes)
-	var feedID int64
-	err = transaction.QueryRow(context.Background(), `INSERT INTO app.signature_feed_revisions
+	// The trusted issuer and revision are unique; an imported row is reused as it is.
+	if _, err := transaction.Exec(context.Background(), `INSERT INTO app.signature_feed_revisions
 		(issuer, revision, source_file_name, source_text, file_digest, content, import_source)
-		VALUES ($1, 'feed_v1', 'attack-signatures.json', $2, $3, '{}', 'command') RETURNING id`,
-		"catalogtest-"+uniqueSuffix(t), string(feedBytes), hex.EncodeToString(digest[:])).Scan(&feedID)
-	if err != nil {
+		VALUES ('task-passport-security', 'feed_v1', 'attack-signatures.json', $1, $2, '{}', 'command')
+		ON CONFLICT (issuer, revision) DO NOTHING`, string(feedBytes), hex.EncodeToString(digest[:])); err != nil {
 		t.Fatalf("insert the signature feed: %v", err)
+	}
+	var feedID int64
+	if err := transaction.QueryRow(context.Background(), `SELECT id FROM app.signature_feed_revisions
+		WHERE issuer = 'task-passport-security' AND revision = 'feed_v1'`).Scan(&feedID); err != nil {
+		t.Fatalf("read the signature feed: %v", err)
 	}
 	return feedID
 }
@@ -83,9 +86,20 @@ func ActivatePolicy(t *testing.T, transaction pgx.Tx) int64 {
 	return Activate(t, transaction, PolicyContent, &feedID)
 }
 
-func uniqueSuffix(t *testing.T) string {
+// Request stores content as a new catalog revision and sets only requested_revision_id, as the
+// import does under the catalog activation protocol; the active revision is unchanged.
+func Request(t *testing.T, transaction pgx.Tx, content string) int64 {
 	t.Helper()
-	var randomBytes [8]byte
-	_, _ = rand.Read(randomBytes[:])
-	return hex.EncodeToString(randomBytes[:])
+	var revisionID int64
+	err := transaction.QueryRow(context.Background(), `INSERT INTO app.control_catalog_revisions
+		(schema_version, source_file_name, source_text, file_digest, content, import_source)
+		VALUES (1, 'policy.yaml', 'catalogtest', repeat('d', 64), $1, 'command') RETURNING id`, content).Scan(&revisionID)
+	if err != nil {
+		t.Fatalf("insert the requested revision: %v", err)
+	}
+	if _, err := transaction.Exec(context.Background(), `INSERT INTO app.control_catalog_pointer (id, requested_revision_id)
+		VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET requested_revision_id = EXCLUDED.requested_revision_id`, revisionID); err != nil {
+		t.Fatalf("request the revision: %v", err)
+	}
+	return revisionID
 }

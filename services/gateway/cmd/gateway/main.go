@@ -24,6 +24,7 @@ import (
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/logging"
 	"starter/services/gateway/internal/operatorcontext"
+	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/repository"
 )
 
@@ -31,6 +32,8 @@ const (
 	// Kept below the default 10 s container stop grace period.
 	shutdownTimeout    = 8 * time.Second
 	healthcheckTimeout = 2 * time.Second
+	// A requested catalog revision is validated within about this long after its import.
+	catalogActivationInterval = time.Second
 )
 
 func main() {
@@ -76,19 +79,34 @@ func run() error {
 	// Runs after Run returns: HTTP drains first, then the pool closes.
 	defer pool.Close()
 
+	// Validates and activates each newly requested catalog revision (catalog activation
+	// protocol). Stopped before the pool closes: the deferred calls run in reverse order.
+	activationStopped := make(chan struct{})
+	go func() {
+		defer close(activationStopped)
+		catalog.WatchRequested(signalContext, pool, catalogActivationInterval, logger)
+	}()
+	defer func() {
+		stopSignals()
+		<-activationStopped
+	}()
+
 	operatorContextVerifier, err := operatorcontext.NewVerifier(loadedConfig.OperatorContextSigningKey)
 	if err != nil {
 		return err
 	}
 
+	runtimeRepository := repository.New(pool)
 	handler := httpserver.NewHandler(httpserver.Options{
 		Logger:          logger,
 		Health:          health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger},
 		ServiceToken:    loadedConfig.ServiceToken,
 		OperatorContext: operatorContextVerifier,
 		InternalCommands: api.Commands(api.Dependencies{
-			Admitter: admission.New(repository.New(pool), catalog.NewLoader()),
-			Database: pool,
+			Admitter:  admission.New(runtimeRepository, catalog.NewLoader()),
+			Canceller: runtimeRepository,
+			Approvals: policy.NewApprovals(pool),
+			Database:  pool,
 		}),
 	})
 	listenAddress := net.JoinHostPort(loadedConfig.Host, strconv.Itoa(loadedConfig.Port))
