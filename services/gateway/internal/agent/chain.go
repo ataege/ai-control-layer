@@ -229,16 +229,20 @@ func (caller *CatalogAccountedCaller) Call(ctx context.Context, runID, callID st
 		return model.AccountedResult{}, err
 	}
 	requestTimeout := time.Duration(snapshot.Limits.RequestTimeoutSeconds) * time.Second
-	if requestTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, requestTimeout)
-		defer cancel()
+	if requestTimeout <= 0 {
+		return model.AccountedResult{}, catalog.ErrUnavailable
 	}
-	// The process-wide local cap: wait for a slot within the request deadline, before reserving.
-	release, err := caller.local.acquire(ctx, int(snapshot.Limits.LocalMaxConcurrency))
+	// The process-wide local cap: wait for a slot, bounded on its own by one request period, before
+	// reserving. The wait never spends the provider's request time.
+	waitContext, cancelWait := context.WithTimeout(ctx, requestTimeout)
+	release, err := caller.local.acquire(waitContext, int(snapshot.Limits.LocalMaxConcurrency))
+	cancelWait()
 	if err != nil {
 		return model.AccountedResult{}, budget.ErrConcurrencyLimit
 	}
+	// The request deadline starts once the slot is held.
+	ctx, cancelRequest := context.WithTimeout(ctx, requestTimeout)
+	defer cancelRequest()
 	result, callErr := accounted.Call(ctx, runID, callID, request)
 	if result.UsageUnknown {
 		// A client timeout does not prove inference stopped: keep the slot one more request period.

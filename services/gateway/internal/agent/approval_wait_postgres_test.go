@@ -129,7 +129,7 @@ func TestReviewWaitHoldsNoWorkerAndResumesTheApprovedActionAfterARestart(t *test
 	var status string
 	var digestAfter []byte
 	if err := world.pool.QueryRow(context.Background(), "SELECT status, action_digest FROM runtime.actions WHERE id = $1", wait.actionID).
-		Scan(&status, &digestAfter); err != nil || status != "executed" || string(digestAfter) != string(digestBefore) {
+		Scan(&status, &digestAfter); err != nil || status != "succeeded" || string(digestAfter) != string(digestBefore) {
 		t.Fatalf("the approved stored action: status %s, digest changed %v, %v", status, string(digestAfter) != string(digestBefore), err)
 	}
 	if outbox := world.count(t, "SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1"); outbox != 1 {

@@ -238,3 +238,35 @@ func TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport(t *testing.T)
 		t.Fatalf("provider hits %d, security calls %d (stored limit %d)", hits.Load(), snapshot.Security.Calls, snapshot.Security.CallLimit)
 	}
 }
+
+// Worker 3's review: waiting for a local slot does not spend the provider's request time. With a
+// one-second request period and one slot, the second call waits 0.7 s and then gets its full second.
+func TestModelGatewaySlotWaitKeepsTheFullRequestTime(t *testing.T) {
+	pool := testdb.Open(t)
+	provider := providerDouble(t, func(writer http.ResponseWriter, request *http.Request) {
+		select {
+		case <-time.After(700 * time.Millisecond):
+			fmt.Fprint(writer, fixtureAnswer)
+		case <-request.Context().Done():
+		}
+	})
+	caller := NewCatalogAccountedCaller(provider, budgettest.NewDispatchRecordingStore(pool), fixedAccounting{},
+		gatewaySnapshot([]string{"test-fixture"}, 1, 1), pool, "test-fixture")
+	runs := []budgettest.Run{budgettest.OpenRun(t, pool, budgettest.Limits(20000)), budgettest.OpenRun(t, pool, budgettest.Limits(20000))}
+	failures := make(chan error, len(runs))
+	var waitGroup sync.WaitGroup
+	for _, run := range runs {
+		waitGroup.Add(1)
+		go func(runID string) {
+			defer waitGroup.Done()
+			if _, err := caller.Call(context.Background(), runID, testdb.ID(t), agentRequest()); err != nil {
+				failures <- err
+			}
+		}(run.RunID)
+	}
+	waitGroup.Wait()
+	close(failures)
+	for err := range failures {
+		t.Fatalf("a call that waited for the slot ran out of request time: %v", err)
+	}
+}
