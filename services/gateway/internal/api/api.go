@@ -6,6 +6,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"starter/services/gateway/internal/admission"
@@ -13,6 +14,7 @@ import (
 	"starter/services/gateway/internal/evaluation"
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
+	"starter/services/gateway/internal/logging"
 	"starter/services/gateway/internal/operatorcontext"
 	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/provenance"
@@ -118,6 +120,14 @@ func StartRunHandler(admitter RunAdmitter) http.Handler {
 		case errors.As(err, &rejection):
 			httpserver.WriteError(responseWriter, request, http.StatusBadRequest, string(rejection.Code), rejection.Message)
 		case err != nil:
+			// The stage is a fixed word from admission, so the log names the cause without any
+			// record, request or driver text.
+			stage := "unknown"
+			var unavailable *admission.UnavailableError
+			if errors.As(err, &unavailable) {
+				stage = unavailable.Stage
+			}
+			logging.FromContext(request.Context(), slog.Default()).Warn("admission unavailable", "stage", stage)
 			httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, string(contracts.ReasonDecisionUnavailable),
 				"Admission could not be decided; no run was started.")
 		default:

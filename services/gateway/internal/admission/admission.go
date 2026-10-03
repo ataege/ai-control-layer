@@ -38,6 +38,18 @@ const maximumRequestedInvoices = 100
 // It is never an admission: nothing is stored and the caller answers decision_unavailable.
 var ErrUnavailable = errors.New("admission decision unavailable")
 
+// UnavailableError names the admission stage that could not decide. Stage is a fixed word, never
+// record or driver text, so the caller may log it; errors.Is(err, ErrUnavailable) holds.
+type UnavailableError struct{ Stage string }
+
+func (unavailableErr *UnavailableError) Error() string {
+	return "admission decision unavailable at stage " + unavailableErr.Stage
+}
+
+func (unavailableErr *UnavailableError) Unwrap() error { return ErrUnavailable }
+
+func unavailableAt(stage string) error { return &UnavailableError{Stage: stage} }
+
 // Rejection explains why a request exceeds the operator's authority.
 type Rejection struct {
 	Code contracts.ReasonCode
@@ -69,7 +81,7 @@ func New(runtimeRepository *repository.Repository, catalogLoader *catalog.Loader
 // ErrUnavailable. Identity comes only from the verified operator, never from the request.
 func (admitter *Admitter) Admit(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest) (contracts.Passport, error) {
 	if admitter == nil || admitter.repository == nil || admitter.catalog == nil || ctx == nil {
-		return contracts.Passport{}, ErrUnavailable
+		return contracts.Passport{}, unavailableAt("dependencies")
 	}
 	if rejection := validateRequest(request); rejection != nil {
 		return contracts.Passport{}, admitter.recordRejection(ctx, operator, nil, rejection)
@@ -81,25 +93,25 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 		// that cannot be enforced issues no passport.
 		snapshot, err := admitter.catalog.Active(ctx, tx.Raw())
 		if err != nil {
-			return ErrUnavailable
+			return unavailableAt("catalog")
 		}
 		catalogRevisionID = &snapshot.RevisionID
 		vendorID, rejection, err := resolveVendor(ctx, tx.Raw(), operator.OrganizationID, request)
 		if err != nil {
-			return ErrUnavailable
+			return unavailableAt("records")
 		}
 		if rejection != nil {
 			return rejection
 		}
 		passport, rejection, err = admitter.buildPassport(operator, request, snapshot.RevisionID, snapshot.Limits, vendorID)
 		if err != nil {
-			return ErrUnavailable
+			return unavailableAt("passport")
 		}
 		if rejection != nil {
 			return rejection
 		}
 		if err := tx.InsertAdmission(ctx, passport, repository.NewJob{ID: newUUID(), Kind: contracts.JobKindAgentStep}); err != nil {
-			return ErrUnavailable
+			return unavailableAt("storage")
 		}
 		// The run's token ledger opens with the passport (alignment decision 6); without it no
 		// model request can be reserved.
@@ -107,7 +119,7 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 		case errors.Is(err, budget.ErrInvalid):
 			return reject(contracts.ReasonLimitNotAllowed, "the token limits cannot open a run ledger")
 		case err != nil:
-			return ErrUnavailable
+			return unavailableAt("budget_ledger")
 		}
 		_, err = tx.AppendEvent(ctx, repository.NewEvent{
 			OrganizationID:    passport.OrganizationID,
@@ -121,7 +133,7 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 			},
 		})
 		if err != nil {
-			return ErrUnavailable
+			return unavailableAt("event")
 		}
 		return nil
 	})
@@ -129,8 +141,13 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 	if errors.As(err, &rejection) {
 		return contracts.Passport{}, admitter.recordRejection(ctx, operator, catalogRevisionID, rejection)
 	}
+	var stageErr *UnavailableError
+	if errors.As(err, &stageErr) {
+		return contracts.Passport{}, stageErr
+	}
 	if err != nil {
-		return contracts.Passport{}, ErrUnavailable
+		// Beginning or committing the transaction failed.
+		return contracts.Passport{}, unavailableAt("transaction")
 	}
 	return passport, nil
 }
@@ -153,7 +170,7 @@ func (admitter *Admitter) recordRejection(ctx context.Context, operator contract
 		return err
 	})
 	if err != nil {
-		return ErrUnavailable
+		return unavailableAt("rejection_evidence")
 	}
 	return rejection
 }

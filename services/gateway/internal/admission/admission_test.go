@@ -235,18 +235,16 @@ func TestPostgresAdmissionRejectsWhatExceedsAuthority(t *testing.T) {
 func TestPostgresAdmissionWithoutActiveCatalogIsUnavailable(t *testing.T) {
 	fixture := newFixture(t)
 	exec(t, fixture.outer, `UPDATE app.control_catalog_pointer SET active_revision_id = NULL WHERE id = 1`)
-	if _, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request()); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("got %v, want ErrUnavailable", err)
-	}
+	_, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request())
+	assertUnavailableAt(t, err, "catalog")
 	fixture.assertNothingAdmitted(t)
 }
 
 func TestPostgresAdmissionRejectsAnInvalidCatalog(t *testing.T) {
 	fixture := newFixture(t)
 	activateCatalog(t, fixture.outer, strings.Replace(testCatalogContent, `"calls_agent": 12`, `"calls_agent": 30`, 1))
-	if _, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request()); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("got %v, want ErrUnavailable", err)
-	}
+	_, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request())
+	assertUnavailableAt(t, err, "catalog")
 	fixture.assertNothingAdmitted(t)
 }
 
@@ -283,9 +281,8 @@ func TestPostgresAdmissionFaultBeforeCommitLeavesNothing(t *testing.T) {
 		BEGIN RAISE EXCEPTION 'injected admission fault'; END; $$`)
 	exec(t, fixture.outer, `CREATE TRIGGER admission_fault BEFORE INSERT ON runtime.audit_events
 		FOR EACH ROW WHEN (NEW.event_type = 'run.queued') EXECUTE FUNCTION pg_temp.fail_run_queued()`)
-	if _, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request()); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("got %v, want ErrUnavailable", err)
-	}
+	_, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request())
+	assertUnavailableAt(t, err, "event")
 	fixture.assertNothingAdmitted(t)
 }
 
@@ -294,8 +291,16 @@ func TestPostgresAdmissionFaultBeforeCommitLeavesNothing(t *testing.T) {
 func TestPostgresAdmissionRefusesWhenTheFeedIsMissing(t *testing.T) {
 	fixture := newFixture(t)
 	catalogtest.Activate(t, fixture.outer, testCatalogContent, nil)
-	if _, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request()); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("got %v, want ErrUnavailable", err)
-	}
+	_, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request())
+	assertUnavailableAt(t, err, "catalog")
 	fixture.assertNothingAdmitted(t)
+}
+
+// assertUnavailableAt checks the error is ErrUnavailable and names the stage that failed.
+func assertUnavailableAt(t *testing.T, err error, wantStage string) {
+	t.Helper()
+	var stageErr *UnavailableError
+	if !errors.Is(err, ErrUnavailable) || !errors.As(err, &stageErr) || stageErr.Stage != wantStage {
+		t.Fatalf("got %v, want ErrUnavailable at stage %q", err, wantStage)
+	}
 }
