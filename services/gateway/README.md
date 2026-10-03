@@ -189,7 +189,8 @@ MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gatew
 Each call used `think: false`, context 4096, output ceiling 256, deadline 30 seconds and 1 MiB
 request/response limits. These are diagnostic settings. The durations are two observations, not
 a benchmark, a throughput estimate or proof of a maximum latency. The configured model remains
-a provisional choice, and the shared model/accounting decision remains pending GO-03/SH-04.
+a provisional choice. These observations predate the accounting adoption below; the shared
+model/hardware freeze remains GO-03/SH-04.
 
 ## GO-06 token accounting
 
