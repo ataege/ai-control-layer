@@ -1165,7 +1165,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     1 create and delegate a task)
   - Blocked by: nothing
 
-- [ ] **WEB-12 · Render the report from the stored report and its registered template**
+- [x] **WEB-12 · Render the report from the stored report and its registered template**
   - **Report 1.1 change:** Renders both reports; beats 4 and 7.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: API-18, WEB-06 · Needs: X-64 · Provides: nothing
@@ -1181,6 +1181,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary); "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 3)
   - Blocked by: `stored report read`; `final result format`
+  - Completed (2026-10-04): lane web/reports. The page `apps/web/src/app/runs/[id]/reports/[reportId]/page.tsx` loads one stored report through the same-origin route `app/api/runs/[id]/reports/[reportId]/route.ts` (proxyUpstream to `GET /api/runs/{id}/reports/{reportId}`) and `lib/clients/reports-client.ts`, whose guard `isReportView` accepts only the two registered templates, a consistent withheld state, a 64-hex content hash and a non-empty source trail; anything else is an error ("Report cannot be shown"), never free text. `components/report/report-content.tsx` renders the title, report id, run id, version and template with its version from the stored fields only, the content as plain text (never markup), or, when `contentWithheld` is set, the statement "Content withheld" and no content, even if a body were present. Checks: `pnpm --filter web run lint` (0 errors; 3 warnings in files this lane does not own), `typecheck` and `test` (49 passed, 12 new: the guard against both report-view fixtures and tampered copies, the client with encoded ids and the API's 404, the rendering of both fixtures, a tampered withheld report, markup as text, the failure words, and the route's upstream path). Browser check, quoted: on a live run (qwen3.5:4b, development demonstration) the model read both invoices, created the internal report, was denied its export (`report_export_restricted`), created the vendor report and waited for approval; as the signed-in demo operator, `/api/runs/{run}/reports/{vendor report}` answered 200 (404 for an unknown id, 401 without a session) and the page at `/runs/{run}/reports/{vendor report}` showed "Vendor reconciliation", version 1, `vendor_reconciliation_v1 (version 1)` and its stored content ("invoice_A01: external reference INV104 … duplicate reference: yes"). Not here: the classification label and source trail (WEB-27), the denial explanation (WEB-28), and marking a queued report's outbox entry as simulated, which is event data that `ReportView` does not carry (WEB-13 and the run timeline); the link from the run page is Batın's mount.
 
 - [ ] **WEB-13 · Label the simulated outbox, replays and the development demonstration**
   - **Report 1.1 change:** Label quote: "Do not describe a simulated outbox as live email delivery or an invoice report as a real payment operation."
