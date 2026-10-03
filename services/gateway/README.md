@@ -438,7 +438,8 @@ the governed chain once, and `cmd/gateway` uses it with the same `catalog.Loader
   request timeout per call, the run's ledger, `model.AccountedCaller`, the Ollama provider
   (`MODEL_BASE_URL`, `MODEL_NAME`, 2-minute outer bound, 1 MiB request/response limits);
 - `SecurityCaller` (`agent.RecordingCaller`), `Evaluator` (`security.NewSemanticEvaluator`, context
-  8192, verdicts labelled `live`), `Inspector` (`security.NewInspector`);
+  8192, verdicts labelled `live`, or `ChainConfig.VerdictSource` = `fixture` for a test driving the
+  chain with a fixture provider), `Inspector` (`security.NewInspector`);
 - `Settings` (`agent.CatalogSettings`, policy's `SecuritySettingsSource` over the active snapshot;
   a revision that is no longer active has no settings), `Catalog` (`agent.PoolCatalog`);
 - `Gate` (`policy.NewGate` with `PassportScopeReader`, `PostgresRecorder`, `PostgresRelationships`
@@ -478,6 +479,8 @@ request time and by the ledger's (`budget.Reservation.RequestTimeout`, applied i
 runs out is `budget.ErrConcurrencyLimit`, which requeues the job). After a timeout or unknown usage
 the process slot stays held for one more request period, because a client timeout does not prove
 the provider stopped; the ledger keeps the reservation and its slot until the late settlement.
+A call is refused (`catalog.ErrUnavailable`) when the snapshot and the accounting projection
+describe different catalog revisions, so one call never mixes two revisions.
 `model.AccountedCaller` now joins the safe failure sentinel (`ErrTransport`, `ErrResponse`) to
 `ErrUsageUnknown`, never the provider's raw error.
 
@@ -532,12 +535,17 @@ references plus the stored steps; then, by result:
   `policy.CheckCorrections` applies the passport's limit (beyond it: `stopped` /
   `allowance_exhausted`), and otherwise the denied call and `policy.BuildDenialFeedback` (reason
   code, fixed safe message, permitted alternative only) join the context; approval required →
-  `awaiting_approval` (`approval.requested`, GO-40 resumes); allow → `policy.Executor.Execute`,
+  `awaiting_approval` (the run's own `run.awaiting_approval` event naming the action; `approval.requested`
+  stays the gate's; GO-40 resumes); allow → `policy.Executor.Execute`,
   then the tool-result inspection, then the step's call and inspected result are appended to
   `runtime.context_entries` and the loop continues;
 - several tool calls → an `action.denied` event with `multiple_actions_not_supported` (GO-01), then
   the same correction path: it counts against the correction limit;
-- a final answer → `completed` (GO-26 adds the narrow result validation);
+- a final answer → `runresult.Validate` (GO-26, 3c): only the exact JSON naming one or two reports
+  this run created completes the run, and the validated reference is stored with the completion in
+  the same transaction; any other answer is an `action.denied` event and goes through the same
+  correction path with a fixed message; a failed check pauses the run (`decision_unavailable`). The
+  agent instruction contains `runresult.FinalAnswerInstruction` verbatim;
 - a model failure: exhausted or paused allowance and overspend → `paused` / `allowance_exhausted`;
   unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
   `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
