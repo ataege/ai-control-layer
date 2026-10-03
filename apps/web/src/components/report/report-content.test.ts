@@ -46,6 +46,55 @@ describe("ReportContent", () => {
   });
 });
 
+describe("classification and source trail", () => {
+  it("shows the stored classification of a vendor report and of each source", () => {
+    const html = render(vendorReport);
+    expect(html).toContain("Vendor shareable");
+    expect(html).not.toContain("Internal only");
+    expect(html).toContain('data-classification="vendor_shareable"');
+  });
+
+  it("shows an Internal only report with its label even when its content is withheld", () => {
+    const html = render(withheldReport);
+    expect(html).toContain('data-classification="internal_only"');
+    expect(html).toContain("Internal only");
+    expect(html).toContain("Content withheld");
+  });
+
+  it("lists every source with its version, stored classification and consumed fields", () => {
+    const html = render(withheldReport);
+    for (const source of withheldReport.lineage) {
+      expect(html).toContain(`${source.sourceKind} ${source.sourceId}`);
+      expect(html).toContain(source.consumedFields.join(", "));
+    }
+    // The first source carries the internal note and so the restriction; the second does not.
+    expect(html).toContain("internal_note");
+    expect(html).toContain('data-classification="vendor_shareable"');
+  });
+
+  it("shows template and projection versions, the destination class and the content hash", () => {
+    const html = render(vendorReport);
+    expect(html).toContain("vendor_invoice_fields_v1 (version 1)");
+    expect(html).toContain("Registered vendor recipient");
+    expect(html).toContain(vendorReport.contentHash);
+    const internalHtml = render(withheldReport);
+    expect(internalHtml).toContain("None (the internal template reads sources directly)");
+    expect(internalHtml).toContain("Internal reviewers");
+  });
+
+  it("reads the label from the stored field and never computes it from sources or the title", () => {
+    // A title that claims another label and a source trail that disagrees change nothing.
+    const html = render({
+      ...vendorReport,
+      title: "Internal only: renamed report",
+      lineage: withheldReport.lineage,
+    });
+    const badge = html.match(/data-classification="([a-z_]+)"[^>]*>([^<]+)</);
+    expect(badge?.[1]).toBe("vendor_shareable");
+    expect(badge?.[2]).toBe("Vendor shareable");
+  });
+});
+
 describe("describeReportFailure", () => {
   it("says a missing report was not found", () => {
     expect(describeReportFailure({ kind: "http", status: 404, body: undefined }).title).toBe(

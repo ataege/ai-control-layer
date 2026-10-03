@@ -1,13 +1,30 @@
 import type {
   ControlBoundary,
+  StartRunRequest,
   ControlEvaluationRequest,
   ControlEvaluationResponse,
   ToolName,
 } from "@workspace/contracts";
-import { postJson, type FetchJsonResult } from "../fetch-json";
+import { fetchJson, postJson, type FetchJsonResult } from "../fetch-json";
 
 export const EVALUATE_PATH = "/api/control/evaluate";
 export const MAX_TEXT_LENGTH = 4096;
+
+/**
+ * The seeded Atlas scenario (fixtures/demo-records.json), started as the judge's own run so an
+ * evaluation spends this run's security allowance and never a demo run's. The review requirement
+ * pauses the run at its report, which keeps it active for further evaluations.
+ */
+export const JUDGE_RUN_REQUEST: StartRunRequest = {
+  template: "reconcile_atlas_v1",
+  vendorId: "vendor_Atlas",
+  invoiceIds: ["invoice_A01", "invoice_A02"],
+  destination: "vendor_Atlas",
+  approvalRequirement: "review_queue_report",
+};
+
+/** A run in one of these states is refused by the evaluator with run_not_active. */
+export const INACTIVE_RUN_STATUSES = ["completed", "failed", "stopped"];
 
 export const BOUNDARIES: readonly ControlBoundary[] = [
   "model_input",
@@ -145,6 +162,26 @@ export function interpretEvaluation(result: FetchJsonResult<unknown>): Evaluatio
 }
 
 export class JudgeClient {
+  /** Starts the judge's dedicated run through the existing start-run route. */
+  static async startRun(): Promise<FetchJsonResult<{ runId: string }>> {
+    const result = await postJson<{ runId?: unknown }>("/api/runs", JUDGE_RUN_REQUEST);
+    if (result.ok && typeof result.data?.runId !== "string") {
+      return {
+        ok: false,
+        error: { kind: "invalid_json", status: result.status },
+        durationMs: result.durationMs,
+        requestId: result.requestId,
+      };
+    }
+    return result as FetchJsonResult<{ runId: string }>;
+  }
+
+  /** The run's state as the gateway reports it, or null when it cannot be read. */
+  static async getRunStatus(runId: string): Promise<string | null> {
+    const result = await fetchJson<{ status?: unknown }>(`/api/runs/${encodeURIComponent(runId)}`);
+    return result.ok && typeof result.data?.status === "string" ? result.data.status : null;
+  }
+
   static async evaluate(request: ControlEvaluationRequest): Promise<EvaluationOutcome> {
     // The semantic evaluator runs a local model, so allow longer than the default 15 s.
     const result = await postJson<unknown>(EVALUATE_PATH, request, { timeoutMs: 60_000 });

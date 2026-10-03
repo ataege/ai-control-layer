@@ -7,7 +7,8 @@ import { AppNavigation } from "@/components/app-navigation";
 
 export const metadata: Metadata = {
   title: { default: "Task Passport", template: "%s | Task Passport" },
-  description: "Control and monitor delegated agentic workflows.",
+  description:
+    "Delegate one bounded job to an agent under visible controls over its actions, information and spend. Synthetic records only.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -345,7 +345,6 @@ than a runtime product feature. It provides bounded explicit PostgreSQL connecti
 fixture identifiers for database-backed tests, through the existing X-24 `pnpm test:db` command.
 It owns no tables, performs no schema creation or migrations, and is not used by gateway startup.
 
-
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"
 in [AGENTS.md](../AGENTS.md).

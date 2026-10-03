@@ -194,6 +194,11 @@ export async function proxyUpstream(
     responseHeaders.set("cache-control", "no-store");
     responseHeaders.set(REQUEST_ID_HEADER, upstreamRequestId);
 
+    // Paging cursor of the audit export's CSV pages; a reference, never a secret.
+    const nextCursor = upstreamResponse.headers.get("x-next-cursor");
+    if (nextCursor && /^[A-Za-z0-9._:-]{1,128}$/.test(nextCursor)) {
+      responseHeaders.set("x-next-cursor", nextCursor);
+    }
     if (upstreamResponse.headers.has("content-type")) {
       responseHeaders.set("content-type", upstreamResponse.headers.get("content-type")!);
     }
