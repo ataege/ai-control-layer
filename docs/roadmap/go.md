@@ -2048,7 +2048,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
+- [x] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
   - **Report 1.1 change:** The review payload adds the report fields of GO-43; "Review payloads and source manifests need their own access rules".
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: SH-05, GO-21, GO-43 · Needs: X-09 · Provides: X-41
@@ -2067,6 +2067,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     second disclosure channel); "Users operating model and proposed user journeys" (Journey 2 review
     an exact outbound effect)
   - Blocked by: `read path`; `review payload read`
+  - Completed (2026-10-03): the read path chose private Go endpoints (lead decision); `policy.ReviewHandler` with `Approvals.FrozenReviewFor` serves `GET /internal/actions/{actionId}/review` (c8207de), mounted by 3c behind the service token and operator context (d5c5e8c). Checks: `pnpm test:db gateway` 694 passed, 0 failed, 0 skipped with `TestReviewEndpointServesTheFrozenPayloadToReviewersOnly` (evidence X-41: the reviewer's served report content and recipient address equal the stored frozen payload byte for byte; an operator without the reviewer role gets 403, a reviewer of another organization 404, no operator context 401, none of them with content) and `TestFrozenReviewIsReadOnlyByReviewers`; `pnpm verify` 6/6.
 
 ## M4: hours 14-18
 
@@ -2177,6 +2178,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     revocation); "Trusted authority and passport invariants"; "Threat model limits and unresolved
     design choices" ("Current revocation requires a single owner and reliable reads")
   - Blocked by: `revocation reads`; `decision 2 in docs/product/README.md`
+  - Progress (2026-10-03): blocked on SH-38/X-66 (web + API): `revocation reads` is not decided and no revocation table exists, so no reader is built (a reader that fails closed against a missing table would stop every run; lead decision).
 
 - [ ] **GO-53 · Handle known failures, safe retries and unknown outcomes**
   - **Report 1.1 change:** Figure 9.
