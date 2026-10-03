@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "control-evaluation-response.schema.json",
+  "title": "ControlEvaluationResponse",
+  "description": "X-91: the decision for one evaluated interaction. A denial is a decision (HTTP 200), not an error. Evaluated actions are decisions only: nothing is stored as an action or executed, so actionId is always null. A semantic verdict restricts, never grants.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evaluationId",
+    "runId",
+    "actionId",
+    "decision",
+    "reasonCode",
+    "safeMessage",
+    "alternativeTemplate",
+    "controls",
+    "semantic",
+    "content",
+    "catalog"
+  ],
+  "properties": {
+    "evaluationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "actionId": {
+      "type": "null"
+    },
+    "decision": {
+      "enum": ["allow", "deny", "redact", "approval_required"]
+    },
+    "reasonCode": {
+      "anyOf": [
+        {
+          "enum": [
+            "resource_out_of_scope",
+            "destination_not_allowed",
+            "report_export_restricted",
+            "report_lineage_missing",
+            "source_policy_changed",
+            "template_not_allowed",
+            "approval_required",
+            "approval_expired",
+            "action_changed",
+            "resource_version_changed",
+            "allowance_exhausted",
+            "run_cancelled",
+            "outcome_unknown",
+            "semantic_injection_detected",
+            "security_evaluator_unavailable",
+            "security_allowance_exhausted",
+            "content_redacted",
+            "signature_match",
+            "policy_reload_rejected",
+            "model_not_allowed",
+            "multiple_actions_not_supported",
+            "run_expired",
+            "tool_not_registered",
+            "invalid_arguments",
+            "tool_not_allowed",
+            "decision_unavailable",
+            "content_blocked",
+            "content_too_large",
+            "limit_not_allowed"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "safeMessage": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "alternativeTemplate": {
+      "anyOf": [
+        {
+          "enum": ["internal_investigation_v1", "vendor_reconciliation_v1"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "boundary",
+          "controlClass",
+          "control",
+          "outcome",
+          "reasonCode",
+          "ruleId",
+          "feedRevision"
+        ],
+        "properties": {
+          "boundary": {
+            "enum": ["model_input", "tool_result", "action_proposal"]
+          },
+          "controlClass": {
+            "enum": ["deterministic", "semantic"]
+          },
+          "control": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "outcome": {
+            "enum": ["pass", "redact", "block", "error", "not_applicable"]
+          },
+          "reasonCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ruleId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "feedRevision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "semantic": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "riskCategory", "score", "reasonCode"],
+          "properties": {
+            "source": {
+              "enum": ["live", "fixture"]
+            },
+            "riskCategory": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+            },
+            "score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "reasonCode": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "content": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admissionRevisionId", "activeRevisionId", "feedRevisionId"],
+      "properties": {
+        "admissionRevisionId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "activeRevisionId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "feedRevisionId": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

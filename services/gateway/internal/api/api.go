@@ -15,6 +15,7 @@ import (
 	"starter/services/gateway/internal/operatorcontext"
 	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/provenance"
+	"starter/services/gateway/internal/reads"
 	"starter/services/gateway/internal/repository"
 )
 
@@ -47,11 +48,18 @@ type Approvals interface {
 	policy.ReviewReader
 }
 
+// RunReader serves run state and event pages (lane w2's GO-24); *repository.Repository implements it.
+type RunReader interface {
+	reads.RunStateReader
+	reads.RunEventsReader
+}
+
 // Dependencies are what the internal routes need.
 type Dependencies struct {
 	Admitter  RunAdmitter
 	Canceller RunCanceller
 	Approvals Approvals
+	Runs      RunReader
 	// Database serves the stored report read (GO-37); the gateway pool in production.
 	Database provenance.Beginner
 }
@@ -64,6 +72,13 @@ func Commands(dependencies Dependencies) []httpserver.InternalCommand {
 		{Pattern: provenance.StoredReportRoutePattern, Handler: provenance.StoredReportHandler(dependencies.Database, StoredReportViewer)},
 		{Pattern: policy.ApprovalRoutePattern, Handler: policy.ApprovalHandler(dependencies.Approvals)},
 		{Pattern: policy.ReviewRoutePattern, Handler: policy.ReviewHandler(dependencies.Approvals)},
+		// Lane w2's GO-24 and GO-83 reads, organization-scoped through the verified operator.
+		{Pattern: reads.RunStateRoutePattern, Handler: reads.RunStateHandler(dependencies.Runs)},
+		{Pattern: reads.RunEventsRoutePattern, Handler: reads.RunEventsHandler(dependencies.Runs)},
+		{Pattern: reads.RunUsageRoutePattern, Handler: reads.RunUsageHandler(dependencies.Database)},
+		{Pattern: reads.SecuritySummaryRoutePattern, Handler: reads.SecuritySummaryHandler(dependencies.Database)},
+		{Pattern: reads.SecurityAssessmentsRoutePattern, Handler: reads.SecurityAssessmentsHandler(dependencies.Database)},
+		{Pattern: reads.SecurityEventsRoutePattern, Handler: reads.SecurityEventsHandler(dependencies.Database)},
 	}
 }
 

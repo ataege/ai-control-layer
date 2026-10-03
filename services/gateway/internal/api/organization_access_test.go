@@ -101,6 +101,7 @@ func openCrossOrganizationWorld(t *testing.T) *crossOrganizationWorld {
 		Admitter:  admission.New(runtimeRepository, catalog.NewLoader()),
 		Canceller: runtimeRepository,
 		Approvals: policy.NewApprovals(pool),
+		Runs:      runtimeRepository,
 		Database:  pool,
 	})
 	return world
@@ -200,6 +201,9 @@ func TestPostgresAnotherOrganizationCannotReachTheRunOrItsResources(t *testing.T
 		{"reject A's action", http.MethodPost, "/internal/actions/" + world.actionID + "/approval", `{"decision":"reject"}`,
 			[]int{http.StatusNotFound, http.StatusForbidden}},
 		{"read A's review", http.MethodGet, "/internal/actions/" + world.actionID + "/review", "", []int{http.StatusNotFound, http.StatusForbidden}},
+		{"read A's run state", http.MethodGet, "/internal/runs/" + world.runID, "", []int{http.StatusNotFound}},
+		{"read A's run events", http.MethodGet, "/internal/runs/" + world.runID + "/events", "", []int{http.StatusNotFound}},
+		{"read A's run usage", http.MethodGet, "/internal/runs/" + world.runID + "/usage", "", []int{http.StatusNotFound}},
 	}
 	for index, attempt := range attempts {
 		recorder := world.call(t, world.intruder, attempt.method, attempt.path, attempt.body, "intruder-"+string(rune('a'+index)))
@@ -214,6 +218,18 @@ func TestPostgresAnotherOrganizationCannotReachTheRunOrItsResources(t *testing.T
 			t.Errorf("%s: the response discloses organization A's data: %s", attempt.name, recorder.Body.String())
 		}
 	}
+	// The organization-wide security reads answer B with B's own (empty) records, never A's.
+	for index, path := range []string{"/internal/security/summary", "/internal/security/assessments", "/internal/security/events"} {
+		recorder := world.call(t, world.intruder, http.MethodGet, path, "", "intruder-security-"+string(rune('a'+index)))
+		if recorder.Code != http.StatusOK {
+			t.Errorf("%s: status %d (%s)", path, recorder.Code, recorder.Body.String())
+		}
+		for _, secret := range []string{world.runID, world.actionID, world.reportID, world.owner.OrganizationID} {
+			if strings.Contains(recorder.Body.String(), secret) {
+				t.Errorf("%s discloses organization A's record %s", path, secret)
+			}
+		}
+	}
 	if after := world.fingerprint(t); after != before {
 		t.Errorf("organization A's rows changed\nbefore %s\nafter  %s", before, after)
 	}
@@ -223,7 +239,12 @@ func TestPostgresAnotherOrganizationCannotReachTheRunOrItsResources(t *testing.T
 		t.Errorf("organization B got %d passports (err %v)", intruderPassports, err)
 	}
 
-	// Positive controls: A's own operator reaches the same report and run.
+	// Positive controls: A's own operator reaches the same records.
+	for _, path := range []string{"/internal/runs/" + world.runID, "/internal/runs/" + world.runID + "/events"} {
+		if recorder := world.call(t, world.owner, http.MethodGet, path, "", "owner-read-"+path); recorder.Code != http.StatusOK {
+			t.Errorf("owner read %s: %d %s", path, recorder.Code, recorder.Body.String())
+		}
+	}
 	if recorder := world.call(t, world.owner, http.MethodGet, "/internal/runs/"+world.runID+"/reports/"+world.reportID, "", "owner-report"); recorder.Code != http.StatusOK {
 		t.Errorf("owner report read: %d %s", recorder.Code, recorder.Body.String())
 	}

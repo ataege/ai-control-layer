@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "control-evaluation-request.schema.json",
+  "title": "ControlEvaluationRequest",
+  "description": "X-91: one interaction of an admitted run evaluated at one boundary through the same gates as the agent path. The caller cannot issue a grant; identity comes from the verified operator context, never from this body. The evaluate call never dispatches the agent model.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "kind", "text", "tool", "arguments"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "kind": {
+      "enum": ["model_input", "tool_result", "action_proposal"]
+    },
+    "text": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tool": {
+      "anyOf": [
+        {
+          "enum": ["read_invoice", "read_vendor", "create_report", "queue_report"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "arguments": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "model_input"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "null"
+          },
+          "arguments": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "tool_result"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "tool": {
+            "enum": ["read_invoice", "read_vendor", "create_report", "queue_report"]
+          },
+          "arguments": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "action_proposal"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "text": {
+            "type": "null"
+          },
+          "tool": {
+            "enum": ["read_invoice", "read_vendor", "create_report", "queue_report"]
+          },
+          "arguments": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ]
+}

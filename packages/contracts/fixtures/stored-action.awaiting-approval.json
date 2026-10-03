@@ -15,5 +15,6 @@
   "evaluatedCatalogRevisionId": 1,
   "status": "awaiting_approval",
   "expiresAt": "2026-10-03T12:10:00Z",
-  "createdAt": "2026-10-03T12:05:00Z"
+  "createdAt": "2026-10-03T12:05:00Z",
+  "replaySource": "labelled_replay:hostile_export_v1"
 }
