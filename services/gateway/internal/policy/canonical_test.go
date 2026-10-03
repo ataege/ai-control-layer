@@ -30,10 +30,10 @@ func TestEquivalentArgumentsGiveIdenticalCanonicalBytes(t *testing.T) {
 			name: "create_report: field order",
 			tool: ToolCreateReport,
 			equivalents: []string{
-				`{"template":"internal_investigation_v1","invoice_ids":["invoice_A01","invoice_A02"]}`,
-				`{"invoice_ids":["invoice_A01","invoice_A02"],"template":"internal_investigation_v1"}`,
+				`{"template":"internal_investigation_v1","source_invoice_ids":["invoice_A01","invoice_A02"]}`,
+				`{"source_invoice_ids":["invoice_A01","invoice_A02"],"template":"internal_investigation_v1"}`,
 			},
-			want: `{"template":"internal_investigation_v1","invoice_ids":["invoice_A01","invoice_A02"]}`,
+			want: `{"template":"internal_investigation_v1","source_invoice_ids":["invoice_A01","invoice_A02"]}`,
 		},
 		{
 			name: "queue_report: field order",
@@ -65,12 +65,12 @@ func TestEquivalentArgumentsGiveIdenticalCanonicalBytes(t *testing.T) {
 }
 
 func TestListOrderIsPreserved(t *testing.T) {
-	first, _ := DecodeArguments(ToolCreateReport, []byte(`{"template":"vendor_reconciliation_v1","invoice_ids":["invoice_A01","invoice_A02"]}`))
-	second, _ := DecodeArguments(ToolCreateReport, []byte(`{"template":"vendor_reconciliation_v1","invoice_ids":["invoice_A02","invoice_A01"]}`))
+	first, _ := DecodeArguments(ToolCreateReport, []byte(`{"template":"vendor_reconciliation_v1","source_invoice_ids":["invoice_A01","invoice_A02"]}`))
+	second, _ := DecodeArguments(ToolCreateReport, []byte(`{"template":"vendor_reconciliation_v1","source_invoice_ids":["invoice_A02","invoice_A01"]}`))
 	firstBytes, _ := CanonicalArguments(first)
 	secondBytes, _ := CanonicalArguments(second)
 	if bytes.Equal(firstBytes, secondBytes) {
-		t.Fatal("reordered invoice_ids gave the same canonical bytes")
+		t.Fatal("reordered source_invoice_ids gave the same canonical bytes")
 	}
 }
 
@@ -86,9 +86,9 @@ func TestAmbiguousOrUnsupportedArgumentsAreRejected(t *testing.T) {
 		{"field plus case variant", ToolReadInvoice, `{"invoice_id":"invoice_A01","Invoice_Id":"invoice_B01"}`},
 		{"missing field", ToolCreateReport, `{"template":"internal_investigation_v1"}`},
 		{"null field", ToolReadVendor, `{"vendor_id":null}`},
-		{"null list item", ToolCreateReport, `{"template":"internal_investigation_v1","invoice_ids":[null]}`},
+		{"null list item", ToolCreateReport, `{"template":"internal_investigation_v1","source_invoice_ids":[null]}`},
 		{"number instead of string", ToolReadInvoice, `{"invoice_id":5}`},
-		{"float in a list", ToolCreateReport, `{"template":"internal_investigation_v1","invoice_ids":[1.5]}`},
+		{"float in a list", ToolCreateReport, `{"template":"internal_investigation_v1","source_invoice_ids":[1.5]}`},
 		{"object instead of string", ToolReadVendor, `{"vendor_id":{"id":"vendor_atlas"}}`},
 		{"empty string", ToolReadInvoice, `{"invoice_id":""}`},
 		{"control character", ToolReadInvoice, `{"invoice_id":"invoice\u0000A01"}`},
@@ -97,9 +97,9 @@ func TestAmbiguousOrUnsupportedArgumentsAreRejected(t *testing.T) {
 		{"trailing data", ToolReadInvoice, `{"invoice_id":"invoice_A01"} {}`},
 		{"top-level array", ToolReadInvoice, `[{"invoice_id":"invoice_A01"}]`},
 		{"malformed JSON", ToolReadInvoice, `{"invoice_id":`},
-		{"unregistered template", ToolCreateReport, `{"template":"public_summary_v1","invoice_ids":["invoice_A01"]}`},
-		{"empty invoice list", ToolCreateReport, `{"template":"internal_investigation_v1","invoice_ids":[]}`},
-		{"repeated invoice", ToolCreateReport, `{"template":"internal_investigation_v1","invoice_ids":["invoice_A01","invoice_A01"]}`},
+		{"unregistered template", ToolCreateReport, `{"template":"public_summary_v1","source_invoice_ids":["invoice_A01"]}`},
+		{"empty invoice list", ToolCreateReport, `{"template":"internal_investigation_v1","source_invoice_ids":[]}`},
+		{"repeated invoice", ToolCreateReport, `{"template":"internal_investigation_v1","source_invoice_ids":["invoice_A01","invoice_A01"]}`},
 		{"report_id not a UUID", ToolQueueReport, `{"report_id":"report-1","recipient_reference":"atlas_reporting"}`},
 		{"uppercase UUID", ToolQueueReport, `{"report_id":"6F1C2A3B-0000-4000-8000-000000000001","recipient_reference":"atlas_reporting"}`},
 	}

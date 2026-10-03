@@ -65,10 +65,10 @@ type ReadVendorArguments struct {
 	VendorID string `json:"vendor_id"`
 }
 
-// CreateReportArguments are the arguments of create_report. InvoiceIDs keeps its order.
+// CreateReportArguments are the arguments of create_report. SourceInvoiceIDs keeps its order.
 type CreateReportArguments struct {
-	Template   string   `json:"template"`
-	InvoiceIDs []string `json:"invoice_ids"`
+	Template         string   `json:"template"`
+	SourceInvoiceIDs []string `json:"source_invoice_ids"`
 }
 
 // QueueReportArguments are the arguments of queue_report. RecipientReference names a trusted
@@ -95,18 +95,18 @@ func (arguments CreateReportArguments) validate() error {
 	if arguments.Template != TemplateInternalInvestigation && arguments.Template != TemplateVendorReconciliation {
 		return fmt.Errorf("%w: template is not a registered template", ErrInvalidArguments)
 	}
-	if len(arguments.InvoiceIDs) == 0 {
-		return fmt.Errorf("%w: invoice_ids is empty", ErrInvalidArguments)
+	if len(arguments.SourceInvoiceIDs) == 0 {
+		return fmt.Errorf("%w: source_invoice_ids is empty", ErrInvalidArguments)
 	}
-	seenInvoiceIDs := make(map[string]bool, len(arguments.InvoiceIDs))
-	for _, invoiceID := range arguments.InvoiceIDs {
-		if err := validateIdentifier("invoice_ids", invoiceID); err != nil {
+	seenSourceInvoiceIDs := make(map[string]bool, len(arguments.SourceInvoiceIDs))
+	for _, invoiceID := range arguments.SourceInvoiceIDs {
+		if err := validateIdentifier("source_invoice_ids", invoiceID); err != nil {
 			return err
 		}
-		if seenInvoiceIDs[invoiceID] {
-			return fmt.Errorf("%w: invoice_ids repeats a value", ErrInvalidArguments)
+		if seenSourceInvoiceIDs[invoiceID] {
+			return fmt.Errorf("%w: source_invoice_ids repeats a value", ErrInvalidArguments)
 		}
-		seenInvoiceIDs[invoiceID] = true
+		seenSourceInvoiceIDs[invoiceID] = true
 	}
 	return nil
 }
@@ -281,7 +281,7 @@ func requiredFieldNames(tool ToolName) []string {
 	case ToolReadVendor:
 		return []string{"vendor_id"}
 	case ToolCreateReport:
-		return []string{"template", "invoice_ids"}
+		return []string{"template", "source_invoice_ids"}
 	case ToolQueueReport:
 		return []string{"report_id", "recipient_reference"}
 	}

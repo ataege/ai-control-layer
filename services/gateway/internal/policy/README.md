@@ -31,5 +31,5 @@ Argument shapes (proposed for X-09; renamed here if X-09 freezes different names
 | --------------- | ----------------------------------------------------------------------------- |
 | `read_invoice`  | `invoice_id`                                                                  |
 | `read_vendor`   | `vendor_id`                                                                   |
-| `create_report` | `template` (one of the two fixed templates), `invoice_ids` (ordered, unique)  |
+| `create_report` | `template` (one of the two fixed templates), `source_invoice_ids` (ordered, unique)  |
 | `queue_report`  | `report_id` (lowercase UUID), `recipient_reference` (trusted directory entry) |
