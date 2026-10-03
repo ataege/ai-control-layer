@@ -63,7 +63,7 @@ func OpenRun(t testing.TB, pool *pgxpool.Pool, limits contracts.PassportLimits) 
 
 // remove deletes every runtime row of the synthetic organization.
 func remove(t testing.TB, pool *pgxpool.Pool, organizationID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	transaction, err := pool.Begin(ctx)
 	if err != nil {

@@ -455,8 +455,9 @@ and records each dispatch. Details: `internal/budget/README.md`.
 
 ## Performance telemetry (GO-80)
 
-`agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the
-tool-result inspection's decisions to `runtime.control_assessments`. Per step the loop records
+`agent.Telemetry` writes observed monotonic durations to `runtime.timing_records`, and the
+tool-result inspection's decisions to `runtime.control_assessments` through the repository's single
+writer, `repository.Tx.InsertControlRecords`, which validates every record. Per step the loop records
 `policy_lookup` (run, passport and step count), `provider` (agent call, Go wall time, with its
 `model_calls` id), `deterministic` (the gate decision, with the action when one was stored),
 `commit` (the executor's attempt and local effect), the inspection's `deterministic` and
