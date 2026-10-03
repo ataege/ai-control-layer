@@ -68,7 +68,7 @@ export class DefaultDenyGuard implements CanActivate {
         roles: membership.roles,
       };
 
-      request["user"] = principal;
+      (request as any)["user"] = principal;
       return true;
     } catch (e) {
       if (e instanceof UnauthorizedException) throw e;

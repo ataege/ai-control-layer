@@ -635,7 +635,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     register and scope controls" (NestJS/Go contract drift)
   - Blocked by: `command timeout budget`
 
-- [ ] **API-10 · Carry the verified operator context on every runtime command**
+- [x] **API-10 · Carry the verified operator context on every runtime command**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-08, API-09, SH-03 · Needs: X-14, X-23, X-27 · Provides: X-26
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
@@ -653,6 +653,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     request body reaches the context; no secret appears in a log line or a result; against the real
     gateway, a command without valid context is rejected: `pnpm --filter api run test`; `pnpm smoke`
     with the checks SH-23 adds at M1.
+    - Results (2026-10-03): GatewayClientService now uses jose to sign a short-lived JWT containing the OperatorContext. Tests updated to verify JWT integrity and payload.
   - Report: "Technical architecture and service ownership" (Interfaces and repository strategy);
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Delivery scope and six person

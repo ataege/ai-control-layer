@@ -3,9 +3,11 @@ import {
   type DiagnosticCheck,
   type DiagnosticFailureReason,
   REQUEST_ID_HEADER,
+  type OperatorContext,
 } from "@workspace/contracts";
 import { AppConfigService } from "../config/app-config.service.js";
 import { z } from "zod";
+import { SignJWT } from "jose";
 
 export type CommandFailureReason =
   | "timeout"
@@ -87,14 +89,29 @@ async function interpretReadinessResponse(
 export class GatewayClientService {
   private readonly logger = new Logger(GatewayClientService.name);
 
-  constructor(private readonly config: AppConfigService) {}
+  private readonly secretKey: Uint8Array;
+
+  constructor(private readonly config: AppConfigService) {
+    this.secretKey = new TextEncoder().encode(this.config.gatewayServiceToken);
+  }
+
+  private async buildToken(context?: OperatorContext): Promise<string> {
+    const jwt = new SignJWT(context ? { ctx: context } : {})
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("1m")
+      .setIssuer("gateway-client");
+    
+    return await jwt.sign(this.secretKey);
+  }
 
   /** Authenticated GET /internal/ping: proves service-to-service reachability. */
-  ping(requestId: string): Promise<DiagnosticCheck> {
+  async ping(requestId: string): Promise<DiagnosticCheck> {
+    const token = await this.buildToken();
     return this.probe(
       PING_PATH,
       requestId,
-      { authorization: `Bearer ${this.config.gatewayServiceToken}` },
+      { authorization: `Bearer ${token}` },
       interpretPingResponse,
     );
   }
@@ -160,6 +177,7 @@ export class GatewayClientService {
     requestId: string,
     body: unknown,
     responseSchema: Schema,
+    context?: OperatorContext,
   ): Promise<CommandOutcome<z.infer<Schema>>> {
     try {
       const response = await fetch(new URL(path, this.config.gatewayUrl), {
@@ -168,7 +186,7 @@ export class GatewayClientService {
           accept: "application/json",
           "content-type": "application/json",
           [REQUEST_ID_HEADER]: requestId,
-          authorization: `Bearer ${this.config.gatewayServiceToken}`,
+          authorization: `Bearer ${await this.buildToken(context)}`,
         },
         body: JSON.stringify(body),
         redirect: "manual",

@@ -1,3 +1,4 @@
+import { jwtVerify } from "jose";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Logger } from "@nestjs/common";
@@ -88,7 +89,11 @@ describe("GatewayClientService", () => {
     expect(check.reason).toBeUndefined();
     expect(check.latencyMs).toBeGreaterThanOrEqual(0);
     expect(receivedPath).toBe("/internal/ping");
-    expect(receivedHeaders.authorization).toBe(`Bearer ${SERVICE_TOKEN}`);
+          expect(receivedHeaders.authorization).toMatch(/^Bearer eyJ/);
+      const token = receivedHeaders.authorization!.replace("Bearer ", "");
+      const secret = new TextEncoder().encode(SERVICE_TOKEN);
+      const { payload: jwtPayload } = await jwtVerify(token, secret, { issuer: "gateway-client" });
+      expect(jwtPayload).toBeDefined();
     expect(receivedHeaders["x-request-id"]).toBe("req-ping-1");
   });
 
@@ -176,7 +181,11 @@ describe("GatewayClientService", () => {
       
       expect(outcome).toEqual({ success: true, data: { status: "ok", service: "gateway" } });
       expect(receivedPath).toBe("/internal/runs");
-      expect(receivedHeaders.authorization).toBe(`Bearer ${SERVICE_TOKEN}`);
+            expect(receivedHeaders.authorization).toMatch(/^Bearer eyJ/);
+      const token = receivedHeaders.authorization!.replace("Bearer ", "");
+      const secret = new TextEncoder().encode(SERVICE_TOKEN);
+      const { payload: jwtPayload } = await jwtVerify(token, secret, { issuer: "gateway-client" });
+      expect(jwtPayload).toBeDefined();
       expect(receivedHeaders["x-request-id"]).toBe("req-cmd-1");
     });
 

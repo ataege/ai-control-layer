@@ -131,12 +131,7 @@ writes each outcome down here when it is settled.
    which matches the report's recommendation. The starter still has one database user. Owner: the lead
    (database roles, by default).
 3. **Browser to API path. Settled: same-origin forwarder.** One same-origin route handler in Next.js forwards an allowlist of top-level API prefixes, the session cookie and a fixed set of headers, and streams the response. Owner: the web + API implementer.
-4. **Operator context to Go. Requirement settled; the two sources differ on the mechanism.** The
-   report requires Go to verify service identity and the authenticated operator context and lists the
-   mechanism as unresolved ("The service token in the starter requires replacement or extension for
-   authenticated operator context"). The architecture specifies "signed, short-lived operator context
-   containing the user and organization"; that is an input to the decision, not the decision. Waits on
-   decision 7. Owner: the web + API implementer with the Go implementer.
+4. **Operator context to Go. Settled: signed, short-lived JWT.** NestJS encodes the operator context (userId, organizationId, roles) into a JWT signed symmetrically using `GATEWAY_SERVICE_TOKEN` with a short expiry (e.g., 1 minute). Go verifies the signature to ensure integrity and authenticity. Owner: the web + API implementer.
 5. **Background worker in Go. Settled by the report:** durable jobs in PostgreSQL, claimed with a lease
    and released during an approval wait, and no message broker; one worker process is the report's
    simple option. The worker must be covered by graceful shutdown and the readiness check. Owner: the Go
