@@ -1,7 +1,10 @@
 // Tests of the draft judge client against a local stand-in HTTP server. The stand-in only answers
 // with fixed bodies shaped like the draft contract; it tests the client, not any control.
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 
 import { buildRequestBody, EVALUATE_PATH, main, UsageError } from "./judge-client.mjs";
@@ -148,4 +151,28 @@ test("an unreachable API and a missing cookie fail without a decision", async ()
   const withoutCookie = await runClient(["--run", "r", "--text", "hi", "--api-url", apiUrl]);
   assert.equal(withoutCookie.exitCode, 2);
   assert.match(withoutCookie.output, /No operator session/);
+});
+
+test("a proposal file becomes an action_proposal; a malformed one is rejected", () => {
+  const proposalDirectory = mkdtempSync(join(tmpdir(), "judge-proposal-"));
+  try {
+    const validPath = join(proposalDirectory, "valid.json");
+    writeFileSync(
+      validPath,
+      JSON.stringify({ tool: "read_invoice", arguments: { invoice_id: "invoice_B01" } }),
+    );
+    const { body } = buildRequestBody({ run: "run_1", proposal: validPath });
+    assert.deepEqual(body, {
+      run_id: "run_1",
+      kind: "action_proposal",
+      tool: "read_invoice",
+      arguments: { invoice_id: "invoice_B01" },
+    });
+
+    const malformedPath = join(proposalDirectory, "malformed.json");
+    writeFileSync(malformedPath, JSON.stringify({ tool: "read_invoice" }));
+    assert.throws(() => buildRequestBody({ run: "run_1", proposal: malformedPath }), UsageError);
+  } finally {
+    rmSync(proposalDirectory, { recursive: true, force: true });
+  }
 });
