@@ -1161,6 +1161,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-72 · Check the active catalog revision before every evaluation and dispatch**
+  - **Report 1.2 change:** Figure 3 names this module the "Trusted active snapshot loader"; the external signature feed reaches it.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-15, GO-19 · Needs: X-79, X-80, X-81 · Provides: X-82
   - Paths: the enforcement package from GO-12; `services/gateway/internal/health`
@@ -1181,6 +1182,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-78 · Match the signature-feed rules**
+  - **Report 1.2 change:** Figure 6 applies the known-signature checks to action proposals too ("Fast typed schema scope and known-signature checks"), and Figure 10 to tool results ("Fast field size and signature checks").
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-72, GO-76 · Needs: X-87, X-88 · Provides: nothing
   - Paths: the enforcement package from GO-12
@@ -1583,6 +1585,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-45 · Recheck before execution and claim the attempt in one transaction**
+  - **Report 1.2 change:** Figure 8: when the required action guard assessment is not current, the action returns to the budgeted semantic action check (GO-77) instead of executing.
   - **Report 1.2 change:** The recheck adds the active catalog revision and the required guard status: "required current semantic checks cannot be satisfied by a failed or stale assessment".
   - **Report 1.1 change:** The recheck adds current source and template policy and revocations, resource and report lineage preconditions and destination restrictions, with the new reason codes; Figure 8.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
@@ -2002,6 +2005,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`
 
 - [ ] **GO-82 · Serve the control evaluation adapter contract**
+  - **Report 1.2 change:** The judge reaches this endpoint through the NestJS live test entry (Figure 2; API-38, X-106).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-21, GO-76, GO-77 · Needs: X-79 · Provides: X-91
   - Paths: the internal API package from GO-21

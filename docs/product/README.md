@@ -15,11 +15,12 @@ until the team assigns the role.
 
 The report lists its internal sources as `project-architecture.md`, `project-architecture.mmd`,
 `task-execution-flow.mmd`, `report-information-flow.mmd`, `hybrid-security-flow.mmd` and
-`CLAUDE_SETUP_PROMPT.md`. Only `project-architecture.md` is in the repository; it embeds the Mermaid
-sources of version 1.1 and has none of the report 1.2 additions (the hybrid security controls, the
-control catalog, the signature feed, reporting, telemetry, Figures 10 and 12), although report 1.2 says
-"The source diagrams and report form one consistent implementation specification" (`architecture
-specification version`). The SVG exports of
+`CLAUDE_SETUP_PROMPT.md`. The current diagrams are the report's twelve figures, embedded in the docx as images (Figures 1 to
+3 system architecture, 4 to 10 task execution flow with the tool-result security check, 11 report
+information flow, 12 central catalog and hybrid controls). Of the source files only
+`project-architecture.md` is in the repository; it embeds the Mermaid sources of version 1.1 and none
+of the report 1.2 additions, so where it differs from the figures the open item `architecture
+specification version` records it. The SVG exports of
 version 1.0 were removed. The report says "The original Mermaid sources and this report describe the
 same updated design"; the open items below record where they still differ.
 
@@ -194,8 +195,9 @@ Each item is open until the document owner records the outcome here; the roadmap
 - `deployment network`: the architecture's private service network against the current Compose file.
 - `Go package layout`: inconsistencies inside the architecture's module list and package tree.
 - `design source references`: the report's internal sources that are not in the repository.
-- `architecture specification version`: the architecture specification predates report 1.2 and has
-  none of its hybrid controls, catalog, feed, reporting or telemetry.
+- `architecture specification version`: the architecture specification holds the version 1.1
+  Mermaid source; the report 1.2 figures in the docx are the current design, and the specification's
+  routes, modules and tables lack the report 1.2 additions.
 - `policy editor` (changed by report 1.2): the report now replaces the editor screen with `policy.yaml`.
 - `test command`: the report names `make verify-controls` and `make reset-demo`; the repository has no
   Makefile and runs its commands through `package.json`.

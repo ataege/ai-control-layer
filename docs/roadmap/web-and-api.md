@@ -20,7 +20,7 @@ scope and six person ownership", report 1.1):
 | Web + API implementer (Implementer 1, interface; Implementer 2, application API) | Interface: task form, passport summary, run timeline, approval preview, terminal states, report classification, authorized source trail, export denial and approved alternative template. Application API: NestJS authentication, membership checks, task configuration, runtime facade, authorized event feed, versioned source-policy and projection configuration; coordinates shared contracts | frontend: `apps/web`, `packages/ui`; nestjs: `apps/api`, `packages/contracts` | API, WEB |
 
 Report 1.2 adds the policy-file and feed imports, catalog activation, the security summary and audit
-export (API-31 to API-37), and the posture views (WEB-29 to WEB-32). One person does both, so the API
+export and the live test entry (API-31 to API-38), and the posture views (WEB-29 to WEB-32). One person does both, so the API
 and WEB tasks run in sequence, not in parallel; the lead helps when
 needed. By default the same person also writes the migrations and seeds on the shared track
 (`shared-track assignment`).
@@ -118,7 +118,7 @@ Work that does not wait on decision 7:
 
 ## Task overview
 
-Every task in this file, one row each, in milestone order. 69 tasks: 49 Tier A, 16 Tier B, 4 Tier C. 24 name decision 7 (the authentication hold) under "Blocked by". Generated from the task blocks below on 2026-10-03. The task blocks are the source of truth: when you add, drop or rename a task, update its row in the same change.
+Every task in this file, one row each, in milestone order. 70 tasks: 50 Tier A, 16 Tier B, 4 Tier C. 25 name decision 7 (the authentication hold) under "Blocked by". Generated from the task blocks below on 2026-10-03. The task blocks are the source of truth: when you add, drop or rename a task, update its row in the same change.
 
 ### NestJS (report role: Implementer 2)
 
@@ -159,6 +159,7 @@ Every task in this file, one row each, in milestone order. 69 tasks: 49 Tier A, 
 | API-35 | M4   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Serve the security summary                                                                                  | `read path`                                                                                                                         |
 | API-36 | M4   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Serve the sanitized audit export                                                                            | `read path`                                                                                                                         |
 | API-37 | M4   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2 h     | Prove the audit export and security summary                                                                 | nothing                                                                                                                             |
+| API-38 | M4   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-3 h     | Serve the live test entry for judge input                                                                   | `decision 7 in docs/product/README.md`                                                                                              |
 | API-26 | M5   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2 h     | Clean up the API's error states                                                                             | nothing                                                                                                                             |
 | API-27 | M6   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 0.5-1.5 h | Supply the NestJS part of the technical handoff                                                             | nothing                                                                                                                             |
 
@@ -1566,6 +1567,22 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Validation plan and evidence matrix" (Audit export and security summary)
   - Blocked by: nothing
 
+- [ ] **API-38 · Serve the live test entry for judge input**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
+  - Depends on: API-11, API-16 · Needs: X-91 · Provides: X-106
+  - Paths: `apps/api/src` (the runtime facade module from API-11)
+  - Work: Figure 2, "Public API and live test entry": an authenticated public operation, named at M0,
+    that accepts a judge's ad-hoc interaction, action proposal or tool result for an existing run and
+    forwards it to `POST /internal/control/evaluate` with service identity and the verified operator
+    context. It returns the recorded decision and the active catalog revision, never issues a grant,
+    and exposes no model or tool credentials.
+  - Done when: an ad-hoc input submitted through the entry is decided by the same gates as the agent
+    path and appears in the decision records and the security summary.
+  - Tests: `pnpm --filter api run test` for authentication, organization scope and forwarding errors.
+  - Report: "Architecture and chart reading guide" (Figure 2, Figure 12); "Technical architecture and
+    service ownership" (Small integration boundary)
+  - Blocked by: `decision 7 in docs/product/README.md`
+
 ### Next.js (report role: Implementer 1)
 
 - [ ] **WEB-19 · Show unknown usage as uncertain on a real run**
@@ -1976,12 +1993,12 @@ spine: the plan assumes the starter may be used (X-01, so a negative answer chan
 container run checks this side's images (X-02), the requirements sheet feeds the demo specification
 (X-05 into X-16), and the deployment procedure is SH-30's.
 
-**Totals (estimates, not a schedule).** 69 tasks; their ranges add up to 111.5-234.5 h, 173 h at the
-midpoints (Tier A 136 h, Tier B 25.5 h, Tier C 11.5 h). Report 1.1 added API-28 to API-30, WEB-27 and
-WEB-28 (14 h at the midpoints) and report 1.2 added API-31 to API-37 and WEB-29 to WEB-32 (31.5 h).
-Per milestone: P 0.5-1 h, M0 6-11 h, M1 35.5-75 h, M2 27-57.5 h, M3 18-36.5 h, M4 18.5-38.5 h, M5
+**Totals (estimates, not a schedule).** 70 tasks; their ranges add up to 113.5-237.5 h, 175.5 h at the
+midpoints (Tier A 138.5 h, Tier B 25.5 h, Tier C 11.5 h). Report 1.1 added API-28 to API-30, WEB-27 and
+WEB-28 (14 h at the midpoints) and report 1.2 added API-31 to API-38 and WEB-29 to WEB-32 (34 h).
+Per milestone: P 0.5-1 h, M0 6-11 h, M1 35.5-75 h, M2 27-57.5 h, M3 18-36.5 h, M4 20.5-41.5 h, M5
 5-12 h, M6 1-3 h; the SH tasks the web + API implementer owns by default (SH-01 to SH-03, SH-11, SH-39,
-SH-42 and the migrations and seeds) come on top. Tier A alone is 89.5-182.5 h, now including M4 work,
+SH-42 and the migrations and seeds) come on top. Tier A alone is 91.5-185.5 h, now including M4 work,
 against at most 24 person-hours for one implementer working all 24 hours without a break. M1 holds
 35.5-75 h (Tier A 34-71.5 h; Tier B 1.5-3.5 h in API-15 and WEB-07; no Tier C) against 4
 person-hours in hours 2-6. Removing every Tier B and Tier C task does not close the gap; narrowing
