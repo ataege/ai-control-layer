@@ -497,7 +497,7 @@ required while `signature_match` is enabled.
 
 `config/attack-signatures.json` is the sample feed: issuer `task-passport-security`, revision
 `feed_v1`, SHA-256 `c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244` (of the
-committed, prettier-formatted bytes). The import (API-34) stores these bytes as `source_text` with
+committed bytes). The import (API-34) stores these bytes as `source_text` with
 this digest as `file_digest`; any other bytes fail `ParseFeed`. There is no signing key: the trust
 decision is the digest pin plus the authenticated import, so the roadmap's "broken signature"
 acceptance case is a copy whose bytes differ from the pinned digest.
@@ -513,14 +513,15 @@ All four run at all three boundaries with response `block`. They match text only
 downloads no models, loads no model files and deserializes nothing, so the last three show that the
 managed feed can carry rules for these classes and that a judge can disable or add them; they do not
 protect model-loading infrastructure. A paraphrase or a spacing change inside a pattern (for
-example `trust_remote_code = True`) is not matched. The tests pin the file by its digest, check that
-on the shared fixtures only the two corpus cases holding the sample phrase hit, and use inline
-positive texts for the three data-only rules until `fixtures/` carries cases for them.
+example `trust_remote_code = True`) is not matched. The tests pin the file by its digest and check that on the shared fixtures exactly the labelled
+cases hit: the two corpus cases holding the sample phrase and the `signature_rule` positive case of
+each data-only rule (`fixtures/semantic-corpus.json`, version 2). The file is listed in
+`.prettierignore`, so a formatter change cannot alter the pinned bytes.
 
-To change the feed, edit the file, run `pnpm format`, recompute the digest
+To change the feed, edit the file (byte-stable; prettier skips it), bump `revision`, recompute the digest
 (`shasum -a 256 config/attack-signatures.json`), update `committedFeedDigest` in
-`internal/security/feed_file_test.go` and import the new bytes; a new rule set needs a new
-`revision` and the matching `signatures.revision` in `policy.yaml`.
+`internal/security/feed_file_test.go` and import the new bytes, together with the matching
+`signatures.revision` in `policy.yaml`.
 
 ## Worker and job lease (GO-08)
 
