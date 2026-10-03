@@ -277,6 +277,14 @@ type RunState struct {
 	CancelRequestedAt *time.Time  `json:"cancelRequestedAt"`
 	CreatedAt         time.Time   `json:"createdAt"`
 	UpdatedAt         time.Time   `json:"updatedAt"`
+	// ResultReference is the validated final result of a completed run (GO-26); nil otherwise.
+	ResultReference *RunResultReference `json:"resultReference"`
+}
+
+// RunResultReference names the reports a completed run delivered; the interface renders their
+// stored content, never model prose.
+type RunResultReference struct {
+	ReportIDs []string `json:"reportIds"`
 }
 
 // EventType names a safe event (X-12).

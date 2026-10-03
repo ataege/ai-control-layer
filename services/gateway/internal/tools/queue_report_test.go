@@ -47,8 +47,9 @@ func TestQueueInternalReportToTheRegisteredVendorIsDenied(t *testing.T) {
 	if after := world.outboxRows(t); after != before {
 		t.Fatalf("outbox rows %d -> %d, want unchanged", before, after)
 	}
-	if got := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE action_id = $1 AND event_type = 'report.export_denied' AND reason_code = 'report_export_restricted'`, request.ActionID); got != 1 {
-		t.Fatalf("export_denied events = %d, want 1", got)
+	if got := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE action_id = $1 AND event_type = 'report.export_denied' AND reason_code = 'report_export_restricted'
+	                            AND masked_summary->>'safeMessage' = 'This report inherits an Internal only restriction and cannot be sent to the vendor.'`, request.ActionID); got != 1 {
+		t.Fatalf("export_denied events with their X-13 safe message = %d, want 1", got)
 	}
 	if got := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE action_id = $1 AND event_type = 'report.safe_template_offered'
 	                            AND masked_summary->>'alternativeTemplate' = 'vendor_reconciliation_v1'`, request.ActionID); got != 1 {

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/repository"
 )
 
 // AssessmentRecord is one control assessment as the security summary and the audit export read
@@ -108,21 +109,14 @@ type PhaseTiming struct {
 // boundaries, phases, verdict categories).
 var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`)
 
-// Closed value sets of the masked summary fields that are plain strings in the Go type (X-12).
+// Closed value sets of the assessment fields.
 var (
-	summaryPurposes        = []string{"agent", "security"}
-	summaryClassifications = []string{"internal_only", "vendor_shareable"}
-	summaryLineageChecks   = []string{"passed", "failed", "missing"}
-	summaryEffects         = []string{"none", "read", "report_created", "outbox_message_queued"}
-	verdictSources         = []string{"live", "fixture"}
-	controlClasses         = []string{"deterministic", "semantic"}
+	verdictSources = []string{"live", "fixture"}
+	controlClasses = []string{"deterministic", "semantic"}
 )
 
-// Bounds of the X-12 schema: maskedSummary.safeMessage and identifier fields.
-const (
-	maximumSafeMessageLength = 512
-	maximumIdentifierLength  = 256
-)
+// maximumIdentifierLength is the X-12 schema bound on identifier fields.
+const maximumIdentifierLength = 256
 
 // SecuritySummaryHandler serves the security summary of the operator's organization.
 func SecuritySummaryHandler(database Beginner) http.Handler {
@@ -301,7 +295,7 @@ func readSecurityEventPage(ctx context.Context, tx pgx.Tx, organizationID string
 		if event.ReasonCode, err = optionalReasonCode(reason); err != nil {
 			return SecurityEventPage{}, err
 		}
-		if contracts.DecodeStrict([]byte(summary), &event.MaskedSummary) != nil || !validEvent(event) {
+		if contracts.DecodeStrict([]byte(summary), &event.MaskedSummary) != nil || !repository.ValidStoredEvent(event) {
 			return SecurityEventPage{}, errMalformedRecord
 		}
 		page.Events = append(page.Events, event)
@@ -456,28 +450,6 @@ func validAssessment(record AssessmentRecord) bool {
 func validVerdict(verdict VerdictSummary) bool {
 	return identifierPattern.MatchString(verdict.RiskCategory) && identifierPattern.MatchString(verdict.ReasonCode) &&
 		verdict.Score >= 0 && verdict.Score <= 1
-}
-
-// validEvent re-checks a stored event against X-12, as the repository's run read does; a row
-// outside the contract is never served.
-func validEvent(event contracts.SafeEvent) bool {
-	summary := event.MaskedSummary
-	return uuidPattern.MatchString(event.OrganizationID) && event.EventType.Valid() &&
-		optionalUUID(event.RunID) && optionalUUID(event.ActionID) &&
-		(event.ActionID == nil || event.RunID != nil) &&
-		(event.Decision == nil || event.Decision.Valid()) &&
-		(event.CatalogRevisionID == nil || *event.CatalogRevisionID > 0) &&
-		optionalOneOf(summary.Purpose, summaryPurposes) &&
-		optionalOneOf(summary.Classification, summaryClassifications) &&
-		optionalOneOf(summary.LineageCheck, summaryLineageChecks) &&
-		optionalOneOf(summary.Effect, summaryEffects) &&
-		(summary.AdmissionCatalogRevisionID == nil || *summary.AdmissionCatalogRevisionID > 0) &&
-		optionalIdentifier(summary.MatchedRule) && optionalIdentifier(summary.FeedRevision) &&
-		optionalIdentifier(summary.ReplaySource) && optionalUUID(summary.ReportID) &&
-		(summary.Template == nil || summary.Template.Valid()) &&
-		(summary.AlternativeTemplate == nil || summary.AlternativeTemplate.Valid()) &&
-		(summary.SafeMessage == nil || (utf8.ValidString(*summary.SafeMessage) &&
-			utf8.RuneCountInString(*summary.SafeMessage) <= maximumSafeMessageLength))
 }
 
 func oneOf(value string, allowed []string) bool {

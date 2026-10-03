@@ -35,7 +35,12 @@
       "feedRevision": null
     }
   ],
-  "semantic": { "source": "live", "riskCategory": "none", "score": 0.05, "reasonCode": "none" },
+  "semantic": {
+    "source": "live",
+    "riskCategory": "none",
+    "score": 0.05,
+    "reasonCode": "no_risk_found"
+  },
   "content": { "text": "Use account [REDACTED:bank_account] for the transfer summary." },
   "catalog": { "admissionRevisionId": 1, "activeRevisionId": 1, "feedRevisionId": 1 }
 }

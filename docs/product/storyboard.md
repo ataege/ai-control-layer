@@ -140,8 +140,9 @@ sets the timing from the rehearsal on the final build.
 
 ## Open items this storyboard depends on
 
-Open: `rename operation` (beat 6), the classifier prompt's tested limits (beat 10), `judge access`
-(judge interactions), `measurement method` (beat 12), `test command` (beat 12). `catalog activation
+Open: `rename operation` (beat 6), `judge access`
+(judge interactions), `test command` (beat 12). `measurement method` (beat 12) and the classifier
+prompt (beat 10) are decided (lead's delegate, decisions 22 and 23). `catalog activation
 protocol` (beat 11) is decided (lead's delegate, decision 15): the import requests a revision, Go
 validates and acknowledges it or keeps the last good one.
 

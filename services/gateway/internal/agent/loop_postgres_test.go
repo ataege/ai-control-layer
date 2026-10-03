@@ -137,7 +137,7 @@ func (world *loopWorld) exec(t *testing.T, sql string, arguments ...any) {
 // remove deletes every row of the synthetic organization. Passports reject DELETE by trigger,
 // so they are removed with triggers disabled for that transaction (superuser test database).
 func (world *loopWorld) remove(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	transaction, err := world.pool.Begin(ctx)
 	if err != nil {
