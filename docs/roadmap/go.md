@@ -2559,6 +2559,19 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     "On provider failure, show the actual failure state" holds for Go's records.
   - Tests: a table test that every emitted reason code has a safe message and a fixture value; a
     provider-failure test that records the actual failure state. `pnpm --filter gateway run test`.
+  - Progress (2026-10-03): W2 lane, branch go/w2. The Go-records half is done; the task stays open
+    for the SH-33 rehearsal. `contracts.ReasonCode.SafeMessage()` holds a fixed safe operator
+    message for each of the 29 X-13 codes (`TestEveryReasonCodeHasASafeMessage`: matches the
+    schema enum and the reason-code fixture, unique, storable as an event's safeMessage). Agent
+    run-end events carry a safeMessage, specific for each model failure, and the purpose `agent`
+    (`TestModelFailuresNameTheActualFailure`); tool events with a reason carry theirs (the export
+    denial asserts it). Provider failure (`TestUnreachableProviderRecordsTheActualFailureState`,
+    real stepper, accounted caller and ledger against an unreachable Ollama): `model_calls.outcome`
+    `usage_unknown`, the reservation held as `usage_unknown`, the run paused with
+    `outcome_unknown` and an event message saying the call failed or returned no usage (lead: no
+    new X-13 code). Error envelopes: no error text reaches them; admission echoes request ids
+    through `%q`. 3c adds the default safeMessage for every other reason-coded event in
+    `repository.AppendEvent` once this is on `main`.
   - Report: "Relative implementation milestones and critical dependencies" (Hours 18-21); "Live
     demonstration storyboard and proof checks" (Reliable demonstrations without invented
     behavior); "Illustrative passport and interface contracts" (Decision and error semantics)

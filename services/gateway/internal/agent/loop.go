@@ -107,6 +107,11 @@ type runEnd struct {
 	status   contracts.RunStatus
 	reason   contracts.ReasonCode
 	actionID string
+	// message is the specific safe operator message of the actual failure (GO-58); empty uses
+	// the reason's X-13 message.
+	message string
+	// purpose names the metered model purpose whose call ended the run, if one did.
+	purpose string
 }
 
 // Handle runs model steps for the job's run until the run ends, waits, or the claim's step bound
@@ -404,6 +409,16 @@ func (loop *Loop) transition(ctx context.Context, run policy.RunIdentity, end ru
 		}
 		reason = &reasonCode
 		event.ReasonCode = &reasonCode
+		// Every stop, pause and failure says what happened in fixed, safe text (GO-58).
+		message := end.message
+		if message == "" {
+			message = reasonCode.SafeMessage()
+		}
+		event.MaskedSummary.SafeMessage = &message
+	}
+	if end.purpose != "" {
+		purpose := end.purpose
+		event.MaskedSummary.Purpose = &purpose
 	}
 	if end.actionID != "" {
 		actionID := end.actionID
@@ -437,16 +452,36 @@ func eventFor(status contracts.RunStatus) contracts.EventType {
 	}
 }
 
+// Safe operator messages of the model failures, so a run-end event records which failure it was
+// (GO-58: "On provider failure, show the actual failure state").
+const (
+	messageModelUsageUnknown = "The local model call failed or returned no usage counts; whether it used tokens is unknown, so its allowance stays held and the run is paused."
+	messageModelTimeout      = "The local model did not answer in time; whether it used tokens is unknown, so its allowance stays held and the run is paused."
+	messageModelUnusable     = "The local model answered with neither one action nor a final answer, so the run failed."
+	messageModelNotRecorded  = "The model call could not be recorded, so the run failed."
+	messageModelCallFailed   = "The model call failed before its answer could be used, so the run failed."
+)
+
 // stepErrorEnd maps a failed model step to the run's end. Nothing here continues the run.
 func stepErrorEnd(err error) runEnd {
+	agentPurpose := string(model.AgentPurpose)
 	switch {
 	case errors.Is(err, budget.ErrExhausted), errors.Is(err, budget.ErrPaused), errors.Is(err, model.ErrOverspend):
-		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonAllowanceExhausted}
-	case errors.Is(err, model.ErrUsageUnknown), errors.Is(err, model.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
+		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonAllowanceExhausted, purpose: agentPurpose}
+	case errors.Is(err, model.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
 		// Alignment decision 7: unresolved usage pauses the run.
-		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonOutcomeUnknown}
+		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonOutcomeUnknown, message: messageModelTimeout, purpose: agentPurpose}
+	case errors.Is(err, model.ErrUsageUnknown):
+		// An unreachable provider lands here: the accounted call keeps the reservation as unknown.
+		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonOutcomeUnknown, message: messageModelUsageUnknown, purpose: agentPurpose}
 	case errors.Is(err, ErrModelNotAllowed):
 		return runEnd{status: contracts.RunStopped, reason: contracts.ReasonModelNotAllowed}
+	case errors.Is(err, ErrUnusableResponse):
+		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable, message: messageModelUnusable, purpose: agentPurpose}
+	case errors.Is(err, ErrRecording):
+		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable, message: messageModelNotRecorded, purpose: agentPurpose}
+	case errors.Is(err, ErrModelCallFailed):
+		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable, message: messageModelCallFailed, purpose: agentPurpose}
 	default:
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}
 	}
