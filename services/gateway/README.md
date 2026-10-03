@@ -80,19 +80,20 @@ As directed by the user on 3 October 2026, the user is the sole owner and implem
 The report's Implementer 3/4/5 labels group responsibilities; they do not assign separate people
 to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` for planned modules.
 
-| Existing package      | Owner                      |
-| --------------------- | -------------------------- |
-| `cmd/gateway`         | User (sole Go implementer) |
-| `cmd/modelcheck`      | User (sole Go implementer) |
-| `cmd/budgetcheck`     | User (sole Go implementer) |
-| `internal/config`     | User (sole Go implementer) |
-| `internal/logging`    | User (sole Go implementer) |
-| `internal/database`   | User (sole Go implementer) |
-| `internal/health`     | User (sole Go implementer) |
-| `internal/httpserver` | User (sole Go implementer) |
-| `internal/model`      | User (sole Go implementer) |
-| `internal/budget`     | User (sole Go implementer) |
-| `internal/testdb`     | User (sole Go implementer) |
+| Existing package      | Owner                       |
+| --------------------- | --------------------------- |
+| `cmd/gateway`         | User (sole Go implementer)  |
+| `cmd/modelcheck`      | User (sole Go implementer)  |
+| `cmd/budgetcheck`     | User (sole Go implementer)  |
+| `internal/config`     | User (sole Go implementer)  |
+| `internal/logging`    | User (sole Go implementer)  |
+| `internal/database`   | User (sole Go implementer)  |
+| `internal/health`     | User (sole Go implementer)  |
+| `internal/httpserver` | User (sole Go implementer)  |
+| `internal/model`      | User (sole Go implementer)  |
+| `internal/budget`     | User (sole Go implementer)  |
+| `internal/testdb`     | User (sole Go implementer)  |
+| `internal/contracts`  | Go lane 3c (lead's session) |
 
 New packages get their ownership row when their first real code lands.
 
@@ -108,6 +109,7 @@ internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
+internal/contracts/   Go mirrors of the runtime wire contracts and strict decoding (GO-18)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 

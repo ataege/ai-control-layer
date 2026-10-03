@@ -158,3 +158,197 @@ export interface SanitizedEvent {
   timestamp: string;
   details: Record<string, unknown>;
 }
+
+// Go-owned runtime contracts (X-08, X-09, X-11, X-12, X-13). Envelope fields are camelCase;
+// tool arguments stay snake_case as in the report's appendix. Every field is present; an
+// optional value is null. Mirrored in services/gateway/internal/contracts.
+
+/** X-13: stable reason codes shared by the gate, admission, events and the interface. */
+export type ReasonCode =
+  | "resource_out_of_scope"
+  | "destination_not_allowed"
+  | "report_export_restricted"
+  | "report_lineage_missing"
+  | "source_policy_changed"
+  | "template_not_allowed"
+  | "approval_required"
+  | "approval_expired"
+  | "action_changed"
+  | "resource_version_changed"
+  | "allowance_exhausted"
+  | "run_cancelled"
+  | "outcome_unknown"
+  | "semantic_injection_detected"
+  | "security_evaluator_unavailable"
+  | "security_allowance_exhausted"
+  | "content_redacted"
+  | "signature_match"
+  | "policy_reload_rejected"
+  | "model_not_allowed"
+  | "multiple_actions_not_supported"
+  | "run_expired"
+  | "tool_not_registered"
+  | "invalid_arguments"
+  | "tool_not_allowed"
+  | "decision_unavailable"
+  | "content_blocked"
+  | "content_too_large";
+
+/** The four registered tools. */
+export type ToolName = "read_invoice" | "read_vendor" | "create_report" | "queue_report";
+
+/** The two fixed report templates. */
+export type ReportTemplate = "internal_investigation_v1" | "vendor_reconciliation_v1";
+
+/** X-08: the immutable grant of one run. Identity comes from verified context only. */
+export interface Passport {
+  passportId: string;
+  runId: string;
+  organizationId: string;
+  actorId: string;
+  taskVersion: string;
+  admissionCatalogRevisionId: number;
+  /** RFC 3339, UTC. */
+  issuedAt: string;
+  expiresAt: string;
+  scope: {
+    tools: ToolName[];
+    invoiceIds: string[];
+    vendorIds: string[];
+    reportTemplates: ReportTemplate[];
+    projectionRules: string[];
+    /** Trusted directory references, format recipient:<runId>:<vendorId>; never an address. */
+    recipientReferences: string[];
+    allowedModels: string[];
+    /** The "Internal note allowed for investigation" field rule. */
+    internalNoteReadable: boolean;
+    approvalRequiredTools: ToolName[];
+  };
+  limits: {
+    callsTotal: number;
+    callsAgent: number;
+    callsSecurity: number;
+    tokensTotal: number;
+    /** Null: no purpose sub-limit beyond the shared token total. */
+    tokensAgent: number | null;
+    tokensSecurity: number | null;
+    requestTimeoutSeconds: number;
+    localMaxConcurrency: number;
+    toolAttempts: number;
+    corrections: number;
+    runExpiryMinutes: number;
+  };
+}
+
+/** X-09: one proposed tool action with its typed, snake_case arguments. */
+export type ActionProposal =
+  | { tool: "read_invoice"; arguments: { invoice_id: string } }
+  | { tool: "read_vendor"; arguments: { vendor_id: string } }
+  | {
+      tool: "create_report";
+      arguments: { template: ReportTemplate; source_invoice_ids: string[] };
+    }
+  | { tool: "queue_report"; arguments: { report_id: string; recipient_reference: string } };
+
+/** X-09: lifecycle of a stored action. */
+export type ActionStatus =
+  | "proposed"
+  | "allowed"
+  | "denied"
+  | "awaiting_approval"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "executing"
+  | "succeeded"
+  | "failed"
+  | "unknown";
+
+/** X-09: the immutable stored action, recorded before any policy check. */
+export interface StoredAction {
+  actionId: string;
+  runId: string;
+  stepNumber: number;
+  proposal: ActionProposal;
+  canonicalizationVersion: 1;
+  /** Lowercase hex SHA-256 of the canonical action (GO-04). */
+  actionDigest: string;
+  idempotencyKey: string;
+  /** The active catalog revision when the action was stored. */
+  evaluatedCatalogRevisionId: number;
+  status: ActionStatus;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** X-11: run status. */
+export type RunStatus =
+  "queued" | "running" | "awaiting_approval" | "paused" | "completed" | "failed" | "stopped";
+
+/** X-11: state of one run. terminalReason is set exactly when paused, failed or stopped. */
+export interface RunState {
+  runId: string;
+  passportId: string;
+  status: RunStatus;
+  terminalReason: ReasonCode | null;
+  cancelRequestedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** X-12: event names. */
+export type SafeEventType =
+  | "admission.rejected"
+  | "run.queued"
+  | "run.started"
+  | "run.paused"
+  | "run.completed"
+  | "run.failed"
+  | "run.stopped"
+  | "model.completed"
+  | "action.proposed"
+  | "action.allowed"
+  | "action.denied"
+  | "approval.requested"
+  | "approval.decided"
+  | "action.executing"
+  | "action.succeeded"
+  | "action.failed"
+  | "action.unknown"
+  | "report.created"
+  | "report.export_denied"
+  | "report.safe_template_offered"
+  | "control.evaluated"
+  | "catalog.revision_rejected";
+
+/** X-12: decision recorded with an event. */
+export type SafeEventDecision =
+  "allow" | "deny" | "approval_required" | "redact" | "approved" | "rejected";
+
+/** X-12: a sanitized event. The summary is a closed set of masked metadata, never raw content. */
+export interface SafeEvent {
+  /** Decimal string of the event cursor. */
+  eventId: string;
+  organizationId: string;
+  runId: string | null;
+  actionId: string | null;
+  eventType: SafeEventType;
+  decision: SafeEventDecision | null;
+  reasonCode: ReasonCode | null;
+  catalogRevisionId: number | null;
+  maskedSummary: {
+    purpose: "agent" | "security" | null;
+    admissionCatalogRevisionId: number | null;
+    matchedRule: string | null;
+    feedRevision: string | null;
+    reportId: string | null;
+    template: ReportTemplate | null;
+    classification: "internal_only" | "vendor_shareable" | null;
+    lineageCheck: "passed" | "failed" | "missing" | null;
+    effect: "none" | "read" | "report_created" | "outbox_message_queued" | null;
+    replaySource: string | null;
+    alternativeTemplate: ReportTemplate | null;
+    safeMessage: string | null;
+  };
+  occurredAt: string;
+}
