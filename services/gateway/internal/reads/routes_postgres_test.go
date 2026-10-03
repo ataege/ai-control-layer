@@ -42,7 +42,7 @@ func signedContext(t *testing.T, operator contracts.OperatorContext, tokenID str
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// TestPostgresReadRoutesThroughTheGatewayHandler calls the six read routes through the production
+// TestPostgresReadRoutesThroughTheGatewayHandler calls the seven read routes through the production
 // handler tree (httpserver.NewHandler with api.Commands): service token, signed operator context,
 // the mounted handlers and the database, as NestJS reaches them (GO-24, GO-83).
 func TestPostgresReadRoutesThroughTheGatewayHandler(t *testing.T) {
@@ -95,9 +95,10 @@ func TestPostgresReadRoutesThroughTheGatewayHandler(t *testing.T) {
 	}
 
 	runPaths := map[string]any{
-		"/internal/runs/" + runID:             &contracts.RunState{},
-		"/internal/runs/" + runID + "/events": &reads.RunEventPage{},
-		"/internal/runs/" + runID + "/usage":  &reads.RunUsage{},
+		"/internal/runs/" + runID:               &contracts.RunState{},
+		"/internal/runs/" + runID + "/events":   &reads.RunEventPage{},
+		"/internal/runs/" + runID + "/usage":    &reads.RunUsage{},
+		"/internal/runs/" + runID + "/passport": &contracts.Passport{},
 	}
 	for path, target := range runPaths {
 		recorder := call(owner, path, true)
@@ -114,6 +115,18 @@ func TestPostgresReadRoutesThroughTheGatewayHandler(t *testing.T) {
 	}
 	if page := runPaths["/internal/runs/"+runID+"/events"].(*reads.RunEventPage); len(page.Events) != 1 || page.Events[0].EventType != contracts.EventRunStarted {
 		t.Fatalf("run events %+v", page)
+	}
+
+	// The catalog status is global: every verified operator reads it, and it needs the service token.
+	for _, operator := range []contracts.OperatorContext{owner, intruder} {
+		var status reads.CatalogStatus
+		recorder := call(operator, "/internal/catalog/active", true)
+		if recorder.Code != http.StatusOK || contracts.DecodeStrict(recorder.Body.Bytes(), &status) != nil || status.ActiveRevisionID == nil || len(status.Controls) != 3 {
+			t.Fatalf("catalog status %d %s", recorder.Code, recorder.Body.String())
+		}
+	}
+	if recorder := call(owner, "/internal/catalog/active", false); recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("catalog status without the service token: %d", recorder.Code)
 	}
 
 	recorder := call(owner, "/internal/security/summary", true)
@@ -153,5 +166,5 @@ func TestPostgresReadRoutesThroughTheGatewayHandler(t *testing.T) {
 			t.Fatalf("intruder %s: %d %s", path, recorder.Code, recorder.Body.String())
 		}
 	}
-	t.Logf("evidence GO-24/GO-83: six read routes through httpserver.NewHandler and api.Commands: owner 200 with strict X-11/X-12 and draft shapes, other organization 404 or its own empty records, no service token 401")
+	t.Logf("evidence GO-24/GO-83: seven read routes through httpserver.NewHandler and api.Commands: owner 200 with strict X-11/X-12 and draft shapes, other organization 404 or its own empty records, no service token 401")
 }

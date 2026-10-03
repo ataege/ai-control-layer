@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"starter/services/gateway/internal/admission"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/evaluation"
 	"starter/services/gateway/internal/health"
@@ -55,6 +56,7 @@ type Approvals interface {
 type RunReader interface {
 	reads.RunStateReader
 	reads.RunEventsReader
+	reads.PassportReader
 }
 
 // ControlEvaluator evaluates one interaction (X-91); *evaluation.Evaluator implements it.
@@ -102,7 +104,9 @@ func Commands(dependencies Dependencies) []httpserver.InternalCommand {
 		// Lane w2's GO-24 and GO-83 reads, organization-scoped through the verified operator.
 		{Pattern: reads.RunStateRoutePattern, Handler: reads.RunStateHandler(dependencies.Runs)},
 		{Pattern: reads.RunEventsRoutePattern, Handler: reads.RunEventsHandler(dependencies.Runs)},
+		{Pattern: reads.PassportRoutePattern, Handler: reads.PassportHandler(dependencies.Runs)},
 		{Pattern: reads.RunUsageRoutePattern, Handler: reads.RunUsageHandler(dependencies.Database)},
+		{Pattern: reads.CatalogStatusRoutePattern, Handler: reads.CatalogStatusHandler(dependencies.Database, catalog.NewLoader())},
 		{Pattern: reads.SecuritySummaryRoutePattern, Handler: reads.SecuritySummaryHandler(dependencies.Database)},
 		{Pattern: reads.SecurityAssessmentsRoutePattern, Handler: reads.SecurityAssessmentsHandler(dependencies.Database)},
 		{Pattern: reads.SecurityEventsRoutePattern, Handler: reads.SecurityEventsHandler(dependencies.Database)},

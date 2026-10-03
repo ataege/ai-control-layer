@@ -55,7 +55,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "number", "date", "amount"],
+        "required": ["id", "number", "date", "amount", "vendorId"],
         "properties": {
           "id": {
             "type": "string",
@@ -70,6 +70,10 @@
           },
           "amount": {
             "type": "integer"
+          },
+          "vendorId": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

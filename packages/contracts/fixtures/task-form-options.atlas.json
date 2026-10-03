@@ -16,13 +16,15 @@
       "id": "invoice_A01",
       "number": "INV104",
       "date": "2026-09-01",
-      "amount": 125000
+      "amount": 125000,
+      "vendorId": "vendor_Atlas"
     },
     {
       "id": "invoice_A02",
       "number": "INV104",
       "date": "2026-09-08",
-      "amount": 125000
+      "amount": 125000,
+      "vendorId": "vendor_Atlas"
     }
   ],
   "destinations": [

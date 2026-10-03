@@ -118,9 +118,11 @@ func atlasRelationships() *fakeRelationships {
 	return &fakeRelationships{
 		vendorInvoices: map[string][]string{"vendor_atlas": {"invoice_A01", "invoice_A02"}, "vendor_borealis": {"invoice_C01"}},
 		runReports: map[string]ExportVerdict{
-			testReportID:     {Allowed: true},
-			internalReportID: {ReasonCode: ReasonReportExportRestricted, AlternativeTemplate: TemplateVendorReconciliation},
-			brokenReportID:   {ReasonCode: ReasonReportLineageMissing},
+			testReportID: {Allowed: true, Report: ReportRef{ID: testReportID, Template: TemplateVendorReconciliation, Classification: "vendor_shareable"}},
+			internalReportID: {ReasonCode: ReasonReportExportRestricted, AlternativeTemplate: TemplateVendorReconciliation,
+				Report: ReportRef{ID: internalReportID, Template: "internal_investigation_v1", Classification: "internal_only"}},
+			brokenReportID: {ReasonCode: ReasonReportLineageMissing,
+				Report: ReportRef{ID: brokenReportID, Template: "internal_investigation_v1", Classification: "internal_only"}},
 		},
 	}
 }
@@ -367,6 +369,16 @@ func TestRestrictedExportIsDeniedBeforeReview(t *testing.T) {
 			}
 			if testCase.wantOutcome == OutcomeDeny && evaluator.calls != 0 {
 				t.Fatal("a restricted export reached the semantic check")
+			}
+			// A denied export names the stored report it concerns, by references; an allowed one
+			// carries no denial reference.
+			if testCase.wantOutcome == OutcomeDeny {
+				if decision.DeniedReport == nil || decision.DeniedReport.ID != testCase.reportID || decision.DeniedReport.Template != "internal_investigation_v1" ||
+					decision.DeniedReport.Classification != "internal_only" {
+					t.Fatalf("denied report = %+v, want the stored internal report %s", decision.DeniedReport, testCase.reportID)
+				}
+			} else if decision.DeniedReport != nil {
+				t.Fatalf("an approved export carries a denied report: %+v", decision.DeniedReport)
 			}
 		})
 	}

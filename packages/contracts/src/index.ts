@@ -115,7 +115,7 @@ export interface OperatorContext {
 export interface TaskFormOptions {
   templates: { id: string; name: string }[];
   vendors: { id: string; name: string }[];
-  invoices: { id: string; number: string; date: string; amount: number }[];
+  invoices: { id: string; number: string; date: string; amount: number; vendorId: string }[];
   destinations: { id: string; name: string }[];
   approvalRequirements: { id: string; description: string }[];
   limits: { maxModelCalls: number; maxTimeoutSeconds: number };
