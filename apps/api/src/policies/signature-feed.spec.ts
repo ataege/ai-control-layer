@@ -54,6 +54,10 @@ describe("validateSignatureFeed", () => {
       "schema_version written as 1.0",
       committedText.replace('"schema_version": 1,', '"schema_version": 1.0,'),
     ],
+    [
+      "an issuer the gateway does not trust",
+      committedText.replace('"issuer": "task-passport-security"', '"issuer": "other-publisher"'),
+    ],
     ["a bad revision", committedText.replace('"revision": "feed_v1"', '"revision": "../feed"')],
     ["a control character", committedText.replace("Sample managed", "Sample\\u0007managed")],
     ["trailing data", `${committedText}{}`],

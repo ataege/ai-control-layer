@@ -28,6 +28,7 @@
     "db:roles": "node scripts/db-roles.mjs",
     "db:seed": "node scripts/seed-demo.mjs",
     "reset:demo": "node scripts/reset-demo.mjs",
+    "catalog:activate": "node scripts/with-env.mjs go -C services/gateway run ./cmd/catalogactivate",
     "verify:controls": "node scripts/verify-controls.mjs",
     "judge": "node scripts/judge-client.mjs",
     "benchmark": "node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark",

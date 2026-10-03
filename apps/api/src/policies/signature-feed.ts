@@ -61,9 +61,12 @@ const signatureRuleSchema = z.strictObject({
   sources: z.array(boundedText).min(1),
 });
 
+/** The only issuer the gateway's activation trusts (catalog.TrustedFeedIssuer); any other is refused here. */
+export const TRUSTED_FEED_ISSUER = "task-passport-security";
+
 export const signatureFeedSchema = z.strictObject({
   schema_version: z.literal(1),
-  issuer: z.string().regex(feedIdentifierPattern),
+  issuer: z.literal(TRUSTED_FEED_ISSUER),
   revision: z.string().regex(feedIdentifierPattern),
   description: boundedText,
   scope: boundedText,

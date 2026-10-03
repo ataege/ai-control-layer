@@ -134,7 +134,8 @@ async function ensureTestDatabase(environment, testDatabaseName, { fresh }) {
 
 /**
  * Brings the test database to the current schema and the demo baseline: create (or recreate),
- * then `pnpm db:migration:run` and `pnpm db:seed` (demo records and control catalog), both with
+ * then `pnpm db:migration:run`, `pnpm db:seed` (demo records and the requested control catalog) and
+ * `pnpm catalog:activate` (the gateway's own activation, once), each with
  * POSTGRES_DB set to the test database. Resolves { status, detail } for the summary.
  */
 export async function prepareTestDatabase(testEnvironment, testDatabaseName, { fresh }) {
@@ -142,7 +143,10 @@ export async function prepareTestDatabase(testEnvironment, testDatabaseName, { f
   const ensured = await ensureTestDatabase(testEnvironment, testDatabaseName, { fresh });
   if (!ensured.ok) return { status: "FAIL", detail: ensured.detail };
 
-  for (const scriptName of ["db:migration:run", "db:seed"]) {
+  // The seed imports the policy and its signature feed as the requested catalog revision; with no
+  // gateway running, `catalog:activate` runs the gateway's own validation and activation once, so
+  // the test database has the Go-validated, enforceable catalog the demo has.
+  for (const scriptName of ["db:migration:run", "db:seed", "catalog:activate"]) {
     console.log(`Running pnpm ${scriptName} against ${testDatabaseName} ...`);
     const exitCode = await runCommand("pnpm", ["run", scriptName], {
       env: testEnvironment,

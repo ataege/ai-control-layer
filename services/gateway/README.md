@@ -134,6 +134,7 @@ New packages get their ownership row when their first real code lands.
 cmd/gateway/          wiring, signals, -healthcheck
 cmd/modelcheck/       explicit synthetic Ollama connectivity check
 cmd/budgetcheck/      explicit central-catalog and PostgreSQL accounting diagnostic
+cmd/catalogactivate/  one-shot catalog activation (the gateway's own, run once; GO-73)
 cmd/replay/           explicit labelled replay of a hostile-note proposal (demo)
 cmd/benchmark/        repeatable performance benchmark of the governed tool-result path (GO-81)
 internal/config/      environment and trusted accounting-catalog validation
@@ -793,16 +794,38 @@ rejects unknown or missing keys, unsupported boundaries, a threshold outside 0 t
 revision differs from `signatures.revision`, and a disabled rule the feed does not have. A feed is
 required while `signature_match` is enabled.
 
+### One-shot catalog activation (`catalogactivate`)
+
+`pnpm catalog:activate` (`cmd/catalogactivate`) runs the gateway's own `catalog.ActivateRequested`
+once: it validates the requested catalog revision (limits, security settings, the trusted issuer's
+feed named by `signatures.revision`) and, in one transaction, makes it active together with its feed,
+or records a rejection code and keeps the last good revision. A running gateway does this itself
+within seconds (`catalog.WatchRequested`), so the command is for setups without a gateway: the test
+database (`pnpm test:db` and `pnpm verify:controls` run it after `pnpm db:seed`) and a reset demo
+database (`pnpm reset:demo` runs it after its reseed). Because the policy import only requests a
+revision (it never activates), nothing in those flows is enforceable until this has run.
+
+- It retries a busy activation lock 10 times at 300 ms, then fails; busy is never success.
+- Exit 0: a revision was activated, or nothing was requested and a revision is active. Exit 1:
+  nothing is active (no pointer, or the first request was rejected), the requested revision was
+  rejected (the safe code is printed: `revision_missing`, `signature_feed_missing` or
+  `catalog_invalid`; a rejected request is not retried, the fix is a new import), or the activation
+  could not run. This is stricter than "idle is success": an idle result with no active catalog
+  would hide exactly the failure the command exists to catch.
+- It prints fixed texts, revision ids and the recorded code, never policy or feed content, and
+  needs the same `POSTGRES_*` settings as the gateway; a role other than the gateway's needs the
+  same column UPDATE grant on `app.control_catalog_pointer` (migration 1791120000000).
+
 ### The sample feed (SH-46)
 
 `config/attack-signatures.json` is the sample feed: issuer `task-passport-security`, revision
 `feed_v1`, SHA-256 `c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244` (of the
 committed bytes). The import (API-34) stores these bytes as `source_text` with
-this digest as `file_digest`; any other bytes fail `ParseFeed`. The revision is the lookup key: GO-73 finds the
-feed by `signatures.revision` alone, so the import stores each revision once across issuers, and
-`issuer` is audit metadata. There is no signing key: the trust
-decision is the digest pin plus the authenticated import, so the roadmap's "broken signature"
-acceptance case is a copy whose bytes differ from the pinned digest.
+this digest as `file_digest`; any other bytes fail `ParseFeed`. GO-73's activation accepts only the
+trusted issuer `task-passport-security` and finds the feed by that issuer and `signatures.revision`,
+so the import refuses a feed from any other issuer and stores each revision once. There is no
+signing key: the trust decision is the digest pin plus the authenticated import, so the roadmap's
+"broken signature" acceptance case is a copy whose bytes differ from the pinned digest.
 
 | Rule                               | Attack class                    | Pattern                        | Source                                      |
 | ---------------------------------- | ------------------------------- | ------------------------------ | ------------------------------------------- |

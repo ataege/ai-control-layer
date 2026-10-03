@@ -118,5 +118,5 @@ if (importExitCode !== 0) {
 }
 printStatus(
   "ok",
-  "control catalog imported as the requested revision with its signature feed; the gateway validates and activates it",
+  "control catalog imported as the requested revision with its signature feed; the gateway validates and activates it (without a gateway, run pnpm catalog:activate)",
 );

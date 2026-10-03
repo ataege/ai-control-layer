@@ -118,10 +118,10 @@ describe("importPolicyFile with the signature feed", () => {
       "feed.revision",
     ],
     [
-      "the same revision from another issuer",
+      "a feed from an issuer the gateway does not trust",
       policyText,
       feedText.replace('"issuer": "task-passport-security"', '"issuer": "other-publisher"'),
-      "feed.revision",
+      "feed.issuer",
     ],
     ["a policy naming another feed revision", policyNamingFeedV2, feedText, "signatures.revision"],
     [
