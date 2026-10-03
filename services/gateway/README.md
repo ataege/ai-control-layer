@@ -26,6 +26,17 @@ a lifetime of at most five minutes and a `jti` that is accepted once. The verifi
 `401 unauthorized` before the handler runs. `httpserver.DecodeJSONBody` reads a bounded, strict JSON
 body and answers `400 bad_request` otherwise.
 
+**Limitation: the `jti` replay cache is in memory, per process.** A gateway restart forgets the
+used token ids, so a captured operator-context token could be replayed until its own expiry (at
+most five minutes plus the five-second leeway) after a restart; the internal routes still require
+the service token. Like the job leases, it assumes one gateway process per database.
+
+Admission (`internal/admission`) rejects with fixed text that names the field, scope or limit
+(`invoiceIds`, `destination`, `vendorId`, the catalog limit), never a value the request sent, so
+the `admission.rejected` event's safe message and the events export carry no request text. Invoice
+and vendor ids must have the shared shapes `contracts.InvoiceIDPattern` and
+`contracts.VendorIDPattern` (also the gate decoder's), so every admitted invoice can be read.
+
 Every other routed request returns the shared JSON error envelope (`404 not_found`,
 `405 method_not_allowed`, `401 unauthorized`, `500 internal_error`). Every response produced by the
 handler chain carries `x-request-id`: an inbound value is reused when it is 1-64 characters of
