@@ -1219,7 +1219,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     and proposed user journeys" (Journey 3)
   - Blocked by: nothing
 
-- [ ] **WEB-32 · Show hybrid decisions in the run timeline**
+- [x] **WEB-32 · Show hybrid decisions in the run timeline**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: WEB-06 · Needs: X-12, X-13 · Provides: nothing
   - Paths: `apps/web`

@@ -174,9 +174,11 @@ export interface SanitizedEvent {
     message?: string;
     tool?: string;
     action?: string;
-    decision?: 'allowed' | 'denied' | 'pending';
+    decision?: 'allowed' | 'denied' | 'pending' | 'blocked' | 'redacted';
     reasonCode?: string;
     rule?: string;
+    revision?: string;
+    modelPurpose?: string;
     correctionRoute?: string;
     correctionCount?: number;
     isReplay?: boolean;
