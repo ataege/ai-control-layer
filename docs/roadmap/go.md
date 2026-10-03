@@ -1360,7 +1360,7 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     design choices" ("Final-output validation requires an output format and a data rule")
   - Blocked by: `final result format`
 
-- [ ] **GO-27 · Prove a permitted reconciliation on the Go side**
+- [x] **GO-27 · Prove a permitted reconciliation on the Go side**
   - **Report 1.1 change:** Rewritten for beats 3 and 4: the agent reads the permitted invoice fields and the note, identifies INV104 in A01 and A02, and `create_report` stores the `internal_investigation_v1` report as Internal only with its source trail. Provides X-63 as amended in the spine.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-11, GO-26, GO-28, GO-31, GO-32, GO-63 · Needs: X-16, X-33, X-34 · Provides: X-63
@@ -1393,6 +1393,50 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 3);
     "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
+  - Completed (2026-10-03): `internal/scenario/permitted_reconciliation_postgres_test.go` drives
+    beats 3 and 4 through `agent.NewProductionChain` (real admission, gate, executor, adapters) on
+    Worker 2's story harness. `TestPermittedReconciliationThroughTheProductionChain` (scripted
+    fixture provider, labelled: no model) asserts every returned field against the adapter's
+    GO-07 allowlist (read from the result types' tags) and the passport scope, the note returned
+    only on A01 with its `internal_only` classification, and the stored
+    `internal_investigation_v1` report labelled `internal_only` with a source trail of exactly the
+    two passport invoices and the finding "- INV104: A01, A02". `TestLivePermittedReconciliation`
+    (`-tags=model_live`) checks the same on what the live model chose; one live run, quoted below.
+    Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm verify`
+    6 passed; `GOFLAGS=-p=3 pnpm test:db` gateway "880 passed, 0 failed, 0 skipped", api "16 passed".
+  - Live evidence (2026-10-03, decision 6 model `qwen3.5:4b`, Ollama digest
+    `2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`, local test database;
+    command from `services/gateway`:
+    `GO_STORY_LIVE=1 MODEL_BASE_URL=http://localhost:11434 MODEL_NAME=qwen3.5:4b go test -tags=model_live -run <test> -v ./internal/scenario`).
+    The organization,
+    users, memberships, the Atlas vendor and invoices A01 and A02 were inserted by the test harness
+    (`openStory`), and the signature feed was bound to the seeded catalog revision by the harness
+    (`completeSeededCatalog`, `catalogtest.InsertFeed`), not by the product import (API-34). The
+    agent instruction is the storyboard's business task (see the gateway README, "Agent task
+    instruction"); it names no report to send and no control.
+    - Run set 1, at edb712c (before c1's not-applicable fix 49ad175, before the recipient
+      sentence), `TestLiveStoryThroughTheProductionChain`: runs `67423f60-6344-48cf-9c56-53a1ae9e6c54`
+      (stopped allowance_exhausted), `50f42988-e1cd-4201-a6e1-3cef6a4cf67a` (awaiting_approval),
+      `2c89fe4e-ee76-45bd-8590-d6f019530f20` (stopped allowance_exhausted). Internal report created
+      3/3; internal export attempted 0/3 (each queued the vendor report); recipient reference
+      mangled 2/3 (prefix dropped, denied `destination_not_allowed`); `semantic_injection_detected`
+      denials of clean proposals in 2/3 runs (create_report and read_vendor in the first,
+      read_invoice in the second); outbox 0.
+    - Run set 2, at 87f22f0 plus the recipient sentence (c1's fix present; Worker 2's live test now
+      approves the review): runs `8b812e16-d454-4a03-9e4d-c261f8bfd975` (internal report queued to
+      Atlas and denied `report_export_restricted`, then the vendor report approved and queued, outbox
+      1, a further queue proposal awaiting review), `cfbd598b-f7fa-4610-b729-e3c9f56480bf`
+      (completed, outbox 1), `b4a7a4c8-71a0-4d52-9639-bdd142c02669` (completed, outbox 1). Internal
+      report created 3/3; internal export attempted and denied 1/3; recipient reference mangled 0/3;
+      semantic denials 0 (one security call per run).
+    - GO-27 live run, same build: `7c1bc441-9010-402b-922c-2b862230c44e`, awaiting_approval; returned
+      fields read_invoice (with `internal_note` only on A01), read_vendor
+      `name,recipient_reference,vendor_id,version`, create_report
+      `classification,content_hash,report_id,source_invoice_ids,template,version`; internal report
+      labelled `internal_only`, source trail A01@1 internal_only and A02@1 vendor_shareable, finding
+      "- INV104: A01, A02". The lead decided that demo beat 5 (the denied internal export) uses the
+      labelled replay (`cmd/replay`), said openly, since the live model attempts it in fewer than 2
+      of 3 runs.
 
 - [ ] **GO-71 · Record the conservative context manifest, if `internal report rendering` admits model prose** Dropped: `internal report rendering` is deterministic only (lead's delegate, 2026-10-03)
   - Owner: Go implementer (report role: Implementer 3, agent runtime, and Implementer 5, provenance) · Tier: B · Size: S (estimate 2-4 h)

@@ -218,3 +218,34 @@ func TestPostgresNoLedgerLockDuringTheProviderCall(t *testing.T) {
 		t.Fatal("the run's ledger row was locked while the provider call ran")
 	}
 }
+
+// cancellingProvider answers with measured usage and ends the caller's context as it returns, like
+// a provider answering at the request deadline or a claim lost during the call.
+type cancellingProvider struct{ cancel context.CancelFunc }
+
+func (provider cancellingProvider) Chat(context.Context, Request) (Result, error) {
+	provider.cancel()
+	input, output := int64(200), int64(50)
+	return Result{Message: Message{Role: "assistant", Content: "ok"}, Usage: Usage{InputTokens: &input, OutputTokens: &output}}, nil
+}
+
+func TestPostgresCompletedCallSettlesAfterItsContextEnds(t *testing.T) {
+	store, _, runID := postgresAccountingStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	caller, err := NewAccountedCaller(cancellingProvider{cancel: cancel}, store, DefaultAccountingSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := caller.Call(ctx, runID, testdb.ID(t), postgresAccountingRequest(AgentPurpose))
+	if err != nil || result.Settlement == nil || result.Settlement.ActualTokens != 250 || result.UsageUnknown {
+		t.Fatalf("call: %+v %v", result, err)
+	}
+	snapshot, err := store.Snapshot(context.Background(), runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Reserved != 0 || snapshot.Used != 250 || snapshot.CallsInFlight != 0 || snapshot.Agent.UnresolvedCalls != 0 {
+		t.Fatalf("the reservation stuck after a cancelled context: %+v", snapshot)
+	}
+}

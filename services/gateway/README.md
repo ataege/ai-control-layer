@@ -646,6 +646,20 @@ stopping.
   revision, an out-of-scope resource or destination) executes nothing and is a counted denial with
   bounded feedback, like a rejection; only run-level refusals stop, pause or fail the run.
 
+## Agent task instruction
+
+The first model message describes the `reconcile_atlas_v1` business task as the report's
+storyboard does (beats 3 to 8): the finance team suspects a duplicate charge; investigate
+internally, reading each invoice including any authorized internal note, find repeated external
+references and record the findings in an internal investigation report; then send the vendor
+(the passport's recipient reference) what they need to reconcile; use each `recipient_reference`
+exactly as `read_vendor` returns it. It lists the registered templates and names no report to
+send and no control, so a denied export is a natural attempt, not a staged one. Live results with
+`qwen3.5:4b` (run ids and commands in GO-27 in `docs/roadmap/go.md`): the internal report is
+created in 3 of 3 runs per set; the internal export was attempted (and denied) in 0 of 3 and 1 of 3
+runs, so demo beat 5 uses the labelled replay (`cmd/replay`), said openly. The recipient sentence
+took mangled references from 2 of 3 runs to 0 of 3.
+
 ## Cancellation during a step (Worker 3's review)
 
 The loop re-reads the run just before and just after each model request: a cancel stamped since
@@ -723,6 +737,19 @@ revision lowered below what a run has used refuses its next reservation with `bu
 (`allowance_exhausted`). A raised revision widens nothing, and past usage is never refunded or
 rewritten; the ledger keeps the passport's stored limits. The catalog has no per-purpose token
 limits, so those stay the passport's.
+
+**Settlement and slot wait (Worker 3's review).** A completed provider call settles under its own
+5 s cleanup context, so a call that answers at its deadline or under a lost claim never leaves its
+reservation stuck as `reserved`; if the settlement still fails, the call is marked `usage_unknown`
+(reservation and slot held) and returns `model.ErrUsageUnknown`, which pauses the run. The wait for
+a process slot is bounded on its own by one request period, and the provider's request deadline
+starts only once the slot is held.
+
+**Limitation: unknown calls hold their slots.** A `usage_unknown` reservation keeps its ledger slot
+until a trusted late settlement (`Reconcile`). Such calls normally pause the run; a run that kept
+going with all `max_concurrent_calls` slots held by unknown calls would requeue every second
+without progressing. The MVP's action checks no longer call the model (c1's `not_applicable`), so
+this is latent; an operator resolves it by reconciling or cancelling the run.
 
 ## Model allowance ledger alignment (GO-39)
 
