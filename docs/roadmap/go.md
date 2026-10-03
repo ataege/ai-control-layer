@@ -1311,7 +1311,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-26 · Validate the narrow final result and complete the run**
+- [x] **GO-26 · Validate the narrow final result and complete the run**
   - **Report 1.1 change:** The final result may reference both reports.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-32 · Needs: X-11, X-33 · Provides: nothing
@@ -1343,10 +1343,18 @@ typecheck` PASS; `pnpm verify` 6 passed.
     example parses; PostgreSQL: own reports validated, a sibling run's report (same organization),
     another organization's and an unknown report rejected; a rejected final answer leaves the run
     running and a forged or misplaced reference is refused; the validated reference completes the
-    run and reads back unchanged with no prose. Missing half: lane f3 calls `Validate` in the
-    loop's StepFinal, counts a rejection as a correction (GO-29, lead decision) and adds the
-    instruction to the agent prompt; then a reconciliation run completes only with a validated
-    result.
+    run and reads back unchanged with no prose.
+  - Completed (2026-10-03): lane f3 wired the loop (e03ab44): StepFinal calls `runresult.Validate`, the
+    agent prompt carries `FinalAnswerInstruction` verbatim, a rejected answer counts as a GO-29
+    correction and a failed check pauses with `decision_unavailable`. Tests (lane f3,
+    `internal/agent/final_postgres_test.go`): a final answer without a report of this run is denied with
+    `invalid_arguments` feedback and, after two corrections, the run stops `allowance_exhausted` without
+    completing; an answer naming a report the run created completes it with that reference. `pnpm
+test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 passed, 0 failed, 0
+    skipped (internal/agent and internal/runresult ok). Live (3c private database, qwen3.5:4b): run
+    66cbb01a completed after the vendor report was approved and queued, and stored `result_reference`
+    `{"report_ids":["292c82de-6ca9-4fa1-9e7b-e514317a19a3"]}`, its own vendor report; per the lead, lane
+    w2's GO-47 live run also completed through this check.
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary); "The enforcement loop and data minimization"; "Threat model limits and unresolved
     design choices" ("Final-output validation requires an output format and a data rule")
