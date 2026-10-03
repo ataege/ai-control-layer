@@ -1046,7 +1046,8 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     classifications); "Users operating model and proposed user journeys" (Policy administrator)
   - Blocked by: `source classification storage`
 
-- [ ] **API-30 · Serve the report classification and trusted source trail to authorized users**
+- [x] **API-30 · Serve the report classification and trusted source trail to authorized users**
+  - Done (2026-10-04): API-18's single stored-report route already returns X-64 classification, lineage and exact template/projection metadata unchanged from Go, including Internal-only withholding. API-30 records its separate authorization/source-trail evidence: report.controller.spec.ts covers both shared report fixtures, missing authentication, upstream 404, mismatched run/report, unknown source fields, projection consistency and forbidden withheld content; product-access.db-spec.ts checks real authenticated memberships in two organizations and foreign-report denial propagation. Go fixtures are labelled; no new live-model report was rendered by this API task. Checks: API lint, typecheck and build exited 0; API unit tests: "366 passed"; `pnpm test:db api`: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". No duplicate endpoint, browser-derived labels or runtime/demo writes.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-16, API-18 · Needs: X-64, X-71 · Provides: nothing
   - Paths: `apps/api/src` (the module that serves API-18)
