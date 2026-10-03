@@ -1939,7 +1939,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     revocation)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-42 · Prove the limit-triggered stop**
+- [x] **GO-42 · Prove the limit-triggered stop**
   - **Report 1.2 change:** The exhausted allowance may be the security sub-budget (`security_allowance_exhausted`).
   - **Report 1.1 change:** Beat 9; X-46 as amended in the spine.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 1-2 h)
@@ -1963,6 +1963,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     unresolved design choices" (smallest credible vertical slice); "Mapping the proposal to the
     Goldman Sachs challenge" (Unpredictable costs)
   - Blocked by: `model call retries` (the retry part only)
+  - Completed (2026-10-03, lane w3): `internal/agent/limit_stop_postgres_test.go`, `TestModelLimitStopsTheRunBeforeTheNextDispatch`, a clearly labelled runtime test: a run admitted with an agent call allowance of 2 runs through lane f3's loop with the production stepper, accounted caller, Ollama client, token ledger and call log against a labelled provider double (an httptest server speaking the Ollama chat API, always proposing a permitted read). Evidence X-46: provider requests 2, `model_calls` 2 completed, reservations 2 settled with input and output usage, 0 unresolved, ledger used 98 reserved 0 tokens, run paused/`allowance_exhausted` with the `run.paused` event's safe message; the third request was rejected before dispatch. The tool-attempt limit is covered at the executor by `TestAttemptLimitIsEnforced`. Not done: the bounded-retry part, because `model call retries` is still open (document owner); the security sub-budget variant is lane c1's `security_allowance_exhausted` evidence. Checks: see the commit.
 
 - [x] **GO-79 · Enforce the model allowlist, request timeout and local concurrency cap**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
