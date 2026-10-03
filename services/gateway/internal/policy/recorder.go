@@ -133,6 +133,12 @@ func decisionEvent(run RunIdentity, decision Decision) repository.NewEvent {
 		if isExportDenial(decision.ReasonCode) {
 			event.EventType = contracts.EventReportExportDenied
 			event.MaskedSummary.LineageCheck = lineageCheckFor(decision.ReasonCode)
+			// The stored report's references, never its content, so the interface can link to it.
+			if report := decision.DeniedReport; report != nil && report.ID != "" {
+				reportID, template, classification := report.ID, contracts.ReportTemplate(report.Template), report.Classification
+				event.MaskedSummary.ReportID, event.MaskedSummary.Template = &reportID, &template
+				event.MaskedSummary.Classification = &classification
+			}
 		}
 	}
 	event.Decision = &eventDecision

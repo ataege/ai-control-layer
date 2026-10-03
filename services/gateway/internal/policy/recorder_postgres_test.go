@@ -155,8 +155,10 @@ func TestRecorderWritesAnExportDenialEvent(t *testing.T) {
 	if err := recorder.StoreAction(ctx, action); err != nil {
 		t.Fatal(err)
 	}
+	reportID := testdb.ID(t)
 	decision := Decision{Outcome: OutcomeDeny, ReasonCode: ReasonReportExportRestricted, ActionID: action.ActionID,
-		ActionStored: true, ActionDigest: action.ActionDigest, EvaluatedRevisionID: 1, AlternativeTemplate: TemplateVendorReconciliation}
+		ActionStored: true, ActionDigest: action.ActionDigest, EvaluatedRevisionID: 1, AlternativeTemplate: TemplateVendorReconciliation,
+		DeniedReport: &ReportRef{ID: reportID, Template: "internal_investigation_v1", Classification: "internal_only"}}
 	if err := recorder.RecordDecision(ctx, run, decision); err != nil {
 		t.Fatal(err)
 	}
@@ -166,14 +168,22 @@ func TestRecorderWritesAnExportDenialEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var decoded struct {
-		LineageCheck        string `json:"lineageCheck"`
-		AlternativeTemplate string `json:"alternativeTemplate"`
+		LineageCheck        string  `json:"lineageCheck"`
+		AlternativeTemplate string  `json:"alternativeTemplate"`
+		ReportID            *string `json:"reportId"`
+		Template            *string `json:"template"`
+		Classification      *string `json:"classification"`
 	}
 	if err := json.Unmarshal([]byte(summary), &decoded); err != nil {
 		t.Fatal(err)
 	}
 	if eventType != "report.export_denied" || decoded.LineageCheck != "passed" || decoded.AlternativeTemplate != TemplateVendorReconciliation {
 		t.Fatalf("event %q with summary %s; want report.export_denied, lineage passed and the alternative", eventType, summary)
+	}
+	// The stored report's references, matching safe-event.export-denied.json: id, template, label.
+	if decoded.ReportID == nil || *decoded.ReportID != reportID || decoded.Template == nil || *decoded.Template != "internal_investigation_v1" ||
+		decoded.Classification == nil || *decoded.Classification != "internal_only" {
+		t.Fatalf("summary %s does not carry the denied report's id, template and classification", summary)
 	}
 }
 
