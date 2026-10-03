@@ -40,7 +40,7 @@ To proxy another API route, add its path to `UPSTREAM_PATHS` and create a matchi
 | ------------------ | ---------------------------------------------- | ----------- |
 | `API_UPSTREAM_URL` | Base URL of the API, read at request time only | none        |
 | `WEB_PORT`         | Port for `dev` and `start`                     | `3000`      |
-| `WEB_HOST`         | Bind address for `start` (optional)            | `127.0.0.1` |
+| `WEB_HOST`         | Bind address for `dev` and `start` (optional)  | `127.0.0.1` |
 
 There are no `NEXT_PUBLIC_*` variables, and this app never reads the service token or database
 settings. The build needs no environment at all.
@@ -49,14 +49,14 @@ settings. The build needs no environment at all.
 
 Run from the repository root with `pnpm --filter web run <script>`:
 
-| Script      | Does                                                      |
-| ----------- | --------------------------------------------------------- |
-| `dev`       | `next dev` on `WEB_PORT` (via `scripts/dev.mjs`)          |
-| `build`     | `next build` (standalone output in `.next/standalone`)    |
-| `start`     | Standalone server on `WEB_PORT` (via `scripts/start.mjs`) |
-| `lint`      | ESLint                                                    |
-| `typecheck` | `next typegen`, then `tsc --noEmit`                       |
-| `test`      | Vitest (fetch helper, proxy, check interpretation)        |
+| Script      | Does                                                        |
+| ----------- | ----------------------------------------------------------- |
+| `dev`       | `next dev` on `WEB_HOST`:`WEB_PORT` (via `scripts/dev.mjs`) |
+| `build`     | `next build` (standalone output in `.next/standalone`)      |
+| `start`     | Standalone server on `WEB_PORT` (via `scripts/start.mjs`)   |
+| `lint`      | ESLint                                                      |
+| `typecheck` | `next typegen`, then `tsc --noEmit`                         |
+| `test`      | Vitest (fetch helper, proxy, check interpretation)          |
 
 `pnpm run dev:web` from the root loads the root `.env` first. `@workspace/contracts` must be built
 once (`pnpm --filter @workspace/contracts run build`); Turborepo does this automatically.

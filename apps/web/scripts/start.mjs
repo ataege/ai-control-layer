@@ -4,9 +4,12 @@
 import { cpSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { resolveWebPort, runNodeScript, webAppDirectory } from "./lib/launch.mjs";
-
-const DEFAULT_BIND_ADDRESS = "127.0.0.1";
+import {
+  resolveWebBindAddress,
+  resolveWebPort,
+  runNodeScript,
+  webAppDirectory,
+} from "./lib/launch.mjs";
 
 const buildDirectory = path.join(webAppDirectory, ".next");
 // The standalone tree mirrors the monorepo layout, so the server sits under apps/web.
@@ -44,8 +47,7 @@ process.exit(
     env: {
       ...process.env,
       PORT: String(resolveWebPort()),
-      // Shells may export HOSTNAME as the machine name, so only WEB_HOST changes the address.
-      HOSTNAME: process.env.WEB_HOST || DEFAULT_BIND_ADDRESS,
+      HOSTNAME: resolveWebBindAddress(),
     },
   }),
 );

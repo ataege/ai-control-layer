@@ -212,12 +212,12 @@ readable by your user only. Real environment variables always win over the file.
 
 Optional variables that are not in `.env.example`:
 
-| Variable       | Default       | Read by                            | Notes                                                                                                         |
-| -------------- | ------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `API_HOST`     | `127.0.0.1`   | API                                | Bind address. The API image and Compose set `0.0.0.0`.                                                        |
-| `GATEWAY_HOST` | `127.0.0.1`   | gateway                            | Bind address. The gateway image and Compose set `0.0.0.0`.                                                    |
-| `NODE_ENV`     | `development` | API                                | `development`, `test` or `production`. The API image and Compose set `production`.                            |
-| `WEB_HOST`     | `127.0.0.1`   | `pnpm --filter web run start` only | Bind address of the standalone web server started on the host. An inherited `HOSTNAME` is ignored on purpose. |
+| Variable       | Default       | Read by                        | Notes                                                                                                                                     |
+| -------------- | ------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_HOST`     | `127.0.0.1`   | API                            | Bind address. The API image and Compose set `0.0.0.0`.                                                                                    |
+| `GATEWAY_HOST` | `127.0.0.1`   | gateway                        | Bind address. The gateway image and Compose set `0.0.0.0`.                                                                                |
+| `NODE_ENV`     | `development` | API                            | `development`, `test` or `production`. The API image and Compose set `production`.                                                        |
+| `WEB_HOST`     | `127.0.0.1`   | web launchers (`dev`, `start`) | Bind address of the web server started on the host (`next dev` and the standalone server). An inherited `HOSTNAME` is ignored on purpose. |
 
 The gateway also rejects a `GATEWAY_SERVICE_TOKEN` that starts or ends with whitespace and blank
 `POSTGRES_USER`, `POSTGRES_PASSWORD` or `POSTGRES_DB` values.
@@ -577,8 +577,9 @@ describes.
   4 skipped; then `pnpm infra:down`.
 - Exposure found afterwards: `pnpm dev:web` listened on `*:3000`, and the page answered HTTP 200 on
   the machine's Wi-Fi address; the API (3001) and the gateway (8080) bind to `127.0.0.1` on the host.
-  Recorded in docs/setup.md section 8, "Network and exposure"; the bind fix belongs to the frontend
-  role.
+  Fixed afterwards (lead-authorized change to the web launchers): `next dev` now binds to
+  `WEB_HOST`, default `127.0.0.1`; lsof showed `TCP 127.0.0.1:3000 (LISTEN)` only and the Wi-Fi
+  address refused the connection.
 - Not covered, because the commands do not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
   control suite (SH-47) and the policy reload in a container (API-32). SH-30 is done only when a
   teammate who did not write the procedure has followed it.

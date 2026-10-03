@@ -485,13 +485,11 @@ pnpm stack:down                    # removes the containers and the network, kee
 
 ### Network and exposure
 
-- Host mode: the API (3001) and the gateway (8080) listen on `127.0.0.1`, and PostgreSQL is
-  published on `127.0.0.1:5432`. **The web development server does not:** `next dev` listens on
-  every interface (`*:3000`), and on 2026-10-03 this machine answered on its Wi-Fi address as well.
-  Through the web app's `/api` proxy, the API is then reachable from the local network too. Until
-  the web dev launcher binds to `127.0.0.1` (a change in `apps/web/scripts/dev.mjs`, owned by the
-  frontend role, reported), keep the macOS firewall on and block incoming connections for Node.js,
-  or use a network you trust.
+- Host mode: web (3000), API (3001) and gateway (8080) listen on `127.0.0.1`, and PostgreSQL is
+  published on `127.0.0.1:5432`. The web launchers bind to `WEB_HOST` (default `127.0.0.1`); before
+  that was added on 2026-10-03, `next dev` listened on every interface and answered on the Wi-Fi
+  address, which also exposed the API through the web app's `/api` proxy. Leave `WEB_HOST` unset
+  for the demonstration.
 - Full-container mode: every published port is bound to `127.0.0.1` (web 3000, API 3001,
   PostgreSQL 5432); the gateway is not published (only `pnpm stack:up --debug` publishes 8080). All
   four containers share Compose's default network; the architecture's "NestJS and Go use a private
@@ -506,8 +504,7 @@ pnpm stack:down                    # removes the containers and the network, kee
 - [ ] The checkout is at the submission commit; `git status` is clean.
 - [ ] `ollama list` shows `qwen3.5:4b` with the recorded ID; the warm-up answered.
 - [ ] `pnpm infra:up` and `pnpm dev` are running; `pnpm smoke` passed.
-- [ ] Incoming connections to Node.js are blocked, or the network is trusted (see "Network and
-      exposure").
+- [ ] `WEB_HOST` is unset, so the web app listens on `127.0.0.1` only (see "Network and exposure").
 - [ ] Migrations and seeds ran; the demonstration data was reset.
 - [ ] The control suite ran on this build and its result is saved.
 - [ ] The laptop is on power and does not sleep (for example `caffeinate -dims` in a spare
