@@ -32,9 +32,12 @@ const (
 const (
 	rejectionRevisionMissing = "revision_missing"
 	rejectionFeedMissing     = "signature_feed_missing"
-	rejectionFeedAmbiguous   = "signature_feed_ambiguous"
 	rejectionInvalid         = "catalog_invalid"
 )
+
+// TrustedFeedIssuer is the only signature-feed issuer the gateway binds; the import stores the
+// repository's config/attack-signatures.json under it.
+const TrustedFeedIssuer = "task-passport-security"
 
 // Beginner starts a transaction: the gateway pool, or an enclosing transaction in tests.
 type Beginner interface {
@@ -51,7 +54,7 @@ type rejection struct {
 }
 
 // ActivateRequested validates the requested revision with the gateway's own parsers (limits and
-// security settings, with the feed found by the policy's signatures.revision) and, in the same
+// security settings, with the trusted issuer's feed of the policy's signatures.revision) and, in the same
 // transaction, either makes it validated and active together with its feed and clears the last
 // error, or records a safe last error and keeps the last good active revision. A request that
 // already failed is not retried; a new import sets a new requested revision.
@@ -138,32 +141,18 @@ func validateRevision(ctx context.Context, transaction pgx.Tx, revisionID int64)
 	if json.Unmarshal(content, &signatures) != nil || signatures.Signatures == nil || signatures.Signatures.Revision == nil {
 		return nil, reject(rejectionInvalid, "The requested catalog revision names no signature feed revision.")
 	}
-	rows, err := transaction.Query(ctx, `SELECT id, source_text, file_digest FROM app.signature_feed_revisions
-		WHERE revision = $1 ORDER BY id`, *signatures.Signatures.Revision)
-	if err != nil {
-		return nil, reject(rejectionInvalid, "The signature feed could not be read.")
-	}
-	type feedRow struct {
-		id             int64
-		source, digest string
-	}
-	var feeds []feedRow
-	for rows.Next() {
-		var feed feedRow
-		if err := rows.Scan(&feed.id, &feed.source, &feed.digest); err != nil {
-			rows.Close()
-			return nil, reject(rejectionInvalid, "The signature feed could not be read.")
-		}
-		feeds = append(feeds, feed)
-	}
-	rows.Close()
-	if len(feeds) > 1 {
-		return nil, reject(rejectionFeedAmbiguous, "More than one imported signature feed has the policy's feed revision.")
-	}
+	// Only the trusted issuer's feed is bound; (issuer, revision) is unique.
 	var feedID *int64
 	var feedSource, feedDigest *string
-	if len(feeds) == 1 {
-		feedID, feedSource, feedDigest = &feeds[0].id, &feeds[0].source, &feeds[0].digest
+	var storedID int64
+	var storedSource, storedDigest string
+	err = transaction.QueryRow(ctx, `SELECT id, source_text, file_digest FROM app.signature_feed_revisions
+		WHERE issuer = $1 AND revision = $2`, TrustedFeedIssuer, *signatures.Signatures.Revision).Scan(&storedID, &storedSource, &storedDigest)
+	switch {
+	case err == nil:
+		feedID, feedSource, feedDigest = &storedID, &storedSource, &storedDigest
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, reject(rejectionInvalid, "The signature feed could not be read.")
 	}
 	if _, err := ParseLimits(content); err != nil {
 		return nil, reject(rejectionInvalid, "The requested catalog revision has invalid limits.")
