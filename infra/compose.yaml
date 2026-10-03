@@ -52,6 +52,7 @@ services:
       # Unverified: container mode has never been run (Docker was unavailable).
       MODEL_BASE_URL: http://host.docker.internal:11434
       MODEL_NAME: ${MODEL_NAME:-}
+      OPERATOR_CONTEXT_SIGNING_KEY: "${OPERATOR_CONTEXT_SIGNING_KEY:?OPERATOR_CONTEXT_SIGNING_KEY is not set - run pnpm run setup first}"
     # Makes host.docker.internal resolve on Linux Docker Engine too (Docker Desktop provides it already).
     # Resolution only: on Linux, Ollama listens on 127.0.0.1 by default and is not reachable from the bridge.
     extra_hosts:
@@ -87,6 +88,8 @@ services:
       GATEWAY_URL: http://gateway:8080
       GATEWAY_SERVICE_TOKEN: "${GATEWAY_SERVICE_TOKEN:?GATEWAY_SERVICE_TOKEN is not set - run pnpm run setup first}"
       GATEWAY_TIMEOUT_MS: ${GATEWAY_TIMEOUT_MS:-3000}
+      AUTH_JWT_SECRET: "${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is not set - run pnpm run setup first}"
+      OPERATOR_CONTEXT_SIGNING_KEY: "${OPERATOR_CONTEXT_SIGNING_KEY:?OPERATOR_CONTEXT_SIGNING_KEY is not set - run pnpm run setup first}"
       DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-3000}
       # The browser origin of the published web port.
       CORS_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-3000}
@@ -115,7 +118,8 @@ services:
       context: .
       dockerfile: infra/docker/web.Dockerfile
     restart: unless-stopped
-    # Deliberately no GATEWAY_SERVICE_TOKEN, no POSTGRES_* and no MODEL_* here: the web app must never hold them.
+    # Deliberately no GATEWAY_SERVICE_TOKEN, AUTH_JWT_SECRET, OPERATOR_CONTEXT_SIGNING_KEY, POSTGRES_* or MODEL_* here:
+    # the web app must never hold them.
     environment:
       NODE_ENV: production
       PORT: "3000"

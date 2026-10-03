@@ -20,6 +20,8 @@ const MINIMUM_GO_VERSION = "1.27";
 const GENERATED_SECRETS = {
   POSTGRES_PASSWORD: () => randomBytes(24).toString("base64url"), // 32 characters
   GATEWAY_SERVICE_TOKEN: () => randomBytes(36).toString("base64url"), // 48 characters
+  AUTH_JWT_SECRET: () => randomBytes(48).toString("base64url"), // 64 characters, 384 bits
+  OPERATOR_CONTEXT_SIGNING_KEY: () => randomBytes(48).toString("base64url"), // 64 characters, 384 bits
 };
 
 // ---------------------------------------------------------------- versions
