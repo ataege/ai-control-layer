@@ -18,13 +18,12 @@ import (
 // ReviewerRole is the membership role an operator needs to decide an approval (lead decision).
 const ReviewerRole = "reviewer"
 
-// ApprovalChoice is the X-10 decision: approve or reject one stored action, nothing else. It is
-// handler-local until 3c adds ApprovalDecision to internal/contracts.
-type ApprovalChoice string
+// ApprovalChoice is the X-10 decision: approve or reject one stored action, nothing else.
+type ApprovalChoice = contracts.ApprovalChoice
 
 const (
-	ApprovalApprove ApprovalChoice = "approve"
-	ApprovalReject  ApprovalChoice = "reject"
+	ApprovalApprove = contracts.ApprovalApprove
+	ApprovalReject  = contracts.ApprovalReject
 )
 
 // Approval decision failures. Each one stores no grant.
@@ -34,6 +33,7 @@ var (
 	ErrApprovalClosed      = errors.New("approval already decided")
 	ErrApprovalExpired     = errors.New("approval expired")
 	ErrApprovalChanged     = errors.New("action or review material changed")
+	ErrApprovalRunStopped  = errors.New("run is stopped or cancelled")
 	ErrApprovalInvalid     = errors.New("invalid approval decision")
 	ErrApprovalUnavailable = errors.New("approval could not be decided")
 )
@@ -81,6 +81,7 @@ type awaitingAction struct {
 	payload             []byte
 	payloadDigest       []byte
 	expiresAt           time.Time
+	runOpen             bool
 }
 
 // Decide checks the reviewer's authority from app.memberships (never from the signed claim
@@ -104,6 +105,10 @@ func (approvals *Approvals) Decide(ctx context.Context, operator contracts.Opera
 		action, err := loadAwaitingAction(ctx, tx.Raw(), operator.OrganizationID, actionID)
 		if err != nil {
 			return err
+		}
+		// A stopped or cancel-stamped run takes no decision: no grant and no continuation (GO-41).
+		if !action.runOpen {
+			return ErrApprovalRunStopped
 		}
 		if !action.expiresAt.After(approvals.now()) {
 			return ErrApprovalExpired
@@ -150,7 +155,7 @@ func (approvals *Approvals) Decide(ctx context.Context, operator contracts.Opera
 	case err == nil:
 		return result, nil
 	case errors.Is(err, ErrNotReviewer), errors.Is(err, ErrApprovalNotFound), errors.Is(err, ErrApprovalClosed),
-		errors.Is(err, ErrApprovalExpired), errors.Is(err, ErrApprovalChanged):
+		errors.Is(err, ErrApprovalExpired), errors.Is(err, ErrApprovalChanged), errors.Is(err, ErrApprovalRunStopped):
 		return ApprovalResult{}, err
 	default:
 		return ApprovalResult{}, ErrApprovalUnavailable
@@ -191,7 +196,8 @@ func loadAwaitingAction(ctx context.Context, tx pgx.Tx, organizationID, actionID
 	var tool string
 	err := tx.QueryRow(ctx,
 		`SELECT a.run_id::text, r.passport_id::text, a.tool, a.canonical_arguments::text, a.action_digest,
-		        a.evaluated_catalog_revision_id, a.status, p.id::text, p.payload::text, p.payload_digest, p.expires_at
+		        a.evaluated_catalog_revision_id, a.status, p.id::text, p.payload::text, p.payload_digest, p.expires_at,
+		        (r.cancel_requested_at IS NULL AND r.status NOT IN ('completed', 'failed', 'stopped'))
 		   FROM runtime.actions AS a
 		   JOIN runtime.runs AS r ON r.id = a.run_id AND r.organization_id = a.organization_id
 		   JOIN runtime.review_payloads AS p ON p.action_id = a.id AND p.organization_id = a.organization_id
@@ -199,7 +205,8 @@ func loadAwaitingAction(ctx context.Context, tx pgx.Tx, organizationID, actionID
 		  FOR UPDATE OF a`,
 		actionID, organizationID,
 	).Scan(&action.runID, &action.passportID, &tool, &action.canonicalArguments, &action.actionDigest,
-		&action.evaluatedRevisionID, &action.status, &action.payloadID, &action.payload, &action.payloadDigest, &action.expiresAt)
+		&action.evaluatedRevisionID, &action.status, &action.payloadID, &action.payload, &action.payloadDigest, &action.expiresAt,
+		&action.runOpen)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return awaitingAction{}, ErrApprovalNotFound
 	}

@@ -12,6 +12,9 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 | `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                            |
 | `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable`. |
 | `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                |
+| `POST /internal/runs/{runId}/cancel`            | GO-41: records a cancellation; `200` X-11 run state, `404` unknown or another organization's run.                 |
+| `POST /internal/actions/{actionId}/approval`    | GO-44 (lane w3): approve or reject one stored action (X-10).                                                      |
+| `GET /internal/actions/{actionId}/review`       | GO-44 (lane w3): the frozen review payload, for a reviewer of the organization.                                   |
 
 Internal product commands are registered through `httpserver.Options.InternalCommands`, which
 always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
@@ -117,6 +120,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/policy`          | Go lane w3 (action gate and approvals)                        |
 | `internal/security`        | Go lane c1 (hybrid security controls)                         |
 | `internal/provenance`      | Go lane w2 (tools and provenance)                             |
+| `internal/reads`           | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -136,6 +140,7 @@ internal/contracts/   Go mirrors of the runtime wire contracts and strict decodi
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
+internal/reads/       operator reads: run state, usage and events; security summary, assessments and events (GO-24, GO-83)
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76), action check (GO-77 part)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
@@ -143,7 +148,7 @@ internal/repository/  runtime passports, runs, jobs and X-12 events (gap-free pe
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
 internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)
-internal/catalog/     trusted active snapshot loader: pointer, limits, security settings, effective limits (GO-72)
+internal/catalog/     trusted active snapshot loader (GO-72) and catalog activation: validate, acknowledge or reject a requested revision (GO-73)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 

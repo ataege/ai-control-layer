@@ -245,3 +245,65 @@ func (repository *Repository) Passport(ctx context.Context, organizationID, runI
 	}
 	return passport, nil
 }
+
+// RequestCancellation records a cancellation of one run of the organization (GO-41) and returns
+// the resulting state. The first request stamps cancel_requested_at and writes a
+// run.cancel_requested event; the worker loop and the executor refuse every later dispatch of a
+// run with that stamp. A run no worker is advancing (queued, awaiting approval or paused) stops
+// at once with run_cancelled; a running run stops at its next check. A finished run and a repeated
+// request change nothing. Cancellation reverses no committed effect.
+func (tx Tx) RequestCancellation(ctx context.Context, organizationID, runID string) (contracts.RunState, error) {
+	if ctx == nil || !validUUID(organizationID) || !validUUID(runID) {
+		return contracts.RunState{}, ErrInvalid
+	}
+	// The lock orders this request against the worker's own transitions of the run.
+	state, err := scanRunState(tx.transaction.QueryRow(ctx, `SELECT `+runStateColumns+`
+		FROM runtime.runs WHERE id = $1 AND organization_id = $2 FOR NO KEY UPDATE`, runID, organizationID))
+	if err != nil {
+		return contracts.RunState{}, err
+	}
+	if _, active := allowedRunTransitions[state.Status]; !active {
+		return state, nil
+	}
+	if state.CancelRequestedAt == nil {
+		state, err = scanRunState(tx.transaction.QueryRow(ctx, `UPDATE runtime.runs
+			SET cancel_requested_at = now(), updated_at = now()
+			WHERE id = $1 AND organization_id = $2
+			RETURNING `+runStateColumns, runID, organizationID))
+		if err != nil {
+			return contracts.RunState{}, err
+		}
+		if _, err := tx.AppendEvent(ctx, NewEvent{
+			OrganizationID: organizationID, RunID: &runID, EventType: contracts.EventRunCancelRequested,
+			ReasonCode:    pointerTo(contracts.ReasonRunCancelled),
+			MaskedSummary: contracts.MaskedSummary{Effect: pointerTo("none")},
+		}); err != nil {
+			return contracts.RunState{}, err
+		}
+	}
+	if state.Status == contracts.RunRunning {
+		return state, nil
+	}
+	return tx.TransitionRun(ctx, RunTransition{
+		OrganizationID: organizationID, RunID: runID, To: contracts.RunStopped,
+		Reason: pointerTo(contracts.ReasonRunCancelled),
+		Event: NewEvent{
+			OrganizationID: organizationID, RunID: &runID, EventType: contracts.EventRunStopped,
+			ReasonCode:    pointerTo(contracts.ReasonRunCancelled),
+			MaskedSummary: contracts.MaskedSummary{Effect: pointerTo("none")},
+		},
+	})
+}
+
+func pointerTo[Value any](value Value) *Value { return &value }
+
+// CancelRun records a cancellation in its own transaction; see Tx.RequestCancellation.
+func (repository *Repository) CancelRun(ctx context.Context, organizationID, runID string) (contracts.RunState, error) {
+	var state contracts.RunState
+	err := repository.InTransaction(ctx, func(tx Tx) error {
+		var cancelErr error
+		state, cancelErr = tx.RequestCancellation(ctx, organizationID, runID)
+		return cancelErr
+	})
+	return state, err
+}

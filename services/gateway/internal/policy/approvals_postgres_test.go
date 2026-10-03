@@ -137,6 +137,14 @@ func TestApprovalRefusalsStoreNoGrant(t *testing.T) {
 				`{"report_id":"`+world.reportID+`","recipient_reference":"recipient:`+world.run.RunID+`:vendor_other"}`, world.actionID)
 			return NewApprovals(world.pool), world.reviewer
 		}, ErrApprovalChanged},
+		{"cancel-stamped run", func(t *testing.T, world *approvalWorld) (*Approvals, contracts.OperatorContext) {
+			mustExec(t, world.pool, `UPDATE runtime.runs SET cancel_requested_at = now() WHERE id = $1`, world.run.RunID)
+			return NewApprovals(world.pool), world.reviewer
+		}, ErrApprovalRunStopped},
+		{"stopped run", func(t *testing.T, world *approvalWorld) (*Approvals, contracts.OperatorContext) {
+			mustExec(t, world.pool, `UPDATE runtime.runs SET status = 'stopped', terminal_reason = 'run_cancelled' WHERE id = $1`, world.run.RunID)
+			return NewApprovals(world.pool), world.reviewer
+		}, ErrApprovalRunStopped},
 		{"continuation cannot be stored", func(t *testing.T, world *approvalWorld) (*Approvals, contracts.OperatorContext) {
 			approvals := NewApprovals(world.pool)
 			approvals.enqueue = func(context.Context, repository.Tx, string, string) (string, error) {
