@@ -117,6 +117,18 @@ func TestPostgresReadRoutesThroughTheGatewayHandler(t *testing.T) {
 		t.Fatalf("run events %+v", page)
 	}
 
+	// The catalog status is global: every verified operator reads it, and it needs the service token.
+	for _, operator := range []contracts.OperatorContext{owner, intruder} {
+		var status reads.CatalogStatus
+		recorder := call(operator, "/internal/catalog/active", true)
+		if recorder.Code != http.StatusOK || contracts.DecodeStrict(recorder.Body.Bytes(), &status) != nil || status.ActiveRevisionID == nil || len(status.Controls) != 3 {
+			t.Fatalf("catalog status %d %s", recorder.Code, recorder.Body.String())
+		}
+	}
+	if recorder := call(owner, "/internal/catalog/active", false); recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("catalog status without the service token: %d", recorder.Code)
+	}
+
 	recorder := call(owner, "/internal/security/summary", true)
 	var summary reads.SecuritySummary
 	if recorder.Code != http.StatusOK || contracts.DecodeStrict(recorder.Body.Bytes(), &summary) != nil || summary.OrganizationID != owner.OrganizationID {

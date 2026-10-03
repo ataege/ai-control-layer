@@ -260,6 +260,18 @@ func TestStoryThroughTheProductionChain(t *testing.T) {
 	deniedActionID, _, _ := world.actionAt(t, 5)
 	denials := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE organization_id = $1 AND action_id = $2
 		AND event_type = 'report.export_denied' AND decision = 'deny' AND reason_code = 'report_export_restricted'`, deniedActionID)
+	// The denial event names the stored internal report by references, as the shared fixture does.
+	var deniedReportID, deniedTemplate, deniedClassification string
+	if err := world.pool.QueryRow(context.Background(), `SELECT coalesce(masked_summary->>'reportId', ''), coalesce(masked_summary->>'template', ''),
+		coalesce(masked_summary->>'classification', '') FROM runtime.audit_events
+		WHERE organization_id = $1 AND action_id = $2 AND event_type = 'report.export_denied'`, world.organizationID, deniedActionID).
+		Scan(&deniedReportID, &deniedTemplate, &deniedClassification); err != nil {
+		t.Fatal(err)
+	}
+	if deniedReportID != internalID || deniedTemplate != string(contracts.TemplateInternalInvestigation) || deniedClassification != "internal_only" {
+		t.Fatalf("report.export_denied names report %q, template %q, classification %q; want %s, internal_investigation_v1, internal_only",
+			deniedReportID, deniedTemplate, deniedClassification, internalID)
+	}
 	outboxAfterDenial := world.count(t, `SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1`)
 	internalLineage := world.lineageOf(t, internalID)
 	if internalClassification != "internal_only" || denials != 1 || outboxBefore != 0 || outboxAfterDenial != 0 ||

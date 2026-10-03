@@ -444,7 +444,11 @@ Runtime check with real HTTP calls against services that are already running (`p
 
 - API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200;
   the OpenAPI document `/api/docs-json` loads.
-- The three web pages load.
+- The sign-in gate: `/` and `/components` without a session redirect to `/login`, and `/login` loads.
+  With `DEMO_OPERATOR_PASSWORD` in `.env` it then signs in as the seeded demo operator through
+  `/api/auth/sign-in` (a wrong password gets 401), loads `/`, `/components` and `/diagnostics` with
+  that session, and signs out. Without the password the signed-in checks are skipped and the web leak
+  check says it covered only the sign-in page.
 - The three web proxy routes return the same status as the API.
 - `x-request-id` is echoed by the API, the web proxy and the gateway.
 - Gateway liveness and readiness; `/internal/ping` returns 401 without a token and with a wrong

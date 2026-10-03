@@ -1,0 +1,43 @@
+{
+  "activeRevisionId": 1,
+  "requestedRevisionId": 2,
+  "validatedRevisionId": 1,
+  "policyDigest": "df00c9d6064542c1a5863abbb03d2a765a3b84b0385775b30bb2b50b6343c072",
+  "feedRevisionId": 1,
+  "feedRevision": "feed_v1",
+  "feedDigest": "c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244",
+  "feedRuleCount": 4,
+  "lastError": {
+    "code": "catalog_invalid",
+    "message": "The requested revision failed gateway validation.",
+    "revisionId": 2,
+    "stage": "gateway_validation"
+  },
+  "controls": [
+    {
+      "controlId": "secret_pattern",
+      "controlClass": "deterministic",
+      "enabled": true,
+      "mode": "redact",
+      "threshold": null,
+      "boundaries": ["model_input", "tool_result"]
+    },
+    {
+      "controlId": "semantic_injection",
+      "controlClass": "semantic",
+      "enabled": true,
+      "mode": "block",
+      "threshold": 0.75,
+      "boundaries": ["model_input", "tool_result", "action_proposal"]
+    },
+    {
+      "controlId": "signature_match",
+      "controlClass": "deterministic",
+      "enabled": true,
+      "mode": null,
+      "threshold": null,
+      "boundaries": ["model_input", "tool_result", "action_proposal"]
+    }
+  ],
+  "disabledRules": []
+}

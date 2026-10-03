@@ -115,6 +115,9 @@ type Decision struct {
 	AdmissionCatalogRevisionID int64
 	// ReplaySource labels every record of a replayed proposal.
 	ReplaySource string
+	// DeniedReport names the stored report whose export was denied (GO-64), so the denial event
+	// carries its references. Nil for every other decision.
+	DeniedReport *ReportRef
 }
 
 // ScopeReader loads the passport scope and the active catalog revision for a verified run.
@@ -148,6 +151,16 @@ type ExportVerdict struct {
 	Allowed             bool
 	ReasonCode          ReasonCode
 	AlternativeTemplate string // a permitted continuation, never extra authority
+	// Report names the stored report by references (id, template, stored classification), so a
+	// denial event can point at it. Empty when Found is false.
+	Report ReportRef
+}
+
+// ReportRef names a stored report by references only: never its content, title or sources.
+type ReportRef struct {
+	ID             string
+	Template       string
+	Classification string
 }
 
 // ActionEvaluator is the semantic action check of GO-77, called only for a proposal the
@@ -300,6 +313,7 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 				denial.ReasonCode = ReasonReportExportRestricted
 			}
 			denial.AlternativeTemplate = verdict.AlternativeTemplate
+			denial.DeniedReport = &verdict.Report
 			return denial
 		}
 	}

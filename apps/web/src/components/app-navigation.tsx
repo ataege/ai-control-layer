@@ -16,6 +16,8 @@ const NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { href: "/tasks/new", label: "New Task", icon: <LayoutGridIcon aria-hidden="true" /> },
   { href: "/components", label: "Components", icon: <LayoutGridIcon aria-hidden="true" /> },
   { href: "/diagnostics", label: "Diagnostics", icon: <ActivityIcon aria-hidden="true" /> },
+  { href: "/judge", label: "Judge", icon: <LayoutGridIcon aria-hidden="true" /> },
+  { href: "/security", label: "Security", icon: <ActivityIcon aria-hidden="true" /> },
 ];
 
 /** Connects the generic AppShell to the Next.js router. */
@@ -33,12 +35,22 @@ export function AppNavigation({ children }: Readonly<{ children: React.ReactNode
     if (currentPathname !== "/login") {
       ProductClient.getMe()
         .then((res) => {
-          if (res.ok) setUser(res.data);
-          else setUser(null);
+          if (res.ok) {
+            setUser(res.data);
+          } else {
+            setUser(null);
+            // Redirect to login if unauthenticated on a protected route
+            const isPublic =
+              currentPathname.startsWith("/diagnostics") ||
+              currentPathname.startsWith("/components");
+            if (!isPublic) {
+              router.push("/login");
+            }
+          }
         })
         .catch(() => setUser(null));
     }
-  }, [currentPathname]);
+  }, [currentPathname, router]);
 
   if (currentPathname === "/login") {
     return <main>{children}</main>;

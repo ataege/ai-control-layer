@@ -63,6 +63,8 @@ var fixturesCoveredElsewhere = map[string]string{
 	// Go-owned read contracts (lane w2), decoded by internal/reads' TestReadContractFixturesMatchTheGoTypes.
 	"run-usage.ledger.json":                          "internal/reads",
 	"run-usage.no-ledger.json":                       "internal/reads",
+	"catalog-status.active.json":                     "internal/reads",
+	"catalog-status.rejected-request.json":           "internal/reads",
 	"run-events-page.export-denied.json":             "internal/reads",
 	"assessment-record.semantic-judge.json":          "internal/reads",
 	"assessment-record.semantic-not-applicable.json": "internal/reads",
