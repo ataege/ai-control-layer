@@ -16,20 +16,8 @@ import (
 func TestUnreachableProviderRecordsTheActualFailureState(t *testing.T) {
 	world := newLoopWorld(t, passportOptions{})
 	ctx := context.Background()
+	// newLoopWorld opens the run's ledger with the passport, as admission does.
 	ledger := budget.NewPostgresStore(world.pool)
-	if err := ledger.CreateRun(ctx, world.runID, 20000); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		for _, statement := range []string{
-			"DELETE FROM runtime.model_token_reservations WHERE run_id = $1",
-			"DELETE FROM runtime.model_token_budgets WHERE run_id = $1",
-		} {
-			if _, err := world.pool.Exec(context.Background(), statement, world.runID); err != nil {
-				t.Errorf("clean ledger: %v", err)
-			}
-		}
-	})
 	// A closed loopback port: the connection is refused, nothing answers.
 	provider, err := model.NewOllama(model.Options{BaseURL: "http://127.0.0.1:1", Model: "test-fixture", Timeout: 5 * time.Second,
 		MaxRequestBytes: 1 << 20, MaxResponseBytes: 1 << 20})
