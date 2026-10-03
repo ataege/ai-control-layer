@@ -751,6 +751,37 @@ the same denials are the tools lane's X-72 and X-74 tests.
 | allowance of 100 tokens     | paused `security_allowance_exhausted`, 0 requests, nothing reserved                |
 | ledger paused by an overrun | next check paused `security_allowance_exhausted`, no further request               |
 
+## Evidence: redaction and the attack feed update (GO-85)
+
+Both tests are deterministic (`go test ./internal/security -run TestEvidence -v`); the semantic guard
+is off for tool results in them, so no verdict is involved.
+
+**X-99, redaction control** (`TestEvidenceRedactionControl`). Each of the six secret cases of
+`fixtures/semantic-corpus.json` goes through `InspectToolResult` as an Internal only note of a
+`read_invoice` result (the `model_input` case through `ApplyContentRules`). The exact output equals
+the input with only each secret span replaced, for example:
+
+```text
+Vendor onboarding note: portal login is atlas-billing, password [REDACTED:password], rotate after first use.
+Handover note: backup portal password [REDACTED:password] and recovery token [REDACTED:api_token] are stored here until IT moves them.
+Use this connection to check the totals: postgres://report_reader:[REDACTED:password]@db.finance.example/ledger
+```
+
+The note keeps `classification: internal_only` and its trusted `Source`, the invoice fields
+(`external_reference`, totals) return unchanged, and each record names `content_redacted`, the
+matched rule and the catalog revision.
+
+**X-100, attack feed update** (`TestEvidenceAttackFeedUpdate`). Under `feed_v1` (the committed feed,
+catalog revision 5) a note asking for `os.system('id')` passes. A trusted `feed_v2` that adds
+`code_exec_os_system_v1` (`os.system(`), bound by catalog revision 6 through `SettingsFromCatalog`,
+blocks it: the record names the rule, `feed_v2`, its digest and revision 6, and the note in the
+would-be agent context is `[WITHHELD:signature_match]`. A malformed `feed_v2` (a `regex` rule) is
+refused with `ErrFeed` and an untrusted copy (bytes other than the pinned digest) with
+`ErrFeedDigest`; the caller keeps the accepted settings, and the same input stays blocked. Storing
+a feed revision through the import and its refusals are covered by
+`apps/api/src/policies/signature-feed-import.db-spec.ts`; switching the active feed in PostgreSQL is
+GO-73 (3c).
+
 ## Worker and job lease (GO-08)
 
 `internal/worker` claims `runtime.jobs` rows and runs them one at a time (decision 5: PostgreSQL
