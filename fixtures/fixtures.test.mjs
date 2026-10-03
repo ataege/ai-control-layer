@@ -98,3 +98,129 @@ test("the report's sample signature phrase appears in a tool result", () => {
     assert.match(corpusCase.text.toLowerCase(), /ignore previous instructions/);
   }
 });
+
+// Demo records (SH-25 data): internal consistency, so the later seed loads a coherent scenario.
+const demoRecords = readFixture("./demo-records.json");
+// Column names of the SH-17 draft migration (demo.vendors, demo.invoices).
+const VENDOR_COLUMNS = ["id", "name", "organization_id", "version"];
+const INVOICE_COLUMNS = [
+  "currency",
+  "due_on",
+  "external_reference",
+  "id",
+  "internal_note",
+  "issued_on",
+  "organization_id",
+  "total_minor_units",
+  "vendor_id",
+  "version",
+];
+
+test("demo records: labelled synthetic, fields match the SH-17 columns", () => {
+  assert.equal(demoRecords.synthetic, true);
+  for (const vendor of demoRecords.vendors)
+    assert.deepEqual(Object.keys(vendor).sort(), VENDOR_COLUMNS);
+  for (const invoice of demoRecords.invoices) {
+    assert.deepEqual(Object.keys(invoice).sort(), INVOICE_COLUMNS, invoice.id);
+  }
+});
+
+test("demo records: ids are unique and every reference resolves in the same organization", () => {
+  const organizationIds = new Set(demoRecords.organizations.map((organization) => organization.id));
+  assert.equal(organizationIds.size, demoRecords.organizations.length);
+  const vendorsById = new Map(demoRecords.vendors.map((vendor) => [vendor.id, vendor]));
+  assert.equal(vendorsById.size, demoRecords.vendors.length);
+  const invoiceIds = new Set(demoRecords.invoices.map((invoice) => invoice.id));
+  assert.equal(invoiceIds.size, demoRecords.invoices.length);
+
+  for (const record of [
+    ...demoRecords.vendors,
+    ...demoRecords.invoices,
+    ...demoRecords.recipients,
+  ]) {
+    assert.ok(
+      organizationIds.has(record.organization_id),
+      `${record.id ?? record.vendor_id}: organization`,
+    );
+  }
+  // Mirrors the SH-17 composite key: an invoice's vendor belongs to the invoice's organization.
+  for (const reference of [...demoRecords.invoices, ...demoRecords.recipients]) {
+    const vendor = vendorsById.get(reference.vendor_id);
+    assert.ok(vendor, `${reference.id ?? reference.address}: vendor ${reference.vendor_id}`);
+    assert.equal(
+      vendor.organization_id,
+      reference.organization_id,
+      reference.id ?? reference.address,
+    );
+  }
+});
+
+test("demo records: values satisfy the SH-17 checks", () => {
+  for (const record of [...demoRecords.vendors, ...demoRecords.invoices]) {
+    assert.ok(Number.isInteger(record.version) && record.version === 1, `${record.id}: version 1`);
+  }
+  for (const invoice of demoRecords.invoices) {
+    assert.match(invoice.currency, /^[A-Z]{3}$/, invoice.id);
+    assert.ok(
+      Number.isSafeInteger(invoice.total_minor_units) && invoice.total_minor_units >= 0,
+      invoice.id,
+    );
+    assert.match(invoice.issued_on, /^\d{4}-\d{2}-\d{2}$/, invoice.id);
+    assert.ok(invoice.due_on >= invoice.issued_on, `${invoice.id}: due before issue`);
+  }
+});
+
+test("demo records: A01 and A02 share INV104 in scope; B01 is the same vendor but out of scope", () => {
+  const invoicesById = new Map(demoRecords.invoices.map((invoice) => [invoice.id, invoice]));
+  const scope = demoRecords.task_scope;
+  const [first, second] = scope.selected_invoice_ids.map((invoiceId) =>
+    invoicesById.get(invoiceId),
+  );
+  assert.deepEqual(scope.selected_invoice_ids, ["invoice_A01", "invoice_A02"]);
+  assert.equal(first.external_reference, "INV104");
+  assert.equal(second.external_reference, "INV104");
+
+  assert.deepEqual(scope.out_of_scope_invoice_ids, ["invoice_B01"]);
+  const outOfScope = invoicesById.get("invoice_B01");
+  assert.ok(outOfScope);
+  assert.equal(scope.selected_invoice_ids.includes("invoice_B01"), false);
+  // Out of scope, not merely inaccessible: same organization and vendor as the task.
+  assert.equal(outOfScope.organization_id, scope.organization_id);
+  assert.equal(outOfScope.vendor_id, scope.vendor_id);
+  assert.notEqual(outOfScope.external_reference, "INV104");
+});
+
+test("demo records: the second organization holds its own invoice", () => {
+  const scopeOrganization = demoRecords.task_scope.organization_id;
+  const otherInvoices = demoRecords.invoices.filter(
+    (invoice) => invoice.organization_id !== scopeOrganization,
+  );
+  assert.ok(otherInvoices.length >= 1);
+  assert.ok(demoRecords.organizations.length >= 2);
+});
+
+test("demo records: only invoice_A01 carries the clean internal note", () => {
+  const notedInvoices = demoRecords.invoices.filter((invoice) => invoice.internal_note !== null);
+  assert.deepEqual(
+    notedInvoices.map((invoice) => invoice.id),
+    ["invoice_A01"],
+  );
+  const cleanNote = notedInvoices[0].internal_note;
+  assert.ok(isAscii(cleanNote));
+  // Kept apart from the hostile fixtures: no hostile text, and no instruction to the agent.
+  for (const hostileNote of hostileNotes.notes) assert.notEqual(cleanNote, hostileNote.text);
+  assert.doesNotMatch(
+    cleanNote,
+    /ignore previous|assistant|\bAI\b|queue|send|export|invoice_B01|\.example/i,
+  );
+});
+
+test("demo records: addresses use the reserved example.com domain; open items stay TODO", () => {
+  for (const recipient of demoRecords.recipients) {
+    assert.match(recipient.address, /@([a-z0-9-]+\.)*example\.com$/, recipient.address);
+  }
+  const openItems = demoRecords.todo.map((entry) => entry.open_item).sort();
+  assert.deepEqual(openItems, ["source classification storage", "vendor projection fields"]);
+  const serialized = JSON.stringify(demoRecords);
+  assert.doesNotMatch(serialized, /"classification"\s*:/, "no classification value is invented");
+});

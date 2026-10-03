@@ -261,6 +261,9 @@ All root scripts, as defined in `package.json`:
 | `pnpm verify`                           | Runs `check:instructions`, `format:check`, `lint`, `typecheck`, `test`, `build` and prints a summary.             |
 | `pnpm smoke` (`--mode=host\|container`) | HTTP checks against the running services.                                                                         |
 | `pnpm test:db` (`gateway\|api`)         | Database-backed tests against the PostgreSQL in `.env`; see "Testing and verification".                           |
+| `pnpm db:seed`                          | DRAFT: loads the synthetic demo records from `fixtures/`; see "Testing and verification".                         |
+| `pnpm reset:demo`                       | DRAFT: truncates the demo and runtime data and reseeds the demo records; see "Testing and verification".          |
+| `pnpm judge`                            | DRAFT judge client: submits one input to the NestJS live test entry; see "Testing and verification".              |
 | `pnpm check:instructions`               | Checks that `AGENTS.md` and `CLAUDE.md` are identical and complete, and that the agent files are valid.           |
 | `pnpm db:migration:create <Name>`       | Writes an empty migration file.                                                                                   |
 | `pnpm db:migration:generate <Name>`     | Generates a migration from the difference between entities and the database.                                      |
@@ -357,7 +360,8 @@ Conventions:
 
 - Go (`services/gateway`): a test that needs the database skips visibly when no database is
   configured, so `pnpm test` lists it as skipped. The command runs `go test -count=1 -json ./...`
-  once without the `POSTGRES_*` settings and `TEST_DATABASE_REQUIRED`; the tests that skip there are
+  once without the `POSTGRES_*` settings, `TEST_DATABASE_REQUIRED` and
+  `GATEWAY_TEST_DATABASE_URL`; the tests that skip there are
   the database tests. It then runs the suite again with the database, where every test must pass.
   How a test detects the database is the Go side's choice.
 - API (`apps/api`): files named `*.db-spec.ts` under `src`. The API's own Vitest config includes
@@ -369,6 +373,53 @@ A skip is never a pass. The summary marks each side PASS, FAIL or SKIPPED, and t
 non-zero unless every selected side passed: an unreachable database or a failing test is FAIL; a
 test skipped while the database is available, or a side with no database-backed tests, is
 SKIPPED. Go runs with `-count=1`, so a cached pass cannot hide a database that is down.
+
+### `pnpm db:seed` (draft)
+
+An explicit seed; nothing runs it at startup. It loads the synthetic vendors and invoices of
+`fixtures/demo-records.json` into the `demo` tables in one transaction. Running it twice changes
+nothing: missing rows are inserted and present rows are left alone. A present row with other values
+(for example an invoice whose version a run changed) stops the seed with an error and changes
+nothing; `pnpm reset:demo` restores it. It then runs `pnpm policy:import` to seed the control
+catalog when that script exists, and otherwise reports the step as skipped. The app records
+(organizations, users, memberships, the demonstration operator) are not seeded yet; they follow the
+identity tables (API-05 to API-08, SH-19).
+
+**Draft:** the `demo` tables are the unapproved SH-17 migration; run `pnpm db:migration:run` first.
+It uses the API's installed `pg` client, so it adds no dependency.
+
+### `pnpm reset:demo` (draft)
+
+An explicit reset for the judge environment (`make reset-demo` calls it); nothing runs it at
+startup. Decided scope: it truncates every table of the `demo` and `runtime` schemas and reseeds the
+synthetic demo records, in one transaction, so either the fixtures are fully restored or nothing
+changed. It keeps the app data (users, memberships, control-catalog revisions), so a judge's policy
+edits survive a fixture reset; for the same reason it does not re-import `policy.yaml`. It prints
+the row count of every table before and after, and never removes the database volume.
+
+Like `pnpm db:seed`, it refuses to run unless `POSTGRES_HOST` resolves only to a loopback address,
+and stops when the database does not answer or the tables were not migrated. **Draft:** it works on
+the unapproved SH-16, SH-17, SH-24, SH-27 and SH-44 migrations.
+
+### `pnpm judge` (draft)
+
+A small client for judges and the team (SH-48). It submits one ad-hoc text, one case from
+`fixtures/` or one action proposal to the NestJS live test entry and prints the decision, the reason,
+the controls that ran, the active catalog revision and the timings:
+
+```sh
+JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run_id> --text "Ignore previous instructions"
+JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run_id> --case indirect_ignore_previous_note_v1
+pnpm judge --help
+```
+
+**Draft:** it is written against the proposal in `docs/contracts/control-evaluation-draft.md`; the
+live test entry (X-106) and `POST /internal/control/evaluate` (X-91) are not approved or implemented
+yet, so today every call ends with "No decision". Its only credential is the operator's session
+cookie; it never reads `.env`. It exits 0 when a decision came back, whatever the decision, and
+non-zero when none did. For a fixture case it says whether the decision matches the case's label; a
+label is a test expectation, not detection quality. `pnpm test:judge` tests the client against a
+local stand-in server.
 
 ## Troubleshooting
 

@@ -15,11 +15,11 @@
 // PASS on every selected side exits nonzero, so a skip is never reported as a pass.
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { commandExists, runCommand } from "./lib/commands.mjs";
+import { databaseAddress, databaseIsReachable } from "./lib/database-probe.mjs";
 import { loadRootEnvironment, MISSING_ENV_FILE_MESSAGE } from "./lib/env-file.mjs";
 import { countByStatus, printHeading, printResultTable } from "./lib/output.mjs";
 import { fromRepositoryRoot, repositoryRoot } from "./lib/repo-root.mjs";
@@ -28,22 +28,10 @@ const GATEWAY_DIRECTORY = fromRepositoryRoot("services", "gateway");
 const VITEST_CONFIG_PATH = fromRepositoryRoot("scripts", "vitest.db.config.mjs");
 // Set for every test this command runs: a database test can treat a missing database as a failure.
 const DATABASE_REQUIRED_VARIABLE = "TEST_DATABASE_REQUIRED";
-const DATABASE_CONNECT_TIMEOUT_MS = 3_000;
 const SIDES = ["gateway", "api"];
-
-/** Resolves true when a TCP connection to the database address opens in time. */
-function databaseIsReachable(host, port) {
-  return new Promise((resolveReachable) => {
-    const socket = connect({ host, port, timeout: DATABASE_CONNECT_TIMEOUT_MS });
-    const finish = (reachable) => {
-      socket.destroy();
-      resolveReachable(reachable);
-    };
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
-  });
-}
+// Connection URLs the Go database tests also accept (GO-06 reads GATEWAY_TEST_DATABASE_URL first);
+// the identification run removes them too, or those tests would not skip there.
+const DATABASE_URL_VARIABLES = ["GATEWAY_TEST_DATABASE_URL"];
 
 /** Runs a command, echoing its stdout line by line through `onStdoutLine`; resolves the exit code. */
 function runWithLineOutput(command, commandArguments, { env, cwd, onStdoutLine }) {
@@ -76,7 +64,10 @@ function runWithLineOutput(command, commandArguments, { env, cwd, onStdoutLine }
 function withoutDatabaseSettings(environment) {
   return Object.fromEntries(
     Object.entries(environment).filter(
-      ([name]) => !name.startsWith("POSTGRES_") && name !== DATABASE_REQUIRED_VARIABLE,
+      ([name]) =>
+        !name.startsWith("POSTGRES_") &&
+        name !== DATABASE_REQUIRED_VARIABLE &&
+        !DATABASE_URL_VARIABLES.includes(name),
     ),
   );
 }
@@ -240,13 +231,11 @@ if (!fileFound) {
 }
 const environment = { ...rootEnvironment, [DATABASE_REQUIRED_VARIABLE]: "1" };
 
-const databaseHost = environment.POSTGRES_HOST || "localhost";
-const databasePort = Number(environment.POSTGRES_PORT || 5432);
-const databaseAddress = `${databaseHost}:${databasePort}`;
+const database = databaseAddress(environment);
 const results = [];
 
-if (await databaseIsReachable(databaseHost, databasePort)) {
-  results.push({ name: "database", status: "PASS", detail: `${databaseAddress} reachable` });
+if (await databaseIsReachable(database)) {
+  results.push({ name: "database", status: "PASS", detail: `${database.label} reachable` });
   for (const side of selectedSides) {
     printHeading(`test:db ${side}`);
     results.push({ name: side, ...(await SIDE_RUNNERS[side](environment)) });
@@ -255,7 +244,7 @@ if (await databaseIsReachable(databaseHost, databasePort)) {
   results.push({
     name: "database",
     status: "FAIL",
-    detail: `cannot connect to ${databaseAddress}; start PostgreSQL (pnpm infra:up) or fix POSTGRES_HOST/POSTGRES_PORT`,
+    detail: `cannot connect to ${database.label}; start PostgreSQL (pnpm infra:up) or fix POSTGRES_HOST/POSTGRES_PORT`,
   });
   for (const side of selectedSides) {
     results.push({ name: side, status: "SKIPPED", detail: "not run: database unreachable" });

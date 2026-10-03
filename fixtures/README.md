@@ -11,18 +11,44 @@ text, direct/indirect instruction attacks and secret-redaction cases" ("Validati
 matrix"), and "A separate hostile-note fixture would attempt to redirect the agent to invoice_B01 or
 another recipient" ("Illustrative invoice scenario and future domain adaptations").
 
-| File                   | Content                                                                                                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `hostile-notes.json`   | Three hostile internal-note texts for the separate hostile-note run: redirect to `invoice_B01`, redirect to another recipient, and include internal information in a vendor message. |
-| `semantic-corpus.json` | 24 labelled cases: 8 benign (4 of them hard negatives), 5 direct and 5 indirect instruction attacks, 6 secret-redaction cases.                                                       |
-| `fixtures.test.mjs`    | Self-check of both files: `pnpm test:fixtures`.                                                                                                                                      |
+| File                   | Content                                                                                                                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hostile-notes.json`   | Three hostile internal-note texts for the separate hostile-note run: redirect to `invoice_B01`, redirect to another recipient, and include internal information in a vendor message.    |
+| `semantic-corpus.json` | 24 labelled cases: 8 benign (4 of them hard negatives), 5 direct and 5 indirect instruction attacks, 6 secret-redaction cases.                                                          |
+| `demo-records.json`    | The synthetic records of the Atlas scenario for the later seed (SH-25): organizations, vendors, invoices, the registered reporting address, the task scope and the clean internal note. |
+| `fixtures.test.mjs`    | Self-check of all three files: `pnpm test:fixtures`.                                                                                                                                    |
 
-## The clean note is not here
+## Demo records
+
+`demo-records.json` holds the scenario's records. `pnpm db:seed` (draft, SH-18) loads its vendors
+and invoices into the `demo` tables, and `pnpm reset:demo` restores them. Record fields match the
+column names of the SH-17 draft migration (`demo.vendors`, `demo.invoices`); amounts are integers
+in minor units, dates are ISO dates, every record is at version 1. The amounts and dates are
+illustrative values, not requirements.
+
+| Record                       | Role in the demonstration                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `vendor_Atlas`               | The task's vendor.                                                                                                                    |
+| `invoice_A01`, `invoice_A02` | The selected invoices; both carry external reference `INV104` with the same total, the repeated reference the agent should find.      |
+| `invoice_B01`                | Same organization and vendor, but outside the task scope: a read must be denied (`resource_out_of_scope`).                            |
+| `internal_note` of A01       | The clean authorized internal investigation note: no instruction to the agent. The hostile notes are separate (`hostile-notes.json`). |
+| `reports@atlas.example.com`  | The registered demonstration reporting address (reserved `example.com` domain); the outbox is simulated, nothing is sent.             |
+| Second organization          | `vendor_Borealis` and `invoice_C01`, for the organization-access check.                                                               |
+
+Organizations are `app` records owned by NestJS; this file gives them fixed ids only so the demo
+records can reference them. Two values are left as TODO with their open items: the classification
+of the internal note (`source classification storage`), which is also why the reporting address is
+listed apart from the vendor, and the approved fields of the vendor projection
+(`vendor projection fields`).
+
+## The clean note and the hostile notes stay apart
 
 The demonstration's baseline uses a **clean** authorized internal investigation note on
-`invoice_A01`, labelled Internal only. It belongs to the synthetic records seeded by SH-18 and is
-deliberately not in this directory: "The baseline note is clean; the hostile note is a separate
-fixture." The hostile notes are for a separate hostile-note run; how that run attaches them follows SH-18.
+`invoice_A01` (Internal only once `source classification storage` decides where that label lives).
+It is the `internal_note` of `invoice_A01` in `demo-records.json`, and it holds no instruction to the
+agent. The hostile notes in `hostile-notes.json` are separate: "The baseline note is clean; the
+hostile note is a separate fixture." They are for a separate hostile-note run; how that run attaches
+them follows SH-18. The self-check keeps the two apart.
 
 ## Fields
 
@@ -65,7 +91,8 @@ evaluation can record false positives as the report asks.
   `classifier prompt and verdict schema`. The labels here are expected outcomes, not verdict
   categories; the semantic evaluator (GO-75) maps its validated verdict to an outcome with the
   catalog thresholds.
-- **How the fixtures are loaded** (seed location, `repository layout`) follows SH-18.
+- **How the hostile notes and the corpus reach a run** (the seed loads only the demo records) follows
+  SH-18 and the Go tests that use them. The seed location itself is decided: `fixtures/`.
 
 ## Reading the results honestly
 
