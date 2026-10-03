@@ -554,11 +554,36 @@ the same machine was not touched (see [infra/README.md](infra/README.md)).
   `pnpm dev` and `pnpm smoke` 21 of 21 (see SH-20 above), `pnpm infra:down` removed the container
   and kept the volume.
 
+**SH-30: deployment procedure rehearsal**
+
+On the presentation machine itself (Apple M1 Pro, 16 GB, Ollama 0.35.1), following
+[docs/setup.md](docs/setup.md) section 8 from a fresh `git clone` of commit `88317a3` in a
+temporary directory. Because the everyday checkout's `starter` project was running, the clone's
+`.env` set `COMPOSE_PROJECT_NAME=starter-rehearsal` and `POSTGRES_PORT=55441`, as the procedure
+describes.
+
+- `pnpm install --frozen-lockfile` (5.7 s) and `pnpm run setup` (all four secrets generated);
+  `MODEL_NAME=qwen3.5:4b` set by hand.
+- `ollama show --license qwen3.5:4b`: Apache License 2.0; `ollama list`: ID `2a654d98e6fb`. The
+  first warm-up after the model was unloaded took about 29 s; a warmed `--think=false` call answered
+  in 0.3 s.
+- `pnpm stack:up`: exit 0, all four containers healthy after 2 min 29 s, including the first image
+  builds of this clone.
+- `pnpm db:migration:run` from the host against the published port: created the bookkeeping table,
+  "No migrations are pending" (none exist yet).
+- `pnpm smoke --mode=container`: 24 passed, 0 failed, 6 skipped; Ollama reachable from the Compose
+  network (HTTP 200).
+- Fallback: `pnpm stack:down`, `pnpm infra:up`, `pnpm dev` and `pnpm smoke`: 26 passed, 0 failed,
+  4 skipped; then `pnpm infra:down`.
+- Not covered, because the commands do not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
+  control suite (SH-47) and the policy reload in a container (API-32). SH-30 is done only when a
+  teammate who did not write the procedure has followed it.
+
 ## Documentation
 
 | Document                                                 | Content                                                                                                                                                                                            |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service                                                                                                                 |
+| [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service, local model, deployment on the presentation machine                                                            |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                                                                                                        |
 | [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                                                                                                    |
 | [docs/roadmap/README.md](docs/roadmap/README.md)         | Implementation roadmap: shared spine, then the Go side (`go.md`) and the Next.js and NestJS side (`web-and-api.md`)                                                                                |

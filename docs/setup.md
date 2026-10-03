@@ -357,3 +357,137 @@ note with a JSON schema for `risk_category`, `score` (0 to 1) and `reason_code`.
 Ollama did not enforce the schema's numeric range for `qwen2.5:3b`, so Go must validate every
 verdict itself (report 1.2: "Go rejects unsupported fields and malformed scores"). `qwen3.5:4b` is the
 provisional model for both purposes; the M2 8 GB machine still has to run it before it is fixed.
+
+## 8. Deployment on the presentation machine
+
+The demonstration runs on the lead's MacBook Pro (Apple M1 Pro, 16 GB), the machine the probe in
+section 7 ran on. Everything runs locally: the four components (web, API, gateway, PostgreSQL)
+through Docker Compose, and Ollama on the host. Nothing is deployed to a remote server, and no paid
+service is used. Rehearsal record: "SH-30" under "Verification status" in the README.
+
+Commands marked "not on `main` yet" belong to open roadmap tasks; until they land, that step does
+not exist and the demonstration cannot include what it provides.
+
+### Which mode
+
+- **Full-container mode** (`pnpm stack:up`) is the recommended mode: it runs the production builds
+  of the web app and the API, needs no Go toolchain and matches the four deployed components of the
+  architecture. Its smoke run also scans the service logs for secrets.
+- **Host mode** (`pnpm infra:up` and `pnpm dev`) is the fallback: development servers, logs in
+  one terminal, and the gateway rebuilt from source on every start.
+
+Both modes passed their smoke checks on this machine (README, "Verification status"). One
+dependency is still open: judges edit `config/policy.yaml` and reload it, and how the API reads
+that file in container mode (a bind mount of `config/`, or another path) is decided when the import
+lands (API-32, not on `main` yet). Until that path is verified in a container, run the
+policy-reload part of the demonstration in host mode.
+
+### Once per machine
+
+| Tool           | Version used                                | Check                                      |
+| -------------- | ------------------------------------------- | ------------------------------------------ |
+| Node.js        | 24.18.0 (`.nvmrc`)                          | `node --version`                           |
+| pnpm           | 11.10.0                                     | `pnpm --version`                           |
+| Docker Desktop | Docker 29.8.1, Compose v5.5.1 (running)     | `docker compose version`                   |
+| Ollama         | 0.35.1                                      | `ollama --version`                         |
+| Go             | 1.27.1 (host-mode fallback only)            | `go version`                               |
+| Model          | `qwen3.5:4b`, ID `2a654d98e6fb`, Apache 2.0 | `ollama list`, `ollama show --license ...` |
+
+Install the tools as in sections 1 and 7, then pull the model and confirm its license and ID:
+
+```sh
+ollama pull qwen3.5:4b
+ollama show --license qwen3.5:4b   # expect the Apache License 2.0
+ollama list                        # the ID is the exact model build; record it
+```
+
+Keep Ollama bound to `127.0.0.1` (its default). Never set `OLLAMA_HOST=0.0.0.0`: Ollama has no
+authentication. Docker Desktop for macOS lets the gateway container reach the loopback-bound
+Ollama at `http://host.docker.internal:11434` without any change.
+
+### From a clean checkout
+
+```sh
+git clone https://github.com/ataege/ai-control-layer.git task-passport
+cd task-passport
+git checkout <submission-commit>   # the frozen build; write the hash down
+nvm use                            # or any other way to get Node.js 24.18.0
+pnpm install --frozen-lockfile
+pnpm run setup                     # creates .env with generated secrets, values not printed
+```
+
+Then set `MODEL_NAME=qwen3.5:4b` in `.env`.
+
+If another checkout on this machine has used the default Compose project `starter` (for example the
+everyday working copy), its volume `starter_postgres-data` still exists and holds that checkout's
+database password, so the fresh `.env` would not authenticate; stopping the other checkout is not
+enough. Give the fresh checkout its own project name and PostgreSQL port (two lines in its `.env`,
+[infra/README.md](../infra/README.md), "Several checkouts on one machine"), and stop the other
+checkout's web, API and gateway so ports 3000, 3001 and 8080 are free.
+
+### Start
+
+```sh
+ollama run qwen3.5:4b --think=false "Say hello in one word."   # loads the model
+pnpm stack:up                      # builds the images on the first run, waits for the health checks
+pnpm db:migration:run              # from the host: the API image has no migration tooling
+pnpm smoke --mode=container
+```
+
+- Migrations run from the host against the published PostgreSQL port, because the API image's
+  runtime stage contains only the compiled API and its production dependencies.
+- Seed (not on `main` yet: SH-18 for the policy fixture and synthetic records, SH-19 for the
+  demonstration operator): runs from the host after the migrations, through its documented command.
+- The warm-up loads the model into memory (about 30 seconds on the first load in the rehearsal,
+  then well under a second). Ollama unloads a model after five idle minutes by default; `ollama ps`
+  shows whether it is loaded, so repeat the warm-up shortly before the presentation.
+
+Open <http://localhost:3000>.
+
+### Between rehearsals and before judging
+
+- Reset the demonstration data with `pnpm reset:demo` or `make reset-demo` (SH-29, not on `main`
+  yet). Do not remove the database volume as a reset: that deletes every table, and the migrations
+  and seeds would have to run again.
+- Run the control suite with `pnpm verify:controls` or `make verify-controls` (SH-47, not on `main`
+  yet) and keep its machine-readable result with the build's commit hash.
+
+### Stop
+
+```sh
+pnpm stack:down                    # removes the containers and the network, keeps the volume
+```
+
+`docker compose stop` waits 10 seconds per container by default, which covers the gateway's own
+8 second shutdown budget.
+
+### Fallback: host mode
+
+```sh
+pnpm stack:down
+pnpm infra:up
+pnpm dev                           # in a second terminal: pnpm smoke
+```
+
+The gateway then reaches Ollama at `MODEL_BASE_URL=http://localhost:11434` (the `.env` default).
+Stop with Ctrl+C and `pnpm infra:down`.
+
+### Network and exposure
+
+- Every published port is bound to `127.0.0.1`: web 3000, API 3001 and PostgreSQL 5432 (for the
+  host-side migrations, seeds and tools). The gateway is not published (only `pnpm stack:up --debug`
+  publishes 8080). Judges therefore work on the presentation machine itself; access from another
+  machine is not set up (open item `judge access`).
+- All four containers share Compose's default network. The architecture's "NestJS and Go use a
+  private service network" is open item `deployment network`.
+- Secrets stay in the untracked `.env` of the checkout; the images contain no `.env` file.
+
+### Checklist before the presentation
+
+- [ ] The checkout is at the submission commit; `git status` is clean.
+- [ ] `ollama list` shows `qwen3.5:4b` with the recorded ID; the warm-up answered.
+- [ ] `pnpm stack:up` finished with every container healthy; `pnpm smoke --mode=container` passed.
+- [ ] Migrations and seeds ran; the demonstration data was reset.
+- [ ] The control suite ran on this build and its result is saved.
+- [ ] The laptop is on power and does not sleep (for example `caffeinate -dims` in a spare
+      terminal).
