@@ -104,4 +104,18 @@ export class ProductClient {
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`);
     return enforceGuard(result, isSanitizedEventsResponse);
   }
+
+  static async signIn(credentials: { email: string; password: string }): Promise<FetchJsonResult<{ message: string }>> {
+    const result = await postJson("/api/auth/sign-in", credentials);
+    return enforceGuard(result, (data): data is { message: string } => 
+      typeof data === "object" && data !== null && "message" in data
+    );
+  }
+
+  static async getMe(): Promise<FetchJsonResult<{ id: string; email: string; name: string; organizationId: string; roles: string[] }>> {
+    const result = await fetchJson("/api/auth/me");
+    return enforceGuard(result, (data): data is { id: string; email: string; name: string; organizationId: string; roles: string[] } => 
+      typeof data === "object" && data !== null && "id" in data && "name" in data
+    );
+  }
 }

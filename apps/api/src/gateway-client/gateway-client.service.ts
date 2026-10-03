@@ -247,4 +247,71 @@ export class GatewayClientService {
       return { success: false, reason: "unreachable" };
     }
   }
+
+  /** Performs an authenticated GET request to the gateway, expecting a Zod-validated response. */
+  async fetchQuery<Schema extends z.ZodTypeAny>(
+    path: string,
+    responseSchema: Schema,
+    context?: OperatorContext,
+  ): Promise<CommandOutcome<z.infer<Schema>>> {
+    try {
+      const headers: Record<string, string> = {
+        accept: "application/json",
+        authorization: `Bearer ${this.config.gatewayServiceToken}`,
+      };
+      if (context) {
+        headers["x-operator-context"] = await this.buildToken(context);
+      } else {
+        headers["x-operator-context"] = await this.buildToken({ userId: "test", organizationId: "test", roles: [] });
+      }
+
+      const response = await fetch(new URL(path, this.config.gatewayUrl), {
+        method: "GET",
+        headers,
+        redirect: "manual",
+        signal: AbortSignal.timeout(this.config.commandTimeoutMs),
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        const json = await readJsonObject(response);
+        if (!json) {
+          return { success: false, reason: "invalid_response" };
+        }
+        const parsed = responseSchema.safeParse(json);
+        if (parsed.success) {
+          return { success: true, data: parsed.data };
+        }
+        return { success: false, reason: "invalid_response" };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, reason: "unauthorized" };
+      }
+
+      if (response.status >= 400 && response.status < 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "bad_request", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "bad_request" };
+      }
+
+      if (response.status >= 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "server_error", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "server_error" };
+      }
+
+      return { success: false, reason: "unexpected_status" };
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        return { success: false, reason: "timeout" };
+      }
+      return { success: false, reason: "unreachable" };
+    }
+  }
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Res, Req, HttpCode, UnauthorizedException, UsePipes } from "@nestjs/common";
+import { Controller, Post, Get, Body, Res, Req, HttpCode, UnauthorizedException, UsePipes } from "@nestjs/common";
 import type { Response, Request } from "express";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, LessThan } from "typeorm";
@@ -91,5 +91,24 @@ export class AuthController {
       sameSite: "lax",
     });
     return { message: "Signed out successfully" };
+  }
+
+  @Get("me")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Get current user info" })
+  async me(@Req() req: Request) {
+    const userId = req.operatorContext.userId;
+    const organizationId = req.operatorContext.organizationId;
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      organizationId,
+      roles: req.operatorContext.roles,
+    };
   }
 }

@@ -105,7 +105,7 @@ function isJsonText(bodyText: string): boolean {
 }
 
 function isPathAllowed(path: string): boolean {
-  const pathname = path.split("?")[0];
+  const pathname = path.split("?")[0] || "";
   return UPSTREAM_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(prefix + "/"));
 }
 
@@ -151,7 +151,7 @@ export async function proxyUpstream(
   const cookie = request.headers.get("cookie");
   if (cookie) {
     const sessionMatch = cookie.match(/(?:^|;\s*)(session=[^;]+)/);
-    if (sessionMatch) {
+    if (sessionMatch && sessionMatch[1]) {
       headers.set("cookie", sessionMatch[1]);
     }
   }
