@@ -11,6 +11,15 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 | `GET /health/ready`  | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.        |
 | `GET /internal/ping` | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database. |
 
+Internal product commands are registered through `httpserver.Options.InternalCommands`, which
+always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
+HS256 JWT signed with `OPERATOR_CONTEXT_SIGNING_KEY`, issuer `gateway-client`, audience `gateway`,
+a lifetime of at most five minutes and a `jti` that is accepted once. The verified operator
+(`internal/contracts.OperatorContext`) is the command's only identity source, read with
+`operatorcontext.FromContext`; it never authorizes a command by itself. Any failure answers
+`401 unauthorized` before the handler runs. `httpserver.DecodeJSONBody` reads a bounded, strict JSON
+body and answers `400 bad_request` otherwise.
+
 Every other routed request returns the shared JSON error envelope (`404 not_found`,
 `405 method_not_allowed`, `401 unauthorized`, `500 internal_error`). Every response produced by the
 handler chain carries `x-request-id`: an inbound value is reused when it is 1-64 characters of
@@ -35,18 +44,19 @@ exercises (for example a new optional property) is not detected; mirror those by
 
 Read from environment variables (the root scripts pass the root `.env` to the process).
 
-| Variable                | Default     | Notes                                                             |
-| ----------------------- | ----------- | ----------------------------------------------------------------- |
-| `GATEWAY_HOST`          | `127.0.0.1` | Bind address. The image and Compose set `0.0.0.0`.                |
-| `GATEWAY_PORT`          | `8080`      |                                                                   |
-| `GATEWAY_SERVICE_TOKEN` | required    | At least 32 characters, no leading or trailing whitespace.        |
-| `POSTGRES_HOST`         | `localhost` |                                                                   |
-| `POSTGRES_PORT`         | `5432`      |                                                                   |
-| `POSTGRES_USER`         | required    | Must not be blank.                                                |
-| `POSTGRES_PASSWORD`     | required    | Must not be blank. Any characters are safe; the value is escaped. |
-| `POSTGRES_DB`           | required    | Must not be blank.                                                |
-| `DATABASE_TIMEOUT_MS`   | `3000`      | Bounds one connection attempt and one readiness ping (100-20000). |
-| `LOG_LEVEL`             | `info`      | `debug`, `info`, `warn` or `error`.                               |
+| Variable                       | Default     | Notes                                                                        |
+| ------------------------------ | ----------- | ---------------------------------------------------------------------------- |
+| `GATEWAY_HOST`                 | `127.0.0.1` | Bind address. The image and Compose set `0.0.0.0`.                           |
+| `GATEWAY_PORT`                 | `8080`      |                                                                              |
+| `GATEWAY_SERVICE_TOKEN`        | required    | At least 32 characters, no leading or trailing whitespace.                   |
+| `OPERATOR_CONTEXT_SIGNING_KEY` | required    | At least 32 characters; the HS256 key the API signs X-Operator-Context with. |
+| `POSTGRES_HOST`                | `localhost` |                                                                              |
+| `POSTGRES_PORT`                | `5432`      |                                                                              |
+| `POSTGRES_USER`                | required    | Must not be blank.                                                           |
+| `POSTGRES_PASSWORD`            | required    | Must not be blank. Any characters are safe; the value is escaped.            |
+| `POSTGRES_DB`                  | required    | Must not be blank.                                                           |
+| `DATABASE_TIMEOUT_MS`          | `3000`      | Bounds one connection attempt and one readiness ping (100-20000).            |
+| `LOG_LEVEL`                    | `info`      | `debug`, `info`, `warn` or `error`.                                          |
 
 `DATABASE_TIMEOUT_MS` is capped at 20000 so a readiness response always fits inside the server's
 30 s write timeout. The API accepts the same range for this variable.
@@ -80,26 +90,27 @@ Since the evening of 3 October 2026 the lead's Claude Code sessions build the Go
 package group; the lead routes cross-lane interfaces (see "People" in `AGENTS.md`). The report's
 Implementer 3/4/5 labels group responsibilities; they do not assign separate people.
 
-| Existing package      | Owner                                                         |
-| --------------------- | ------------------------------------------------------------- |
-| `cmd/gateway`         | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
-| `cmd/modelcheck`      | Go lane f3 (worker, agent, model, budget)                     |
-| `cmd/budgetcheck`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/config`     | Shared Go lanes; the lead coordinates edits                   |
-| `internal/logging`    | Shared Go lanes; the lead coordinates edits                   |
-| `internal/database`   | Shared Go lanes; the lead coordinates edits                   |
-| `internal/health`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/httpserver` | Go lane 3c (repository, admission, passport, API)             |
-| `internal/model`      | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/budget`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/worker`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/testdb`     | Shared Go lanes; the lead coordinates edits                   |
-| `internal/contracts`  | Go lane 3c (repository, admission, passport, API)             |
-| `internal/repository` | Go lane 3c (repository, admission, passport, API)             |
-| `internal/tools`      | Go lane w2 (tools and provenance)                             |
-| `internal/policy`     | Go lane w3 (action gate and approvals)                        |
-| `internal/security`   | Go lane c1 (hybrid security controls)                         |
-| `internal/provenance` | Go lane w2 (tools and provenance)                             |
+| Existing package           | Owner                                                         |
+| -------------------------- | ------------------------------------------------------------- |
+| `cmd/gateway`              | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
+| `cmd/modelcheck`           | Go lane f3 (worker, agent, model, budget)                     |
+| `cmd/budgetcheck`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/config`          | Shared Go lanes; the lead coordinates edits                   |
+| `internal/logging`         | Shared Go lanes; the lead coordinates edits                   |
+| `internal/database`        | Shared Go lanes; the lead coordinates edits                   |
+| `internal/health`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/httpserver`      | Go lane 3c (repository, admission, passport, API)             |
+| `internal/model`           | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/budget`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/worker`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/testdb`          | Shared Go lanes; the lead coordinates edits                   |
+| `internal/contracts`       | Go lane 3c (repository, admission, passport, API)             |
+| `internal/repository`      | Go lane 3c (repository, admission, passport, API)             |
+| `internal/operatorcontext` | Go lane 3c (repository, admission, passport, API)             |
+| `internal/tools`           | Go lane w2 (tools and provenance)                             |
+| `internal/policy`          | Go lane w3 (action gate and approvals)                        |
+| `internal/security`        | Go lane c1 (hybrid security controls)                         |
+| `internal/provenance`      | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -122,6 +133,7 @@ internal/security/    hybrid security controls: content rules (GO-74), semantic 
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
+internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
