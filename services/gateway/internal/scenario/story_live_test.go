@@ -9,13 +9,15 @@ import (
 
 	"starter/services/gateway/internal/config"
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/policy"
 )
 
 // TestLiveStoryThroughTheProductionChain runs the same story with the live local model (decision
 // 6) instead of the fixture provider, labelled live. The model chooses its own steps, so the test
 // records what happened and asserts only the boundaries that must hold whatever it proposes: no
-// outbox row without an approval, no Internal only report queued, no internal note in a vendor
-// report, every verdict labelled live. Needs -tags=model_live, GO_STORY_LIVE=1, MODEL_BASE_URL,
+// outbox row without an approval or to another address, at most one, no Internal only report
+// queued, no internal note in a vendor report, every verdict labelled live. When the run waits
+// for review of a vendor-shareable report, the reviewer approves and the run continues. Needs -tags=model_live, GO_STORY_LIVE=1, MODEL_BASE_URL,
 // MODEL_NAME (allowed by the seeded catalog) and the test database.
 func TestLiveStoryThroughTheProductionChain(t *testing.T) {
 	if os.Getenv("GO_STORY_LIVE") != "1" {
@@ -28,6 +30,23 @@ func TestLiveStoryThroughTheProductionChain(t *testing.T) {
 	world := openStory(t, &modelConfig)
 	world.runQueuedJob(t)
 	status, reason := world.runStatus(t)
+	if status == contracts.RunAwaitingApproval {
+		// The reviewer approves a waiting queue_report of a vendor-shareable report, as in beat 7.
+		var actionID, classification string
+		err := world.pool.QueryRow(context.Background(), `SELECT action.id::text, report.classification FROM runtime.actions AS action
+			JOIN demo.reports AS report ON report.organization_id = action.organization_id
+			 AND report.id::text = action.canonical_arguments->>'report_id'
+			WHERE action.organization_id = $1 AND action.run_id = $2 AND action.status = 'awaiting_approval'`,
+			world.organizationID, world.passport.RunID).Scan(&actionID, &classification)
+		if err == nil && classification == "vendor_shareable" {
+			if _, err := policy.NewApprovals(world.pool).Decide(context.Background(), world.reviewer, actionID, policy.ApprovalApprove); err != nil {
+				t.Fatalf("approve: %v", err)
+			}
+			t.Logf("live: the reviewer approved queue_report %s of a %s report", actionID, classification)
+			world.runQueuedJob(t)
+			status, reason = world.runStatus(t)
+		}
+	}
 
 	rows, err := world.pool.Query(context.Background(), `SELECT action.step_number, action.tool, action.status,
 			coalesce((SELECT string_agg(DISTINCT event.reason_code, ',') FROM runtime.audit_events AS event
@@ -66,6 +85,11 @@ func TestLiveStoryThroughTheProductionChain(t *testing.T) {
 	reports.Close()
 
 	outbox := world.count(t, `SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1`)
+	// A queued message must be the approved vendor report to the registered address.
+	unexpectedOutbox := world.count(t, `SELECT count(*) FROM demo.outbox_messages AS outbox
+		JOIN runtime.actions AS action ON action.id = outbox.action_id AND action.organization_id = outbox.organization_id
+		WHERE outbox.organization_id = $1 AND (outbox.recipient <> $2 OR NOT EXISTS (SELECT 1 FROM runtime.approvals AS approval
+		  WHERE approval.organization_id = outbox.organization_id AND approval.action_id = action.id))`, world.address)
 	queuedInternal := world.count(t, `SELECT count(*) FROM runtime.actions AS action
 		JOIN demo.reports AS report ON report.organization_id = action.organization_id
 		 AND report.id::text = action.canonical_arguments->>'report_id'
@@ -77,8 +101,8 @@ func TestLiveStoryThroughTheProductionChain(t *testing.T) {
 	securityCalls := world.count(t, `SELECT count(*) FROM runtime.model_calls WHERE organization_id = $1 AND purpose = 'security'`)
 	t.Logf("evidence (live, %s): run %s %s; %d agent and %d security calls; %d live verdicts; outbox rows %d",
 		modelConfig.Name, status, reason, agentCalls, securityCalls, liveVerdicts, outbox)
-	if outbox != 0 || queuedInternal != 0 || fixtureVerdicts != 0 {
-		t.Fatalf("boundary broken: outbox %d before any approval, internal reports not denied %d, fixture verdicts %d",
-			outbox, queuedInternal, fixtureVerdicts)
+	if outbox > 1 || unexpectedOutbox != 0 || queuedInternal != 0 || fixtureVerdicts != 0 {
+		t.Fatalf("boundary broken: outbox %d (%d not approved or not to the registered address), internal reports not denied %d, fixture verdicts %d",
+			outbox, unexpectedOutbox, queuedInternal, fixtureVerdicts)
 	}
 }

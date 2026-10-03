@@ -36,7 +36,9 @@ type AssessmentRecord struct {
 	// fixture verdict is never semantic detection quality.
 	VerdictSource *string         `json:"verdictSource"`
 	Verdict       *VerdictSummary `json:"verdict"`
-	AssessedAt    time.Time       `json:"assessedAt"`
+	// InputSource is "judge" when the assessment belongs to a judge's control evaluation (GO-82).
+	InputSource *string   `json:"inputSource"`
+	AssessedAt  time.Time `json:"assessedAt"`
 }
 
 // VerdictSummary is the decided semantic verdict schema, and only it: an extra stored key is
@@ -67,8 +69,11 @@ type SecuritySummary struct {
 	Runs           []StatusCount     `json:"runs"`
 	Decisions      []DecisionCount   `json:"decisions"`
 	Assessments    []AssessmentCount `json:"assessments"`
-	ModelUsage     []PurposeUsage    `json:"modelUsage"`
-	Timings        []PhaseTiming     `json:"timings"`
+	// ModelUsage counts every model call of the organization, judge probes' security calls
+	// included; JudgeSecurityCalls counts those probe calls on their own.
+	ModelUsage         []PurposeUsage `json:"modelUsage"`
+	JudgeSecurityCalls int64          `json:"judgeSecurityCalls"`
+	Timings            []PhaseTiming  `json:"timings"`
 }
 
 // StatusCount counts runs per X-11 status.
@@ -95,7 +100,9 @@ type AssessmentCount struct {
 	ControlID     string  `json:"controlId"`
 	Outcome       string  `json:"outcome"`
 	VerdictSource *string `json:"verdictSource"`
-	Count         int64   `json:"count"`
+	// InputSource is "judge" for a judge probe's assessments, null for the run's own.
+	InputSource *string `json:"inputSource"`
+	Count       int64   `json:"count"`
 }
 
 // PhaseTiming summarizes the observed spans of one measured phase, in microseconds.
@@ -107,6 +114,14 @@ type PhaseTiming struct {
 	P95Microseconds    int64  `json:"p95Microseconds"`
 	MaxMicroseconds    int64  `json:"maxMicroseconds"`
 }
+
+// judgeEvaluations lists the evaluation ids of the organization's ($1) judge probes: the
+// control.evaluated events marked inputSource "judge" name them (3c's rule: every assessment of
+// such an evaluation is judge evidence, everything else is the run's own).
+const judgeEvaluations = `judge AS (
+	SELECT DISTINCT (masked_summary->>'evaluationId')::uuid AS evaluation_id FROM runtime.audit_events
+	WHERE organization_id = $1 AND event_type = 'control.evaluated' AND masked_summary->>'inputSource' = 'judge'
+	  AND masked_summary->>'evaluationId' IS NOT NULL)`
 
 // identifierPattern bounds the code-defined names this package passes on (control ids, outcomes,
 // boundaries, phases, verdict categories).
@@ -195,14 +210,15 @@ func SecurityEventsHandler(database Beginner) http.Handler {
 }
 
 func readAssessmentPage(ctx context.Context, tx pgx.Tx, organizationID string, cursor windowCursor, limit int) (AssessmentPage, error) {
-	rows, err := tx.Query(ctx, windowHorizon+`
+	rows, err := tx.Query(ctx, windowHorizon+`, `+judgeEvaluations+`
 		SELECT horizon.high::text, record.id, record.run_id::text, record.evaluation_id::text,
 			record.action_id::text, record.security_model_call_id::text, record.boundary,
 			record.control_class, record.control_id, record.outcome, record.reason_code,
 			record.admission_catalog_revision_id, record.evaluated_catalog_revision_id,
 			record.matched_rule_id, record.feed_revision, record.verdict_source, record.verdict::text,
-			record.assessed_at
-		FROM runtime.control_assessments AS record, horizon
+			record.assessed_at, CASE WHEN judge.evaluation_id IS NULL THEN NULL ELSE 'judge' END
+		FROM runtime.control_assessments AS record CROSS JOIN horizon
+		LEFT JOIN judge ON judge.evaluation_id = record.evaluation_id
 		WHERE record.organization_id = $1 AND `+windowPredicate+`
 		ORDER BY record.id LIMIT $5`,
 		organizationID, optionalXid8(cursor.Low), optionalXid8(cursor.High), cursor.AfterID, limit+1)
@@ -226,7 +242,7 @@ func readAssessmentPage(ctx context.Context, tx pgx.Tx, organizationID string, c
 		if err := rows.Scan(&highText, &recordID, &record.RunID, &record.EvaluationID, &record.ActionID,
 			&record.SecurityModelCallID, &record.Boundary, &record.ControlClass, &record.ControlID,
 			&record.Outcome, &reason, &record.AdmissionCatalogRevisionID, &record.EvaluatedCatalogRevisionID,
-			&record.MatchedRuleID, &record.FeedRevision, &record.VerdictSource, &verdict, &record.AssessedAt); err != nil {
+			&record.MatchedRuleID, &record.FeedRevision, &record.VerdictSource, &verdict, &record.AssessedAt, &record.InputSource); err != nil {
 			return AssessmentPage{}, err
 		}
 		if high, err = strconv.ParseUint(highText, 10, 64); err != nil {
@@ -371,26 +387,39 @@ func readSecuritySummary(ctx context.Context, tx pgx.Tx, organizationID string) 
 		return SecuritySummary{}, err
 	}
 
-	err = collect(ctx, tx, `SELECT control_class, control_id, outcome, verdict_source, count(*)
-		FROM runtime.control_assessments WHERE organization_id = $1
-		GROUP BY control_class, control_id, outcome, verdict_source
-		ORDER BY control_class, control_id, outcome, verdict_source NULLS FIRST`, organizationID, func(rows pgx.Rows) error {
-		var count AssessmentCount
-		if err := rows.Scan(&count.ControlClass, &count.ControlID, &count.Outcome, &count.VerdictSource, &count.Count); err != nil {
-			return err
-		}
-		if !oneOf(count.ControlClass, controlClasses) || !identifierPattern.MatchString(count.ControlID) ||
-			!identifierPattern.MatchString(count.Outcome) || !optionalOneOf(count.VerdictSource, verdictSources) {
-			return errMalformedRecord
-		}
-		summary.Assessments = append(summary.Assessments, count)
-		return nil
-	})
+	err = collect(ctx, tx, `WITH `+judgeEvaluations+`
+		SELECT record.control_class, record.control_id, record.outcome, record.verdict_source,
+			CASE WHEN judge.evaluation_id IS NULL THEN NULL ELSE 'judge' END AS input_source, count(*)
+		FROM runtime.control_assessments AS record LEFT JOIN judge ON judge.evaluation_id = record.evaluation_id
+		WHERE record.organization_id = $1
+		GROUP BY record.control_class, record.control_id, record.outcome, record.verdict_source, input_source
+		ORDER BY record.control_class, record.control_id, record.outcome, record.verdict_source NULLS FIRST, input_source NULLS FIRST`,
+		organizationID, func(rows pgx.Rows) error {
+			var count AssessmentCount
+			if err := rows.Scan(&count.ControlClass, &count.ControlID, &count.Outcome, &count.VerdictSource, &count.InputSource, &count.Count); err != nil {
+				return err
+			}
+			if !oneOf(count.ControlClass, controlClasses) || !identifierPattern.MatchString(count.ControlID) ||
+				!identifierPattern.MatchString(count.Outcome) || !optionalOneOf(count.VerdictSource, verdictSources) {
+				return errMalformedRecord
+			}
+			summary.Assessments = append(summary.Assessments, count)
+			return nil
+		})
 	if err != nil {
 		return SecuritySummary{}, err
 	}
 
 	if summary.ModelUsage, err = readPurposeUsage(ctx, tx, organizationID, nil); err != nil {
+		return SecuritySummary{}, err
+	}
+	err = tx.QueryRow(ctx, `WITH `+judgeEvaluations+`
+		SELECT count(DISTINCT call.id) FROM runtime.model_calls AS call
+		JOIN runtime.control_assessments AS record
+		  ON record.security_model_call_id = call.id AND record.organization_id = call.organization_id
+		JOIN judge ON judge.evaluation_id = record.evaluation_id
+		WHERE call.organization_id = $1`, organizationID).Scan(&summary.JudgeSecurityCalls)
+	if err != nil {
 		return SecuritySummary{}, err
 	}
 
