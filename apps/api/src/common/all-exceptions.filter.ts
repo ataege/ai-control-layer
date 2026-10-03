@@ -8,6 +8,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import type { ErrorResponse } from "@workspace/contracts";
+import reasonContract from "@workspace/contracts/schemas/reason-code.schema.json" with { type: "json" };
 import type { Request, Response } from "express";
 import { getRequestPath } from "./request-id.middleware.js";
 
@@ -23,6 +24,8 @@ const ERROR_CODES_BY_STATUS: Record<number, string> = {
 };
 
 const KNOWN_ERROR_CODES = new Set([
+  ...reasonContract.enum,
+  "conflict",
   "bad_request",
   "unauthorized",
   "forbidden",
@@ -30,28 +33,8 @@ const KNOWN_ERROR_CODES = new Set([
   "method_not_allowed",
   "internal_error",
   "not_implemented",
-  "resource_out_of_scope",
-  "destination_not_allowed",
-  "report_export_restricted",
-  "report_lineage_missing",
-  "source_policy_changed",
-  "template_not_allowed",
-  "approval_required",
-  "approval_expired",
-  "action_changed",
-  "resource_version_changed",
-  "allowance_exhausted",
-  "run_cancelled",
-  "outcome_unknown",
   "outcome_unconfirmed",
   "upstream_unavailable",
-  "semantic_injection_detected",
-  "security_evaluator_unavailable",
-  "security_allowance_exhausted",
-  "content_redacted",
-  "signature_match",
-  "policy_reload_rejected",
-  "model_not_allowed",
   "upstream_unreachable",
   "upstream_timeout",
   "invalid_json",
@@ -133,14 +116,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const requestPath = getRequestPath(request);
 
     if (statusCode >= 500) {
-      // Full detail goes to the server log only.
+      // General logs carry correlation metadata only; exception text may contain credentials
+      // or protected review content from an unavailable dependency.
       this.logger.error("request failed", {
         requestId: request.requestId,
         path: requestPath,
         statusCode,
-        errorName: exception instanceof Error ? exception.name : typeof exception,
-        errorMessage: exception instanceof Error ? exception.message : String(exception),
-        stack: exception instanceof Error ? exception.stack : undefined,
+        errorName:
+          exception instanceof HttpException
+            ? "HttpException"
+            : exception instanceof Error
+              ? "Error"
+              : typeof exception,
       });
     }
 

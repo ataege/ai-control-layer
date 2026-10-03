@@ -1698,7 +1698,8 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-26 · Clean up the API's error states**
+- [x] **API-26 · Clean up the API's error states**
+  - Done (2026-10-04): error-code allowlist consumes all 31 shared X-13 codes; unknown upstream codes are never relayed. General 5xx logs contain only correlation/status metadata, not exception messages, untrusted exception names or stacks that can carry credentials/review content. Session lookup dependency errors now return 503 while invalid/expired credentials remain 401. All facades preserve Go status or return fail-closed transport errors; command timeouts remain unconfirmed. Checks: API lint, typecheck and build exited 0; API unit tests: "366 passed"; `pnpm test:db api`: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Host log scan: service token, operator signing key, demo password and shared restricted-review fixture text absent. Tests cover every shared reason code and secret-bearing exceptions in both response/log output. Live model execution quality is outside this evidence.
   - **Report 1.2 change:** Uses the 20 proposed reason codes.
   - **Report 1.1 change:** Uses the 13 proposed reason codes.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2 h)

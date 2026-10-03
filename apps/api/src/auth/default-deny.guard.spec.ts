@@ -124,6 +124,17 @@ describe("DefaultDenyGuard", () => {
     dataSourceMock.isInitialized = true;
   });
 
+  it("answers 503 when the session lookup dependency fails", async () => {
+    authProviderMock.authenticate = vi
+      .fn()
+      .mockRejectedValue(new Error("database connection secret"));
+    const response = await request(app.getHttpServer())
+      .get("/api/guard-test/protected")
+      .set("Cookie", "session=valid-session-id")
+      .expect(503);
+    expect(JSON.stringify(response.body)).not.toContain("database connection secret");
+  });
+
   it("allows access to a route with the @Public marker", async () => {
     const response = await request(app.getHttpServer()).get("/api/guard-test/public");
     expect(response.status).toBe(200);
