@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Smoke test against the RUNNING starter: node scripts/smoke.mjs [--mode=host|container]
 // Uses real HTTP calls only. In container mode the gateway is not published, so its direct
-// checks are reported as skipped. Secret values are never printed.
+// checks are reported as skipped. Secret values are never printed. The web pages sit behind the
+// sign-in gate: the smoke test checks the gate, then signs in as the seeded demo operator (with
+// DEMO_OPERATOR_PASSWORD from .env; without it the signed-in checks are skipped) and runs the page and
+// leak checks with that session.
 import { spawnSync } from "node:child_process";
 
 import { composeProjectArguments } from "./lib/compose-arguments.mjs";
@@ -9,13 +12,22 @@ import { loadRootEnvironment, MISSING_ENV_FILE_MESSAGE } from "./lib/env-file.mj
 import { GENERATED_SECRETS } from "./lib/generated-secrets.mjs";
 import { probeHttp } from "./lib/http-probe.mjs";
 import { countByStatus, printHeading, printResultTable } from "./lib/output.mjs";
+import { isRedirectToLogin, sessionCookieHeader } from "./lib/smoke-session.mjs";
 
 const SMOKE_MODES = ["host", "container"];
 const REQUEST_ID_HEADER = "x-request-id";
 const PROXIED_API_PATHS = ["/api/health/live", "/api/health/ready", "/api/diagnostics/gateway"];
 // Public API documents that are not part of the proxy comparison but are scanned for secrets.
 const SCANNED_API_ONLY_PATHS = ["/api/docs-json"];
+// Pages the middleware sends a visitor without a session to the sign-in page, and the sign-in page.
+const SIGN_IN_GATED_PAGE_PATHS = ["/", "/components"];
+const LOGIN_PAGE_PATH = "/login";
+// Pages checked with the demo operator's session.
 const WEB_PAGE_PATHS = ["/", "/components", "/diagnostics"];
+const SIGN_IN_PATH = "/api/auth/sign-in";
+const SIGN_OUT_PATH = "/api/auth/sign-out";
+// The seeded development-demonstration operator (apps/api/src/auth/demo-operator-seed.ts).
+const DEMO_OPERATOR_EMAIL = "demo-operator@example.com";
 // Shorter values could match unrelated page text, so they are not searched for.
 const MINIMUM_SEARCHABLE_SECRET_LENGTH = 16;
 // The diagnostics route makes two bounded upstream calls, so allow more than one timeout.
@@ -43,6 +55,7 @@ const mode = parseMode(process.argv.slice(2));
 const { fileFound, environment } = loadRootEnvironment();
 const serviceToken = environment.GATEWAY_SERVICE_TOKEN ?? "";
 const databasePassword = environment.POSTGRES_PASSWORD ?? "";
+const demoOperatorPassword = environment.DEMO_OPERATOR_PASSWORD ?? "";
 
 if (!serviceToken || !databasePassword) {
   console.error(
@@ -77,8 +90,12 @@ const scannedResponses = []; // { label, text }
 const isApiOrGatewayUrl = (url) =>
   url.startsWith(gatewayBaseUrl) || new URL(url).pathname.startsWith("/api/");
 
-async function probe(url, headers = {}) {
-  const probeResult = await probeHttp(url, { headers, timeoutMs: PROBE_TIMEOUT_MS });
+async function probe(url, headers = {}, requestOptions = {}) {
+  const probeResult = await probeHttp(url, {
+    headers,
+    timeoutMs: PROBE_TIMEOUT_MS,
+    ...requestOptions,
+  });
   if (probeResult.reached && isApiOrGatewayUrl(url)) {
     const headerText = [...probeResult.headers].map(([name, value]) => `${name}: ${value}`);
     scannedResponses.push({
@@ -271,15 +288,95 @@ function collectAssetUrls(pageHtml) {
   return assetUrls;
 }
 
-/** Fetches the pages and every asset they reference, then searches all of it for the secrets. */
-async function checkWebPagesAndLeaks() {
+/**
+ * Without a session the middleware must send the gated pages to the sign-in page, and the sign-in page
+ * itself must load. Returns the sign-in page document for the leak check.
+ */
+async function checkSignInGate() {
+  for (const pagePath of SIGN_IN_GATED_PAGE_PATHS) {
+    const checkName = `web: GET ${pagePath} without a session redirects to ${LOGIN_PAGE_PATH}`;
+    const gatedResult = await probe(`${webBaseUrl}${pagePath}`);
+    if (!gatedResult.reached) fail(checkName, gatedResult.failure);
+    else if (isRedirectToLogin(gatedResult.status, gatedResult.headers.get("location"))) {
+      pass(checkName, `HTTP ${gatedResult.status}`);
+    } else {
+      fail(checkName, `expected a redirect to ${LOGIN_PAGE_PATH}, got HTTP ${gatedResult.status}`);
+    }
+  }
+
+  const loginResult = await probe(`${webBaseUrl}${LOGIN_PAGE_PATH}`);
+  recordHttpCheck(`web: GET ${LOGIN_PAGE_PATH}`, loginResult, 200);
+  return loginResult.reached && loginResult.status === 200
+    ? { document: { label: LOGIN_PAGE_PATH, text: loginResult.bodyText }, loaded: true }
+    : { loaded: false };
+}
+
+const signInRequestOptions = (password) => ({
+  method: "POST",
+  body: JSON.stringify({ email: DEMO_OPERATOR_EMAIL, password }),
+});
+const JSON_HEADERS = { "content-type": "application/json" };
+
+/**
+ * Signs in as the seeded demo operator through the web proxy. Returns the session cookie to carry, or
+ * a reason the signed-in checks cannot run (they are then skipped, not failed, when the password is
+ * simply not configured).
+ */
+async function signInDemoOperator() {
+  const wrongPasswordCheck = "web: POST /api/auth/sign-in with a wrong password -> 401";
+  const signInCheck =
+    "web: POST /api/auth/sign-in as the demo operator -> 200 with a session cookie";
+  if (demoOperatorPassword === "") {
+    const reason = "DEMO_OPERATOR_PASSWORD is not set in .env";
+    skip(wrongPasswordCheck, reason);
+    skip(signInCheck, reason);
+    return { skipReason: reason };
+  }
+
+  const wrongResult = await probe(`${webBaseUrl}${SIGN_IN_PATH}`, JSON_HEADERS, {
+    ...signInRequestOptions(`${demoOperatorPassword}-wrong`),
+  });
+  recordHttpCheck(wrongPasswordCheck, wrongResult, 401, errorCodeProblem("unauthorized"));
+
+  const signInResult = await probe(`${webBaseUrl}${SIGN_IN_PATH}`, JSON_HEADERS, {
+    ...signInRequestOptions(demoOperatorPassword),
+  });
+  const sessionCookie = signInResult.reached ? sessionCookieHeader(signInResult.setCookies) : null;
+  if (!signInResult.reached) fail(signInCheck, signInResult.failure);
+  else if (signInResult.status !== 200) {
+    fail(
+      signInCheck,
+      `expected HTTP 200, got HTTP ${signInResult.status}; was the demo seeded? pnpm db:seed`,
+    );
+  } else if (sessionCookie === null) fail(signInCheck, "HTTP 200, but no session cookie was set");
+  else pass(signInCheck, "HTTP 200, session cookie set");
+  return sessionCookie === null
+    ? { skipReason: "the demo operator could not sign in" }
+    : { sessionCookie };
+}
+
+/**
+ * Fetches the pages (signed in when a session exists) and every asset they reference, then searches
+ * all of it for the secrets. Without a session only the sign-in page is scanned, and the leak check
+ * says so instead of claiming the gated pages were covered.
+ */
+async function checkWebPagesAndLeaks({ sessionCookie, skipReason }, signInPage) {
   const fetchedDocuments = []; // { label, text }
   const assetUrls = new Set();
-  let everyPageLoaded = true;
+  let everyPageLoaded = signInPage.loaded;
+  if (signInPage.loaded) {
+    fetchedDocuments.push(signInPage.document);
+    for (const assetUrl of collectAssetUrls(signInPage.document.text)) assetUrls.add(assetUrl);
+  }
 
   for (const pagePath of WEB_PAGE_PATHS) {
-    const pageResult = await probe(`${webBaseUrl}${pagePath}`);
-    recordHttpCheck(`web: GET ${pagePath}`, pageResult, 200);
+    const checkName = `web: GET ${pagePath} (signed in)`;
+    if (sessionCookie === undefined) {
+      skip(checkName, skipReason);
+      continue;
+    }
+    const pageResult = await probe(`${webBaseUrl}${pagePath}`, { cookie: sessionCookie });
+    recordHttpCheck(checkName, pageResult, 200);
     if (!pageResult.reached || pageResult.status !== 200) {
       everyPageLoaded = false;
       continue;
@@ -306,8 +403,26 @@ async function checkWebPagesAndLeaks() {
     if (assetUrls.size === 0) {
       return { failed: true, detail: "the pages reference no JS or CSS assets" };
     }
-    return { detail: `${WEB_PAGE_PATHS.length} pages and ${assetUrls.size} assets scanned` };
+    const scannedPageCount = fetchedDocuments.length - assetUrls.size;
+    return {
+      detail:
+        sessionCookie === undefined
+          ? `sign-in page only, signed-in pages not scanned (${skipReason}); ${assetUrls.size} assets scanned`
+          : `${scannedPageCount} pages and ${assetUrls.size} assets scanned (signed in)`,
+    };
   });
+}
+
+/** Ends the smoke test's session so it does not leave a signed-in session behind. */
+async function signOutDemoOperator(sessionCookie) {
+  const signOutResult = await probe(
+    `${webBaseUrl}${SIGN_OUT_PATH}`,
+    { cookie: sessionCookie },
+    {
+      method: "POST",
+    },
+  );
+  recordHttpCheck("web: POST /api/auth/sign-out ends the session -> 200", signOutResult, 200);
 }
 
 /** Loads the API-only documents, so they are part of the response leak check. */
@@ -353,7 +468,11 @@ console.log(`Smoke test (${mode} mode): web ${webBaseUrl}, api ${apiBaseUrl}`);
 
 const directApiResults = await checkApi();
 await fetchApiOnlyDocuments();
-await checkWebPagesAndLeaks();
+const signInPage = await checkSignInGate();
+const signedInState = await signInDemoOperator();
+await checkWebPagesAndLeaks(signedInState, signInPage);
+if (signedInState.sessionCookie !== undefined)
+  await signOutDemoOperator(signedInState.sessionCookie);
 await checkWebProxy(directApiResults);
 
 const requestIdTargets = [

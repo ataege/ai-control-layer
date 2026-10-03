@@ -15,6 +15,7 @@ import type {
   ApprovalResponse,
   AssessmentPage,
   AssessmentRecord,
+  CatalogStatus,
   ControlEvaluationRequest,
   ControlEvaluationResponse,
   ErrorResponse,
@@ -126,6 +127,24 @@ test("read contracts reject inconsistent combinations", () => {
   // An unclassified semantic record has no verdict; another outcome needs a source.
   assert.equal(validateRecord({ ...record, outcome: "pass" }), false);
   assert.equal(validateRecord({ ...record, matchedRuleId: "rule\u0007" }), false);
+});
+
+test("the catalog status contract rejects what Go never produces", () => {
+  const status = readJson(join(fixtureDirectory, "catalog-status.active.json")) as CatalogStatus;
+  const validateStatus = validatorFor("catalog-status");
+  assert.equal(validateStatus(status), true);
+  assert.equal(
+    validateStatus(readJson(join(fixtureDirectory, "catalog-status.rejected-request.json"))),
+    true,
+  );
+  // A policy or feed text field, an unknown control or a non-hex digest is never part of the read.
+  assert.equal(validateStatus({ ...status, sourceText: "policy" }), false);
+  assert.equal(
+    validateStatus({ ...status, controls: [{ ...status.controls[0], controlId: "other" }] }),
+    false,
+  );
+  assert.equal(validateStatus({ ...status, policyDigest: "not-a-digest" }), false);
+  assert.equal(validateStatus({ ...status, lastError: { code: "x" } }), false);
 });
 
 test("runtime contracts reject inconsistent combinations", () => {
@@ -589,6 +608,44 @@ export const typedSamples = {
     ],
     nextCursor: "v1.1750.0.0",
   } satisfies SecurityEventPage,
+  catalogStatus: {
+    activeRevisionId: 1,
+    requestedRevisionId: 1,
+    validatedRevisionId: 1,
+    policyDigest: "df00c9d6064542c1a5863abbb03d2a765a3b84b0385775b30bb2b50b6343c072",
+    feedRevisionId: 1,
+    feedRevision: "feed_v1",
+    feedDigest: "c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244",
+    feedRuleCount: 4,
+    lastError: null,
+    controls: [
+      {
+        controlId: "secret_pattern",
+        controlClass: "deterministic",
+        enabled: true,
+        mode: "redact",
+        threshold: null,
+        boundaries: ["model_input", "tool_result"],
+      },
+      {
+        controlId: "semantic_injection",
+        controlClass: "semantic",
+        enabled: true,
+        mode: "block",
+        threshold: 0.75,
+        boundaries: ["model_input", "tool_result", "action_proposal"],
+      },
+      {
+        controlId: "signature_match",
+        controlClass: "deterministic",
+        enabled: true,
+        mode: null,
+        threshold: null,
+        boundaries: ["model_input", "tool_result", "action_proposal"],
+      },
+    ],
+    disabledRules: [],
+  } satisfies CatalogStatus,
   securitySummary: {
     organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
     generatedAt: "2026-10-03T12:30:00.25Z",
@@ -800,8 +857,20 @@ export const typedSamples = {
     templates: [{ id: "reconcile_atlas_v1", name: "Reconcile Atlas invoices" }],
     vendors: [{ id: "vendor_Atlas", name: "Atlas" }],
     invoices: [
-      { id: "invoice_A01", number: "INV104", date: "2026-09-01", amount: 125000 },
-      { id: "invoice_A02", number: "INV104", date: "2026-09-08", amount: 125000 },
+      {
+        id: "invoice_A01",
+        number: "INV104",
+        date: "2026-09-01",
+        amount: 125000,
+        vendorId: "vendor_Atlas",
+      },
+      {
+        id: "invoice_A02",
+        number: "INV104",
+        date: "2026-09-08",
+        amount: 125000,
+        vendorId: "vendor_Atlas",
+      },
     ],
     destinations: [{ id: "vendor_Atlas", name: "Atlas" }],
     approvalRequirements: [
@@ -840,6 +909,7 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   assessmentRecord: "assessment-record.semantic-judge.json",
   assessmentPage: "assessment-page.two-records.json",
   securityEventPage: "security-event-page.judge.json",
+  catalogStatus: "catalog-status.active.json",
   securitySummary: "security-summary.judge-split.json",
   reportView: "report-view.vendor.json",
   approvalResponse: "approval-response.approve.json",

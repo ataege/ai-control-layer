@@ -1,11 +1,14 @@
 import type { ReportView } from "@workspace/contracts";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@workspace/ui/components/card";
+import { ClassificationBadge } from "./classification-badge";
+import { SourceTrail } from "./source-trail";
 
 /** The stored content, or the plain statement that it is withheld. Never reconstructed. */
 export function ReportBody({ report }: { report: ReportView }) {
@@ -41,7 +44,6 @@ export function ReportIdentity({ report }: { report: ReportView }) {
     ["Report", report.reportId],
     ["Run", report.runId],
     ["Version", String(report.version)],
-    ["Template", `${report.template} (version ${report.templateVersion})`],
   ];
   return (
     <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
@@ -55,7 +57,10 @@ export function ReportIdentity({ report }: { report: ReportView }) {
   );
 }
 
-/** One stored report: its title and identity, then its content or the withheld statement. */
+/**
+ * One stored report: its title beside its stored classification, its identity, its content or the
+ * withheld statement, and its source trail.
+ */
 export function ReportContent({ report }: { report: ReportView }) {
   return (
     <Card>
@@ -64,10 +69,14 @@ export function ReportContent({ report }: { report: ReportView }) {
         <CardDescription>
           Rendered from the stored report by its registered template.
         </CardDescription>
+        <CardAction>
+          <ClassificationBadge classification={report.classification} />
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-6">
         <ReportIdentity report={report} />
         <ReportBody report={report} />
+        <SourceTrail report={report} />
       </CardContent>
     </Card>
   );

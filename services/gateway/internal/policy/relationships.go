@@ -72,6 +72,8 @@ func (relationships *PostgresRelationships) ReportExport(ctx context.Context, or
 		verdict = ExportVerdict{
 			Found: true, Allowed: decision.Allowed, ReasonCode: ReasonCode(decision.ReasonCode),
 			AlternativeTemplate: decision.AlternativeTemplate,
+			// The stored references of the report; the classification is the stored fact.
+			Report: ReportRef{ID: report.ID, Template: report.TemplateName, Classification: report.Classification},
 		}
 		return nil
 	})

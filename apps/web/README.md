@@ -7,29 +7,24 @@ Next.js App Router front end (React, strict TypeScript, Tailwind CSS v4). UI pri
 
 | Route          | Purpose                                                            |
 | -------------- | ------------------------------------------------------------------ |
-| `/`            | Task setup and overview                                            |
-| `/tasks/new`   | Alias for task setup                                               |
-| `/runs/[id]`   | View run details and execution timeline                            |
+| `/`            | Task form and a plain explanation of admission, passport and run   |
+| `/login`       | Sign in as the seeded development demonstration operator           |
+| `/tasks/new`   | The task form on its own page                                      |
 | `/components`  | Showcase of every shared primitive and generic component           |
 | `/diagnostics` | Live health of the API, the gateway and their database connections |
 
 ## Server proxy
 
-The browser only talks to this app. Route handlers forward to the API using the proxy helpers:
+The browser only talks to this app. Three route handlers forward to the API and nothing else:
 
 | Route                          | Upstream                                      |
 | ------------------------------ | --------------------------------------------- |
 | `GET /api/health/live`         | `${API_UPSTREAM_URL}/api/health/live`         |
 | `GET /api/health/ready`        | `${API_UPSTREAM_URL}/api/health/ready`        |
 | `GET /api/diagnostics/gateway` | `${API_UPSTREAM_URL}/api/diagnostics/gateway` |
-| `GET /api/runs/*`              | `${API_UPSTREAM_URL}/api/runs/*`              |
-| `POST /api/runs/*`             | `${API_UPSTREAM_URL}/api/runs/*`              |
-| `GET /api/auth/me`             | `${API_UPSTREAM_URL}/api/auth/me`             |
-| `POST /api/auth/sign-in`       | `${API_UPSTREAM_URL}/api/auth/sign-in`        |
-| `POST /api/auth/sign-out`      | `${API_UPSTREAM_URL}/api/auth/sign-out`       |
 
 The shared helper is `src/server/upstream-proxy.ts`. It passes the upstream status and JSON body
-through, forwards or generates `x-request-id` and session cookies, but never forwards the caller's path, query, or
+through, forwards or generates `x-request-id`, and never forwards the caller's path, query, cookies or
 other headers. Failures of the proxy itself use the shared `ErrorResponse` envelope:
 
 | Status | Code                        | Meaning                                          |
@@ -39,7 +34,7 @@ other headers. Failures of the proxy itself use the shared `ErrorResponse` envel
 | 502    | `upstream_invalid_response` | The API answered with something that is not JSON |
 | 504    | `upstream_timeout`          | No complete answer within 10 seconds             |
 
-To proxy another API route, create a matching `route.ts` that calls `proxyUpstream`.
+To proxy another API route, add its path to `UPSTREAM_PATHS` and create a matching `route.ts`.
 
 ## Environment
 

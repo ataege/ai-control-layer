@@ -115,7 +115,7 @@ export interface OperatorContext {
 export interface TaskFormOptions {
   templates: { id: string; name: string }[];
   vendors: { id: string; name: string }[];
-  invoices: { id: string; number: string; date: string; amount: number }[];
+  invoices: { id: string; number: string; date: string; amount: number; vendorId: string }[];
   destinations: { id: string; name: string }[];
   approvalRequirements: { id: string; description: string }[];
   limits: { maxModelCalls: number; maxTimeoutSeconds: number };
@@ -152,20 +152,6 @@ export interface RunView {
   passport: {
     id: string;
     template: string;
-    vendorId?: string;
-    invoiceIds: string[];
-    destination: string;
-    approvalRequirement?: string;
-    limits: {
-      modelCalls: number;
-      timeoutSeconds: number;
-    };
-    versions: {
-      task: string;
-      policy: string;
-    };
-    rules: string[];
-    expiresAt: string;
   };
 }
 
@@ -174,20 +160,7 @@ export interface SanitizedEvent {
   id: string;
   type: string;
   timestamp: string;
-  details: {
-    message?: string;
-    tool?: string;
-    action?: string;
-    decision?: 'allowed' | 'denied' | 'pending' | 'blocked' | 'redacted';
-    reasonCode?: string;
-    rule?: string;
-    revision?: string;
-    modelPurpose?: string;
-    correctionRoute?: string;
-    correctionCount?: number;
-    isReplay?: boolean;
-    [key: string]: unknown;
-  };
+  details: Record<string, unknown>;
 }
 
 // Go-owned runtime contracts (X-08, X-09, X-11, X-12, X-13). Envelope fields are camelCase;
@@ -577,6 +550,41 @@ export interface ModelLedger {
   maxConcurrentCalls: number;
   /** Held slots: calls in flight or with unknown usage. */
   callsInFlight: number;
+}
+
+/**
+ * WEB-29, `GET /internal/catalog/active` (Go-owned read): the active control catalog as the gateway
+ * enforces it. Never carries policy or feed text, a signature pattern or a secret.
+ */
+export interface CatalogStatus {
+  /** Null until a revision has been activated. */
+  activeRevisionId: number | null;
+  requestedRevisionId: number | null;
+  validatedRevisionId: number | null;
+  /** SHA-256 hex of the active policy file as imported. */
+  policyDigest: string | null;
+  /** The feed fields are null when no signature feed is bound to the active revision. */
+  feedRevisionId: number | null;
+  feedRevision: string | null;
+  feedDigest: string | null;
+  feedRuleCount: number | null;
+  /** The last rejected activation; the last good revision stays active. Null when none failed. */
+  lastError: { code: string; message: string; revisionId: number; stage: string } | null;
+  /** All three registered controls when a revision is active, each with its enabled flag. */
+  controls: CatalogControl[];
+  disabledRules: string[];
+}
+
+/** One registered control's setting in the active catalog revision. */
+export interface CatalogControl {
+  controlId: "secret_pattern" | "semantic_injection" | "signature_match";
+  controlClass: "deterministic" | "semantic";
+  enabled: boolean;
+  /** Null for signature_match (each feed rule carries its own response) and when disabled. */
+  mode: "block" | "redact" | null;
+  /** Set on the semantic control only. */
+  threshold: number | null;
+  boundaries: ("model_input" | "tool_result" | "action_proposal")[];
 }
 
 /** X-29 draft (GO-24), `GET /internal/runs/{runId}/usage`: no estimate and no cost (local model). */

@@ -90,6 +90,18 @@ func TestPostgresRelationships(t *testing.T) {
 				verdict.ReasonCode != testCase.wantReason || verdict.AlternativeTemplate != testCase.wantAlternative {
 				t.Fatalf("verdict = %+v", verdict)
 			}
+			// A found report is named by its stored references; a missing one by nothing.
+			if testCase.wantFound != (verdict.Report.ID == testCase.reportID) || (!testCase.wantFound && verdict.Report != (ReportRef{})) {
+				t.Fatalf("verdict report = %+v for report %s", verdict.Report, testCase.reportID)
+			}
+			if testCase.name == "internal report is restricted" &&
+				(verdict.Report.Template != "internal_investigation_v1" || verdict.Report.Classification != "internal_only") {
+				t.Fatalf("internal report reference = %+v", verdict.Report)
+			}
+			if testCase.name == "vendor report may leave" &&
+				(verdict.Report.Template != "vendor_reconciliation_v1" || verdict.Report.Classification != "vendor_shareable") {
+				t.Fatalf("vendor report reference = %+v", verdict.Report)
+			}
 		})
 	}
 

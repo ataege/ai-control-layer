@@ -923,7 +923,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Report: "Threat model limits and unresolved design choices" (Verification priorities);
     "Research documentation and submission workflow" (From requirements to verified presentation)
   - Blocked by: nothing
-  - Progress (2026-10-04): the home page (`apps/web/src/app/page.tsx`) is rewritten: it no longer mounts `RunTimeline`, whose rows are hardcoded sample events, and says in plain text what admission, the passport and a run are, with the `SyntheticDataLabel` and `SimulatedOutboxLabel` for what is simulated; it shows no run data. `/components` has a "Truthful labels" section with every label. `apps/web/src/app/page.test.ts` checks the page carries no sample row, no starter wording and the label texts. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (62 passed, 5 of them new), `pnpm format:check` exit 0. Not done, so not ticked: `layout.tsx` still has the title "Starter" and the description "A generic full-stack project starter." and `apps/web/README.md` still has "Starter overview" (both outside my paths, for the web + API implementer); `run-timeline.tsx` keeps its mock data for whoever mounts it next (WEB-06 replaces it); `pnpm smoke` and the browser check of the shell have not run.
+  - Progress (2026-10-04): the home page (`apps/web/src/app/page.tsx`) is rewritten: it no longer mounts `RunTimeline`, whose rows are hardcoded sample events, and says in plain text what admission, the passport and a run are, with the `SyntheticDataLabel` and `SimulatedOutboxLabel` for what is simulated; it shows no run data. `/components` has a "Truthful labels" section with every label. `apps/web/src/app/page.test.ts` checks the page carries no sample row, no starter wording and the label texts. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (62 passed, 5 of them new), `pnpm format:check` exit 0. `layout.tsx` now titles the app "Task Passport" with a truthful description and the pages table of `apps/web/README.md` describes `/`, `/login` and `/tasks/new` (the lead granted both files on 2026-10-04). Not done, so not ticked: `run-timeline.tsx` keeps its mock data for whoever mounts it next (WEB-06 replaces it). Evidence (2026-10-04, my own stack on ports 3150/3151/8150, signed in as the seeded demo operator, an isolated headless Chromium; screenshots not committed): `/`, `/components` and `/diagnostics` answer 200 with the titles "Task Passport", "Components | Task Passport" and "Diagnostics | Task Passport"; none contains "Sample Data" or "Starter"; `/` and `/components` show the "Simulated outbox: a database record, no email is sent" and "Synthetic records" labels; the navigation shows "Development Demonstration". `pnpm smoke` exited 1 with 22 passed, 8 failed, 6 skipped: `web: GET /` and `web: GET /components` expect HTTP 200 and got 307, because the middleware sends an unauthenticated request to `/login`, and the six web leak checks then report "not every page could be loaded" (`scripts/smoke.mjs` is the lead's to adjust). Seen in the browser and not mine: `GET /api/auth/me` answers 404 (Noyan's route is pending) and `GET /api/runs/options` answers 400 "Invalid record identifier" (the API has no `options` route, so the request matches `:id`), so the task form shows "An unknown error occurred." with a Retry button.
 
 ## M2 (hours 6-10)
 
@@ -1154,6 +1154,17 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     (Journey 3).
   - Tests: specs: every state value of the contract has a view and an unknown value shows as unknown,
     never as success; a stopped run always shows its terminal reason: `pnpm --filter web run test`.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3): `RunStatePanel`
+    in `apps/web/src/components/run/run-state-panel.tsx` takes the persisted `RunState` (and the
+    recorded explanation from `terminalSafeMessage(events)`) and does no fetching; the model is
+    `describeRunState` in `labels.ts`. Every status of the contract has a business view, and the
+    view tells a justified interruption (paused at its allowance, waiting for a reviewer), an
+    uncertain result needing an operator (paused with `outcome_unknown`), a deliberate stop and a
+    failure apart; a paused, failed or stopped run always shows its terminal reason (or says none
+    was recorded and flags the contract problem); an unknown status shows as unknown, never as
+    success; a completed run lists the reports its final answer named. Specs over the run-state
+    fixtures pass (`pnpm --filter web run test`). Not done: mounting on the run page (WEB-06,
+    Batın's).
   - Report: "Users operating model and proposed user journeys" (Journey 2 review an exact outbound
     effect; Journey 3 recover cancel or investigate); "Mapping the proposal to the Goldman Sachs
     challenge" (Why successful work matters as much as blocked work)
@@ -1219,7 +1230,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Blocked by: nothing
   - Progress (2026-10-04): the label module and components are done. `apps/web/src/lib/labels.ts` holds the wording of the demonstration specification's label table (X-16) and derives each label from server data, returning null when the data carries no mark: `replayLabel(replaySource)`, `verdictSourceLabel(verdictSource)` ("live" or "fixture", nothing else, never live by default), `outboxEffectLabel(effect)`, `developmentDemonstrationLabel(email)` (the session's `/me` has no demo flag, so this derives from the seeded operator's email; a server field is an open request), `estimatedCostLabel({pricingRule, unresolved})` (null without a rule: not shown), `recordingLabel(buildId)` and the fixed `LABELS`. `apps/web/src/components/labels` exports `LabelBadge`, `SimulatedOutboxLabel`, `OutboxEffectLabel`, `ReplayLabel`, `VerdictSourceLabel`, `DevelopmentDemonstrationLabel`, `EstimatedCostLabel`, `TestDoubleLabel`, `TestEvidenceLabel`, `SyntheticDataLabel` and `RecordingLabel`; each renders nothing when the data carries no mark. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (57 passed, 25 of them new: an event with the replay mark, an outbox effect, an estimate and the seeded operator each always carry their label, an unmarked event carries none, a mark in an unexpected form still shows the label, and a server-supplied mark is escaped). Missing half: the pages that show such things must mount them (the run page's timeline and outbox effect, the control views' verdicts, any cost figure, the navigation's operator); the Done-when ("every page") holds only when they have.
 
-- [ ] **WEB-27 · Show the report classification and source trail on the run page**
+- [x] **WEB-27 · Show the report classification and source trail on the run page**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: WEB-12, API-30 · Needs: X-64, X-71 · Provides: nothing
   - Paths: `apps/web`
@@ -1231,8 +1242,9 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Tests: `pnpm --filter web run test` with the contract fixtures.
   - Report: "Live demonstration storyboard and proof checks" (beat 4)
   - Blocked by: `stored report read`
+  - Completed (2026-10-04): lane web/reports. `components/report/classification-badge.tsx` shows the stored classification ("Internal only" / "Vendor shareable") as a lookup of the stored field, never derived from the title, content or sources; `components/report/source-trail.tsx` shows the template and its version, the projection rule and version (or that the internal template has none), the destination class, the content hash with a copy button, and per source its kind and id, version, stored classification and consumed fields. Both are mounted in the report page's `ReportContent` (title beside the badge). Tests (54 in the web package, 5 new, with the report-view fixtures): the badge and label of a vendor report and of a withheld Internal only one; every source with version, classification and fields; template, projection, destination and hash; and a title that claims "Internal only" with a disagreeing source trail still shows the stored "Vendor shareable". `lint`, `typecheck` and `test` exit 0. Browser check, quoted: the Internal only report of a live run showed the "Internal only" badge beside "Internal investigation", template `internal_investigation_v1 (version 1)`, projection "None (the internal template reads sources directly)", destination "Internal reviewers", its content hash, and the trail `invoice_A01` version 1 Internal only (fields including `internal_note`) and `invoice_A02` version 1 Vendor shareable. Not here: the mount of the link on the run page (Batın's page), and the "renamed title beside the unchanged label", which waits on the open item `rename operation`; the page already shows the stored title next to the stored label.
 
-- [ ] **WEB-28 · Explain the export denial and the safe continuation**
+- [x] **WEB-28 · Explain the export denial and the safe continuation**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: WEB-09, WEB-27 · Needs: X-12, X-13 · Provides: nothing
   - Paths: `apps/web`
@@ -1244,6 +1256,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Report: "Live demonstration storyboard and proof checks" (beats 5 and 7); "Users operating model
     and proposed user journeys" (Journey 3)
   - Blocked by: nothing
+  - Completed (2026-10-04): lane web/reports. `apps/web/src/components/report/export-denial.tsx` (`ExportDenial`, taking a `SafeEvent`) explains a `report.export_denied` event whose reason is `report_export_restricted`: the rule (a report built from an Internal only source inherits the restriction and cannot go to a vendor, whatever its title says), that the task's recipient was permitted and the denial comes from the report's own stored restriction, and the continuation: a separate vendor report rendered from approved database fields only, naming the template from `maskedSummary.alternativeTemplate` (or "No alternative was offered" when there is none). It says plainly that this is a denial, not an approval request, and has no button or action; it shows the event's `safeMessage`, a labelled replay (`replaySource`) as "Replay: scripted proposal, not generated by the model", and a link to the restricted report only when the event names it. It renders nothing for any other event or reason. `isExportDenial(event)` lets the timeline decide where to mount it. Tests (61 in the web package, 7 new, with `safe-event.export-denied.json` and `safe-event.admission-rejected.json`): the rule, recipient and continuation text; the report link; no button, "Approve" or "Reject"; an event without a report id (the gate's real event) shows no link and no invented template; no alternative; a replay label; nothing for other events. `lint`, `typecheck` and `test` exit 0; a temporary preview page, since removed, rendered the component in the browser from the fixture. Finding for the gate lane (w3): the real `report.export_denied` event from a live run carries `alternativeTemplate` and `safeMessage` but null `reportId`, `template` and `classification`, unlike the shared fixture, so the "View the restricted report" link appears only once the event carries the report id; the id is the stored report's, not a protected value. Mounting `ExportDenial` where the timeline shows `report.export_denied` is Batın's (WEB-09 and WEB-32).
 
 - [x] **WEB-32 · Show hybrid decisions in the run timeline**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
@@ -1388,7 +1401,7 @@ this side starts and reviews.
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-14 · Build the approval preview of the stored action**
+- [x] **WEB-14 · Build the approval preview of the stored action**
   - **Report 1.1 change:** Shows the recipient, rendered content, classification, report version, approved source fields, and source, template and projection versions; route proposal `/approvals` for one action (a list needs `list reads`); beat 8.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: M (estimate 3.5-6.5 h)
   - Depends on: API-19, API-20, WEB-10 · Needs: X-09, X-10, X-41 · Provides: X-43 (part: the
@@ -1409,12 +1422,34 @@ this side starts and reviews.
     content or a recipient; an expired or changed outcome never shows as approved; a browser check
     of approve, reject and an expired action against the real stack, quoted:
     `pnpm --filter web run test`.
+  - Completed (2026-10-04, lane 3c on web/approval): `app/runs/[id]/review/[actionId]/page.tsx` with
+    `components/approval/review-panel.tsx` reads `GET /api/actions/{id}/review` (review-view,
+    snake_case) and the run state on every visit and shows the exact recipient (address, vendor,
+    reference), the stored report content with classification, report and template versions, projection
+    rule and SHA-256 content hash, the source manifest (each source, version, classification, fields
+    used, manifest digest), the policy revision and the expiry. Approve and Reject each confirm, then
+    send exactly `{"decision": …}` to `POST /api/actions/{id}/approval` (new same-origin routes
+    `app/api/actions/[id]/{review,approval}/route.ts`). Every error is named: 403 not a reviewer, 404
+    nothing awaits review, 401 signed out, 409 expired, changed, run stopped or already decided (each
+    "nothing was sent"), 504 or a lost connection "outcome unconfirmed", 503 unavailable; an expired or
+    changed outcome never reads as approved; a closed review (run no longer awaiting approval) disables
+    the decision; the simulated outbox is labelled with c1's `SimulatedOutboxLabel`. Tests:
+    `actions-client.test.ts` (10: the decision body is only the decision; 409 kinds never approved; an
+    answer about another action or decision is unconfirmed; non-id refused before any request;
+    error-status mapping; review and run state of another action or run refused). Browser checks
+    (headless Chromium, real stack, demo operator): approve — run 78fc91be, action 62bdba4e, all
+    sections shown, one request body `{"decision":"approve"}`, "Approved" with the simulated-outbox
+    label, buttons disabled; the run resumed and completed with 1 outbox row; reopening shows "This
+    review is closed: the run is completed" with Approve disabled. Reject — run 87d0ed10, action
+    59ab12ca, body `{"decision":"reject"}`, "Rejected … Nothing will be sent", outbox unchanged; Go
+    recorded `approval_rejected` and the model proposed again. Not verified live: an expired review (the
+    expiry follows the run lifetime, 15 minutes); covered by the client tests.
   - Report: "Users operating model and proposed user journeys" (Journey 2 review an exact outbound
     effect); "Exact action approval versioning and execution rechecks"; "Live demonstration
     storyboard and proof checks" (Proposed demo sequence, beat 7)
   - Blocked by: `review payload read`; `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **WEB-15 · Add the cancel control that says cancellation is not a reversal**
+- [x] **WEB-15 · Add the cancel control that says cancellation is not a reversal**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: API-21, WEB-10 · Needs: nothing · Provides: X-43 (part: the cancel operation on the
     browser path)
@@ -1427,6 +1462,20 @@ this side starts and reviews.
     already committed effects and explain that cancellation is not a reversal mechanism" (Journey 3).
   - Tests: specs: the confirmation states the limitation; after the cancelled state arrives, earlier
     effects still render; a browser check, quoted: `pnpm --filter web run test`.
+  - Completed (2026-10-04, lane 3c on web/approval): `components/approval/cancel-run-button.tsx`
+    (`CancelRunButton`, for the run page to mount; also on the review page) opens a confirmation that
+    states the limitation ("stops future work … does not reverse anything already done: reports already
+    created and messages already queued stay recorded"), sends `POST /api/runs/{id}/cancel` with `{}`
+    through the new same-origin route `app/api/runs/[id]/cancel/route.ts`, and shows the state the
+    server recorded (stopped, or stopping before the next step for a running run; never more); a
+    finished run offers no cancel. Client `lib/clients/actions-client.ts` `cancelRun` (a lost connection
+    is "unconfirmed", never "nothing happened"). Tests: `cancel-run-text.test.ts` (the confirmation
+    states the limitation; the reported state never exceeds the server's), `actions-client.test.ts`
+    (empty command, unknown run). Browser check (headless Chromium against the real stack: web 3110, API
+    3111, gateway 8110, demo operator): run 87d0ed10 awaiting approval, Cancel run → confirmation text
+    as above → one request `POST /api/runs/87d0ed10-…/cancel` body `{}` → "Cancellation recorded. The
+    run is stopped. Work already done is not reversed and stays listed."; the run is `stopped` /
+    `run_cancelled`, and its 2 reports and the outbox (1) are unchanged.
   - Report: "Users operating model and proposed user journeys" (Journey 3 recover cancel or
     investigate); "Validation plan and evidence matrix" (Interpreting results honestly:
     "Cancellation can prevent future dispatches but cannot retract information already sent or undo
@@ -1450,6 +1499,18 @@ this side starts and reviews.
   - Tests: specs over the usage fixtures: a missing reported amount with a retained reservation
     renders as uncertain, not zero; an estimated amount always carries its label; limits render from
     the passport, never from constants: `pnpm --filter web run test`.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3): `RunUsagePanel`
+    in `apps/web/src/components/run/run-usage-panel.tsx` takes the `RunUsage` of
+    `GET /api/runs/:id/usage` and does no fetching; the model is `usage-model.ts`
+    (`describeUsage`). Per purpose it shows requests sent with their outcomes, reported tokens (the
+    provider's measured usage) and reserved tokens (allowance held, not usage) as separate columns,
+    never added; the allowance and request limits come from the run's own ledger, never from
+    constants; an unknown-usage request shows "+ uncertain" next to the reported figure and the
+    shared label "Uncertain: an unresolved reservation, not a measured amount and not zero". No
+    amount of money is ever shown: the contract carries no cost (a local model, no pricing rule),
+    so the panel says that estimated cost is not shown, which is c1's rule "estimated, with the
+    pricing rule, or not shown". Specs over the usage fixtures pass. Not done: mounting on the run
+    page (WEB-06, Batın's).
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
     matrix" (Interpreting results honestly); "Risk register and scope controls" (Budget display
     implies certainty); "Live demonstration storyboard and proof checks" (Proposed demo sequence,
@@ -1469,6 +1530,17 @@ this side starts and reviews.
     read from the run view.
   - Tests: the beat 9 run by hand against the real stack, with the run view and a screenshot quoted;
     WEB-10's specs for the stopped state.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3):
+    `LimitStopNotice` in `apps/web/src/components/run/limit-stop-notice.tsx` takes the persisted
+    `RunState`, the run's `RunUsage` (or null) and the recorded explanation; `limitStopKind` reads a
+    limit stop from the persisted state alone (paused or stopped with `allowance_exhausted`,
+    `security_allowance_exhausted` or `run_expired`) and the component renders nothing for any other
+    run. It shows the terminal reason with its code, which request limits are at their cap, the
+    token allowances at the stop (reported, reserved, available), whether every dispatched request
+    is accounted for (or which purpose has an unaccounted one), and unknown usage as uncertain;
+    "no further model request is sent" is stated as following from the run being paused or stopped,
+    and the usage as of the latest read. Specs pass (`limit-stop-notice.test.ts`). Not done: the
+    beat 9 run by hand on the real stack with a screenshot (needs WEB-06's page).
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 9);
     "Threat model limits and unresolved design choices" (the smallest credible vertical slice: "one
     limit-triggered stop")
@@ -1639,6 +1711,12 @@ sit here, before the final build's evidence is captured, and are cut first.
     spending allowance as though cost were zero") has the interface part of its evidence, the
     "visibly uncertain estimated-cost state", recorded for SH-31.
   - Tests: the run by hand, with the run view and a screenshot quoted; WEB-16's specs.
+  - Progress (2026-10-04): `UnknownUsageNotice` in `run-usage-panel.tsx` (lane f3, on
+    web/run-panels, shown inside `RunUsagePanel`) appears whenever a request has unknown usage: "Usage
+    is uncertain", the shared uncertain label, and the statement that the reserved tokens stay held
+    and are counted neither as used nor as zero. WEB-16's specs cover it (a retained reservation with
+    no reported amount renders as uncertain, not zero). Not done: opening a real run with missing
+    provider usage in the interface and keeping the capture for SH-31 (needs WEB-06's page).
   - Report: "Validation plan and evidence matrix" (Proposed critical checks: Unknown usage); "Atomic
     allowances hard limits and estimated cost"
   - Blocked by: `decision 6 in docs/product/README.md`
@@ -1693,7 +1771,8 @@ sit here, before the final build's evidence is captured, and are cut first.
     register and scope controls" (Demo proves logs, not prevention)
   - Blocked by: `demonstration baseline`; `read path`
 
-- [ ] **WEB-30 · Build the security posture dashboard**
+- [x] **WEB-30 · Build the security posture dashboard**
+  - **Done (2026-10-04, web/security):** `/security` (`app/security/page.tsx`, `components/security/*`) renders the real `GET /api/security/summary` through the same-origin route `app/api/security/summary/route.ts` and a typed client (`lib/clients/security-client.ts`) that checks the response against the contract's shape before rendering and maps 401, 403, 5xx, network, timeout and a body outside the contract to fixed messages (no upstream text is shown). It shows decision events by type, decision, reason and input source (agent run versus judge probe); the allowed, blocked, redacted and sent-to-review counts split by source; deterministic blocks; security evaluation failures; assessments by control with live, fixture, no-model-call and check-did-not-complete kept apart (an errored check is never counted as a live verdict; lane c1's `VerdictSourceLabel` and `LABELS` supply the fixture wording); runs by status; model usage by purpose with unknown usage and held tokens kept visible; and measured phase durations, with the statement that no cost is shown or estimated. Not shown because the summary does not carry it: the active controls and policy revision (WEB-29) and matched rule names (those are in the audit export). Checks: `pnpm --filter web run lint` exit 0 (0 errors; 3 warnings, all in `login-form.tsx` and `task-form.tsx`), `typecheck` exit 0, `test` exit 0 (111 passed: view model against the contract fixture and synthetic counts, client status mapping and shape guard, route handlers against a real stub upstream). Live, on the local stack (web 3130, API 3131, gateway 8130, signed in as the development demo operator through the real form), in headless Chromium: after a run and three judge probes through `POST /api/control/evaluate`, the page showed Blocked 3 (all judge probes), Allowed 1 (the run's `run.queued`), one deterministic block, one security evaluation failure (no model configured, so the semantic check failed closed), one assessment with no verdict, and the same rows as the served summary; at 390 px width the page has no horizontal scroll; 503 shows a retry that recovers, 401 offers sign-in, 403 and a malformed body are refused instead of rendered. Checks per commit: see the commit message.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 3-5 h, this roadmap's estimate)
   - Depends on: API-35 · Needs: X-93 · Provides: nothing
   - Paths: `apps/web`
@@ -1703,7 +1782,8 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel); "Delivery scope and six person ownership" (Implementer 1)
   - Blocked by: nothing
 
-- [ ] **WEB-31 · Offer the authorized audit export**
+- [x] **WEB-31 · Offer the authorized audit export**
+  - **Done (2026-10-04, web/security):** `/security/export` (`app/security/export/page.tsx`, `components/security/audit-export.tsx`) offers the sanitized export of `GET /api/security/export` through the same-origin route `app/api/security/export/route.ts`, which streams a CSV body (the buffering proxy refuses a non-JSON body as 502). The web has no role information of its own (the API has no `/api/auth/me`), so the page asks the real export route whether the viewer may export (one record, discarded): 403 shows the refusal and no control at all, 401 offers sign-in, anything else shows that authorization could not be confirmed and no form. An authorized reviewer chooses the records (decision events or control assessments), the cursor to start after and the page size (1 to 500, validated field by field), reads a JSON page (record count, next cursor, an indented preview) and downloads JSON or CSV; JSON is the page already read, CSV re-requests the same page as CSV, and both are saved byte for byte as the server sent them. Checks: `pnpm --filter web run lint` exit 0 (0 errors; the same 3 warnings in other lanes' files), `typecheck` exit 0, `test` exit 0 (114 passed: query validation, file naming, the authorization probe, JSON and CSV page handling, content-type checks, the preview, and the route handlers including CSV streaming and the 403 pass-through). Live, in headless Chromium against the local stack as the seeded development demo operator (roles operator and reviewer): 5 events read, next cursor shown, `security-events-from-start.json` saved (3542 bytes, parses, equal to the bytes the route serves) and `security-events-from-start.csv` saved (header plus 5 rows); a bad limit disables the button and both bad fields explain themselves at once; no horizontal scroll at 390 px. The unauthorized path was exercised by answering the page's own request with 403 (no non-reviewer account is seeded): the refusal showed, the read button and every input were absent and no upstream text appeared; 401, 503, a 403 after authorization and a body that is not a page were each handled; the API's own refusal of a non-reviewer is covered by `audit-export.controller.spec.ts` ("refuses a non-reviewer before contacting Go"). Not done: the CSV response's `X-Next-Cursor` header is not forwarded by the shared proxy (it forwards only content-type, request id and cookies), so the next cursor comes from the JSON page. Checks per commit: see the commit message.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: API-36 · Needs: X-94 · Provides: nothing
   - Paths: `apps/web`
