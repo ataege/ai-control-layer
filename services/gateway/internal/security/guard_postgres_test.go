@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/budget/budgettest"
 	"starter/services/gateway/internal/model"
 	"starter/services/gateway/internal/testdb"
 )
@@ -21,25 +22,13 @@ import (
 // real Ollama transport. The model is a labelled local HTTP provider double; its answers are
 // fixtures, not semantic verdicts of a real model.
 
-func guardLedger(t *testing.T, limit int64) (*budget.PostgresStore, *pgxpool.Pool, string) {
+// guardLedger seeds a run with an open ledger (budgettest); its store writes the semantic
+// evaluator's dispatch record before reserving, as agent.RecordingCaller does in production.
+func guardLedger(t *testing.T, limit int64) (*budgettest.DispatchRecordingStore, *pgxpool.Pool, string) {
 	t.Helper()
 	pool := testdb.Open(t)
-	store := budget.NewPostgresStore(pool)
-	runID := "security-guard-test-" + testdb.ID(t)
-	if err := store.CreateRun(context.Background(), runID, limit); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		cleanupContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if _, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_reservations WHERE run_id=$1", runID); err != nil {
-			t.Error("could not clean test reservations")
-		}
-		if _, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_budgets WHERE run_id=$1", runID); err != nil {
-			t.Error("could not clean test budget")
-		}
-	})
-	return store, pool, runID
+	run := budgettest.OpenRun(t, pool, budgettest.Limits(limit))
+	return budgettest.NewDispatchRecordingStore(pool), pool, run.RunID
 }
 
 // guardInspector serves answer (or sleeps past the timeout) from a labelled HTTP provider double.

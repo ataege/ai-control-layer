@@ -438,6 +438,21 @@ GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
   -run '^TestLiveProductionChainExecutesAPermittedTool$' -count=1 -v
 ```
 
+## Model allowance ledger alignment (GO-39)
+
+Migration `1791130000000-AlignTokenLedger` applies alignment decisions 1 to 5 to the GO-06 ledger:
+uuid `run_id` with a foreign key to `runtime.runs`, `organization_id` on both tables, `call_id` =
+`runtime.model_calls.id` with the purpose bound by the foreign key, per-purpose token sub-limits
+and counters, call limits and counters, the request timeout and the concurrency slot. Ledger rows
+without a run (pre-alignment diagnostics) and reservations with non-uuid call ids are deleted;
+reservations of existing runs without a dispatch record get a labelled backfilled `model_calls`
+row; limits are copied from the passport. `OpenRunLedger` writes every limit at admission;
+`Reserve` checks shared and purpose calls and tokens and the slot before dispatch and returns the
+request timeout, which `model.AccountedCaller` applies to the provider request. The agent loop's
+step count is the ledger's `agent_calls`, and a held slot requeues the job instead of ending the run.
+`budget.CreateRun` is gone; `cmd/budgetcheck` admits a labelled synthetic run (an unclaimed job kind)
+and records each dispatch. Details: `internal/budget/README.md`.
+
 ## Performance telemetry (GO-80)
 
 `agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the

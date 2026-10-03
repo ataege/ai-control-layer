@@ -1796,7 +1796,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
+- [x] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
   - **Report 1.2 change:** Reserve shared task allowance and the agent or security sub-budget atomically, including maximum output tokens and a concurrency slot; purpose is assigned by trusted runtime code, and security calls count against the shared ceiling. With GO-75 this delivers Implementer 3's report 1.2 first integrated deliverable: "A live agent call and live semantic check both reserve allowance and record independent purpose and latency."
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 5-8 h)
   - Depends on: GO-02, GO-03, GO-10 · Needs: X-06, X-11, X-39 · Provides: X-53
@@ -1818,13 +1818,25 @@ typecheck` PASS; `pnpm verify` 6 passed.
     counted, never zero; settlement settles the reservation against the reported usage in its own
     transaction; no reservation transaction is open while the stubbed provider call runs; a model
     call retry, where `model call retries` adopts them, reserves again. The X-24 command.
-  - Progress (2026-10-03): `budget.OpenRunLedger` (1a470f6 on go/f3) opens the run's ledger inside
-    admission's transaction with the passport's token total (alignment decision 6) and validates the
-    per-purpose sub-limits; without a ledger row nothing can be reserved
-    (`TestOpenRunLedgerCommitsWithTheCallersTransaction`). Missing: the new migration applying
-    alignment decisions 1 to 5 (uuid run id with a foreign key, organization id, call id =
-    `model_calls.id`, per-purpose sub-limits, calls, request time and the concurrency slot on the
-    ledger) and the reservation of calls and sub-budgets before every dispatch.
+  - Completed (2026-10-03): migration `1791130000000-AlignTokenLedger` applies alignment decisions 1
+    to 5 (uuid run id with a foreign key to runs, organization id, call id = `model_calls.id` with
+    the purpose bound, per-purpose token sub-limits and counters, call limits and counters, request
+    timeout and concurrency slot). `budget.OpenRunLedger` copies every passport limit at admission;
+    `Reserve` refuses before dispatch on a paused ledger, an exhausted shared or purpose call count
+    or token allowance, a held slot or a missing dispatch record, and returns the request timeout
+    that `model.AccountedCaller` applies; calls count at reserve and are never refunded; unknown
+    usage keeps the reservation and the slot (`Snapshot` reports unresolved calls per purpose);
+    `Settle` settles once in its own transaction. The loop's step count is the ledger's
+    `agent_calls`; a held slot requeues. Tests: shared and purpose call limits, security token sub-
+    budget, slot held through unknown usage and released by the late settlement, purpose binding,
+    concurrent reservations, overrun and overflow pauses, late settlement once, no ledger lock
+    during the provider call (`TestPostgresNoLedgerLockDuringTheProviderCall`). Migration: run,
+    revert, run on a fresh database (18 migrations) and on a database holding an admitted run whose
+    ledger had a settled and an unknown reservation plus an orphan diagnostic ledger: limits
+    backfilled from the passport, counters rebuilt, dispatch records backfilled, the orphan deleted.
+    Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; api `lint`, `typecheck` exit 0; `pnpm verify` 6 passed, 0 failed, 0 skipped; `GOFLAGS=-p=3 pnpm test:db`: gateway "741 passed, 0 failed, 0 skipped; 185 need the database", api "16 passed". Model call retries are not adopted
+    (`model call retries`), so no retry reserves again; local inference has no tariff, so no
+    estimated cost is recorded.
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
     matrix" (critical check Unknown usage); "Architecture and chart reading guide" (Figures 4 and 5)
   - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
