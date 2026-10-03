@@ -459,7 +459,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-03 · Deny every non-public route by default**
+- [x] **API-03 · Deny every non-public route by default**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2.5 h)
   - Depends on: nothing · Needs: X-03 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,
@@ -490,7 +490,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     production identity controls")
   - Blocked by: nothing
 
-- [ ] **API-04 · Add the task template, policy version and tool definition entities**
+- [x] **API-04 · Add the task template, policy version and tool definition entities**
   - **Report 1.2 change:** The policy configuration now comes from `policy.yaml` imported into the catalog (API-31 to API-33); there is no policy editor screen.
   - **Report 1.1 change:** Module names: the architecture's proposal, TasksModule, PoliciesModule and ToolsModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -519,7 +519,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     requirements MVP boundary and deferred scope" (Product decisions that keep the MVP coherent)
   - Blocked by: nothing
 
-- [ ] **API-05 · Add the user and membership entities**
+- [x] **API-05 · Add the user and membership entities**
   - **Report 1.1 change:** Adds `organizations` (architecture table proposal).
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2.5 h)
   - Depends on: SH-01, SH-10 · Needs: X-24 · Provides: X-17 (part: user and membership entities)
@@ -541,7 +541,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-06 · Authenticate the operator through a real credential check**
+- [x] **API-06 · Authenticate the operator through a real credential check**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 4-7 h)
   - Depends on: API-03, API-05, SH-01 · Needs: X-18, X-22, X-23, X-24 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,
