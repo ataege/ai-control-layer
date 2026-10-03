@@ -29,11 +29,14 @@ const (
 	FieldToolResultText FieldName = "tool_result_text"
 	FieldInternalNote   FieldName = "internal_note"
 	FieldModelInputText FieldName = "model_input_text"
+	// FieldToolResultValue is any other string value of a minimized tool result, for example a
+	// vendor display name: deterministic rules only, never a semantic call.
+	FieldToolResultValue FieldName = "tool_result_value"
 )
 
 // designatedFields lists which fields each boundary may carry.
 var designatedFields = map[Boundary][]FieldName{
-	BoundaryToolResult: {FieldToolResultText, FieldInternalNote},
+	BoundaryToolResult: {FieldToolResultText, FieldInternalNote, FieldToolResultValue},
 	BoundaryModelInput: {FieldModelInputText},
 }
 
