@@ -536,6 +536,19 @@ revision lowered below what a run has used refuses its next reservation with `bu
 rewritten; the ledger keeps the passport's stored limits. The catalog has no per-purpose token
 limits, so those stay the passport's.
 
+**Settlement and slot wait (Worker 3's review).** A completed provider call settles under its own
+5 s cleanup context, so a call that answers at its deadline or under a lost claim never leaves its
+reservation stuck as `reserved`; if the settlement still fails, the call is marked `usage_unknown`
+(reservation and slot held) and returns `model.ErrUsageUnknown`, which pauses the run. The wait for
+a process slot is bounded on its own by one request period, and the provider's request deadline
+starts only once the slot is held.
+
+**Limitation: unknown calls hold their slots.** A `usage_unknown` reservation keeps its ledger slot
+until a trusted late settlement (`Reconcile`). Such calls normally pause the run; a run that kept
+going with all `max_concurrent_calls` slots held by unknown calls would requeue every second
+without progressing. The MVP's action checks no longer call the model (c1's `not_applicable`), so
+this is latent; an operator resolves it by reconciling or cancelling the run.
+
 ## Model allowance ledger alignment (GO-39)
 
 Migration `1791130000000-AlignTokenLedger` applies alignment decisions 1 to 5 to the GO-06 ledger:
