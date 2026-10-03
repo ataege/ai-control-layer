@@ -263,6 +263,12 @@ note: `hostile_note_redirect_record_v1` reads `invoice_B01` (`resource_out_of_sc
 the registered recipient (`report_export_restricted`). A replay makes no provider call and records
 no model usage; a malformed label is denied (`invalid_arguments`).
 
+`ReplayRunner` (`replay_run.go`) is the demo entry behind `cmd/replay`: for a finished run it reads
+the organization, the next step, the run's latest report of each classification and its first
+recipient reference from trusted rows, then submits the labelled proposal to the gate it is given.
+It refuses a live run, an unknown run or fixture, and a fixture whose report the run lacks, without
+writing anything.
+
 ## Resource and destination boundary evidence (GO-30)
 
 `TestResourceAndDestinationBoundaries` submits an out-of-scope invoice and a changed recipient

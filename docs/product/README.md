@@ -199,7 +199,7 @@ writes each outcome down here when it is settled.
 ## Decisions recorded by the lead's delegate (3 October 2026)
 
 Each item below was **decided by the lead's delegate** on 3 October 2026 and recorded by the
-researcher. "On `main`" names what is merged at 44e925f (items 1 to 14) or 55d9522 (items 15 to 20);
+researcher. "On `main`" names what is merged at 44e925f (items 1 to 14) 55d9522 (items 15 to 20) or 53f34e6 (items 21 to 23);
 anything else is a decision, not an implemented behaviour.
 
 1. **Read path (`read path`).** Operator reads go through private Go `/internal` endpoints, mounted
@@ -283,6 +283,30 @@ anything else is a decision, not an implemented behaviour.
     `1791050000000-CreateServiceRoles`, whose password wiring is still a comment; the change is on
     branch `go/w2`, not merged.
 
+21. **Final result format.** The model's final answer is exactly
+    `{"status": "completed", "report_ids": [...]}` with one or two unique lowercase UUIDs. Every
+    identifier must be a report of this run and organization; otherwise the answer is rejected, never
+    trimmed, and the rejection counts as a correction under GO-29. Go stores
+    `runs.result_reference = {"report_ids": [...]}` with no prose, in the same transaction as the
+    completion. On `main`: not yet; GO-26 is being built on lane 3c.
+22. **Measurement method (`measurement method`).** Decided by Worker 2 as the Go implementer for
+    GO-81 and accepted by the lead's delegate: concurrency 1; warmup excluded; the configurations
+    without a model interleaved sample by sample; GO-80's phase names (`policy_lookup`,
+    `deterministic`, `semantic`, `provider`, `commit`, `total`); nearest-rank p50 and p95; null before
+    any observation; errors counted, not timed; semantic inspection on and off derived in the process,
+    without editing the catalog. Numbers must be measured again on an idle machine before any slide:
+    the current numbers were taken at a load average of 70 to 150. On `main`: the benchmark
+    (`services/gateway/cmd/benchmark`) and its method in `services/gateway/README.md`.
+23. **Semantic classifier prompt (`classifier prompt and verdict schema`, prompt part).**
+    `classifier_v2` (lane c1, commit `b9f94c2` on branch `go/c1`) was measured at 0 wrong of 84 cases
+    on `qwen3.5:4b`, against 4 of 84 for v1. Limits: v2 was written with the case it now catches in
+    view, the benign probes are few, and variance between runs remains. A claim says "on this fixture
+    set", never universal detection. On `main`: not yet. The measurement is the lane's, not
+    final-build evidence (X-59).
+
+The control evaluation adapter (X-91) is served as `POST /internal/control/evaluate` on lane 3c's
+branch (GO-82); a `model_input` evaluation never dispatches the agent model. On `main`: not yet.
+
 Known limitations recorded with these decisions: `command idempotency keys` is open, so two
 identical start-run requests create two runs; the signature feed has no signing key (item 9).
 
@@ -331,8 +355,8 @@ Each item is open until the document owner records the outcome here; the roadmap
   `feed grammar and trust` and `measurement method`: implementation choices report 1.2 leaves open
   ("Configure these explicitly and record their tested limits"). **Decided by the lead's delegate**:
   the verdict schema (item 7 above), `redaction rules` (item 8) and `feed grammar and trust` (item 9).
-  `catalog activation protocol` is decided too (item 15). Still open: the classifier prompt's tested
-  limits and `measurement method`.
+  `catalog activation protocol` is decided too (item 15), `measurement method` (item 22) and the
+  classifier prompt (item 23, measured on its fixture set only). Nothing in this group is still open.
 - `judge access`: how judges reach the running layer, the test suite and the configuration files.
 - `researcher role` and `shared-track assignment`: the two staffing items above.
 

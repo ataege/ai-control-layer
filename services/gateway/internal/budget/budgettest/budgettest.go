@@ -27,7 +27,7 @@ func Limits(tokensTotal int64) contracts.PassportLimits {
 		RequestTimeoutSeconds: 20, LocalMaxConcurrency: 2, ToolAttempts: 12, Corrections: 2, RunExpiryMinutes: 15}
 }
 
-// OpenRun inserts a synthetic passport, run and open ledger and removes them, with every dispatch
+// OpenRun inserts a synthetic passport (allowing the model "test-fixture"), run and open ledger and removes them, with every dispatch
 // record and reservation of the run, when the test ends. Passports reject DELETE by trigger, so
 // cleanup runs with triggers disabled for its transaction (superuser test database); otherwise it
 // leaves the synthetic rows and logs them.
@@ -44,7 +44,8 @@ func OpenRun(t testing.TB, pool *pgxpool.Pool, limits contracts.PassportLimits) 
 	defer func() { _ = transaction.Rollback(ctx) }()
 	if _, err = transaction.Exec(ctx, `INSERT INTO runtime.passports(id, organization_id, actor_id, task_version,
 		admission_catalog_revision_id, scope, limits, expires_at)
-		VALUES ($1, $2, $3, 'ledger_test_v1', 1, '{}', '{}', now() + interval '1 hour')`, passportID, run.OrganizationID, testdb.ID(t)); err != nil {
+		VALUES ($1, $2, $3, 'ledger_test_v1', 1, '{"allowedModels": ["test-fixture"]}', '{}', now() + interval '1 hour')`,
+		passportID, run.OrganizationID, testdb.ID(t)); err != nil {
 		t.Fatalf("insert passport fixture: %v", err)
 	}
 	if _, err = transaction.Exec(ctx, `INSERT INTO runtime.runs(id, organization_id, passport_id, status)
@@ -63,7 +64,7 @@ func OpenRun(t testing.TB, pool *pgxpool.Pool, limits contracts.PassportLimits) 
 
 // remove deletes every runtime row of the synthetic organization.
 func remove(t testing.TB, pool *pgxpool.Pool, organizationID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	transaction, err := pool.Begin(ctx)
 	if err != nil {

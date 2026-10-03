@@ -101,6 +101,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `cmd/gateway`              | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
 | `cmd/modelcheck`           | Go lane f3 (worker, agent, model, budget)                     |
 | `cmd/budgetcheck`          | Go lane f3 (worker, agent, model, budget)                     |
+| `cmd/replay`               | Go lane w3 (action gate and approvals)                        |
 | `cmd/benchmark`            | Go lane w2 (tools and provenance)                             |
 | `internal/config`          | Shared Go lanes; the lead coordinates edits                   |
 | `internal/logging`         | Shared Go lanes; the lead coordinates edits                   |
@@ -132,6 +133,7 @@ New packages get their ownership row when their first real code lands.
 cmd/gateway/          wiring, signals, -healthcheck
 cmd/modelcheck/       explicit synthetic Ollama connectivity check
 cmd/budgetcheck/      explicit central-catalog and PostgreSQL accounting diagnostic
+cmd/replay/           explicit labelled replay of a hostile-note proposal (demo)
 cmd/benchmark/        repeatable performance benchmark of the governed tool-result path (GO-81)
 internal/config/      environment and trusted accounting-catalog validation
 internal/logging/     JSON slog logger, Secret
@@ -445,6 +447,21 @@ GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
   -run '^TestLiveProductionChainExecutesAPermittedTool$' -count=1 -v
 ```
 
+## Model allowlist, request deadline and local concurrency (GO-79)
+
+`agent.CatalogAccountedCaller`, the chain's metered model gateway, checks every call of either
+purpose before anything is reserved or sent: the configured model must be in the active catalog's
+allowed models and in the run passport's (`ErrModelNotAllowed`, which the loop maps to `stopped` /
+`model_not_allowed` and the semantic check to a pause). Each request is bounded by the catalog's
+request time and by the ledger's (`budget.Reservation.RequestTimeout`, applied in
+`model.AccountedCaller`). Besides the per-run ledger slot, a process-wide cap of the catalog's
+`local_max_concurrency` makes further requests wait for a slot within their deadline (a wait that
+runs out is `budget.ErrConcurrencyLimit`, which requeues the job). After a timeout or unknown usage
+the process slot stays held for one more request period, because a client timeout does not prove
+the provider stopped; the ledger keeps the reservation and its slot until the late settlement.
+`model.AccountedCaller` now joins the safe failure sentinel (`ErrTransport`, `ErrResponse`) to
+`ErrUsageUnknown`, never the provider's raw error.
+
 ## Model allowance ledger alignment (GO-39)
 
 Migration `1791130000000-AlignTokenLedger` applies alignment decisions 1 to 5 to the GO-06 ledger:
@@ -462,8 +479,9 @@ and records each dispatch. Details: `internal/budget/README.md`.
 
 ## Performance telemetry (GO-80)
 
-`agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the
-tool-result inspection's decisions to `runtime.control_assessments`. Per step the loop records
+`agent.Telemetry` writes observed monotonic durations to `runtime.timing_records`, and the
+tool-result inspection's decisions to `runtime.control_assessments` through the repository's single
+writer, `repository.Tx.InsertControlRecords`, which validates every record. Per step the loop records
 `policy_lookup` (run, passport and step count), `provider` (agent call, Go wall time, with its
 `model_calls` id), `deterministic` (the gate decision, with the action when one was stored),
 `commit` (the executor's attempt and local effect), the inspection's `deterministic` and
@@ -849,6 +867,31 @@ the same denials are the tools lane's X-72 and X-74 tests.
 | malformed verdict (score 7) | paused, result withheld, usage settled (312 tokens), 1 request                     |
 | allowance of 100 tokens     | paused `security_allowance_exhausted`, 0 requests, nothing reserved                |
 | ledger paused by an overrun | next check paused `security_allowance_exhausted`, no further request               |
+
+## Labelled replay for the demonstration (GO-36)
+
+`cmd/replay` submits one labelled replay of a hostile-note fixture to a finished run through the
+gateway's production gate (`agent.NewProductionChain`, whose worker it never starts). It is a
+deterministic rehearsal, not a model-generated action, for when the live model does not propose the
+prohibited action. Both arguments are required:
+
+```sh
+node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> -fixture hostile_note_internal_disclosure_v1
+```
+
+Fixtures: `hostile_note_redirect_record_v1` (reads `invoice_B01`), `hostile_note_redirect_recipient_v1`
+(queues the run's vendor report to the address in the note), `hostile_note_internal_disclosure_v1`
+(queues the run's Internal only report to its registered recipient).
+
+- Only a completed, failed or stopped run is accepted, so the replay never takes the step number a
+  live run's loop would use next. The organization comes from the run's own row.
+- It writes only what the gate writes: the stored action and its decision event, both labelled
+  `labelled_replay:<fixture id>`. It never executes the action and makes no provider call while a
+  deterministic check denies first.
+- Output starts with `LABELLED REPLAY` and gives the label, action, step, decision and reason. Exit
+  0: denied with the reason its live equivalent gets. Exit 1: any other decision, printed as
+  `UNEXPECTED` (for example `decision_unavailable` when the active catalog cannot be loaded). Exit 2:
+  not run (usage, unknown run or fixture, live run, or a report the fixture needs is missing).
 
 ## Performance benchmark (GO-81)
 

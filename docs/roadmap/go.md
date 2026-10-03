@@ -1227,7 +1227,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     boundary)
   - Blocked by: nothing
 
-- [ ] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
+- [x] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
   - Depends on: SH-05, GO-21, GO-22 · Needs: X-11, X-12 · Provides: X-29, X-30
   - Paths: `services/gateway/internal/httpserver/server.go`,
@@ -1257,6 +1257,15 @@ typecheck` PASS; `pnpm verify` 6 passed.
     fixtures) and PostgreSQL cases (usage values, other organization, gapless event paging,
     reads as `task_passport_gateway`). Missing: the mount in `internal/api` (3c), the usage view in
     `packages/contracts`, and `passport in the run view` (no passport is served).
+  - Completed (2026-10-03): 3c mounted the routes in `internal/api` (da44d15, merged into go/w2).
+    `TestPostgresReadRoutesThroughTheGatewayHandler` calls them through the production handler
+    tree (`httpserver.NewHandler` with `api.Commands`, service token and signed operator
+    context): the owner gets 200 with the run state (strict X-11), events (strict X-12) and usage
+    (now with the GO-39 ledger); another organization gets 404; no service token gets 401. 3c's
+    GO-57 test adds every cross-organization case. The organization-wide event check now uses
+    `repository.ValidStoredEvent`. `go test ./internal/reads` against `starter_test`: ok. Not
+    served: the passport (`passport in the run view` is still open); the usage view is a Go draft
+    until nestjs lands it in `packages/contracts`.
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
@@ -1745,7 +1754,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
     output)
   - Blocked by: `replay entry`
-  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. The demo-triggerable entry (cmd/replay) follows separately.
+  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. The demo-triggerable entry `cmd/replay` (`-run <finished run> -fixture <id>`) followed: it submits the labelled proposal through the production chain's gate, never executes it, and prints `LABELLED REPLAY` with the decision and reason; `TestDemoReplayOfAFinishedRunIsDeniedAndLabelled` and `TestDemoReplayRefusesWithoutWriting` cover it, and run against a test catalog without its feed it printed `deny / decision_unavailable` as UNEXPECTED, exit 1 (fail closed).
 
 - [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
   - **Report 1.1 change:** Serves the extended X-64 (classification, template and projection versions, content hash, destination class, lineage summary).
@@ -1955,13 +1964,27 @@ typecheck` PASS; `pnpm verify` 6 passed.
     Goldman Sachs challenge" (Unpredictable costs)
   - Blocked by: `model call retries` (the retry part only)
 
-- [ ] **GO-79 · Enforce the model allowlist, request timeout and local concurrency cap**
+- [x] **GO-79 · Enforce the model allowlist, request timeout and local concurrency cap**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-39, GO-72 · Needs: X-82 · Provides: nothing
   - Paths: the model gateway package from GO-10
   - Work: Reject a model alias outside the active catalog and the passport before dispatch (`model_not_allowed`). Bound each request by the configured deadline and hold a concurrency slot in the reservation. "A stalled request is cancelled where supported; a client timeout does not prove inference stopped, so the concurrency/usage record is reconciled conservatively."
   - Done when: an unlisted model, a third concurrent request over a cap of two, and a request over the deadline do not dispatch or are recorded as timed out with their reservation retained.
   - Tests: concurrency tests with `go test -race`; timeout tests with a slow stub provider (labelled).
+  - Completed (2026-10-03): `agent.CatalogAccountedCaller` checks every call of either purpose
+    before reserving or dispatching: the configured model must be in the active catalog's and the
+    run passport's allowed models (`ErrModelNotAllowed`; the loop stops with `model_not_allowed`).
+    Each request is bounded by the catalog's request time and the ledger's (GO-39). A process-wide
+    cap of `local_max_concurrency` makes a further request wait for a slot within its deadline (a
+    wait that runs out requeues the job); after a timeout the slot stays held one more request
+    period and the ledger keeps the reservation and its per-run slot. Tests with a labelled HTTP
+    provider double: `TestModelGatewayRefusesModelsOutsideCatalogOrPassport` (no hit, nothing
+    reserved), `TestModelGatewayHoldsAThirdConcurrentRequestOverACapOfTwo` (3 runs, at most 2 at the
+    provider, the third waits and completes), `TestModelGatewayDeadlineRetainsTheReservationAndSlot`
+    (1 s catalog deadline; reservation unresolved, ledger and process slots held), with `-race`.
+    Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm verify` 6
+    passed, 0 failed, 0 skipped; `GOFLAGS=-p=3 pnpm test:db`: gateway "744 passed, 0 failed, 0
+    skipped; 188 need the database", api "16 passed".
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence matrix" (Model allowlist and current reductions, Local model resources)
   - Blocked by: nothing
 
@@ -2425,6 +2448,14 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     version change (resource_version_changed) or an unregistered projection version
     (template_not_allowed), outbox 0. Missing: the "old approval is rejected" half (needs Worker
     3's GO-45 and GO-52) and revocations (SH-38).
+  - Progress (2026-10-03): the "old approval is rejected" half for changes is on `main` through
+    GO-45: Worker 3's `TestApprovedActionRechecksBeforeExecution` approves a queue_report, then
+    changes the source invoice version (refused `resource_version_changed`) or the active catalog
+    revision (refused `source_policy_changed`), with outbox 0 and no attempt; rerun on 55c851f
+    against `starter_test`: PASS (5 of 5 subtests). Template and projection versions are Go
+    constants, so a running gateway cannot change them during a review; a stored report with an
+    unregistered projection version is refused by the adapter test above. Missing: revoking a
+    source or template during review, which needs GO-52 and the revocation records (SH-38).
   - Report: "Validation plan and evidence matrix" (Source or template policy changes)
   - Blocked by: nothing
 
@@ -2572,7 +2603,7 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
   - Report: "Technical architecture and service ownership" (Small integration boundary); "Illustrative passport and interface contracts" (Proposed browser and runtime operations)
   - Blocked by: nothing
 
-- [ ] **GO-83 · Serve the security decision records, if the read path chooses Go endpoints**
+- [x] **GO-83 · Serve the security decision records, if the read path chooses Go endpoints**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: GO-21, GO-80 · Needs: X-85 · Provides: nothing
   - Paths: the internal API package from GO-21
@@ -2591,6 +2622,11 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     shared lock; the test commits a lower event id after a higher one and reads both, once each
     (10 of 10 race runs). Timing rows were inserted by the test, since GO-80's writer is not on
     main. Missing: the mount in `internal/api` (3c) and the record shapes in `packages/contracts`.
+  - Completed (2026-10-03): mounted by 3c (da44d15). Through the production handler tree the
+    owner reads the summary, assessments and organization events (the committed run event
+    appears once its transaction is final); another organization gets only its own empty
+    records (this test and 3c's GO-57). The record shapes are Go drafts until nestjs lands them
+    in `packages/contracts` for API-35 and API-36.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
@@ -2620,6 +2656,19 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     "On provider failure, show the actual failure state" holds for Go's records.
   - Tests: a table test that every emitted reason code has a safe message and a fixture value; a
     provider-failure test that records the actual failure state. `pnpm --filter gateway run test`.
+  - Progress (2026-10-03): W2 lane, branch go/w2. The Go-records half is done; the task stays open
+    for the SH-33 rehearsal. `contracts.ReasonCode.SafeMessage()` holds a fixed safe operator
+    message for each of the 29 X-13 codes (`TestEveryReasonCodeHasASafeMessage`: matches the
+    schema enum and the reason-code fixture, unique, storable as an event's safeMessage). Agent
+    run-end events carry a safeMessage, specific for each model failure, and the purpose `agent`
+    (`TestModelFailuresNameTheActualFailure`); tool events with a reason carry theirs (the export
+    denial asserts it). Provider failure (`TestUnreachableProviderRecordsTheActualFailureState`,
+    real stepper, accounted caller and ledger against an unreachable Ollama): `model_calls.outcome`
+    `usage_unknown`, the reservation held as `usage_unknown`, the run paused with
+    `outcome_unknown` and an event message saying the call failed or returned no usage (lead: no
+    new X-13 code). Error envelopes: no error text reaches them; admission echoes request ids
+    through `%q`. 3c adds the default safeMessage for every other reason-coded event in
+    `repository.AppendEvent` once this is on `main`.
   - Report: "Relative implementation milestones and critical dependencies" (Hours 18-21); "Live
     demonstration storyboard and proof checks" (Reliable demonstrations without invented
     behavior); "Illustrative passport and interface contracts" (Decision and error semantics)
