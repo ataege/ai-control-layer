@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 
 const DEFAULT_WEB_PORT = 3000;
+const DEFAULT_BIND_ADDRESS = "127.0.0.1";
 const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
 
 /** Absolute path of apps/web, independent of the caller's working directory. */
@@ -20,6 +21,15 @@ export function resolveWebPort() {
     process.exit(1);
   }
   return port;
+}
+
+/**
+ * Address to listen on: WEB_HOST, or loopback when it is unset, so the web app is not reachable
+ * from the local network by default. Shells may export HOSTNAME as the machine name, so only
+ * WEB_HOST changes the address.
+ */
+export function resolveWebBindAddress() {
+  return process.env.WEB_HOST || DEFAULT_BIND_ADDRESS;
 }
 
 /**

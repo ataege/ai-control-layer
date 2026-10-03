@@ -48,6 +48,9 @@ Inside the Compose network the services use container wiring instead of the `.en
 `GATEWAY_HOST` to `0.0.0.0`, so they are reachable inside any container network; on the host the
 default stays `127.0.0.1`.
 
+The step-by-step procedure for the demonstration machine, from a clean checkout to the running
+stack and the local model, is section 8 of [docs/setup.md](../docs/setup.md).
+
 Stop one mode before starting the other: both publish the same host ports. After `pnpm stack:up`
 use `pnpm stack:down` (not `infra:down`) so the profiled containers are removed as well.
 

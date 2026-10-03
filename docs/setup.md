@@ -357,3 +357,155 @@ note with a JSON schema for `risk_category`, `score` (0 to 1) and `reason_code`.
 Ollama did not enforce the schema's numeric range for `qwen2.5:3b`, so Go must validate every
 verdict itself (report 1.2: "Go rejects unsupported fields and malformed scores"). `qwen3.5:4b` is the
 provisional model for both purposes; the M2 8 GB machine still has to run it before it is fixed.
+
+## 8. Deployment on the presentation machine
+
+The demonstration runs on the lead's MacBook Pro (Apple M1 Pro, 16 GB), the machine the probe in
+section 7 ran on. Everything runs locally: the four components (web, API, gateway, PostgreSQL)
+through Docker Compose, and Ollama on the host. Nothing is deployed to a remote server, and no paid
+service is used. Rehearsal record: "SH-30" under "Verification status" in the README.
+
+Commands marked "not on `main` yet" belong to open roadmap tasks; until they land, that step does
+not exist and the demonstration cannot include what it provides.
+
+### Which mode
+
+The live demonstration runs in **host mode** (decided by the lead on 2026-10-03): PostgreSQL in
+Docker through `pnpm infra:up`, and web, API and gateway on the host through `pnpm dev`. It keeps
+editing `config/policy.yaml`, the reload and the local model simple for the judges: the file is
+edited in the checkout, and the gateway reaches Ollama on `localhost`.
+
+**Full-container mode** (`pnpm stack:up`) stays the documented and verified alternative ("Alternative:
+full-container mode" below). How the API would read `config/policy.yaml` there (a bind mount of
+`config/`, or another path) is unverified; the import itself (API-32) is not on `main` yet.
+
+Both modes passed their smoke checks on this machine (README, "Verification status").
+
+### Once per machine
+
+| Tool           | Version used                                | Check                                      |
+| -------------- | ------------------------------------------- | ------------------------------------------ |
+| Node.js        | 24.18.0 (`.nvmrc`)                          | `node --version`                           |
+| pnpm           | 11.10.0                                     | `pnpm --version`                           |
+| Docker Desktop | Docker 29.8.1, Compose v5.5.1 (running)     | `docker compose version`                   |
+| Ollama         | 0.35.1                                      | `ollama --version`                         |
+| Go             | 1.27.1 (builds and runs the gateway)        | `go version`                               |
+| Model          | `qwen3.5:4b`, ID `2a654d98e6fb`, Apache 2.0 | `ollama list`, `ollama show --license ...` |
+
+Install the tools as in sections 1 and 7, then pull the model and confirm its license and ID:
+
+```sh
+ollama pull qwen3.5:4b
+ollama show --license qwen3.5:4b   # expect the Apache License 2.0
+ollama list                        # the ID is the exact model build; record it
+```
+
+Keep Ollama bound to `127.0.0.1` (its default). Never set `OLLAMA_HOST=0.0.0.0`: Ollama has no
+authentication. Docker Desktop for macOS lets the gateway container reach the loopback-bound
+Ollama at `http://host.docker.internal:11434` without any change.
+
+### From a clean checkout
+
+```sh
+git clone https://github.com/ataege/ai-control-layer.git task-passport
+cd task-passport
+git checkout <submission-commit>   # the frozen build; write the hash down
+nvm use                            # or any other way to get Node.js 24.18.0
+pnpm install --frozen-lockfile
+pnpm run setup                     # creates .env with generated secrets, values not printed
+```
+
+Then set `MODEL_NAME=qwen3.5:4b` in `.env`.
+
+If another checkout on this machine has used the default Compose project `starter` (for example the
+everyday working copy), its volume `starter_postgres-data` still exists and holds that checkout's
+database password, so the fresh `.env` would not authenticate; stopping the other checkout is not
+enough. Give the fresh checkout its own project name and PostgreSQL port (two lines in its `.env`,
+[infra/README.md](../infra/README.md), "Several checkouts on one machine"), and stop the other
+checkout's web, API and gateway so ports 3000, 3001 and 8080 are free.
+
+### Start
+
+Use two terminals in the checkout.
+
+```sh
+# terminal 1
+ollama run qwen3.5:4b --think=false "Say hello in one word."   # loads the model
+pnpm infra:up                      # PostgreSQL in Docker, waits for its health check
+pnpm db:migration:run              # applies pending migrations
+pnpm dev                           # web, API and gateway; leave it running
+
+# terminal 2, once the three services are up
+pnpm smoke
+```
+
+- Seed (not on `main` yet: SH-18 for the policy fixture and synthetic records, SH-19 for the
+  demonstration operator): runs after the migrations, through its documented command.
+- The warm-up loads the model into memory (about 30 seconds on the first load in the rehearsal,
+  then well under a second). Ollama unloads a model after five idle minutes by default; `ollama ps`
+  shows whether it is loaded, so repeat the warm-up shortly before the presentation.
+- `pnpm dev` prints every service's log in terminal 1. `pnpm smoke` in host mode reports its log
+  leak checks as skipped, because it cannot read that terminal.
+
+Open <http://localhost:3000>.
+
+### Between rehearsals and before judging
+
+- Reset the demonstration data with `pnpm reset:demo` or `make reset-demo` (SH-29, not on `main`
+  yet). Do not remove the database volume as a reset: that deletes every table, and the migrations
+  and seeds would have to run again.
+- Run the control suite with `pnpm verify:controls` or `make verify-controls` (SH-47, not on `main`
+  yet) and keep its machine-readable result with the build's commit hash.
+
+### Stop
+
+Ctrl+C in terminal 1 stops web, API and gateway (a process that ignores the signal is killed after
+8 seconds), then:
+
+```sh
+pnpm infra:down                    # stops PostgreSQL, keeps the volume
+```
+
+### Alternative: full-container mode
+
+```sh
+pnpm infra:down                    # if host mode ran; Ctrl+C pnpm dev first
+pnpm stack:up                      # builds the images on the first run, waits for the health checks
+pnpm db:migration:run              # from the host: the API image has no migration tooling
+pnpm smoke --mode=container
+pnpm stack:down                    # removes the containers and the network, keeps the volume
+```
+
+- Migrations and seeds run from the host against the published PostgreSQL port, because the API
+  image's runtime stage contains only the compiled API and its production dependencies.
+- The gateway container reaches the host's Ollama at `http://host.docker.internal:11434`.
+- `docker compose stop` waits 10 seconds per container by default, which covers the gateway's own
+  8 second shutdown budget.
+- Reading `config/policy.yaml` from a container is unverified (see "Which mode").
+
+### Network and exposure
+
+- Host mode: web (3000), API (3001) and gateway (8080) listen on `127.0.0.1`, and PostgreSQL is
+  published on `127.0.0.1:5432`. The web launchers bind to `WEB_HOST` (default `127.0.0.1`); before
+  that was added on 2026-10-03, `next dev` listened on every interface and answered on the Wi-Fi
+  address, which also exposed the API through the web app's `/api` proxy. Leave `WEB_HOST` unset
+  for the demonstration.
+- Full-container mode: every published port is bound to `127.0.0.1` (web 3000, API 3001,
+  PostgreSQL 5432); the gateway is not published (only `pnpm stack:up --debug` publishes 8080). All
+  four containers share Compose's default network; the architecture's "NestJS and Go use a private
+  service network" is open item `deployment network`.
+- Judges work on the presentation machine itself; access from another machine is not set up (open
+  item `judge access`).
+- Secrets stay in the untracked `.env` of the checkout; the images contain no `.env` file.
+- Ollama stays bound to `127.0.0.1`.
+
+### Checklist before the presentation
+
+- [ ] The checkout is at the submission commit; `git status` is clean.
+- [ ] `ollama list` shows `qwen3.5:4b` with the recorded ID; the warm-up answered.
+- [ ] `pnpm infra:up` and `pnpm dev` are running; `pnpm smoke` passed.
+- [ ] `WEB_HOST` is unset, so the web app listens on `127.0.0.1` only (see "Network and exposure").
+- [ ] Migrations and seeds ran; the demonstration data was reset.
+- [ ] The control suite ran on this build and its result is saved.
+- [ ] The laptop is on power and does not sleep (for example `caffeinate -dims` in a spare
+      terminal).

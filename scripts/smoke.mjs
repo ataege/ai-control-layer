@@ -2,18 +2,27 @@
 // Smoke test against the RUNNING starter: node scripts/smoke.mjs [--mode=host|container]
 // Uses real HTTP calls only. In container mode the gateway is not published, so its direct
 // checks are reported as skipped. Secret values are never printed.
+import { spawnSync } from "node:child_process";
+
+import { composeProjectArguments } from "./lib/compose-arguments.mjs";
 import { loadRootEnvironment, MISSING_ENV_FILE_MESSAGE } from "./lib/env-file.mjs";
+import { GENERATED_SECRETS } from "./lib/generated-secrets.mjs";
 import { probeHttp } from "./lib/http-probe.mjs";
 import { countByStatus, printHeading, printResultTable } from "./lib/output.mjs";
 
 const SMOKE_MODES = ["host", "container"];
 const REQUEST_ID_HEADER = "x-request-id";
 const PROXIED_API_PATHS = ["/api/health/live", "/api/health/ready", "/api/diagnostics/gateway"];
+// Public API documents that are not part of the proxy comparison but are scanned for secrets.
+const SCANNED_API_ONLY_PATHS = ["/api/docs-json"];
 const WEB_PAGE_PATHS = ["/", "/components", "/diagnostics"];
 // Shorter values could match unrelated page text, so they are not searched for.
 const MINIMUM_SEARCHABLE_SECRET_LENGTH = 16;
 // The diagnostics route makes two bounded upstream calls, so allow more than one timeout.
 const PROBE_TIMEOUT_MS = 10_000;
+// Upper bounds for reading the container logs in container mode.
+const LOG_READ_TIMEOUT_MS = 30_000;
+const LOG_READ_MAX_BYTES = 64 * 1024 * 1024;
 
 // ------------------------------------------------------------ configuration
 
@@ -48,6 +57,12 @@ const webBaseUrl = `http://localhost:${environment.WEB_PORT || "3000"}`;
 const apiBaseUrl = `http://localhost:${environment.API_PORT || "3001"}`;
 const gatewayBaseUrl = `http://localhost:${environment.GATEWAY_PORT || "8080"}`;
 
+// Every secret setup generates, so a new generated secret joins the leak checks automatically.
+const secrets = Object.entries(GENERATED_SECRETS).map(([variableName, { label }]) => ({
+  label,
+  value: environment[variableName] ?? "",
+}));
+
 // ------------------------------------------------------------------ results
 
 const checkResults = [];
@@ -55,7 +70,45 @@ const pass = (name, detail) => checkResults.push({ name, status: "PASS", detail 
 const fail = (name, detail) => checkResults.push({ name, status: "FAIL", detail });
 const skip = (name, detail) => checkResults.push({ name, status: "SKIPPED", detail });
 
-const probe = (url, headers = {}) => probeHttp(url, { headers, timeoutMs: PROBE_TIMEOUT_MS });
+// API and gateway response bodies with their headers (direct and through the web proxy), kept for
+// the response leak check. Web pages and assets have their own check.
+const scannedResponses = []; // { label, text }
+
+const isApiOrGatewayUrl = (url) =>
+  url.startsWith(gatewayBaseUrl) || new URL(url).pathname.startsWith("/api/");
+
+async function probe(url, headers = {}) {
+  const probeResult = await probeHttp(url, { headers, timeoutMs: PROBE_TIMEOUT_MS });
+  if (probeResult.reached && isApiOrGatewayUrl(url)) {
+    const headerText = [...probeResult.headers].map(([name, value]) => `${name}: ${value}`);
+    scannedResponses.push({
+      label: new URL(url).pathname,
+      text: `${headerText.join("\n")}\n\n${probeResult.bodyText}`,
+    });
+  }
+  return probeResult;
+}
+
+/** Records one leak check per secret: fails when a value is found in any of the documents. */
+function recordLeakChecks(scopeLabel, documents, describeCoverage) {
+  for (const { label, value } of secrets) {
+    const checkName = `leak check: no ${label} in ${scopeLabel}`;
+    if (value.length < MINIMUM_SEARCHABLE_SECRET_LENGTH) {
+      skip(checkName, `value is shorter than ${MINIMUM_SEARCHABLE_SECRET_LENGTH} characters`);
+      continue;
+    }
+    const leakingLabels = documents
+      .filter((scannedDocument) => scannedDocument.text.includes(value))
+      .map((scannedDocument) => scannedDocument.label);
+    if (leakingLabels.length > 0) {
+      fail(checkName, `found in ${[...new Set(leakingLabels)].join(", ")}`);
+      continue;
+    }
+    const coverage = describeCoverage();
+    if (coverage.failed) fail(checkName, coverage.detail);
+    else pass(checkName, coverage.detail);
+  }
+}
 
 const describeProbe = (probeResult) =>
   probeResult.reached ? `HTTP ${probeResult.status}` : probeResult.failure;
@@ -220,7 +273,7 @@ function collectAssetUrls(pageHtml) {
 
 /** Fetches the pages and every asset they reference, then searches all of it for the secrets. */
 async function checkWebPagesAndLeaks() {
-  const fetchedDocuments = []; // { url, bodyText }
+  const fetchedDocuments = []; // { label, text }
   const assetUrls = new Set();
   let everyPageLoaded = true;
 
@@ -231,7 +284,7 @@ async function checkWebPagesAndLeaks() {
       everyPageLoaded = false;
       continue;
     }
-    fetchedDocuments.push({ url: pagePath, bodyText: pageResult.bodyText });
+    fetchedDocuments.push({ label: pagePath, text: pageResult.bodyText });
     for (const assetUrl of collectAssetUrls(pageResult.bodyText)) assetUrls.add(assetUrl);
   }
 
@@ -241,35 +294,57 @@ async function checkWebPagesAndLeaks() {
     const assetResult = assetResults[assetIndex];
     const assetPath = new URL(assetUrl).pathname;
     if (assetResult.reached && assetResult.status === 200) {
-      fetchedDocuments.push({ url: assetPath, bodyText: assetResult.bodyText });
+      fetchedDocuments.push({ label: assetPath, text: assetResult.bodyText });
     } else failedAssetPaths.push(`${assetPath} (${describeProbe(assetResult)})`);
   });
 
-  const secrets = [
-    { label: "service token", value: serviceToken },
-    { label: "database password", value: databasePassword },
-    { label: "session signing secret", value: environment.AUTH_JWT_SECRET ?? "" },
-    {
-      label: "operator-context signing key",
-      value: environment.OPERATOR_CONTEXT_SIGNING_KEY ?? "",
-    },
-  ];
-  for (const { label, value } of secrets) {
-    const checkName = `leak check: no ${label} in web pages and assets`;
-    if (value.length < MINIMUM_SEARCHABLE_SECRET_LENGTH) {
-      skip(checkName, `value is shorter than ${MINIMUM_SEARCHABLE_SECRET_LENGTH} characters`);
-      continue;
+  recordLeakChecks("web pages and assets", fetchedDocuments, () => {
+    if (!everyPageLoaded) return { failed: true, detail: "not every page could be loaded" };
+    if (failedAssetPaths.length > 0) {
+      return { failed: true, detail: `could not load ${failedAssetPaths.slice(0, 3).join(", ")}` };
     }
-    const leakingUrls = fetchedDocuments
-      .filter((fetchedDocument) => fetchedDocument.bodyText.includes(value))
-      .map((fetchedDocument) => fetchedDocument.url);
-    if (leakingUrls.length > 0) fail(checkName, `found in ${leakingUrls.join(", ")}`);
-    else if (!everyPageLoaded) fail(checkName, "not every page could be loaded");
-    else if (failedAssetPaths.length > 0) {
-      fail(checkName, `could not load ${failedAssetPaths.slice(0, 3).join(", ")}`);
-    } else if (assetUrls.size === 0) fail(checkName, "the pages reference no JS or CSS assets");
-    else pass(checkName, `${WEB_PAGE_PATHS.length} pages and ${assetUrls.size} assets scanned`);
+    if (assetUrls.size === 0) {
+      return { failed: true, detail: "the pages reference no JS or CSS assets" };
+    }
+    return { detail: `${WEB_PAGE_PATHS.length} pages and ${assetUrls.size} assets scanned` };
+  });
+}
+
+/** Loads the API-only documents, so they are part of the response leak check. */
+async function fetchApiOnlyDocuments() {
+  for (const apiPath of SCANNED_API_ONLY_PATHS) {
+    recordHttpCheck(`api: GET ${apiPath}`, await probe(`${apiBaseUrl}${apiPath}`), 200);
   }
+}
+
+/** Searches every API and gateway response of this run (bodies and headers) for the secrets. */
+function checkResponseLeaks() {
+  recordLeakChecks("API and gateway responses", scannedResponses, () =>
+    scannedResponses.length === 0
+      ? { failed: true, detail: "no API or gateway response was received" }
+      : { detail: `${scannedResponses.length} responses scanned (bodies and headers)` },
+  );
+}
+
+/** Container mode: searches the logs of every Compose service for the secrets. */
+function checkContainerLogLeaks() {
+  const logsResult = spawnSync(
+    "docker",
+    [...composeProjectArguments(), "--profile", "full", "logs", "--no-color"],
+    {
+      encoding: "utf8",
+      timeout: LOG_READ_TIMEOUT_MS,
+      maxBuffer: LOG_READ_MAX_BYTES,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  const logsRead = !logsResult.error && logsResult.status === 0 && logsResult.stdout.trim() !== "";
+  const logDocuments = logsRead ? [{ label: "container logs", text: logsResult.stdout }] : [];
+  recordLeakChecks("container logs", logDocuments, () =>
+    logsRead
+      ? { detail: `${logsResult.stdout.split("\n").length} log lines scanned` }
+      : { failed: true, detail: "docker compose logs could not be read" },
+  );
 }
 
 // -------------------------------------------------------------------- main
@@ -277,6 +352,7 @@ async function checkWebPagesAndLeaks() {
 console.log(`Smoke test (${mode} mode): web ${webBaseUrl}, api ${apiBaseUrl}`);
 
 const directApiResults = await checkApi();
+await fetchApiOnlyDocuments();
 await checkWebPagesAndLeaks();
 await checkWebProxy(directApiResults);
 
@@ -294,6 +370,15 @@ if (mode === "host") {
 } else {
   for (const checkName of [...Object.values(GATEWAY_CHECK_NAMES), "request id echoed: gateway"]) {
     skip(checkName, "gateway port is not published in container mode");
+  }
+}
+
+// Runs after every probe, so it covers all API and gateway responses of this run.
+checkResponseLeaks();
+if (mode === "container") checkContainerLogLeaks();
+else {
+  for (const { label } of secrets) {
+    skip(`leak check: no ${label} in service logs`, "service logs are not captured in host mode");
   }
 }
 

@@ -212,12 +212,12 @@ readable by your user only. Real environment variables always win over the file.
 
 Optional variables that are not in `.env.example`:
 
-| Variable       | Default       | Read by                            | Notes                                                                                                         |
-| -------------- | ------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `API_HOST`     | `127.0.0.1`   | API                                | Bind address. The API image and Compose set `0.0.0.0`.                                                        |
-| `GATEWAY_HOST` | `127.0.0.1`   | gateway                            | Bind address. The gateway image and Compose set `0.0.0.0`.                                                    |
-| `NODE_ENV`     | `development` | API                                | `development`, `test` or `production`. The API image and Compose set `production`.                            |
-| `WEB_HOST`     | `127.0.0.1`   | `pnpm --filter web run start` only | Bind address of the standalone web server started on the host. An inherited `HOSTNAME` is ignored on purpose. |
+| Variable       | Default       | Read by                        | Notes                                                                                                                                     |
+| -------------- | ------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_HOST`     | `127.0.0.1`   | API                            | Bind address. The API image and Compose set `0.0.0.0`.                                                                                    |
+| `GATEWAY_HOST` | `127.0.0.1`   | gateway                        | Bind address. The gateway image and Compose set `0.0.0.0`.                                                                                |
+| `NODE_ENV`     | `development` | API                            | `development`, `test` or `production`. The API image and Compose set `production`.                                                        |
+| `WEB_HOST`     | `127.0.0.1`   | web launchers (`dev`, `start`) | Bind address of the web server started on the host (`next dev` and the standalone server). An inherited `HOSTNAME` is ignored on purpose. |
 
 The gateway also rejects a `GATEWAY_SERVICE_TOKEN` that starts or ends with whitespace and blank
 `POSTGRES_USER`, `POSTGRES_PASSWORD` or `POSTGRES_DB` values.
@@ -327,18 +327,23 @@ so a missing Go toolchain is reported as a failure and never replayed as a pass.
 Runtime check with real HTTP calls against services that are already running (`pnpm dev` or
 `pnpm stack:up`). It needs `.env`. It checks:
 
-- API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200.
+- API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200;
+  the OpenAPI document `/api/docs-json` loads.
 - The three web pages load.
-- None of the service token, the database password, `AUTH_JWT_SECRET` and
-  `OPERATOR_CONTEXT_SIGNING_KEY` appears in the pages or in any JavaScript or CSS asset they
-  reference.
 - The three web proxy routes return the same status as the API.
 - `x-request-id` is echoed by the API, the web proxy and the gateway.
 - Gateway liveness and readiness; `/internal/ping` returns 401 without a token and with a wrong
   token, and 200 with the service token.
+- Leak checks for every secret `pnpm run setup` generates (the list in
+  `scripts/lib/generated-secrets.mjs`, so a new generated secret is covered automatically): none
+  appears in the web pages or the JavaScript and CSS assets they reference, in any API or gateway
+  response of the run (bodies and headers, direct and through the web proxy) or, in container mode,
+  in the logs of the Compose services.
 
 With `--mode=container` the direct gateway checks are reported as skipped because the port is not
-published. Exit code 1 means at least one check failed; a stopped database makes it fail.
+published. In host mode the log checks are reported as skipped: the services log to the
+`pnpm dev` terminal, which smoke cannot read. Exit code 1 means at least one check failed; a stopped
+database makes it fail.
 
 ### `pnpm test:db`
 
@@ -549,11 +554,41 @@ the same machine was not touched (see [infra/README.md](infra/README.md)).
   `pnpm dev` and `pnpm smoke` 21 of 21 (see SH-20 above), `pnpm infra:down` removed the container
   and kept the volume.
 
+**SH-30: deployment procedure rehearsal**
+
+On the presentation machine itself (Apple M1 Pro, 16 GB, Ollama 0.35.1), following
+the draft of [docs/setup.md](docs/setup.md) section 8 against a fresh `git clone` of commit `88317a3` (which predates the section) in a
+temporary directory. Because the everyday checkout's `starter` project was running, the clone's
+`.env` set `COMPOSE_PROJECT_NAME=starter-rehearsal` and `POSTGRES_PORT=55441`, as the procedure
+describes.
+
+- `pnpm install --frozen-lockfile` (5.7 s) and `pnpm run setup` (all four secrets generated);
+  `MODEL_NAME=qwen3.5:4b` set by hand.
+- `ollama show --license qwen3.5:4b`: Apache License 2.0; `ollama list`: ID `2a654d98e6fb`. The
+  first warm-up after the model was unloaded took about 29 s; a warmed `--think=false` call answered
+  in 0.3 s.
+- `pnpm stack:up`: exit 0, all four containers healthy after 2 min 29 s, including the first image
+  builds of this clone.
+- `pnpm db:migration:run` from the host against the published port: created the bookkeeping table,
+  "No migrations are pending" (none exist yet).
+- `pnpm smoke --mode=container`: 24 passed, 0 failed, 6 skipped; Ollama reachable from the Compose
+  network (HTTP 200).
+- Fallback: `pnpm stack:down`, `pnpm infra:up`, `pnpm dev` and `pnpm smoke`: 26 passed, 0 failed,
+  4 skipped; then `pnpm infra:down`.
+- Exposure found afterwards: `pnpm dev:web` listened on `*:3000`, and the page answered HTTP 200 on
+  the machine's Wi-Fi address; the API (3001) and the gateway (8080) bind to `127.0.0.1` on the host.
+  Fixed afterwards (lead-authorized change to the web launchers): `next dev` now binds to
+  `WEB_HOST`, default `127.0.0.1`; lsof showed `TCP 127.0.0.1:3000 (LISTEN)` only and the Wi-Fi
+  address refused the connection.
+- Not covered, because the commands do not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
+  control suite (SH-47) and the policy reload in a container (API-32). SH-30 is done only when a
+  teammate who did not write the procedure has followed it.
+
 ## Documentation
 
 | Document                                                 | Content                                                                                                                                                                                            |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service                                                                                                                 |
+| [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service, local model, deployment on the presentation machine                                                            |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                                                                                                        |
 | [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                                                                                                    |
 | [docs/roadmap/README.md](docs/roadmap/README.md)         | Implementation roadmap: shared spine, then the Go side (`go.md`) and the Next.js and NestJS side (`web-and-api.md`)                                                                                |
