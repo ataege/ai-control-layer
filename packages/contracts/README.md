@@ -35,6 +35,12 @@ does not reshape them.
 | `SecurityEventPage` | `GET /internal/security/events?cursor=&limit=`      | `security-event-page.schema.json` | `reads.SecurityEventPage` | Go-owned (lane w2); NestJS consumes |
 | `ReportView` (X-64) | `GET /internal/runs/{runId}/reports/{reportId}`     | `report-view.schema.json`         | `provenance.ReportView`   | Go-owned (lane w2); NestJS consumes |
 
+Names: the TypeScript `RunEventsPage` (schema `run-events-page`) is the Go type `reads.RunEventPage`.
+`modelCalls` and `modelUsage` always hold two entries in a fixed order, `agent` then `security`.
+The fixture `report-view.internal-withheld.json` documents the withheld case the contract allows;
+the API does not reach it today, because every verified operator of the organization may read
+internal content (lead decision).
+
 The run state (`GET /internal/runs/{runId}`) is X-11's `RunState` above; the event pages carry
 X-12's `SafeEvent` by reference (`safe-event.schema.json`). Points that matter to a consumer:
 

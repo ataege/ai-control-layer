@@ -92,6 +92,39 @@ function validatorFor(schemaName: string): (value: unknown) => boolean {
   return (value) => validate(value);
 }
 
+test("read contracts reject inconsistent combinations", () => {
+  const vendorView = readJson(join(fixtureDirectory, "report-view.vendor.json")) as ReportView;
+  const validateReportView = validatorFor("report-view");
+  assert.equal(validateReportView(vendorView), true);
+  // Only Internal only content is ever withheld, and withheld content is null.
+  assert.equal(validateReportView({ ...vendorView, content: null, contentWithheld: true }), false);
+  assert.equal(validateReportView({ ...vendorView, contentWithheld: true }), false);
+  // The vendor template always names its projection; the internal one never does.
+  assert.equal(validateReportView({ ...vendorView, projectionRule: null }), false);
+  assert.equal(
+    validateReportView({
+      ...vendorView,
+      template: "internal_investigation_v1",
+      classification: "internal_only",
+    }),
+    false,
+  );
+
+  const usage = readJson(join(fixtureDirectory, "run-usage.ledger.json")) as RunUsage;
+  const validateUsage = validatorFor("run-usage");
+  assert.equal(validateUsage({ ...usage, modelCalls: [...usage.modelCalls].reverse() }), false);
+  assert.equal(validateUsage({ ...usage, modelCalls: [usage.modelCalls[0]] }), false);
+
+  const record = readJson(
+    join(fixtureDirectory, "assessment-record.semantic-not-applicable.json"),
+  ) as AssessmentRecord;
+  const validateRecord = validatorFor("assessment-record");
+  assert.equal(validateRecord(record), true);
+  // An unclassified semantic record has no verdict; another outcome needs a source.
+  assert.equal(validateRecord({ ...record, outcome: "pass" }), false);
+  assert.equal(validateRecord({ ...record, matchedRuleId: "rule\u0007" }), false);
+});
+
 test("runtime contracts reject inconsistent combinations", () => {
   const runState = readJson(join(fixtureDirectory, "run-state.running.json")) as RunState;
   const validateRunState = validatorFor("run-state");

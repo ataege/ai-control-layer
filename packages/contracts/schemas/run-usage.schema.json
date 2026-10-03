@@ -13,58 +13,113 @@
     },
     "modelCalls": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "purpose",
-          "dispatched",
-          "completed",
-          "failed",
-          "usageUnknown",
-          "inFlight",
-          "settledTokens",
-          "heldTokens",
-          "usageUnknownReservations"
-        ],
-        "properties": {
-          "purpose": {
-            "enum": ["agent", "security"]
-          },
-          "dispatched": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "completed": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "failed": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "usageUnknown": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "inFlight": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "settledTokens": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "heldTokens": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "usageUnknownReservations": {
-            "type": "integer",
-            "minimum": 0
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "purpose",
+            "dispatched",
+            "completed",
+            "failed",
+            "usageUnknown",
+            "inFlight",
+            "settledTokens",
+            "heldTokens",
+            "usageUnknownReservations"
+          ],
+          "properties": {
+            "purpose": {
+              "const": "agent"
+            },
+            "dispatched": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "usageUnknown": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inFlight": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "settledTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "heldTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "usageUnknownReservations": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "purpose",
+            "dispatched",
+            "completed",
+            "failed",
+            "usageUnknown",
+            "inFlight",
+            "settledTokens",
+            "heldTokens",
+            "usageUnknownReservations"
+          ],
+          "properties": {
+            "purpose": {
+              "const": "security"
+            },
+            "dispatched": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "completed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "usageUnknown": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inFlight": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "settledTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "heldTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "usageUnknownReservations": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         }
-      },
+      ],
+      "items": false,
       "minItems": 2,
       "maxItems": 2
     },
