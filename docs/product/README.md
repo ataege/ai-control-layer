@@ -371,6 +371,13 @@ anything else is a decision, not an implemented behaviour.
     (`POST /internal/runs/{runId}/cancel`, mounted by `api.Commands`, GO-41 ticked). The decision's
     note in `docs/roadmap/go.md` is commit `98fe339` on branch `go/3c`, not on `main` yet.
 
+31. **Passport report fields (`passport report fields`).** Decided by the lead's delegate: the passport
+    contract's shape on `main` is confirmed, with plural `reportTemplates`, `projectionRules` and
+    `recipientReferences` in its `scope` (X-08, lane 3c's GO-18), and the passport is the upper bound for
+    templates, projection rules and recipients. On `main`: yes, `packages/contracts/schemas/passport.schema.json`
+    (the `scope` also holds `tools`, `invoiceIds`, `vendorIds`, `allowedModels`, `approvalRequiredTools`
+    and `internalNoteReadable`).
+
 Live end-to-end completions (3 October 2026), with where each is recorded. All used `qwen3.5:4b`, and
 none is final-build evidence (X-59):
 
@@ -418,7 +425,7 @@ Each item is open until the document owner records the outcome here; the roadmap
   live and who writes them.
 - `vendor projection fields` (**decided by the lead's delegate**, item 5 above): which fields the vendor projection may hold; the report's two example
   lists differ, and the final list is a team policy decision.
-- `passport report fields`: singular or plural destinations, template and projection fields.
+- `passport report fields` (**decided by the lead's delegate**, item 31 above): singular or plural destinations, template and projection fields.
 - `policy editor`: the architecture lists a policy editor and a `/policies` route; the report keeps "A
   policy editor" outside the initial delivery scope.
 - `rename operation`: no operation renames or copies a report in either source, yet the demonstration
@@ -456,18 +463,18 @@ Each item is open until the document owner records the outcome here; the roadmap
 
 Checked against `main` at fdd464f. "Decided" means recorded in this file.
 
-| Open item                | Status                                                                                                                                                                                                                       | Where recorded                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `final result format`    | Decided, amended for one enclosing code fence; the amendment is not on `main` yet                                                                                                                                            | Item 21                                                               |
-| `worker readiness`       | Decided and on `main`                                                                                                                                                                                                        | Item 11, decision 5                                                   |
-| `model call retries`     | Decided: no automatic retries                                                                                                                                                                                                | Item 24                                                               |
-| `command timeout budget` | **Open**: no decision is recorded. The web proxy allows 10 s, `GATEWAY_TIMEOUT_MS` defaults to 3000 ms in `apps/api/src/config/environment.ts` and the gateway's write timeout is 30 s                                       | Nowhere                                                               |
-| `passport report fields` | **Open**: no decision is recorded. The passport contract on `main` already uses plural `reportTemplates`, `projectionRules` and `recipientReferences`, so the code has chosen a shape; the lead's delegate should confirm it | Passport contract (`packages/contracts/schemas/passport.schema.json`) |
-| `canonical arguments`    | Decided and implemented                                                                                                                                                                                                      | GO-04 below; `internal/policy/canonical.go`                           |
-| `dispatched attempts`    | Decided; implemented per the roadmap ticks                                                                                                                                                                                   | GO-02 below                                                           |
-| `redaction rules`        | Decided                                                                                                                                                                                                                      | Items 8 and 25                                                        |
-| GO-02, GO-03 status      | GO-02 decided and implemented per ticks; GO-03 frozen                                                                                                                                                                        | GO-02 below; decision 6                                               |
-| Who may cancel (GO-41)   | Decided                                                                                                                                                                                                                      | Item 30                                                               |
+| Open item                | Status                                                                                                                                                                                 | Where recorded                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `final result format`    | Decided, amended for one enclosing code fence; the amendment is not on `main` yet                                                                                                      | Item 21                                                    |
+| `worker readiness`       | Decided and on `main`                                                                                                                                                                  | Item 11, decision 5                                        |
+| `model call retries`     | Decided: no automatic retries                                                                                                                                                          | Item 24                                                    |
+| `command timeout budget` | **Open**: no decision is recorded. The web proxy allows 10 s, `GATEWAY_TIMEOUT_MS` defaults to 3000 ms in `apps/api/src/config/environment.ts` and the gateway's write timeout is 30 s | Nowhere                                                    |
+| `passport report fields` | Decided by the lead's delegate: the contract's plural shape is confirmed, and the passport is the upper bound for templates, projection rules and recipients                           | Item 31; `packages/contracts/schemas/passport.schema.json` |
+| `canonical arguments`    | Decided and implemented                                                                                                                                                                | GO-04 below; `internal/policy/canonical.go`                |
+| `dispatched attempts`    | Decided; implemented per the roadmap ticks                                                                                                                                             | GO-02 below                                                |
+| `redaction rules`        | Decided                                                                                                                                                                                | Items 8 and 25                                             |
+| GO-02, GO-03 status      | GO-02 decided and implemented per ticks; GO-03 frozen                                                                                                                                  | GO-02 below; decision 6                                    |
+| Who may cancel (GO-41)   | Decided                                                                                                                                                                                | Item 30                                                    |
 
 ## Go runtime decisions
 
