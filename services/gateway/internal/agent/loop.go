@@ -314,7 +314,7 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	case StepRejected:
 		// GO-01: the whole response is denied and recorded as a denial event; no subset runs.
 		// It counts as a correction, like any other denial.
-		if err = loop.recordRejection(ctx, run, result.RejectReason, ""); err != nil {
+		if err = loop.recordRejection(ctx, run, result.RejectReason, "", ""); err != nil {
 			return runEnd{}, false, err
 		}
 		rejection := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(result.RejectReason)}
@@ -327,8 +327,9 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 			return runEnd{status: contracts.RunPaused, reason: contracts.ReasonDecisionUnavailable}, false, nil
 		}
 		if reason != "" {
-			// A rejected final answer is a denial like any other: recorded and counted as a correction.
-			if err = loop.recordRejection(ctx, run, reason, ""); err != nil {
+			// A rejected final answer is a denial like any other: recorded and counted as a correction,
+			// with its fixed cause kind (never the text) so a failure can be diagnosed.
+			if err = loop.recordRejection(ctx, run, reason, "", finalAnswerCause(result.FinalAnswer, reason)); err != nil {
 				return runEnd{}, false, err
 			}
 			rejection := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(reason)}
@@ -396,7 +397,7 @@ func (loop *Loop) executeAllowed(ctx context.Context, run policy.RunIdentity, ag
 		}
 		// GO-45/GO-29: an action whose fresh check failed (an expired grant, a changed record, action
 		// or source policy) executes nothing and is a counted denial with bounded feedback.
-		if err := loop.recordRejection(ctx, run, reason, actionID); err != nil {
+		if err := loop.recordRejection(ctx, run, reason, actionID, ""); err != nil {
 			return runEnd{}, false, err
 		}
 		denial := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(reason), ActionID: actionID}
@@ -472,7 +473,7 @@ func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, effective
 
 // recordRejection writes a denial event the correction counter counts: a whole rejected response or
 // final answer (no action), or a waited-for action a reviewer rejected or that expired.
-func (loop *Loop) recordRejection(ctx context.Context, run policy.RunIdentity, reason contracts.ReasonCode, actionID string) error {
+func (loop *Loop) recordRejection(ctx context.Context, run policy.RunIdentity, reason contracts.ReasonCode, actionID, rejectionCause string) error {
 	runID := run.RunID
 	decision := contracts.DecisionDeny
 	if !reason.Valid() {
@@ -482,6 +483,9 @@ func (loop *Loop) recordRejection(ctx context.Context, run policy.RunIdentity, r
 		Decision: &decision, ReasonCode: &reason}
 	if actionID != "" {
 		event.ActionID = &actionID
+	}
+	if rejectionCause != "" {
+		event.MaskedSummary.RejectionCause = &rejectionCause
 	}
 	return loop.dependencies.Runs.InTransaction(ctx, func(tx repository.Tx) error {
 		_, err := tx.AppendEvent(ctx, event)
@@ -517,7 +521,7 @@ func (loop *Loop) continueDecidedAction(ctx context.Context, run policy.RunIdent
 	if decided.Status == contracts.ActionRejected {
 		reason, message = contracts.ReasonApprovalRejected, rejectedActionMessage
 	}
-	if err = loop.recordRejection(ctx, run, reason, decided.ActionID); err != nil {
+	if err = loop.recordRejection(ctx, run, reason, decided.ActionID, ""); err != nil {
 		return true, runEnd{}, false, err
 	}
 	denial := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(reason), ActionID: decided.ActionID}
@@ -673,6 +677,18 @@ func stepErrorEnd(err error) runEnd {
 	default:
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}
 	}
+}
+
+// finalAnswerCause is the fixed rejection cause of a final answer: runresult.Cause for a format
+// failure, unknown_report when the answer named a report this run did not create.
+func finalAnswerCause(answer string, reason contracts.ReasonCode) string {
+	if cause := runresult.Cause(answer); cause != "" {
+		return cause
+	}
+	if reason == contracts.ReasonResourceOutOfScope {
+		return runresult.CauseUnknownReport
+	}
+	return ""
 }
 
 // correctableRefusal reports whether an executor refusal is a policy outcome about the action

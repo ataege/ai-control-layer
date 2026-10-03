@@ -45,6 +45,27 @@ func TestFinalAnswerWithoutACreatedReportIsDeniedAndCounted(t *testing.T) {
 	if feedback := third[len(third)-1]; !strings.Contains(feedback.Content, `"reason_code":"resource_out_of_scope"`) {
 		t.Fatalf("an unknown report id was not rejected as out of scope: %+v", feedback)
 	}
+	// Each denial stores the fixed cause kind of the rejected answer, never its text.
+	rows, err := world.pool.Query(context.Background(), `SELECT coalesce(masked_summary->>'rejectionCause', ''), masked_summary::text
+		FROM runtime.audit_events WHERE organization_id = $1 AND event_type = 'action.denied' ORDER BY id`, world.organizationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var causes []string
+	for rows.Next() {
+		var cause, summary string
+		if err := rows.Scan(&cause, &summary); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(summary, "INV104") || strings.Contains(summary, "done") {
+			t.Fatalf("a denial event holds the answer text: %s", summary)
+		}
+		causes = append(causes, cause)
+	}
+	if strings.Join(causes, ",") != "not_json,unknown_report,not_json" {
+		t.Fatalf("rejection causes %v, want not_json, unknown_report, not_json", causes)
+	}
 }
 
 func TestFinalAnswerNamingACreatedReportCompletesWithItsReference(t *testing.T) {
