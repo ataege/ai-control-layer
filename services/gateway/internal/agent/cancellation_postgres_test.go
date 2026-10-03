@@ -1,11 +1,9 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -13,55 +11,15 @@ import (
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/model"
 	"starter/services/gateway/internal/policy"
-	"starter/services/gateway/internal/security"
 	"starter/services/gateway/internal/testdb"
 	"starter/services/gateway/internal/tools"
 )
 
 // GO-51 (X-55, Go half): cancellation and expiry stop every later dispatch, also after a review
 // wait, while effects committed before the stop stay recorded. Each scenario runs the production
-// loop, gate (with the review freezer), executor and adapters on the X-34-shaped loop world; only
-// the model is a scripted test double, and its dispatches are counted on the run's ledger.
-
-// newReviewingTestLoop is newTestLoop with the review freezer the production gate has, so a
-// queue_report proposal reaches a review wait instead of failing closed.
-func newReviewingTestLoop(t *testing.T, world *loopWorld, stepper ModelStepper) *Loop {
-	t.Helper()
-	scopes := testScopes{repository: world.repository}
-	recordedSecurity, err := NewRecordingCaller(budget.NewCallLog(world.pool), &fixtureSecurityModel{}, "test-fixture")
-	if err != nil {
-		t.Fatal(err)
-	}
-	evaluator, err := security.NewSemanticEvaluator(recordedSecurity, security.EvaluatorOptions{
-		Model: "test-fixture", ContextTokens: security.MinEvaluatorContextTokens, Source: security.VerdictFixture,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	inspector, err := NewSecurityInspector(security.NewInspector(evaluator))
-	if err != nil {
-		t.Fatal(err)
-	}
-	loop, err := NewLoop(LoopDependencies{
-		Runs:    world.repository,
-		Stepper: stepper,
-		Gate: policy.NewGate(scopes, policy.NewPostgresRecorder(world.pool), policy.NewPostgresRelationships(world.pool), nil).
-			WithReviewFreezer(policy.NewPostgresReviewFreezer(world.pool)),
-		Executor:    policy.NewExecutor(world.pool, scopes, tools.Runner{}),
-		Inspector:   inspector,
-		Catalog:     fixedCatalog{snapshot: testSnapshot(t)},
-		Scopes:      scopes,
-		Corrections: policy.NewCorrectionCounter(world.pool),
-		Steps:       budget.NewPostgresStore(world.pool),
-		Contexts:    NewContextStore(world.pool),
-		Telemetry:   NewTelemetry(world.pool),
-		Logger:      slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return loop
-}
+// loop (newTestLoop: the gate with the review freezer, the executor, adapters, recovery and the
+// GO-40 continuation) on the X-34-shaped loop world; only the model is a scripted test double, and
+// its dispatches are counted on the run's ledger.
 
 // dispatchRecord is what X-55 asks to capture: dispatches, attempts, effects and the stop.
 type dispatchRecord struct {
@@ -132,7 +90,7 @@ func queueStoredReport(t *testing.T, world *loopWorld) func([]model.Message) (St
 // the awaiting action.
 func waitForReview(t *testing.T, world *loopWorld, stepper *scriptedStepper) string {
 	t.Helper()
-	if _, err := newReviewingTestLoop(t, world, stepper).Handle(context.Background(), world.job()); err != nil {
+	if _, err := newTestLoop(t, world, stepper).Handle(context.Background(), world.job()); err != nil {
 		t.Fatalf("handle: %v", err)
 	}
 	if state := world.runState(t); state.Status != contracts.RunAwaitingApproval {
@@ -202,7 +160,7 @@ func TestCancellationDuringAReviewWaitStopsBeforeAnyDecisionOrDispatch(t *testin
 	}
 	execution := policy.NewExecutor(world.pool, testScopes{repository: world.repository}, tools.Runner{}).
 		Execute(ctx, policy.RunIdentity{OrganizationID: world.organizationID, RunID: world.runID}, actionID)
-	if _, err := newReviewingTestLoop(t, world, stepper).Handle(ctx, world.job()); err != nil {
+	if _, err := newTestLoop(t, world, stepper).Handle(ctx, world.job()); err != nil {
 		t.Fatal(err)
 	}
 	after := takeDispatchRecord(t, world)
@@ -233,7 +191,7 @@ func TestCancellationAfterApprovalStopsTheApprovedAction(t *testing.T) {
 	}
 	execution := policy.NewExecutor(world.pool, testScopes{repository: world.repository}, tools.Runner{}).
 		Execute(ctx, policy.RunIdentity{OrganizationID: world.organizationID, RunID: world.runID}, actionID)
-	if _, err := newReviewingTestLoop(t, world, stepper).Handle(ctx, world.job()); err != nil {
+	if _, err := newTestLoop(t, world, stepper).Handle(ctx, world.job()); err != nil {
 		t.Fatal(err)
 	}
 	after := takeDispatchRecord(t, world)
