@@ -309,6 +309,11 @@ telemetry (`architecture specification version`). When the first code of a produ
 | `services/gateway/internal/budget`                  | Go            | Atomic shared reservations, durable unknown usage, one-time reconciliation and overrun pause.                                               | Internal Go store API                                               | `runtime.model_token_budgets`, `runtime.model_token_reservations`                              |
 | Policies (control catalog), `apps/api/src/policies` | NestJS        | Immutable policy and feed revisions, active pointer and explicit `pnpm policy:import`; authenticated reload and feed import remain pending. | Policy activation and catalog revision, draft in `config/README.md` | `app.control_catalog_revisions`, `app.signature_feed_revisions`, `app.control_catalog_pointer` |
 
+Go test support (GO-20), `services/gateway/internal/testdb`, is development infrastructure rather
+than a runtime product feature. It provides bounded explicit PostgreSQL connections and UUID
+fixture identifiers for database-backed tests, through the existing X-24 `pnpm test:db` command.
+It owns no tables, performs no schema creation or migrations, and is not used by gateway startup.
+
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"
 in [AGENTS.md](../AGENTS.md).

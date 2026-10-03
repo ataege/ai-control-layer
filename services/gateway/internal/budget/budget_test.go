@@ -5,14 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net"
-	"net/url"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"starter/services/gateway/internal/testdb"
 )
 
 func TestValidationAndUnavailableFailClosed(t *testing.T) {
@@ -38,43 +35,22 @@ func TestValidationAndUnavailableFailClosed(t *testing.T) {
 }
 func databaseStore(t *testing.T) (*PostgresStore, string) {
 	t.Helper()
-	databaseURL := os.Getenv("GATEWAY_TEST_DATABASE_URL")
-	if databaseURL == "" && os.Getenv("POSTGRES_USER") != "" && os.Getenv("POSTGRES_PASSWORD") != "" && os.Getenv("POSTGRES_DB") != "" {
-		host := os.Getenv("POSTGRES_HOST")
-		if host == "" {
-			host = "localhost"
-		}
-		port := os.Getenv("POSTGRES_PORT")
-		if port == "" {
-			port = "5432"
-		}
-		address := url.URL{Scheme: "postgresql", User: url.UserPassword(os.Getenv("POSTGRES_USER"), os.Getenv("POSTGRES_PASSWORD")), Host: net.JoinHostPort(host, port), Path: "/" + os.Getenv("POSTGRES_DB")}
-		databaseURL = address.String()
-	}
-	if databaseURL == "" {
-		if os.Getenv("TEST_DATABASE_REQUIRED") == "1" {
-			t.Fatal("PostgreSQL ledger tests required but database configuration is missing")
-		}
-		t.Skip("PostgreSQL test configuration unset: ledger integration test not run")
-	}
-	pool, err := pgxpool.New(context.Background(), databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	id := fmt.Sprintf("budget-test-%d", time.Now().UnixNano())
+	pool := testdb.Open(t)
+	id := "budget-test-" + testdb.ID(t)
 	s := NewPostgresStore(pool)
-	if err = s.CreateRun(context.Background(), id, 20000); err != nil {
+	if err := s.CreateRun(context.Background(), id, 20000); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, err := pool.Exec(context.Background(), "DELETE FROM runtime.model_token_reservations WHERE run_id=$1", id)
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_reservations WHERE run_id=$1", id)
 		if err != nil {
-			t.Error(err)
+			t.Error("could not clean PostgreSQL test fixtures")
 		}
-		_, err = pool.Exec(context.Background(), "DELETE FROM runtime.model_token_budgets WHERE run_id=$1", id)
+		_, err = pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_budgets WHERE run_id=$1", id)
 		if err != nil {
-			t.Error(err)
+			t.Error("could not clean PostgreSQL test fixtures")
 		}
 	})
 	return s, id

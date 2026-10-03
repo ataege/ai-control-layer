@@ -84,6 +84,7 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | --------------------- | -------------------------- |
 | `cmd/gateway`         | User (sole Go implementer) |
 | `cmd/modelcheck`      | User (sole Go implementer) |
+| `cmd/budgetcheck`     | User (sole Go implementer) |
 | `internal/config`     | User (sole Go implementer) |
 | `internal/logging`    | User (sole Go implementer) |
 | `internal/database`   | User (sole Go implementer) |
@@ -91,6 +92,7 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | `internal/httpserver` | User (sole Go implementer) |
 | `internal/model`      | User (sole Go implementer) |
 | `internal/budget`     | User (sole Go implementer) |
+| `internal/testdb`     | User (sole Go implementer) |
 
 New packages get their ownership row when their first real code lands.
 
@@ -105,6 +107,7 @@ internal/health/      handlers and wire DTOs
 internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
+internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -323,18 +326,18 @@ SH-10 must freeze tool arguments and X-06 field rules before this draft is adopt
 describe candidate result fields, not final JSON property names or database columns. No provider,
 limit value or shared wire contract is selected here.
 
-| Tool            | Proposed result field allowlist                                                                                                                                               | Protected values                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `read_invoice`  | Invoice reference and version, associated vendor reference, external invoice reference, total in the agreed numeric format, status, synthetic untrusted note used in the demo | Raw fields outside the frozen allowlist are omitted; protected values required by the workflow remain run-scoped opaque references |
-| `read_vendor`   | Vendor reference and version, synthetic display name, trusted recipient reference                                                                                             | Recipient address remains an opaque reference; no raw contact or bank details reach the model                                      |
-| `create_report` | Stored report reference and version, authorized source invoice references, registered template reference, structured duplicate-reference finding                              | No unrestricted model prose or raw protected values; exact finding shape awaits the freeze                                         |
-| `queue_report`  | Report reference and version, simulated outbox entry reference and queued status                                                                                              | Raw recipient and rendered review content stay out of model-facing results and general events                                      |
+| Tool            | Proposed result field allowlist                                                                                                                                                            | Protected values                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `read_invoice`  | Invoice reference and version, associated vendor reference, external invoice reference, integer total in minor units plus currency code, status, synthetic untrusted note used in the demo | Raw fields outside the frozen allowlist are omitted; protected values required by the workflow remain run-scoped opaque references |
+| `read_vendor`   | Vendor reference and version, synthetic display name, trusted recipient reference                                                                                                          | Recipient address remains an opaque reference; no raw contact or bank details reach the model                                      |
+| `create_report` | Stored report reference and version, authorized source invoice references, registered template reference, structured duplicate-reference finding                                           | No unrestricted model prose or raw protected values; exact finding shape awaits the freeze                                         |
+| `queue_report`  | Report reference and version, simulated outbox entry reference and queued status                                                                                                           | Raw recipient and rendered review content stay out of model-facing results and general events                                      |
 
 All four adapters verify organization and passport/resource relationships themselves. Opaque
 references resolve only after authorization inside the adapter, and do not resolve in another run
 or organization. A source version in a result is evidence for later precondition checks, not
-authority. SH-10 must decide versions, the numeric format, the note's inclusion and the registered
-template fields; this draft does not settle those open items.
+authority. The user accepted integer minor units plus currency on 3 October 2026. SH-10 must still decide
+versions, the note's inclusion and the registered template fields; this draft does not settle those open items.
 
 Idempotency and retries follow the stable action identity:
 
@@ -360,6 +363,65 @@ Idempotency and retries follow the stable action identity:
 The simulated outbox creates a database record and sends no email. GO-17, GO-23, GO-31 to GO-35
 and GO-53 will test the adopted field rules, direct adapter authorization, stable identities,
 duplicate prevention and uncertain outcomes. GO-07 stays open until SH-10 and X-06 are settled.
+
+## PostgreSQL test harness (GO-20)
+
+All Go database tests use `internal/testdb.Open(t)`. It reads the same `POSTGRES_HOST`,
+`POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` settings supplied by
+`pnpm test:db`. If all five variables are absent, an optional test visibly skips. Partial,
+blank or malformed configuration fails; `TEST_DATABASE_REQUIRED=1` also makes missing settings
+fail. The helper requires a successful ping within three seconds and reports fixed safe errors
+without connection strings or credentials. It closes the pool after callers clean their fixtures.
+
+`testdb.ID(t)` generates UUID v4 identifiers for isolated synthetic rows. Tests remove only their
+own rows or roll back their own transactions; cleanup uses bounded contexts. The helper creates
+no schemas, tables or seed data and never runs migrations. Its round-trip test uses the existing
+GO-06 token ledger, so apply the normal TypeORM migrations before running database tests.
+
+The gateway wrapper now runs `go test -count=1 -v ./...`: each skipped database test is named,
+and changing database availability cannot reuse a cached pass. The former test-only
+`GATEWAY_TEST_DATABASE_URL` is no longer accepted. X-24 deliberately removes `POSTGRES_*` for
+its discovery run; a separate URL variable would bypass that isolation and hide required tests.
+Ordinary tests do not read `.env`; the existing database command supplies its values explicitly.
+
+```sh
+pnpm --filter gateway run test       # unit tests, with visible database skips when unset
+pnpm test:db                        # Go + API against the configured, migrated PostgreSQL
+pnpm test:db gateway                # Go only; missing/unreachable database exits nonzero
+```
+
+Verification on 3 October 2026 used an isolated PostgreSQL 17.11 on loopback port 55432:
+`pnpm --filter gateway run test` exited 0 with 12 explicitly named database skips when unconfigured.
+With PostgreSQL enabled, `go -C services/gateway test -race ./... -count=1 -timeout=60s` passed.
+`pnpm test:db` passed both sides with no skipped tests. After stopping that test PostgreSQL,
+`pnpm test:db gateway` against port 55432 exited 1 as required (database FAIL; gateway not run). The harness also
+checks rollback cleanup, preserved credentials, partial/invalid settings, cancellation and a
+stalled PostgreSQL handshake. `pnpm verify` passed all six steps. The final database command reported 156 Go tests (12 needing
+PostgreSQL) and 6 API tests passed, none skipped. No smoke was run for GO-20 because only test
+support, the test wrapper and documentation changed.
+
+## Runtime schema review input accepted with the user
+
+On 3 October 2026 the user accepted these responses to the lead's five questions:
+
+- Invoice money is stored in integer minor units plus a currency code (`bigint` in PostgreSQL,
+  `int64` in Go), with no floating-point amount. Minor units are not always cents. Wire encoding
+  still follows the shared contract; Ollama has no adopted tariff and must not show a measured
+  zero monetary cost.
+- Draft passport scope and limits may use `jsonb`; identity, organization, version and expiry stay
+  explicit. Go must decode against the frozen typed contract before accepting runtime input.
+- Keep passport update immutability. Changes require a new grant; cancellation/revocation is
+  separate. Service-role protection for deletion and truncation also needs review.
+- Execution events belong to a run. Admission failures before run creation and catalog reload
+  failures cannot be forced into that assumption or given fabricated run IDs; their event contract
+  must distinguish the scope.
+- Prepare isolated schema tests now, but final runtime-schema acceptance waits for the Go owner's
+  shape approval. These decisions do not approve the entire SH-16/SH-27 schema or freeze contracts.
+
+The lead's `budget_reservations` / `model_usage` draft must be aligned with the GO-06 token ledger
+before integration so there is one budget authority. This remains a shared schema review, not a
+second ledger implementation. GO-07 likewise remains open for SH-10 tool arguments and X-06 field
+rules; its numeric storage input above is settled without inventing the remaining contract.
 
 ## Commands
 

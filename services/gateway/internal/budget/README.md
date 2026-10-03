@@ -33,18 +33,20 @@ measured count would overflow the aggregate balance, the transaction pauses the
 budget, retains the full reservation as `usage_unknown`, and returns an accounting
 error without clipping either balance. Public operations reject a nil context.
 
-Run the integration tests only against a dedicated, migrated test database:
+Run the integration tests against a dedicated, migrated test database through the shared helper:
 
 ```sh
-GATEWAY_TEST_DATABASE_URL=postgresql://... go -C services/gateway test -race ./internal/budget
+pnpm test:db gateway
 ```
 
-The suite also accepts `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
-`POSTGRES_PASSWORD` and `POSTGRES_DB`, matching the repository database test
-runner. `TEST_DATABASE_REQUIRED=1` makes missing configuration a failure.
+`internal/testdb.Open` uses `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
+`POSTGRES_PASSWORD` and `POSTGRES_DB`. Completely absent optional settings visibly skip;
+partial settings or an unavailable configured database fail. `TEST_DATABASE_REQUIRED=1`
+makes absent settings fail as well. `GATEWAY_TEST_DATABASE_URL` is no longer supported,
+so the shared runner's database-free discovery cannot accidentally connect through another URL.
 
-Tests create uniquely identified budget rows and remove only their own rows. They
-cover concurrent agent/security reservations, restart reads, retained unknown
-usage, one-time late settlement, conflicting late counters and untruncated
-overruns. If database configuration is absent, these database tests explicitly skip; that is not
-evidence of PostgreSQL verification. No test creates schemas or tables.
+Tests create UUID-named fixtures and remove only their own rows with bounded cleanup contexts.
+They cover concurrent agent/security reservations, restart reads, retained unknown usage,
+one-time late settlement, conflicting late counters and untruncated overruns. Database skips
+are not PostgreSQL verification; the gateway wrapper prints them individually. No test creates
+schemas or tables.

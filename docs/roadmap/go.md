@@ -909,7 +909,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     valid ones")
   - Blocked by: nothing
 
-- [ ] **GO-20 · Build the Go PostgreSQL test harness on the X-24 command**
+- [x] **GO-20 · Build the Go PostgreSQL test harness on the X-24 command**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: nothing · Needs: X-24 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`,
@@ -930,6 +930,18 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: the harness's own test: a round trip passes with the database up; the X-24 command fails
     with the database down; without configuration `pnpm --filter gateway run test` lists the test
     as skipped. The X-24 command; `pnpm --filter gateway run test`.
+  - Completed (2026-10-03): `internal/testdb` provides the shared explicit pool/ping helper and
+    UUID fixture identifiers. Budget and native Ollama PostgreSQL tests use it. Absent optional
+    settings visibly skip; required, partial, invalid and unreachable settings fail safely.
+    No schemas, tables or seeds are created. The gateway wrapper uses `go test -count=1 -v ./...`
+    to name skips and avoid cached database outcomes. The old independent URL is removed so X-24
+    discovery stays database-free. The user's accepted runtime schema review inputs and the
+    remaining GO-07 contract blockers are recorded in the gateway README.
+    Verification: optional `pnpm --filter gateway run test` lists 12 database skips; PostgreSQL
+    round-trip/rollback and `go -C services/gateway test -race ./... -count=1 -timeout=60s` pass.
+    `pnpm test:db` passes Go and API with no skips; after stopping test PostgreSQL, `pnpm test:db gateway`
+    correctly exits 1. `pnpm verify` passes all six steps. No service wiring is changed, so no
+    additional smoke was run for GO-20.
   - Report: "Atomic allowances hard limits and estimated cost" ("the application must choose and
     verify the appropriate transaction boundaries"); "Validation plan and evidence matrix"
     (Interpreting results honestly)

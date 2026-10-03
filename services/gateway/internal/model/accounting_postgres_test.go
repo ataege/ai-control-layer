@@ -5,56 +5,34 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/testdb"
 )
 
 func postgresAccountingStore(t *testing.T) (*budget.PostgresStore, *pgxpool.Pool, string) {
 	t.Helper()
-	databaseURL := os.Getenv("GATEWAY_TEST_DATABASE_URL")
-	if databaseURL == "" && os.Getenv("POSTGRES_USER") != "" && os.Getenv("POSTGRES_PASSWORD") != "" && os.Getenv("POSTGRES_DB") != "" {
-		host := os.Getenv("POSTGRES_HOST")
-		if host == "" {
-			host = "localhost"
-		}
-		port := os.Getenv("POSTGRES_PORT")
-		if port == "" {
-			port = "5432"
-		}
-		address := url.URL{Scheme: "postgresql", User: url.UserPassword(os.Getenv("POSTGRES_USER"), os.Getenv("POSTGRES_PASSWORD")), Host: net.JoinHostPort(host, port), Path: "/" + os.Getenv("POSTGRES_DB")}
-		databaseURL = address.String()
-	}
-	if databaseURL == "" {
-		if os.Getenv("TEST_DATABASE_REQUIRED") == "1" {
-			t.Fatal("PostgreSQL accounting tests required but configuration missing")
-		}
-		t.Skip("PostgreSQL accounting test configuration unset")
-	}
-	pool, err := pgxpool.New(context.Background(), databaseURL)
-	if err != nil {
-		t.Fatal("invalid PostgreSQL test configuration")
-	}
-	t.Cleanup(pool.Close)
+	pool := testdb.Open(t)
 	store := budget.NewPostgresStore(pool)
-	id := fmt.Sprintf("model-accounting-test-%d", time.Now().UnixNano())
+	id := "model-accounting-test-" + testdb.ID(t)
 	if err := store.CreateRun(context.Background(), id, 20000); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if _, err := pool.Exec(context.Background(), "DELETE FROM runtime.model_token_reservations WHERE run_id=$1", id); err != nil {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_reservations WHERE run_id=$1", id); err != nil {
 			t.Error("could not clean test reservations")
 		}
-		if _, err := pool.Exec(context.Background(), "DELETE FROM runtime.model_token_budgets WHERE run_id=$1", id); err != nil {
+		if _, err := pool.Exec(cleanupContext, "DELETE FROM runtime.model_token_budgets WHERE run_id=$1", id); err != nil {
 			t.Error("could not clean test budget")
 		}
 	})

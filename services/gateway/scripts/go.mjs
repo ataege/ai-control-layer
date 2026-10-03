@@ -91,7 +91,8 @@ function runDevelopmentServer() {
 const commands = {
   dev: runDevelopmentServer,
   build: () => runStep("go", ["build", "-trimpath", "-o", "bin/gateway", "./cmd/gateway"]),
-  test: () => runStep("go", ["test", "./..."]),
+  // Verbose output exposes skipped database tests; never reuse cached database outcomes.
+  test: () => runStep("go", ["test", "-count=1", "-v", "./..."]),
   lint: () => {
     runStep("go", ["vet", "./..."]);
     checkFormatting();
