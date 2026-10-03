@@ -9,8 +9,9 @@ export const UPSTREAM_PATHS = [
   "/api/health/ready",
   "/api/diagnostics/gateway",
 ] as const;
+export const UPSTREAM_PATHS_EXTRA = ["/api/auth/me"];
 
-export type UpstreamPath = (typeof UPSTREAM_PATHS)[number];
+export type UpstreamPath = (typeof UPSTREAM_PATHS)[number] | "/api/auth/me";
 
 export const UPSTREAM_PREFIXES = [
   ...UPSTREAM_PATHS,
@@ -35,9 +36,6 @@ interface ProxyOptions {
 }
 
 class UpstreamConfigurationError extends Error {}
-
-// Node's fetch needs `duplex: "half"` to stream a request body; the DOM RequestInit type lacks it.
-type StreamingRequestInit = RequestInit & { duplex?: "half" };
 
 function readUpstreamBaseUrl(): string {
   const configuredValue = process.env.API_UPSTREAM_URL?.trim();
@@ -105,7 +103,7 @@ function isJsonText(bodyText: string): boolean {
 }
 
 function isPathAllowed(path: string): boolean {
-  const pathname = path.split("?")[0] ?? "";
+  const pathname = path.split("?")[0] || "";
   return UPSTREAM_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
   );
@@ -152,9 +150,9 @@ export async function proxyUpstream(
   // Forward session cookie if present
   const cookie = request.headers.get("cookie");
   if (cookie) {
-    const sessionCookie = cookie.match(/(?:^|;\s*)(session=[^;]+)/)?.[1];
-    if (sessionCookie) {
-      headers.set("cookie", sessionCookie);
+    const sessionMatch = cookie.match(/(?:^|;\s*)(session=[^;]+)/);
+    if (sessionMatch && sessionMatch[1]) {
+      headers.set("cookie", sessionMatch[1]);
     }
   }
 
@@ -163,7 +161,7 @@ export async function proxyUpstream(
     headers.set("content-type", request.headers.get("content-type")!);
   }
 
-  const fetchOptions: StreamingRequestInit = {
+  const fetchOptions: RequestInit = {
     method: request.method,
     cache: "no-store",
     redirect: "manual",
@@ -173,7 +171,7 @@ export async function proxyUpstream(
   if (request.method !== "GET" && request.method !== "HEAD") {
     fetchOptions.body = request.body;
     // Need to use duplex: "half" for streaming bodies in Node.js fetch
-    fetchOptions.duplex = "half";
+    (fetchOptions as RequestInit & { duplex?: "half" }).duplex = "half";
   }
 
   let timeoutId: NodeJS.Timeout | undefined;
