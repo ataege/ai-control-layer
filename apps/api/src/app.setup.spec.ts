@@ -38,7 +38,7 @@ describe("App Setup (Decision 3: Forwarder)", () => {
     }).compile();
 
     const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
-    configureApp(app, [], "test-secret");
+    configureApp(app, []);
     await app.init();
 
     const response = await request(app.getHttpServer())

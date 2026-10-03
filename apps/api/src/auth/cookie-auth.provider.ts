@@ -12,8 +12,11 @@ export class CookieAuthProvider implements AuthProvider {
   ) {}
 
   async authenticate(credential: string): Promise<AuthenticatedPrincipal> {
+    const { createHash } = await import("node:crypto");
+    const hashedId = createHash("sha256").update(credential).digest("hex");
+    
     const session = await this.sessionRepository.findOne({
-      where: { id: credential },
+      where: { id: hashedId },
     });
 
     if (!session) {
