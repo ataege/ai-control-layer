@@ -33,3 +33,31 @@ Argument shapes (proposed for X-09; renamed here if X-09 freezes different names
 | `read_vendor`   | `vendor_id`                                                                         |
 | `create_report` | `template` (one of the two fixed templates), `source_invoice_ids` (ordered, unique) |
 | `queue_report`  | `report_id` (lowercase UUID), `recipient_reference` (trusted directory entry)       |
+
+## The decision (GO-15)
+
+`Gate.Evaluate(ctx, run, proposal)` returns exactly one of `allow`, `deny` or
+`approval_required`, always with a decision; every failure is a deny. Order (Figure 6):
+
+1. The proposal envelope (action id, step number, idempotency key, all from the worker) and the
+   registered tool with strict arguments (GO-12). Malformed arguments cannot be canonicalized, so
+   they get no `runtime.actions` row, only the denial event (`invalid_arguments`).
+2. The passport scope of the verified run (`ScopeReader`, implemented with 3c's passport) and the
+   active catalog revision; a lookup failure or a scope of another organization or run denies.
+3. The action is stored (`proposed`) and committed before any further check.
+4. Passport expiry, the passport's tools, then its resources: the invoice of `read_invoice`, the
+   template and sources of `create_report`, the recipient reference of `queue_report`. Deeper
+   relationships are GO-28, the export restriction GO-64.
+5. The passport's approval rule turns an otherwise permitted action into `approval_required`.
+6. The optional `ActionEvaluator` (GO-77) runs only after a deterministic allow or approval
+   requirement. Its verdict can only deny; an error or unknown verdict denies; a semantic allow
+   never skips review.
+
+`PostgresRecorder` writes the records: `StoreAction` inserts the action (the same action stored
+twice is accepted, any other conflict refused), and `RecordDecision` sets its status and inserts
+the `action.decided` safe event (references only) in one transaction. Without a recorded decision
+the outcome is a deny (`decision_unavailable`).
+
+Reason codes: the report's vocabulary plus `tool_not_registered`, `invalid_arguments`,
+`tool_not_allowed` and `decision_unavailable` (approved for X-13; renamed if X-13 differs). An
+expired passport is reported as `run_cancelled` until X-13 has a dedicated code.
