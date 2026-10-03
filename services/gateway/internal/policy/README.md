@@ -139,7 +139,15 @@ provenance again at effect time, so an approval can never override the restricti
   export denial only when the passport permits that template, `create_report` and invoice
   sources; the passport's own invoice references after an out-of-scope read. It never carries a
   protected value, review content or the raw arguments, and the alternative grants nothing: the
-  next proposal goes through the gate again.
+  next proposal goes through the gate again. A denial that can never succeed on retry (out of
+  scope, destination, export or lineage, template, tool, several actions, signature or semantic
+  block, a reviewer's rejection) ends with the fixed sentence "Do not propose this action again."
+- `CorrectionCounter.Feedback(ctx, run, decision, scope)`, called by lane f3's loop, is that
+  feedback with the run's progress read from stored actions and reports, never from model text:
+  after a denied internal export, when a `vendor_reconciliation_v1` report of this run is already
+  queued, awaiting approval or approved, the alternative is no longer offered and the feedback adds
+  "The permitted alternative has already been completed; finish with your final answer." (lane 3c's
+  clean-clone run 8b59f19f retried the denied export until its corrections ran out).
 - `CorrectionCounter.CorrectionsUsed` counts the run's denials from its durable decision events
   (`action.denied` and `report.export_denied`), so the count survives a worker restart and
   includes malformed proposals, which have no action row.
