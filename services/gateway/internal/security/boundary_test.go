@@ -108,7 +108,7 @@ func (atlasRelationships) ReportExport(_ context.Context, _, _, reportID string)
 type stubFreezer struct{}
 
 func (stubFreezer) Freeze(_ context.Context, _ policy.RunIdentity, action policy.StoredAction, _ policy.PassportScope) (policy.FrozenReview, error) {
-	return policy.FrozenReview{PayloadID: "frozen-fixture", ReportID: action.ActionID}, nil
+	return policy.FrozenReview{PayloadID: "00000000-0000-4000-8000-000000000001", ReportID: action.ActionID}, nil
 }
 
 // gateEvaluator adapts security.EvaluateAction to policy.ActionEvaluator the way the README
@@ -118,19 +118,19 @@ type gateEvaluator struct {
 	settings  security.Settings
 }
 
-func (evaluator gateEvaluator) EvaluateAction(ctx context.Context, run policy.RunIdentity, action policy.StoredAction) (policy.Outcome, policy.ReasonCode, error) {
+func (evaluator gateEvaluator) EvaluateAction(ctx context.Context, run policy.RunIdentity, action policy.StoredAction) (policy.ActionCheck, error) {
 	assessment, err := evaluator.inspector.EvaluateAction(ctx, security.ActionInput{
 		RunID: run.RunID, ActionID: action.ActionID, Tool: string(action.Tool), CanonicalArguments: action.CanonicalArguments,
 	}, evaluator.settings)
 	switch {
 	case err != nil:
-		return "", "", err
+		return policy.ActionCheck{Records: assessment.Records}, err
 	case assessment.Decision == security.ActionBlock:
-		return policy.OutcomeDeny, policy.ReasonCode(assessment.ReasonCode), nil
+		return policy.ActionCheck{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(assessment.ReasonCode), Records: assessment.Records}, nil
 	case assessment.Decision == security.ActionNoObjection:
-		return policy.OutcomeAllow, "", nil
+		return policy.ActionCheck{Outcome: policy.OutcomeAllow, Records: assessment.Records}, nil
 	}
-	return "", "", security.ErrEvaluatorUnavailable
+	return policy.ActionCheck{Records: assessment.Records}, security.ErrEvaluatorUnavailable
 }
 
 // sampleSettings builds the settings the way GO-72 will: the sample policy's content and the

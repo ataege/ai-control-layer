@@ -64,9 +64,9 @@ type fakeEvaluator struct {
 	calls   int
 }
 
-func (evaluator *fakeEvaluator) EvaluateAction(context.Context, RunIdentity, StoredAction) (Outcome, ReasonCode, error) {
+func (evaluator *fakeEvaluator) EvaluateAction(context.Context, RunIdentity, StoredAction) (ActionCheck, error) {
 	evaluator.calls++
-	return evaluator.outcome, evaluator.reason, evaluator.err
+	return ActionCheck{Outcome: evaluator.outcome, ReasonCode: evaluator.reason}, evaluator.err
 }
 
 // fakeRelationships answers from fixed sets: vendor -> linked invoices, and reports created in the
@@ -404,5 +404,20 @@ func TestApprovalRequestNeedsFrozenReviewMaterial(t *testing.T) {
 	gate.Evaluate(context.Background(), testRun(), proposal("read_invoice", `{"invoice_id":"invoice_A01"}`))
 	if freezer.calls != 0 {
 		t.Fatal("an allowed read was frozen for review")
+	}
+}
+
+// The verdicts below are stubs (fakeEvaluator), not semantic detection results.
+func TestStubbedSemanticBlockStopsAPermittedActionBeforeReview(t *testing.T) {
+	freezer := &fakeFreezer{}
+	evaluator := &fakeEvaluator{outcome: OutcomeDeny, reason: "semantic_injection_detected"}
+	gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, &fakeRecorder{}, atlasRelationships(), evaluator).WithReviewFreezer(freezer)
+	decision := gate.Evaluate(context.Background(), testRun(),
+		proposal("queue_report", `{"report_id":"`+testReportID+`","recipient_reference":"`+testRecipient+`"}`))
+	if decision.Outcome != OutcomeDeny || decision.ReasonCode != "semantic_injection_detected" {
+		t.Fatalf("decision = %s/%s, want deny/semantic_injection_detected", decision.Outcome, decision.ReasonCode)
+	}
+	if freezer.calls != 0 || decision.Review != nil {
+		t.Fatal("a semantically blocked action was frozen for review")
 	}
 }

@@ -10,20 +10,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"starter/services/gateway/internal/catalog"
+	"starter/services/gateway/internal/catalog/catalogtest"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/repository"
 	"starter/services/gateway/internal/testdb"
 )
 
-const testCatalogContent = `{
-	"schema_version": 1,
-	"allowed_models": ["qwen3.5:4b"],
-	"budgets": {"calls_total": 24, "calls_agent": 12, "calls_security": 12, "tokens_total": 20000,
-		"request_timeout_seconds": 20, "local_max_concurrency": 2, "run_expiry_minutes": 15,
-		"tool_attempts": 12, "corrections": 2, "agent_output_tokens": 512},
-	"reports": {"enabled_templates": ["internal_investigation_v1", "vendor_reconciliation_v1"]},
-	"controls": {}
-}`
+const testCatalogContent = catalogtest.PolicyContent
 
 // admissionFixture is one isolated organization with Atlas-like demo records and an active
 // catalog, all inside one outer transaction that is rolled back when the test ends.
@@ -50,16 +44,8 @@ func exec(t *testing.T, transaction pgx.Tx, sql string, arguments ...any) {
 
 func activateCatalog(t *testing.T, outer pgx.Tx, content string) int64 {
 	t.Helper()
-	var revisionID int64
-	err := outer.QueryRow(context.Background(), `INSERT INTO app.control_catalog_revisions
-		(schema_version, source_file_name, source_text, file_digest, content, import_source)
-		VALUES (1, 'policy.yaml', 'admission test', repeat('a', 64), $1, 'command') RETURNING id`, content).Scan(&revisionID)
-	if err != nil {
-		t.Fatalf("insert catalog revision: %v", err)
-	}
-	exec(t, outer, `INSERT INTO app.control_catalog_pointer (id, active_revision_id) VALUES (1, $1)
-		ON CONFLICT (id) DO UPDATE SET active_revision_id = EXCLUDED.active_revision_id`, revisionID)
-	return revisionID
+	feedID := catalogtest.InsertFeed(t, outer)
+	return catalogtest.Activate(t, outer, content, &feedID)
 }
 
 func newFixture(t *testing.T) *admissionFixture {
@@ -99,7 +85,7 @@ func newFixture(t *testing.T) *admissionFixture {
 	exec(t, outer, insertInvoice, "invoice_s01_"+suffix, organizationID, fixture.silentVendorID)
 	fixture.revisionID = activateCatalog(t, outer, testCatalogContent)
 
-	fixture.admitter = New(repository.New(outer))
+	fixture.admitter = New(repository.New(outer), catalog.NewLoader())
 	fixture.admitter.now = func() time.Time { return fixture.now }
 	return fixture
 }
@@ -278,28 +264,6 @@ func TestPostgresAdmissionNarrowedCatalogNarrowsTemplates(t *testing.T) {
 	}
 }
 
-func TestParseCatalogFailsClosed(t *testing.T) {
-	broken := map[string]string{
-		"not json":              `{`,
-		"wrong schema version":  strings.Replace(testCatalogContent, `"schema_version": 1`, `"schema_version": 2`, 1),
-		"missing calls total":   strings.Replace(testCatalogContent, `"calls_total": 24, `, ``, 1),
-		"zero tool attempts":    strings.Replace(testCatalogContent, `"tool_attempts": 12`, `"tool_attempts": 0`, 1),
-		"negative corrections":  strings.Replace(testCatalogContent, `"corrections": 2`, `"corrections": -1`, 1),
-		"timeout beyond expiry": strings.Replace(testCatalogContent, `"request_timeout_seconds": 20`, `"request_timeout_seconds": 900`, 1),
-		"no models":             strings.Replace(testCatalogContent, `["qwen3.5:4b"]`, `[]`, 1),
-		"unknown template":      strings.Replace(testCatalogContent, `"vendor_reconciliation_v1"]`, `"public_v1"]`, 1),
-		"no reports group":      strings.Replace(testCatalogContent, `"reports": {"enabled_templates": ["internal_investigation_v1", "vendor_reconciliation_v1"]},`, ``, 1),
-	}
-	for name, content := range broken {
-		if _, err := parseCatalog(1, []byte(content)); !errors.Is(err, ErrCatalogUnavailable) {
-			t.Errorf("%s: got %v", name, err)
-		}
-	}
-	if _, err := parseCatalog(1, []byte(testCatalogContent)); err != nil {
-		t.Errorf("valid catalog rejected: %v", err)
-	}
-}
-
 func TestNewUUIDIsAVersion4UUID(t *testing.T) {
 	seen := map[string]bool{}
 	for range 100 {
@@ -319,6 +283,17 @@ func TestPostgresAdmissionFaultBeforeCommitLeavesNothing(t *testing.T) {
 		BEGIN RAISE EXCEPTION 'injected admission fault'; END; $$`)
 	exec(t, fixture.outer, `CREATE TRIGGER admission_fault BEFORE INSERT ON runtime.audit_events
 		FOR EACH ROW WHEN (NEW.event_type = 'run.queued') EXECUTE FUNCTION pg_temp.fail_run_queued()`)
+	if _, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request()); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("got %v, want ErrUnavailable", err)
+	}
+	fixture.assertNothingAdmitted(t)
+}
+
+// A catalog that cannot be enforced issues no passport: signature matching is enabled but no
+// feed is bound (lead decision: admission requires the full enforceable snapshot).
+func TestPostgresAdmissionRefusesWhenTheFeedIsMissing(t *testing.T) {
+	fixture := newFixture(t)
+	catalogtest.Activate(t, fixture.outer, testCatalogContent, nil)
 	if _, err := fixture.admitter.Admit(context.Background(), fixture.operator, fixture.request()); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("got %v, want ErrUnavailable", err)
 	}

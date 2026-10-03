@@ -51,6 +51,8 @@ func StoreReport(ctx context.Context, tx pgx.Tx, report NewReport) (StoredReport
 	if err != nil {
 		return StoredReport{}, err
 	}
+	// Store the registered definition's destination and projection, never the caller's copy.
+	report.Template = registeredTemplates[report.Template.Name]
 	var projectionRule, projectionPolicy *string
 	var projectionVersion *int
 	if report.Template.Projection != nil {

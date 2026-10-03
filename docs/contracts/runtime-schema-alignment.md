@@ -66,6 +66,10 @@ which is safe but blocks the revert until the ledger is reverted. Item 8 removes
   into the configured database and remove them afterwards. The API's draft-schema tests
   (`apps/api/src/database/draft-schemas.db-spec.ts`) instead create and drop their own temporary
   database. Either is fine; say which one the team's suite (SH-47) should expect.
+- Since 2026-10-03, "the configured database" is a dedicated test database: `pnpm test:db` sets
+  `POSTGRES_DB` to `<POSTGRES_DB>_test` for both sides, creates, migrates and seeds it first
+  (`--fresh` recreates it), so rows the tests commit never reach the demo database (README.md,
+  `pnpm test:db`).
 
 ## Answers already applied to the drafts
 

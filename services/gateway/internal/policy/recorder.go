@@ -3,13 +3,17 @@ package policy
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/repository"
+	"starter/services/gateway/internal/security"
 )
 
 // Action status values the gate writes. Execution states follow with the executor (GO-16).
@@ -90,6 +94,9 @@ func (recorder *PostgresRecorder) RecordDecision(ctx context.Context, run RunIde
 				return ErrRecorderUnavailable // already decided or not this run's action
 			}
 		}
+		if err := insertControlRecords(ctx, tx, run, decision); err != nil {
+			return err
+		}
 		_, err := tx.AppendEvent(ctx, event)
 		return err
 	})
@@ -127,11 +134,7 @@ func decisionEvent(run RunIdentity, decision Decision) repository.NewEvent {
 		event.EventType, eventDecision = contracts.EventActionDenied, contracts.DecisionDeny
 		if isExportDenial(decision.ReasonCode) {
 			event.EventType = contracts.EventReportExportDenied
-			lineageCheck := "failed"
-			if decision.ReasonCode == ReasonReportLineageMissing {
-				lineageCheck = "missing"
-			}
-			event.MaskedSummary.LineageCheck = &lineageCheck
+			event.MaskedSummary.LineageCheck = lineageCheckFor(decision.ReasonCode)
 		}
 	}
 	event.Decision = &eventDecision
@@ -163,4 +166,88 @@ func actionStatusFor(outcome Outcome) string {
 	default:
 		return actionStatusDenied
 	}
+}
+
+// insertControlRecords writes the decision's security evidence (GO-77) to
+// runtime.control_assessments: one evaluation id for the decision, the action when it was stored,
+// and never any inspected text.
+func insertControlRecords(ctx context.Context, tx repository.Tx, run RunIdentity, decision Decision) error {
+	if len(decision.ControlRecords) == 0 {
+		return nil
+	}
+	evaluationID, err := newUUID()
+	if err != nil {
+		return err
+	}
+	var actionID any
+	if decision.ActionStored {
+		actionID = decision.ActionID
+	}
+	for _, record := range decision.ControlRecords {
+		var verdict, verdictSource, modelCallID, matchedRule, feedRevision, reason any
+		if record.ControlClass == security.ClassSemantic {
+			verdictSource = string(record.VerdictSource)
+			if record.Verdict != nil {
+				encoded, err := json.Marshal(record.Verdict)
+				if err != nil {
+					return err
+				}
+				verdict = encoded
+			}
+			if record.SecurityModelCallID != "" {
+				modelCallID = record.SecurityModelCallID
+			}
+		}
+		if record.MatchedRuleID != "" {
+			matchedRule = record.MatchedRuleID
+		}
+		if record.FeedRevision != "" {
+			feedRevision = record.FeedRevision
+		}
+		if record.ReasonCode != "" {
+			reason = record.ReasonCode
+		}
+		evaluatedRevision := record.EvaluatedCatalogRevisionID
+		if evaluatedRevision <= 0 {
+			evaluatedRevision = decision.EvaluatedRevisionID
+		}
+		if _, err := tx.Raw().Exec(ctx,
+			`INSERT INTO runtime.control_assessments
+			   (organization_id, run_id, evaluation_id, action_id, security_model_call_id, boundary, control_class,
+			    control_id, outcome, reason_code, admission_catalog_revision_id, evaluated_catalog_revision_id,
+			    matched_rule_id, feed_revision, verdict_source, verdict)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+			run.OrganizationID, run.RunID, evaluationID, actionID, modelCallID, string(record.Boundary),
+			string(record.ControlClass), record.ControlID, string(record.Outcome), reason,
+			decision.AdmissionCatalogRevisionID, evaluatedRevision, matchedRule, feedRevision, verdictSource, verdict,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// newUUID returns a random version 4 UUID.
+func newUUID() (string, error) {
+	var identifier [16]byte
+	if _, err := rand.Read(identifier[:]); err != nil {
+		return "", err
+	}
+	identifier[6] = (identifier[6] & 0x0f) | 0x40
+	identifier[8] = (identifier[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", identifier[0:4], identifier[4:6], identifier[6:8], identifier[8:10], identifier[10:16]), nil
+}
+
+// lineageCheckFor names the lineage result of an export denial the same way the tools package and
+// the safe-event fixture do: a verified lineage whose restriction forbids the export "passed" (the
+// restriction is the decision), unverifiable lineage is "missing", a stale source "failed".
+func lineageCheckFor(reason ReasonCode) *string {
+	check := "failed"
+	switch reason {
+	case ReasonReportExportRestricted:
+		check = "passed"
+	case ReasonReportLineageMissing:
+		check = "missing"
+	}
+	return &check
 }

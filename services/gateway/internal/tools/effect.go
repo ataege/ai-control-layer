@@ -151,8 +151,10 @@ func verifyActionAndAttempt(ctx context.Context, tx pgx.Tx, request EffectReques
 	err := tx.QueryRow(ctx,
 		`SELECT EXISTS (
 		   SELECT 1 FROM runtime.actions
-		    WHERE id = $1 AND organization_id = $2 AND run_id = $3 AND tool = $4 AND action_digest = $5)`,
+		    WHERE id = $1 AND organization_id = $2 AND run_id = $3 AND tool = $4 AND action_digest = $5
+		      AND canonical_arguments = $6::jsonb)`,
 		request.ActionID, request.OrganizationID, request.RunID, request.Tool, request.ActionDigest[:],
+		string(request.CanonicalArguments),
 	).Scan(&matches)
 	if err != nil {
 		return fmt.Errorf("tools: read stored action: %w", err)

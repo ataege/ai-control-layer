@@ -7,6 +7,10 @@ export const GENERATED_SECRETS = {
     label: "database password",
     generate: () => randomBytes(24).toString("base64url"), // 32 characters
   },
+  POSTGRES_GATEWAY_PASSWORD: {
+    label: "gateway database role password",
+    generate: () => randomBytes(24).toString("base64url"), // 32 characters
+  },
   GATEWAY_SERVICE_TOKEN: {
     label: "service token",
     generate: () => randomBytes(36).toString("base64url"), // 48 characters
