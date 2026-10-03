@@ -94,6 +94,7 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | `internal/budget`     | User (sole Go implementer)  |
 | `internal/testdb`     | User (sole Go implementer)  |
 | `internal/contracts`  | Go lane 3c (lead's session) |
+| `internal/repository` | Go lane 3c (lead's session) |
 
 New packages get their ownership row when their first real code lands.
 
@@ -110,6 +111,7 @@ internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
 internal/contracts/   Go mirrors of the runtime wire contracts and strict decoding (GO-18)
+internal/repository/ runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
