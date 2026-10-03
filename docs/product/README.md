@@ -174,8 +174,7 @@ writes each outcome down here when it is settled.
    and 16 GB RAM. `qwen3.5:4b` is licensed Apache 2.0 (model card and the license text bundled with the
    model; [source-register.md](source-register.md)). `qwen2.5:3b` is excluded: its Qwen Research
    License grants use "FOR NON-COMMERCIAL PURPOSES ONLY". On `main`, the Go model client sends `think: false` (`services/gateway/internal/model/accounting.go`).
-   **Frozen for the demonstration on 2026-10-03 (GO-03; commit `452a358` on branch `go/f3`, not on `main`
-   yet; adopted by the lead's delegate):** `qwen3.5:4b`, Ollama digest
+   **Frozen for the demonstration on 2026-10-03 (GO-03; commit `452a358`, on `main`; adopted by the lead's delegate):** `qwen3.5:4b`, Ollama digest
    `2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd` (4.7B, Q4_K_M), on Ollama 0.35.1
    with `think: false` and a context of 8192 tokens for agent and security requests. Measured on an
    Apple M1 Pro with 16 GB (MacBookPro18,1, macOS 27.0) with Ollama on the gateway's machine: the model
@@ -206,7 +205,7 @@ writes each outcome down here when it is settled.
 ## Decisions recorded by the lead's delegate (3 October 2026)
 
 Each item below was **decided by the lead's delegate** on 3 October 2026 and recorded by the
-researcher. "On `main`" names what was merged when the researcher last checked each item: c968034 (3 October 2026, every item re-checked after items 24 to 27 arrived), and again at 1dad371 for items 10, 21 and 25 to 28;
+researcher. "On `main`" names what was merged when the researcher last checked each item: c968034 (3 October 2026, every item re-checked after items 24 to 27 arrived), again at 1dad371 for items 10, 21 and 25 to 28, and at e50e186 for items 6 (decision), 9, 15, 16 and 23;
 anything else is a decision, not an implemented behaviour.
 
 1. **Read path (`read path`).** Operator reads go through private Go `/internal` endpoints, mounted
@@ -260,9 +259,9 @@ anything else is a decision, not an implemented behaviour.
     revisions to the requested one, plus `active_feed_revision_id`, in one transaction: that is its
     acknowledgement. On failure it records `last_error` and keeps the last good revision; with no good
     revision the gateway is not ready and admission refuses. Runs keep the revision on their passport.
-    On `main`: the pointer table `app.control_catalog_pointer` (migration `1791038985994-AddControlCatalog`), the `pnpm policy:import` command and Go's validation and acknowledgement (`services/gateway/internal/catalog/activation.go`, GO-73). The feed half of the import is item 16.
+    On `main`: the pointer table `app.control_catalog_pointer` (migration `1791038985994-AddControlCatalog`), the `pnpm policy:import` command and Go's validation and acknowledgement (`services/gateway/internal/catalog/activation.go`, GO-73). `pnpm catalog:activate` runs the gateway's own activation once for setups without a running gateway (`cmd/catalogactivate`, commit `ec7c815`). The feed half of the import is item 16.
 16. **Feed import (API-34).** Lane c1 builds the feed half of API-34 inside `pnpm policy:import`.
-    Pending the user's clearance with the web + API implementers. On `main`: not yet; `policy-catalog-importer.ts` and `import-policy.command.ts` do not mention the feed at c968034.
+    The user approved merging lane c1. On `main`: yes, `apps/api/src/policies/policy-catalog-importer.ts` and `import-policy.command.ts` validate and import the feed named by `signatures.path` (`validateSignatureFeed`, a size cap, the bare file name next to the policy file).
 17. **Reviewer authority.** A reviewer is a verified user whose `app.memberships` role list holds
     `reviewer` for that organization; a signed claim alone never suffices. The demonstration seed gives
     the demo operator the roles `operator` and `reviewer`. On `main`: the memberships `roles` column, `ReviewerRole = "reviewer"` in `services/gateway/internal/policy/approvals.go` and migration `1791110000000-GrantGatewayMembershipRead`, which lets the gateway read `app.memberships`. `scripts/seed-demo.mjs` still does not seed memberships (its own TODO, SH-19), so the demo operator has no `reviewer` role yet.
@@ -293,14 +292,12 @@ anything else is a decision, not an implemented behaviour.
     the current numbers were taken at a load average of 70 to 150. On `main`: the benchmark
     (`services/gateway/cmd/benchmark`) and its method in `services/gateway/README.md`.
 23. **Semantic classifier prompt (`classifier prompt and verdict schema`, prompt part).**
-    `classifier_v2` (lane c1, commit `b9f94c2` on branch `go/c1`) was measured at 0 wrong of 84 cases
+    `classifier_v2` (lane c1, commit `b9f94c2`) was measured at 0 wrong of 84 cases
     on `qwen3.5:4b`, against 4 of 84 for v1. Limits: v2 was written with the case it now catches in
     view, the benign probes are few, and variance between runs remains. A claim says "on this fixture
-    set", never universal detection. On `main`: not yet (no `classifier_v` on `main` at 1dad371). The
-    measurement is the lane's, not final-build evidence (X-59).
+    set", never universal detection. On `main`: yes, `classifier_v2` (commit `b9f94c2`) and the results table below (commit `6bbaac1`). The measurement is the lane's, not final-build evidence (X-59).
 
-    Later evidence from lane c1 (branch `go/c1`, head `ec7c815`, root `README.md` lines 404 to 411, in the
-    `pnpm verify:controls` section; not on `main`): three runs on `classifier_v2`, fixture version 3,
+    Later evidence from lane c1 (on `main`: root `README.md` lines 404 to 411, in the `pnpm verify:controls` section; commit `ec7c815`): three runs on `classifier_v2`, fixture version 3,
     with the same model and prompt, all reported. Run 1 (`78d386c`) and run 2 (`45308f8`) **failed**:
     run 1 on two Go story tests ("no active control catalog": the request-only feed import activates
     nothing and a test database has no gateway), run 2 on a live label mismatch the test treated more
@@ -313,8 +310,7 @@ anything else is a decision, not an implemented behaviour.
     positive in runs 1 and 2, two false negatives in run 3): that is the model's variance near the 0.75
     threshold, which is why a label mismatch is recorded and does not fail the suite (`--strict-live`
     does)." The earlier "0 wrong of 84" above does not repeat in run 3, so claims quote run 3 and the
-    variance, not the best result. The results JSON is gitignored and exists only on the lead's machine
-    (`.verify-controls/results-2026-10-03T21-16-48Z.json`); copy it if a slide cites it.
+    variance, not the best result. The results JSON is gitignored and was on the lead's machine only (`.verify-controls/results-2026-10-03T21-16-48Z.json`); the lead has asked lane c1 for a sanitized copy under `docs/evidence/`, which is not on `main` yet, so the numbers are not verifiable from the repository until it lands.
 
 24. **Model call retries (`model call retries`).** There are no automatic model-call retries in the
     MVP. A failed, timed-out or unknown agent or security call is never re-sent; its reservation settles
