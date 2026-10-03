@@ -42,6 +42,29 @@ var safeMessages = map[ReasonCode]string{
 
 const genericSafeMessage = "The action was denied by the task's controls."
 
+// Fixed correction sentences (GO-29). They name no record, address or content.
+const (
+	doNotRetrySentence           = "Do not propose this action again."
+	alternativeCompletedSentence = "The permitted alternative has already been completed; finish with your final answer."
+)
+
+// finalDenials can never succeed when the same action is proposed again within the run: the
+// passport, the report's stored provenance, the registered tools and the reviewer's decision do not
+// change while it runs. A model that retries one only spends its corrections.
+var finalDenials = map[ReasonCode]bool{
+	ReasonResourceOutOfScope:                    true,
+	ReasonDestinationNotAllowed:                 true,
+	ReasonReportExportRestricted:                true,
+	ReasonReportLineageMissing:                  true,
+	ReasonTemplateNotAllowed:                    true,
+	ReasonToolNotRegistered:                     true,
+	ReasonToolNotAllowed:                        true,
+	contracts.ReasonMultipleActionsNotSupported: true,
+	contracts.ReasonSignatureMatch:              true,
+	contracts.ReasonSemanticInjectionDetected:   true,
+	contracts.ReasonApprovalRejected:            true,
+}
+
 // BuildDenialFeedback turns a deny into feedback for the model. An export denial names the vendor
 // report template only when the passport permits that template and has invoice sources for it
 // ("offered only if the existing task grant permits the template and source set").
@@ -60,6 +83,29 @@ func BuildDenialFeedback(decision Decision, scope PassportScope) DenialFeedback 
 	}
 	if decision.ReasonCode == ReasonResourceOutOfScope && len(scope.AllowedInvoiceIDs) > 0 {
 		feedback.PermittedInvoiceIDs = append([]string(nil), scope.AllowedInvoiceIDs...)
+	}
+	if finalDenials[decision.ReasonCode] {
+		feedback.SafeMessage += " " + doNotRetrySentence
+	}
+	return feedback
+}
+
+// RunProgress is what the run has already done, read from its stored records, never from model
+// text.
+type RunProgress struct {
+	// VendorReportQueued: a vendor_reconciliation_v1 report of this run is queued, awaiting
+	// approval or approved.
+	VendorReportQueued bool
+}
+
+// BuildCorrectionFeedback is BuildDenialFeedback with the run's progress: once the permitted
+// alternative to a denied export is already done, the feedback says so and offers it no longer, so
+// the model finishes instead of retrying.
+func BuildCorrectionFeedback(decision Decision, scope PassportScope, progress RunProgress) DenialFeedback {
+	feedback := BuildDenialFeedback(decision, scope)
+	if decision.ReasonCode == ReasonReportExportRestricted && progress.VendorReportQueued {
+		feedback.AlternativeTemplate = ""
+		feedback.SafeMessage += " " + alternativeCompletedSentence
 	}
 	return feedback
 }
@@ -84,6 +130,32 @@ func CheckCorrections(correctionsUsed, correctionLimit int) CorrectionVerdict {
 	}
 	verdict.Continue = true
 	return verdict
+}
+
+// Feedback builds the correction feedback for a denial of the run, reading the run's progress from
+// its stored actions and reports when the denial has a permitted alternative (lane f3's loop calls it
+// after CorrectionsUsed allows another correction). A failed read returns ErrCorrectionsUnavailable.
+func (counter *CorrectionCounter) Feedback(ctx context.Context, run RunIdentity, decision Decision, scope PassportScope) (DenialFeedback, error) {
+	var progress RunProgress
+	if decision.ReasonCode == ReasonReportExportRestricted {
+		if counter.pool == nil {
+			return DenialFeedback{}, ErrCorrectionsUnavailable
+		}
+		err := counter.pool.QueryRow(ctx,
+			`SELECT EXISTS (
+			   SELECT 1 FROM runtime.actions AS action
+			   JOIN demo.reports AS report
+			     ON report.id::text = action.canonical_arguments->>'report_id'
+			    AND report.organization_id = action.organization_id AND report.run_id = action.run_id
+			  WHERE action.organization_id = $1 AND action.run_id = $2 AND action.tool = 'queue_report'
+			    AND action.status IN ('awaiting_approval', 'approved', 'executing', 'succeeded', 'executed')
+			    AND report.template = $3)`,
+			run.OrganizationID, run.RunID, TemplateVendorReconciliation).Scan(&progress.VendorReportQueued)
+		if err != nil {
+			return DenialFeedback{}, ErrCorrectionsUnavailable
+		}
+	}
+	return BuildCorrectionFeedback(decision, scope, progress), nil
 }
 
 // ErrCorrectionsUnavailable means the run's denials could not be counted; the caller stops.

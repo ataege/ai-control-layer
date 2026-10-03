@@ -52,6 +52,8 @@ type StepCounter interface {
 // CorrectionCounter counts the run's denials from its durable events (policy.CorrectionCounter).
 type CorrectionCounter interface {
 	CorrectionsUsed(ctx context.Context, run policy.RunIdentity) (int, error)
+	// Feedback builds the fixed correction feedback for a denial from the stored run state (GO-29).
+	Feedback(ctx context.Context, run policy.RunIdentity, decision policy.Decision, scope policy.PassportScope) (policy.DenialFeedback, error)
 }
 
 // CatalogSource returns the active control catalog snapshot (catalog.Loader.Active), read before
@@ -457,7 +459,10 @@ func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, effective
 	if err != nil {
 		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
 	}
-	denialFeedback := policy.BuildDenialFeedback(decision, scope)
+	denialFeedback, err := loop.dependencies.Corrections.Feedback(ctx, run, decision, scope)
+	if err != nil {
+		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
+	}
 	if message != "" {
 		denialFeedback = policy.DenialFeedback{ReasonCode: decision.ReasonCode, SafeMessage: message}
 	}

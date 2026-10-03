@@ -11,6 +11,7 @@ import { buildTypeOrmOptions } from "../database/typeorm-options.js";
 import { ControlCatalogPointer } from "./control-catalog-pointer.entity.js";
 import { ControlCatalogRevision } from "./control-catalog-revision.entity.js";
 import { importPolicyFile, type PolicyImportRequest } from "./policy-catalog-importer.js";
+import { digestPolicyBytes } from "./policy-file.js";
 import { SignatureFeedRevision } from "./signature-feed-revision.entity.js";
 
 const configDirectory = resolve(import.meta.dirname, "../../../../config");
@@ -21,6 +22,7 @@ const feedText = feedBytes.toString("utf8");
 const COMMITTED_FEED_DIGEST = "c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244";
 
 const encode = (text: string) => new TextEncoder().encode(text);
+const digestOf = (text: string) => digestPolicyBytes(encode(text));
 const signaturesOff = policyText.replace(
   /signature_match:\n(\s+)enabled: true/,
   "signature_match:\n$1enabled: false",
@@ -193,6 +195,32 @@ describe("importPolicyFile with the signature feed", () => {
       activeRevisionId: first.revisionId,
       activeFeedRevisionId: first.feedRevisionId,
     });
+  });
+
+  // Go binds the feed by (trusted issuer, revision), so another issuer's row with the same revision is a
+  // different feed: it is neither reused nor a reason to refuse the import.
+  it("ignores a stored feed row of another issuer when reusing or refusing", async () => {
+    const insertOtherIssuer = (sourceText: string) =>
+      queryRunner.query(
+        `INSERT INTO app.signature_feed_revisions
+           (issuer, revision, source_file_name, source_text, file_digest, content, import_source)
+         VALUES ('other-publisher', 'feed_v1', 'attack-signatures.json', $1, $2, '{}', 'command')
+         RETURNING id::text`,
+        [sourceText, digestOf(sourceText)],
+      ) as Promise<{ id: string }[]>;
+    // Same bytes under another issuer: not reused, a trusted row is stored beside it.
+    const [other] = await insertOtherIssuer(feedText);
+    const first = await importPolicyFile(queryRunner.manager, request(policyText, feedText));
+    if (!first.accepted) throw new Error("the sample policy and feed must be accepted");
+    expect(first.feedRevisionId).not.toBe(other?.id);
+    const stored = await queryRunner.manager.findOneByOrFail(SignatureFeedRevision, {
+      id: first.feedRevisionId!,
+    });
+    expect(stored.issuer).toBe("task-passport-security");
+    // Another issuer holding other bytes under the revision does not make a re-import "different bytes".
+    await queryRunner.query(`DELETE FROM app.control_catalog_pointer`);
+    const second = await importPolicyFile(queryRunner.manager, request(policyText, feedText));
+    expect(second.accepted && second.feedRevisionId).toBe(first.feedRevisionId);
   });
 
   it("keeps a stored feed row immutable", async () => {

@@ -488,6 +488,10 @@ const commit = readCommandOutput("git", ["rev-parse", "HEAD"], { cwd: repository
 const dirty =
   (readCommandOutput("git", ["status", "--porcelain"], { cwd: repositoryRoot }) ?? "") !== "";
 
+// Every child process of the suite sees only the test database, the live part included: a database-backed
+// test added to the live selection could then never write to the demo database named in .env.
+const { testEnvironment, testDatabaseName, problem } = testEnvironmentFor(rootEnvironment);
+
 if (blockingProblem) {
   parts.push({
     name: "preflight",
@@ -496,7 +500,6 @@ if (blockingProblem) {
   });
 } else {
   parts.push({ name: "preflight", status: "PASS", detail: "toolchain, .env and PostgreSQL ready" });
-  const { testEnvironment, testDatabaseName, problem } = testEnvironmentFor(rootEnvironment);
   if (problem) {
     parts.push({ name: "test database", status: "FAIL", detail: problem });
   } else {
@@ -557,8 +560,14 @@ if (blockingProblem) {
       status: "INCOMPLETE",
       detail: `${pre.model.name} unavailable; live model cases not run`,
     });
+  } else if (problem) {
+    parts.push({
+      name: "live model",
+      status: "INCOMPLETE",
+      detail: "no safe test database name; live model cases not run",
+    });
   } else {
-    const live = await runLive(rootEnvironment, pre.model, evidencePath);
+    const live = await runLive(testEnvironment, pre.model, evidencePath);
     parts.push({ name: "live model", status: live.status, detail: live.detail });
     cases.push(...live.cases);
     liveSummary = live.liveSummary;

@@ -170,6 +170,57 @@ describe("importPolicyFile", () => {
     });
   });
 
+  // The gateway's rejection of the still-requested revision is the truth about that request and the gateway
+  // only recognizes its own record: a rejected import must not overwrite it (it would be re-validated and
+  // rejected again, replacing the import's record within a second). A stale gateway record (for an older
+  // revision) is overwritten as before.
+  it("keeps the gateway's rejection of the requested revision when an import is rejected", async () => {
+    await clearPointer();
+    const requested = await importPolicyFile(queryRunner.manager, {
+      sourceFileName: "policy.yaml",
+      fileBytes: samplePolicyBytes,
+      feed: sampleFeed,
+    });
+    if (!requested.accepted) throw new Error("the sample policy must be accepted");
+    const gatewayRecord = {
+      reason: "policy_reload_rejected",
+      code: "catalog_invalid",
+      message: "The requested catalog revision failed the gateway's security validation.",
+      revision_id: Number(requested.revisionId),
+      stage: "gateway_validation",
+    };
+    await queryRunner.manager.update(
+      ControlCatalogPointer,
+      { id: 1 },
+      { lastError: gatewayRecord, lastErrorAt: new Date() },
+    );
+
+    const rejected = await importPolicyFile(queryRunner.manager, {
+      sourceFileName: "policy-invalid.yaml",
+      fileBytes: invalidPolicyBytes,
+    });
+
+    expect(rejected.accepted).toBe(false);
+    if (rejected.accepted) return;
+    expect(rejected.issues.length).toBeGreaterThan(0);
+    expect((await readPointer()).lastError).toEqual(gatewayRecord);
+
+    // A record for an older revision no longer describes the request, so the import's rejection replaces it.
+    await queryRunner.manager.update(
+      ControlCatalogPointer,
+      { id: 1 },
+      { lastError: { ...gatewayRecord, revision_id: Number(requested.revisionId) - 1 } },
+    );
+    await importPolicyFile(queryRunner.manager, {
+      sourceFileName: "policy-invalid.yaml",
+      fileBytes: invalidPolicyBytes,
+    });
+    expect((await readPointer()).lastError).toMatchObject({
+      reason: "policy_reload_rejected",
+      source_file_name: "policy-invalid.yaml",
+    });
+  });
+
   it("clears the recorded rejection once a valid file is imported", async () => {
     await clearPointer();
     await importPolicyFile(queryRunner.manager, {

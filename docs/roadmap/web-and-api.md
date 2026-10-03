@@ -1052,7 +1052,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     storyboard and proof checks" (beat 4)
   - Blocked by: `stored report read`; `report storage`; `read path`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-34 · Validate and import the signature feed**
+- [x] **API-34 · Validate and import the signature feed**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: API-32 · Needs: X-87 · Provides: X-88
   - Paths: `apps/api/src` (the module from API-31)
@@ -1061,6 +1061,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Tests: `pnpm --filter api run test` with valid, tampered, oversized and unsupported-grammar feeds.
   - Report: "Hybrid security controls and managed attack signatures" (Trusted historical attack feed)
   - Blocked by: `feed grammar and trust`
+  - Completed (2026-10-03): `apps/api/src/policies/signature-feed.ts` validates the feed the way Go's `ParseFeed` does and stricter where they differ (closed schema, 64 KiB bound, strict JSON without duplicate keys, `schema_version` written as 1, `normalized_substring` rules with `block` response and printable-ASCII patterns, trusted issuer `task-passport-security` only); `importPolicyFile` takes the feed named by `signatures.path`, refuses a feed whose revision differs from `signatures.revision`, whose disabled rule IDs are not in it, or that reuses a stored revision with different bytes, stores the exact bytes with their SHA-256 (the same bytes reuse the row), and only requests the revision (the gateway activates it). Done-when met: the sample feed imports, and a tampered (changed bytes under a stored revision) or oversized copy is rejected. Checks on `main` e50e186: `pnpm --filter api run test` 125 passed (16 in `signature-feed.spec.ts`); `pnpm test:db api` 27 passed, 0 failed, 0 skipped (`signature-feed-import.db-spec.ts` refuses changed bytes, another revision, an unknown disabled rule, an untrusted issuer, an invalid feed and a missing feed with the pointer unchanged). Not covered here: the authenticated reload route that also imports a feed (API-33).
 
 ### Next.js (report role: Implementer 1)
 

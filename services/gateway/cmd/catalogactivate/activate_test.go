@@ -151,6 +151,28 @@ func TestPostgresSignaturesOffPolicyNeedsNoFeed(t *testing.T) {
 	}
 }
 
+// A recorded gateway rejection belongs to one revision; a request an import committed meanwhile is not
+// a rejection, and the message must not call it one.
+func TestGatewayRejectedMatchesOnlyTheRejectedRevision(t *testing.T) {
+	record := []byte(`{"reason":"policy_reload_rejected","code":"catalog_invalid","revision_id":88,"stage":"gateway_validation"}`)
+	for name, testCase := range map[string]struct {
+		record     []byte
+		revisionID int64
+		want       bool
+	}{
+		"the rejected revision": {record, 88, true},
+		"a newer request":       {record, 89, false},
+		"an import's rejection": {[]byte(`{"reason":"policy_reload_rejected","issues":[]}`), 88, false},
+		"another stage":         {[]byte(`{"revision_id":88,"stage":"import"}`), 88, false},
+		"no record":             {nil, 88, false},
+		"not JSON":              {[]byte(`nope`), 88, false},
+	} {
+		if got := gatewayRejected(testCase.record, testCase.revisionID); got != testCase.want {
+			t.Errorf("%s: got %v, want %v", name, got, testCase.want)
+		}
+	}
+}
+
 // failingDatabase cannot start a transaction, as an unreachable database.
 type failingDatabase struct{}
 

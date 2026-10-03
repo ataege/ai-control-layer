@@ -37,8 +37,7 @@ values, not requirements. Its validation targets are not test results. The appro
 is a team policy decision ("The final approved field list would be a team policy decision, not a
 sponsor requirement"), fixed at the M0 freeze. The same holds for the report 1.2 example `policy.yaml` (24 model calls with
 12 agent and 12 security calls, 20,000 tokens, 20 seconds per request, two concurrent local
-requests, 15-minute expiry, a semantic threshold of 0.75): "illustrative team settings, not sponsor
-requirements or measured performance".
+requests, 15-minute expiry, a semantic threshold of 0.75): "illustrative team settings, not sponsor requirements or measured performance". The team has since raised the token total to 40,000 (item 29 below).
 
 ## Team
 
@@ -282,7 +281,13 @@ anything else is a decision, not an implemented behaviour.
     identifier must be a report of this run and organization; otherwise the answer is rejected, never
     trimmed, and the rejection counts as a correction under GO-29. Go stores
     `runs.result_reference = {"report_ids": [...]}` with no prose, in the same transaction as the
-    completion. On `main`: the format check `internal/runresult` (`Parse` rejects anything but the exact shape) and the `result_reference` write in `internal/repository/runs.go`. Its hook into the agent loop is item 27, also on `main`.
+    completion. On `main`: the format check `internal/runresult` (`Parse` rejects anything but the exact shape) and the `result_reference` write in `internal/repository/runs.go`. Its hook into the agent loop is item 27, also on `main`. **Amended by the lead's delegate:** a final
+    answer whose whole message is exactly one markdown code fence (` ``` ` or ` ```json `) around exactly
+    one JSON object is accepted; prose outside the fence, two fences or a fence plus text are still
+    rejected, and the stored result reference stays canonical. Reason: `qwen3.5:4b`'s fenced answers were
+    rejected as `invalid_arguments`, which used up corrections in the live clean-clone run `8b59f19f`.
+    The amendment is being built by lane 3c; not on `main` yet (`internal/runresult/runresult.go` on
+    `main` has no fence handling, so the strict parser still applies).
 22. **Measurement method (`measurement method`).** Decided by Worker 2 as the Go implementer for
     GO-81 and accepted by the lead's delegate: concurrency 1; warmup excluded; the configurations
     without a model interleaved sample by sample; GO-80's phase names (`policy_lookup`,
@@ -353,6 +358,13 @@ anything else is a decision, not an implemented behaviour.
     (`services/gateway/README.md`; a check on 2026-10-03 where all three fixtures printed the expected
     denial, exit 0, with no execution attempt). Both run sets are samples of three on one machine, one
     model and one build.
+
+29. **Token budget raised.** The user approved raising `budgets.tokens_total` from the report's
+    illustrative 20,000 to 40,000, because the live story re-sends its growing context: run `68f4872d`'s
+    10th model call was refused at reservation after 13,565 tokens in 9 calls (lead's report). On `main`:
+    yes, `config/policy.yaml` (`tokens_total: 40000`) and the `config/README.md` row stating why (commit
+    `917859c`). It is a team setting, not a sponsor requirement, and the other budget values keep the
+    report's illustrative numbers.
 
 Live end-to-end completions (3 October 2026), with where each is recorded. All used `qwen3.5:4b`, and
 none is final-build evidence (X-59):
@@ -627,7 +639,7 @@ On 3 October 2026 at 14:56:15 UTC, the developer M2/8 GiB machine completed two 
 The user settled the Go-side calculation dependency: reserve compact input JSON UTF-8 bytes
 (including system prompt, history, tool results, tools and schemas) plus 1,024 template tokens and
 maximum output before dispatch. Agent output is 512 and security output 256; both share an initial
-20,000-token total. Native Ollama uses `think: false`, `stream: false` and `options.num_predict`.
+20,000-token total (raised to 40,000, item 29 below). Native Ollama uses `think: false`, `stream: false` and `options.num_predict`.
 The existing central policy/catalog carries these configurable settings; there is no second
 configuration authority. The three optional v1 budget additions are documented in `config/README.md`.
 
