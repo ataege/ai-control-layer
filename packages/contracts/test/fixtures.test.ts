@@ -12,6 +12,7 @@ import type {
   ActionProposal,
   ApiReadinessResponse,
   ApprovalDecision,
+  ApprovalResponse,
   AssessmentPage,
   AssessmentRecord,
   ControlEvaluationRequest,
@@ -25,6 +26,7 @@ import type {
   ReadinessResponse,
   ReasonCode,
   ReportView,
+  ReviewView,
   RunEventsPage,
   RunState,
   RunUsage,
@@ -741,6 +743,58 @@ export const typedSamples = {
       },
     ],
   } satisfies ReportView,
+  approvalResponse: {
+    approvalId: "a9d8e64b-db06-46aa-bfbb-b3889db82366",
+    actionId: "df036f8b-f6bb-4e9e-bf60-a6c50ae4c830",
+    runId: "073514cb-6817-4cac-8af7-516e72952704",
+    decision: "approve",
+  } satisfies ApprovalResponse,
+  reviewView: {
+    canonicalization_version: 1,
+    action_id: "df036f8b-f6bb-4e9e-bf60-a6c50ae4c830",
+    run_id: "073514cb-6817-4cac-8af7-516e72952704",
+    passport_id: "cf67a545-4d64-49c6-ae9d-4a945bae8a69",
+    policy_revision_id: 1,
+    tool: "queue_report",
+    canonical_arguments: {
+      report_id: "1ce31118-cb8b-46b6-91c2-cb09e9216b66",
+      recipient_reference: "recipient:073514cb-6817-4cac-8af7-516e72952704:vendor_Atlas_88f6c992",
+    },
+    recipient: {
+      reference: "recipient:073514cb-6817-4cac-8af7-516e72952704:vendor_Atlas_88f6c992",
+      vendor_id: "vendor_Atlas_88f6c992",
+      address: "reports-88f6c992@atlas.example.com",
+    },
+    report: {
+      id: "1ce31118-cb8b-46b6-91c2-cb09e9216b66",
+      version: 1,
+      template: "vendor_reconciliation_v1",
+      template_version: 1,
+      projection_rule: "vendor_invoice_fields_v1",
+      projection_rule_version: 1,
+      classification: "vendor_shareable",
+      content_hash: "b0afb95f7c9c4d9a057d8a4ca7892a79884c0fd431e2716bcc3e3d158a0dc6e3",
+      content: "Vendor reconciliation 88f6c992",
+      sources: [
+        {
+          kind: "invoice",
+          id: "invoice_A01_88f6c992",
+          version: 1,
+          classification: "vendor_shareable",
+          consumed_fields: [
+            "invoice_id",
+            "external_reference",
+            "duplicate_reference",
+            "currency",
+            "total_minor_units",
+            "due_on",
+          ],
+        },
+      ],
+      source_manifest_digest: "63a791578bdb66d0014e205811e20226d84a638102b2bc37c53292b8c360644e",
+    },
+    expires_at: "2026-10-03T22:23:29.02559Z",
+  } satisfies ReviewView,
 };
 
 // Fixture file that each typed literal must equal, one per schema.
@@ -770,6 +824,8 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   securityEventPage: "security-event-page.judge.json",
   securitySummary: "security-summary.judge-split.json",
   reportView: "report-view.vendor.json",
+  approvalResponse: "approval-response.approve.json",
+  reviewView: "review-view.queue-report.json",
 };
 
 test("typed samples are identical to their fixtures", () => {
@@ -788,4 +844,25 @@ test("every schema has a typed sample", () => {
     const schemaName = schemaFileName.replace(".schema.json", "");
     assert.ok(schemaNamesWithSample.has(schemaName), `schema "${schemaName}" has no typed sample`);
   }
+});
+
+test("review and approval contracts reject what Go never produces", () => {
+  const review = readJson(join(fixtureDirectory, "review-view.queue-report.json")) as ReviewView;
+  const validateReview = validatorFor("review-view");
+  assert.equal(validateReview(review), true);
+  assert.equal(validateReview({ ...review, recipient: null }), false);
+  assert.equal(validateReview({ ...review, report: null }), false);
+  assert.equal(validateReview({ ...review, reviewer: "x" }), false);
+  assert.equal(
+    validateReview({ ...review, tool: "read_invoice", recipient: null, report: null }),
+    true,
+  );
+  assert.equal(validateReview({ ...review, tool: "read_invoice" }), false);
+
+  const approval = readJson(
+    join(fixtureDirectory, "approval-response.approve.json"),
+  ) as ApprovalResponse;
+  const validateApproval = validatorFor("approval-response");
+  assert.equal(validateApproval({ ...approval, decision: "approved" }), false);
+  assert.equal(validateApproval({ ...approval, payload: {} }), false);
 });

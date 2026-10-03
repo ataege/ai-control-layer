@@ -71,6 +71,10 @@ var fixturesCoveredElsewhere = map[string]string{
 	"security-summary.judge-split.json":              "internal/reads",
 	"report-view.vendor.json":                        "internal/reads",
 	"report-view.internal-withheld.json":             "internal/reads",
+	// Go-owned review and approval contracts (lane w3), decoded by internal/policy's TestReviewContractFixturesMatchTheGoTypes.
+	"review-view.queue-report.json":  "internal/policy",
+	"approval-response.approve.json": "internal/policy",
+	"approval-response.reject.json":  "internal/policy",
 }
 
 func readFile(t *testing.T, path string) []byte {
