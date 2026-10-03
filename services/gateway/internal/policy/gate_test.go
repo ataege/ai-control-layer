@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -419,5 +420,17 @@ func TestStubbedSemanticBlockStopsAPermittedActionBeforeReview(t *testing.T) {
 	}
 	if freezer.calls != 0 || decision.Review != nil {
 		t.Fatal("a semantically blocked action was frozen for review")
+	}
+}
+
+func TestMalformedReplayLabelIsDenied(t *testing.T) {
+	for _, label := range []string{"replay:x", "labelled_replay:", "labelled_replay:has space", "labelled_replay:" + strings.Repeat("a", 201)} {
+		gate, _, recorder := newTestGate(atlasScope())
+		labelled := proposal("read_invoice", `{"invoice_id":"invoice_A01"}`)
+		labelled.ReplaySource = label
+		decision := gate.Evaluate(context.Background(), testRun(), labelled)
+		if decision.Outcome != OutcomeDeny || decision.ReasonCode != ReasonInvalidArguments || recorder.storedAction != nil {
+			t.Fatalf("label %q: decision %s/%s, stored %v", label, decision.Outcome, decision.ReasonCode, recorder.storedAction != nil)
+		}
 	}
 }

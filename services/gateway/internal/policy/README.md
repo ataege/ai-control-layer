@@ -243,3 +243,31 @@ GO-53 belongs to Worker 2, who owns the effect transaction; the executor half li
   any second attempt), the action becomes `unknown` with an `action.unknown` event
   (`outcome_unknown`), and the result is `paused`. Nothing re-runs it.
 - An adapter refusal (`Outcome` failed) is `failed` with its reason, never retried.
+
+## Labelled action replay (GO-36)
+
+GO-05 chose a labelled Go runtime scenario: a stored prohibited proposal, taken from a hostile note
+of the X-34 fixtures (`fixtures/hostile-notes.json`), is submitted for the next step of a named run
+through the same `Gate.Evaluate` and `Executor.Execute` as a model proposal. There is no replay
+branch; `Proposal.ReplaySource` (`labelled_replay:<fixture id>`) only labels the records:
+
+- the stored action (`runtime.actions.replay_source`, migration `1791140000000`, X-09
+  `StoredAction.replaySource`);
+- every event the gate, the approval manager and the executor write for it
+  (`maskedSummary.replaySource`).
+
+`ReplayProposal(fixtureID, targets, ...)` builds the proposal a model would make if it obeyed the
+note: `hostile_note_redirect_record_v1` reads `invoice_B01` (`resource_out_of_scope`),
+`hostile_note_redirect_recipient_v1` queues the vendor report to the address in the note
+(`destination_not_allowed`), `hostile_note_internal_disclosure_v1` queues the internal report to
+the registered recipient (`report_export_restricted`). A replay makes no provider call and records
+no model usage; a malformed label is denied (`invalid_arguments`).
+
+## Resource and destination boundary evidence (GO-30)
+
+`TestResourceAndDestinationBoundaries` submits an out-of-scope invoice and a changed recipient
+(both from the labelled replay) and a vendor outside the task through the production gate and
+executor. It snapshots the excluded invoice's version, the report, outbox and execution-attempt
+counts and the stored passport before and after, and asserts the stored denial, a refused
+execution and zero adapter calls (X-37, X-38). Until the agent loop lands, no case is a live model
+proposal.
