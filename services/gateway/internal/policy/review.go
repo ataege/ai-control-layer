@@ -69,8 +69,16 @@ type ReviewedSource struct {
 }
 
 // Digest is SHA-256 over the payload's canonical JSON. It detects any change to the reviewed
-// material; it never authenticates or authorizes.
+// material; it never authenticates or authorizes. The arguments are re-canonicalized first, so a
+// payload read back from jsonb (which reorders object keys) hashes the same as when it was frozen.
 func (payload ReviewPayload) Digest() ([sha256.Size]byte, []byte, error) {
+	arguments, err := DecodeArguments(payload.Tool, payload.CanonicalArguments)
+	if err != nil {
+		return [sha256.Size]byte{}, nil, err
+	}
+	if payload.CanonicalArguments, err = CanonicalArguments(arguments); err != nil {
+		return [sha256.Size]byte{}, nil, err
+	}
 	canonicalPayload, err := compactJSON(payload)
 	if err != nil {
 		return [sha256.Size]byte{}, nil, err

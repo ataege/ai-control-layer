@@ -161,3 +161,46 @@ detectable; the action's own digest stays untouched. `StaleSources` compares the
 versions with the current ones by exact integer equality (the `record versions` rule), which GO-45
 uses for `resource_version_changed`. The content and the address stay in restricted storage: the
 `approval.requested` event carries only the report id, template and classification.
+
+## Semantic action check (GO-77, policy side)
+
+`SecurityActionEvaluator` adapts c1's `security.Inspector.EvaluateAction` to the gate's
+`ActionEvaluator`. The gate calls it only after the deterministic checks allowed the action or sent
+it to review (Figure 6), so a forbidden action never causes a security request. The inspector runs
+the field limit, the signature rules and then the metered semantic check at the
+`action_proposal` boundary:
+
+- `no_objection`: the gate's outcome stays (allow, or approval required: never skipped);
+- `block`: deny with the control's reason (for example `signature_match`), before any review
+  material is frozen;
+- `pause` or any failure: deny with the reason (`security_evaluator_unavailable` when none), which
+  the worker treats as a pause.
+
+`CatalogSecuritySettings` loads the settings of the action's evaluated revision with
+`security.SettingsFromCatalog` (the revision's content and the active pointer's feed with its pinned
+digest); a missing or unenforceable revision pauses. Every control record of the check is written
+to `runtime.control_assessments` in the decision's transaction (one evaluation id, the action, the
+admission and evaluated revisions, matched rule and feed revision, verdict and source for semantic
+rows), never the inspected text.
+
+## The approval decision (GO-44)
+
+Routes (mounted by 3c's `internal/api` behind the service token and the verified operator
+context): `ApprovalRoutePattern` (`POST /internal/actions/{actionId}/approval`, `ApprovalHandler`)
+and `ReviewRoutePattern` (`GET /internal/actions/{actionId}/review`, `ReviewHandler`).
+
+- The body is X-10 only, `{"decision":"approve"|"reject"}`; any other field or a missing decision is
+  `400` and nothing is decided.
+- Reviewer authority comes from `app.memberships` for the verified user and organization (role
+  `reviewer`, migration `1791110000000` grants the gateway read only); a signed claim alone never
+  suffices, and a missing row or failed read denies.
+- `Approvals.Decide` locks the action of the operator's organization (another organization's action
+  is answered like a missing one), requires `awaiting_approval`, the frozen expiry still ahead, the
+  action digest recomputed from its stored arguments and the review payload digest recomputed from
+  its stored content. Then one transaction writes the `runtime.approvals` row (bound to the action
+  digest, the payload id, the reviewer and the frozen expiry), the action status `approved` or
+  `rejected`, the `approval.decided` event and the continuation job (`repository.Tx.EnqueueJob`), or
+  none of them. A second decision fails. f3's worker moves the run from `awaiting_approval` to
+  `running` when it claims the job.
+- `Approvals.FrozenReviewFor` returns the frozen payload (exact content and recipient) to a reviewer
+  of the organization only.
