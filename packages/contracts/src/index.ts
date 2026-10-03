@@ -152,20 +152,6 @@ export interface RunView {
   passport: {
     id: string;
     template: string;
-    vendorId?: string;
-    invoiceIds: string[];
-    destination: string;
-    approvalRequirement?: string;
-    limits: {
-      modelCalls: number;
-      timeoutSeconds: number;
-    };
-    versions: {
-      task: string;
-      policy: string;
-    };
-    rules: string[];
-    expiresAt: string;
   };
 }
 
@@ -174,20 +160,7 @@ export interface SanitizedEvent {
   id: string;
   type: string;
   timestamp: string;
-  details: {
-    message?: string;
-    tool?: string;
-    action?: string;
-    decision?: 'allowed' | 'denied' | 'pending' | 'blocked' | 'redacted';
-    reasonCode?: string;
-    rule?: string;
-    revision?: string;
-    modelPurpose?: string;
-    correctionRoute?: string;
-    correctionCount?: number;
-    isReplay?: boolean;
-    [key: string]: unknown;
-  };
+  details: Record<string, unknown>;
 }
 
 // Go-owned runtime contracts (X-08, X-09, X-11, X-12, X-13). Envelope fields are camelCase;
