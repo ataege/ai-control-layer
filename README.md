@@ -261,7 +261,8 @@ All root scripts, as defined in `package.json`:
 | `pnpm verify`                           | Runs `check:instructions`, `format:check`, `lint`, `typecheck`, `test`, `build` and prints a summary.             |
 | `pnpm smoke` (`--mode=host\|container`) | HTTP checks against the running services.                                                                         |
 | `pnpm test:db` (`gateway\|api`)         | Database-backed tests against the PostgreSQL in `.env`; see "Testing and verification".                           |
-| `pnpm reset:demo`                       | Resets the demo fixtures for the judge environment; see "Testing and verification". Not complete yet.             |
+| `pnpm db:seed`                          | DRAFT: loads the synthetic demo records from `fixtures/`; see "Testing and verification".                         |
+| `pnpm reset:demo`                       | DRAFT: truncates the demo and runtime data and reseeds the demo records; see "Testing and verification".          |
 | `pnpm judge`                            | DRAFT judge client: submits one input to the NestJS live test entry; see "Testing and verification".              |
 | `pnpm check:instructions`               | Checks that `AGENTS.md` and `CLAUDE.md` are identical and complete, and that the agent files are valid.           |
 | `pnpm db:migration:create <Name>`       | Writes an empty migration file.                                                                                   |
@@ -372,17 +373,32 @@ non-zero unless every selected side passed: an unreachable database or a failing
 test skipped while the database is available, or a side with no database-backed tests, is
 SKIPPED. Go runs with `-count=1`, so a cached pass cannot hide a database that is down.
 
-### `pnpm reset:demo`
+### `pnpm db:seed` (draft)
+
+An explicit seed; nothing runs it at startup. It loads the synthetic vendors and invoices of
+`fixtures/demo-records.json` into the `demo` tables in one transaction. Running it twice changes
+nothing: missing rows are inserted and present rows are left alone. A present row with other values
+(for example an invoice whose version a run changed) stops the seed with an error and changes
+nothing; `pnpm reset:demo` restores it. It then runs `pnpm policy:import` to seed the control
+catalog when that script exists, and otherwise reports the step as skipped. The app records
+(organizations, users, memberships, the demonstration operator) are not seeded yet; they follow the
+identity tables (API-05 to API-08, SH-19).
+
+**Draft:** the `demo` tables are the unapproved SH-17 migration; run `pnpm db:migration:run` first.
+It uses the API's installed `pg` client, so it adds no dependency.
+
+### `pnpm reset:demo` (draft)
 
 An explicit reset for the judge environment (`make reset-demo` calls it); nothing runs it at
-startup. Decided scope: it truncates the demo and runtime data and reseeds the synthetic demo
-records, and keeps the app data (users, memberships, control-catalog revisions), so a judge's policy
-edits survive a fixture reset. It never removes the database volume.
+startup. Decided scope: it truncates every table of the `demo` and `runtime` schemas and reseeds the
+synthetic demo records, in one transaction, so either the fixtures are fully restored or nothing
+changed. It keeps the app data (users, memberships, control-catalog revisions), so a judge's policy
+edits survive a fixture reset; for the same reason it does not re-import `policy.yaml`. It prints
+the row count of every table before and after, and never removes the database volume.
 
-It refuses to run unless `POSTGRES_HOST` resolves only to a loopback address, and stops when the
-database does not answer. **Not complete yet:** the reset itself needs the demo and runtime tables
-and the seed command (SH-17, SH-24, SH-18). Until they exist the command stops with an error after
-these checks and changes nothing.
+Like `pnpm db:seed`, it refuses to run unless `POSTGRES_HOST` resolves only to a loopback address,
+and stops when the database does not answer or the tables were not migrated. **Draft:** it works on
+the unapproved SH-16, SH-17, SH-24, SH-27 and SH-44 migrations.
 
 ### `pnpm judge` (draft)
 

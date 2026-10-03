@@ -3,46 +3,58 @@
 // never run at startup. Decided scope (lead, 2026-10-03, SH-29 option b): truncate the demo and
 // runtime data and reseed the synthetic demo records; app data (users, memberships, control-catalog
 // revisions) is kept, so a judge's policy edits survive a fixture reset. It never removes the
-// database volume.
+// database volume. DRAFT: it works on the unapproved SH-16, SH-17, SH-24, SH-27 and SH-44 tables.
 //
-// Part 1 (this file today): the safety checks. The reset itself lands with the demo and runtime
-// tables and the seed command (SH-17, SH-24, SH-18); until then the command stops with an error
-// after the checks and changes nothing, so it can never be mistaken for a completed reset.
+// The truncate and the reseed run in one transaction: either the fixtures are fully restored or
+// nothing changed. Unlike `pnpm db:seed`, it does not re-import policy.yaml, which would replace a
+// judge's active catalog revision.
+import { requireLocalReachableDatabase } from "./lib/database-probe.mjs";
+import {
+  connectToDatabase,
+  countRows,
+  listTables,
+  requireDemoTables,
+  seedDemoRecords,
+} from "./lib/demo-seed.mjs";
 import { loadRootEnvironment, MISSING_ENV_FILE_MESSAGE } from "./lib/env-file.mjs";
-import { databaseAddress, databaseIsReachable, hostIsLoopback } from "./lib/database-probe.mjs";
 import { printStatus } from "./lib/output.mjs";
+
+const RESET_SCHEMAS = ["demo", "runtime"];
 
 const { fileFound, environment } = loadRootEnvironment();
 if (!fileFound) {
   console.error(MISSING_ENV_FILE_MESSAGE);
   process.exit(1);
 }
+// Only a database on this machine: the reset deletes data and must not reach a shared one.
+if (!(await requireLocalReachableDatabase(environment, printStatus, "reset"))) process.exit(1);
 
-const database = databaseAddress(environment);
+const client = await connectToDatabase(environment);
+try {
+  await requireDemoTables(client);
+  const resetTables = await listTables(client, RESET_SCHEMAS);
+  printStatus("info", `before: ${JSON.stringify(await countRows(client, resetTables))}`);
 
-// 1. Only a database on this machine: the reset deletes data and must not reach a shared one.
-if (!(await hostIsLoopback(database.host))) {
-  printStatus(
-    "fail",
-    `refusing to reset ${database.label}: POSTGRES_HOST must resolve only to a loopback address (localhost, 127.0.0.1, ::1)`,
-  );
+  await client.query("BEGIN");
+  try {
+    // One statement over every table of both schemas, so their foreign keys need no CASCADE;
+    // a table outside them that still references one makes the reset fail instead.
+    await client.query(`TRUNCATE ${resetTables.join(", ")} RESTART IDENTITY`);
+    const seeded = await seedDemoRecords(client);
+    await client.query("COMMIT");
+    printStatus("ok", `truncated ${resetTables.length} tables in ${RESET_SCHEMAS.join(" and ")}`);
+    for (const [tableName, result] of Object.entries(seeded)) {
+      printStatus("ok", `demo.${tableName}: ${result.inserted} reseeded`);
+    }
+  } catch (resetError) {
+    await client.query("ROLLBACK");
+    throw resetError;
+  }
+  printStatus("info", `after: ${JSON.stringify(await countRows(client, resetTables))}`);
+  printStatus("info", "app data (identity, control catalog) kept");
+} catch (resetError) {
+  printStatus("fail", `reset failed, nothing changed: ${resetError.message}`);
   process.exit(1);
+} finally {
+  await client.end();
 }
-printStatus("ok", `${database.host} is a loopback address`);
-
-// 2. The database must answer before anything is changed.
-if (!(await databaseIsReachable(database))) {
-  printStatus(
-    "fail",
-    `cannot connect to ${database.label}; start PostgreSQL (pnpm infra:up) or fix POSTGRES_HOST/POSTGRES_PORT`,
-  );
-  process.exit(1);
-}
-printStatus("ok", `${database.label} reachable`);
-
-// 3. Not built yet: nothing was reset.
-printStatus(
-  "fail",
-  "the reset is not implemented yet: it needs the demo and runtime tables and the seed command (SH-17, SH-24, SH-18). Nothing was changed.",
-);
-process.exit(1);

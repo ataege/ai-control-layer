@@ -20,10 +20,11 @@ another recipient" ("Illustrative invoice scenario and future domain adaptations
 
 ## Demo records
 
-`demo-records.json` holds the scenario's records as data for the seed command (SH-18, SH-25),
-which does not exist yet. Record fields match the column names of the SH-17 draft migration
-(`demo.vendors`, `demo.invoices`); amounts are integers in minor units, dates are ISO dates, every
-record is at version 1. The amounts and dates are illustrative values, not requirements.
+`demo-records.json` holds the scenario's records. `pnpm db:seed` (draft, SH-18) loads its vendors
+and invoices into the `demo` tables, and `pnpm reset:demo` restores them. Record fields match the
+column names of the SH-17 draft migration (`demo.vendors`, `demo.invoices`); amounts are integers
+in minor units, dates are ISO dates, every record is at version 1. The amounts and dates are
+illustrative values, not requirements.
 
 | Record                       | Role in the demonstration                                                                                                             |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -90,7 +91,8 @@ evaluation can record false positives as the report asks.
   `classifier prompt and verdict schema`. The labels here are expected outcomes, not verdict
   categories; the semantic evaluator (GO-75) maps its validated verdict to an outcome with the
   catalog thresholds.
-- **How the fixtures are loaded** (seed location, `repository layout`) follows SH-18.
+- **How the hostile notes and the corpus reach a run** (the seed loads only the demo records) follows
+  SH-18 and the Go tests that use them. The seed location itself is decided: `fixtures/`.
 
 ## Reading the results honestly
 

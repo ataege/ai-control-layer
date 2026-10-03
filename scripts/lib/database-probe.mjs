@@ -40,3 +40,28 @@ export async function hostIsLoopback(host) {
     return false;
   }
 }
+
+/**
+ * The checks before a command that writes demo data: the database must be on this machine and
+ * answer. Prints each result; resolves the address, or null when a check failed.
+ */
+export async function requireLocalReachableDatabase(environment, printStatus, commandLabel) {
+  const database = databaseAddress(environment);
+  if (!(await hostIsLoopback(database.host))) {
+    printStatus(
+      "fail",
+      `refusing to ${commandLabel} ${database.label}: POSTGRES_HOST must resolve only to a loopback address (localhost, 127.0.0.1, ::1)`,
+    );
+    return null;
+  }
+  printStatus("ok", `${database.host} is a loopback address`);
+  if (!(await databaseIsReachable(database))) {
+    printStatus(
+      "fail",
+      `cannot connect to ${database.label}; start PostgreSQL (pnpm infra:up) or fix POSTGRES_HOST/POSTGRES_PORT`,
+    );
+    return null;
+  }
+  printStatus("ok", `${database.label} reachable`);
+  return database;
+}
