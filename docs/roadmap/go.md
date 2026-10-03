@@ -2250,6 +2250,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     future dispatch after a review wait"); "Functional requirements MVP boundary and deferred scope"
     (Cancellation and revocation)
   - Blocked by: nothing
+  - Progress (2026-10-03, lane w3): `internal/agent/cancellation_postgres_test.go` through lane f3's loop with the production gate (review freezer), executor and adapters, model scripted and counted on the ledger. Evidence X-55: cancel during a model request -> stopped/run_cancelled, 2 model calls, 1 succeeded attempt from before the cancel, the later proposal not executed, a late continuation dispatches nothing; cancel during a review wait -> stopped/run_cancelled, the reviewer's decision refused (run stopped), executor refuses, no approval row, report kept, outbox 0, no further model request; cancel after approval -> the approved action refused run_cancelled, grant unconsumed, outbox 0; expiry between steps -> stopped/run_expired before the next model request, the earlier read kept. Each logs the cancel_requested_at and run.stopped timestamps. The executor now refuses an expired passport with run_expired instead of run_cancelled (lane f3 asked to map it to stopped in `refusalEnd`). Not ticked: the continuation after a review wait needs lane f3's GO-40, and the revocation case needs GO-52 (blocked on SH-38).
 
 - [x] **GO-81 · Build the repeatable performance benchmark**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)

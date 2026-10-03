@@ -73,8 +73,9 @@ passport is `run_expired`.
 
 1. Fresh checks, before anything is written: the action belongs to this organization and run and
    is `allowed` (a denied, awaiting, executed or unknown action is refused); the run has no
-   cancellation request and is not terminal; the stored passport is unexpired; the stored
-   arguments still decode and recompute the stored digest (else `action_changed`).
+   cancellation request and is not terminal (else `run_cancelled`); the stored passport is
+   unexpired (else `run_expired`); the stored arguments still decode and recompute the stored
+   digest (else `action_changed`).
 2. The run's attempts are counted under a lock on the run row against the passport's tool attempt
    limit (`allowance_exhausted`), then the open attempt is inserted, the action set to
    `executing`, and both committed before dispatch.
@@ -226,6 +227,18 @@ and `approval_expired`. `recordAttempt` claims the action first (allowed or appr
 only then counts the run's attempts under `FOR NO KEY UPDATE` on the run row, the lock the event
 writer also takes; the earlier order (run lock first) deadlocked with a running effect. A losing
 concurrent execution is refused (`action_changed`).
+
+## Cancellation and expiry evidence (GO-51, in progress)
+
+`internal/agent/cancellation_postgres_test.go` runs lane f3's loop with the production gate (with
+the review freezer), executor and adapters; only the model is a scripted double whose dispatches
+are counted on the run's ledger. A cancellation during a model request leaves the returned
+proposal unexecuted; a cancellation during a review wait stops the run, refuses the reviewer's
+decision and executes nothing; a cancellation after approval refuses the approved action and
+leaves its grant unconsumed; an expiry between steps stops before the next model request. In each,
+effects committed before the stop stay recorded. Still open: expiry and cancellation seen by the
+continuation after a review wait (needs lane f3's GO-40) and revocation during a review wait
+(GO-52, blocked on SH-38).
 
 ## Expiry and the continuation read (for GO-40)
 
