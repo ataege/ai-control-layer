@@ -1455,6 +1455,23 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
       "- INV104: A01, A02". The lead decided that demo beat 5 (the denied internal export) uses the
       labelled replay (`cmd/replay`), said openly, since the live model attempts it in fewer than 2
       of 3 runs.
+  - Clean-checkout rehearsals (2026-10-03, lane 3c): four live runs from a fresh `git clone`, set up
+    only by README.md and docs/setup.md (`pnpm install --frozen-lockfile`, `pnpm run setup`, a private
+    PostgreSQL, `pnpm db:migration:run`, `pnpm db:roles`, `pnpm db:seed`, `pnpm dev:gateway`),
+    qwen3.5:4b, operator context from a development script, app organization, user and reviewer
+    membership inserted by hand (SH-19 not on main). (1) 68f4872d (main 1dad371, feed loaded by hand and
+    imported twice): internal_investigation_v1 (Internal only), vendor report approved and queued, then
+    the internal report's queue_report denied live with `report_export_restricted`; paused
+    `allowance_exhausted` when the 10th agent reservation exceeded the 20000-token total (lane f3's
+    diagnosis). (2) 8b59f19f (go/3c 41af095, no hand feed load; readiness 503 before the seed, 200 after
+    the gateway activated it): the same export denial, then the model retried it and stopped on the
+    two-correction limit. (3) 03806160 (go/3c adda68a, tokens_total 40000, the code-fence rule) and (4)
+    7c354f81 (main cdfee55, every fix including the denial and final-answer feedback, only the app
+    records by hand) both completed in under a minute: both reports created, the vendor report approved
+    through `POST /internal/actions/{actionId}/approval` and queued (one simulated outbox message), and
+    the stored result `{"report_ids":[<internal>,<vendor>]}`; 7 agent and 1 security calls each, no
+    denial and no correction. Runs (3) and (4) did not attempt the internal export, so the live export
+    denial is shown by runs (1) and (2) only.
 
 - [ ] **GO-71 · Record the conservative context manifest, if `internal report rendering` admits model prose** Dropped: `internal report rendering` is deterministic only (lead's delegate, 2026-10-03)
   - Owner: Go implementer (report role: Implementer 3, agent runtime, and Implementer 5, provenance) · Tier: B · Size: S (estimate 2-4 h)
