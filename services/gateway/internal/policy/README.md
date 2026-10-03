@@ -182,3 +182,25 @@ digest); a missing or unenforceable revision pauses. Every control record of the
 to `runtime.control_assessments` in the decision's transaction (one evaluation id, the action, the
 admission and evaluated revisions, matched rule and feed revision, verdict and source for semantic
 rows), never the inspected text.
+
+## The approval decision (GO-44)
+
+Routes (mounted by 3c's `internal/api` behind the service token and the verified operator
+context): `ApprovalRoutePattern` (`POST /internal/actions/{actionId}/approval`, `ApprovalHandler`)
+and `ReviewRoutePattern` (`GET /internal/actions/{actionId}/review`, `ReviewHandler`).
+
+- The body is X-10 only, `{"decision":"approve"|"reject"}`; any other field or a missing decision is
+  `400` and nothing is decided.
+- Reviewer authority comes from `app.memberships` for the verified user and organization (role
+  `reviewer`, migration `1791110000000` grants the gateway read only); a signed claim alone never
+  suffices, and a missing row or failed read denies.
+- `Approvals.Decide` locks the action of the operator's organization (another organization's action
+  is answered like a missing one), requires `awaiting_approval`, the frozen expiry still ahead, the
+  action digest recomputed from its stored arguments and the review payload digest recomputed from
+  its stored content. Then one transaction writes the `runtime.approvals` row (bound to the action
+  digest, the payload id, the reviewer and the frozen expiry), the action status `approved` or
+  `rejected`, the `approval.decided` event and the continuation job (`repository.Tx.EnqueueJob`), or
+  none of them. A second decision fails. f3's worker moves the run from `awaiting_approval` to
+  `running` when it claims the job.
+- `Approvals.FrozenReviewFor` returns the frozen payload (exact content and recipient) to a reviewer
+  of the organization only.
