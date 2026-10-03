@@ -237,6 +237,9 @@ type StoredAction struct {
 	Status                     ActionStatus `json:"status"`
 	ExpiresAt                  *time.Time   `json:"expiresAt"`
 	CreatedAt                  time.Time    `json:"createdAt"`
+	// ReplaySource is labelled_replay:<fixture id> for a labelled replay (GO-36); nil for a model
+	// proposal.
+	ReplaySource *string `json:"replaySource"`
 }
 
 // RunStatus is the state of a run (X-11).
@@ -287,6 +290,7 @@ const (
 	EventRunCompleted              EventType = "run.completed"
 	EventRunFailed                 EventType = "run.failed"
 	EventRunStopped                EventType = "run.stopped"
+	EventRunCancelRequested        EventType = "run.cancel_requested"
 	EventModelCompleted            EventType = "model.completed"
 	EventActionProposed            EventType = "action.proposed"
 	EventActionAllowed             EventType = "action.allowed"
@@ -307,7 +311,7 @@ const (
 // EventTypes lists every event type.
 var EventTypes = []EventType{
 	EventAdmissionRejected, EventRunQueued, EventRunStarted, EventRunPaused, EventRunCompleted,
-	EventRunFailed, EventRunStopped, EventModelCompleted, EventActionProposed, EventActionAllowed,
+	EventRunFailed, EventRunStopped, EventRunCancelRequested, EventModelCompleted, EventActionProposed, EventActionAllowed,
 	EventActionDenied, EventApprovalRequested, EventApprovalDecided, EventActionExecuting,
 	EventActionSucceeded, EventActionFailed, EventActionUnknown, EventReportCreated,
 	EventReportExportDenied, EventReportSafeTemplateOffered, EventControlEvaluated,

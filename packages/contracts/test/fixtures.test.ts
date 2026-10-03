@@ -218,6 +218,7 @@ export const typedSamples = {
     status: "succeeded",
     expiresAt: null,
     createdAt: "2026-10-03T12:01:00.123Z",
+    replaySource: null,
   } satisfies StoredAction,
   runState: {
     runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",

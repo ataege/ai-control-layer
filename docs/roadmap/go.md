@@ -1840,7 +1840,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     versioning and execution rechecks"; "Architecture and chart reading guide" (Figure 6)
   - Blocked by: nothing
 
-- [ ] **GO-41 · Persist cancellation through the internal cancel command**
+- [x] **GO-41 · Persist cancellation through the internal cancel command**
   - **Report 1.1 change:** Figure 7; name proposal `POST /internal/runs/:id/cancel`.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-21 · Needs: X-11, X-13 · Provides: X-42
@@ -1859,6 +1859,22 @@ typecheck` PASS; `pnpm verify` 6 passed.
     changes nothing; after a cancel no model request or tool execution starts, including for a run
     waiting for approval; a repeated cancel is harmless. `pnpm --filter gateway run test`;
     database-backed cases through the X-24 command.
+  - Completed (2026-10-03): `POST /internal/runs/{runId}/cancel` in `internal/api`, behind the
+    service token and the verified operator context; body empty or `{}`; answers 200 with the X-11
+    run state, 404 for an unknown or another organization's run, 503 `decision_unavailable`
+    otherwise. `repository.Tx.RequestCancellation` locks the run, stamps `cancel_requested_at` once
+    with a `run.cancel_requested` event (additive X-12 type), and stops a run no worker is advancing
+    (queued, awaiting approval, paused) at once as `stopped` / `run_cancelled` with `run.stopped`; a
+    running run keeps its status and is stopped by the worker loop (lane f3), which, like the
+    executor (lane w3), refuses every dispatch once the stamp is set. A finished run and a repeated
+    cancel change nothing. No NestJS revocation record is written. Tests: repository (queued and
+    awaiting-approval runs stop with both events; a running run is stamped once and a repeat adds
+    nothing; a completed run is untouched; another organization's run changes nothing) and route
+    tests with a labelled double plus a PostgreSQL route test (another organization 404, own run
+    stopped). Checks: gateway five checks PASS; `go test -race ./internal/repository
+./internal/api` with PostgreSQL ok; contracts `test` PASS; `pnpm verify` 6 passed. Not covered
+    here: interrupting an in-flight model request (the loop stops at its next check), and the
+    approval command refusing a decision on a stopped run, which is lane w3's GO-44 check.
   - Report: "Atomic allowances hard limits and estimated cost" (Cancellation and time limits);
     "Illustrative passport and interface contracts" (Proposed browser and runtime operations);
     "Exact action approval versioning and execution rechecks" (Versioned policy and current
@@ -2016,13 +2032,37 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: nothing
   - Completed (2026-10-03): `TestApprovalCannotOverrideTheExportRestriction`: a genuinely created Internal only report (provenance.StoreReport, titled "Public summary") proposed to the correct, permitted Atlas recipient is denied at the gate before review (`report_export_restricted`); a submitted approval is refused and stores no grant; a replayed grant inserted directly with the action set to approved still executes nothing (refused `action_changed`: nothing was frozen for review); outbox rows for the report: 0. Worker 2's queue_report re-checks the restriction at effect time as a last line. `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped; `pnpm verify` 6/6.
 
-- [ ] **GO-73 · Validate and acknowledge a candidate catalog revision**
+- [x] **GO-73 · Validate and acknowledge a candidate catalog revision**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-72 · Needs: X-79 · Provides: X-83 (part: Go validation and acknowledgement)
   - Paths: the enforcement package from GO-12; the internal API package from GO-21
   - Work: "Go fetches and validates the candidate, acknowledges readiness, and the activation flow publishes its active-version pointer." An invalid candidate is never activated; the last-known-good revision stays in use.
   - Done when: a valid candidate is acknowledged and becomes active, and an invalid one is rejected with a reason while the old revision keeps deciding.
   - Tests: database-backed tests through the X-24 command for a valid and an invalid candidate.
+  - Completed (2026-10-03): the `catalog activation protocol` as the lead decided it.
+    `catalog.ActivateRequested` runs under a transaction-scoped advisory lock (one gateway instance
+    at a time), reads the pointer, and validates a requested revision that is not active and has not
+    already failed with the gateway's own parsers (limits plus `security.SettingsFromCatalog`, with
+    the feed found by the policy's `signatures.revision` and its pinned digest). Success sets
+    `validated_revision_id = active_revision_id = requested` and `active_feed_revision_id`, and
+    clears `last_error` in one transaction (Go's acknowledgement); failure writes a safe
+    `last_error` (`reason`, `code`, `message`, `revision_id`, `stage`; never file content) and keeps
+    the last good revision. `catalog.WatchRequested` runs it every second in `cmd/gateway` and
+    stops before the pool closes. Migration `1791120000000-GrantGatewayCatalogActivation` grants
+    the gateway role UPDATE on exactly those pointer columns. Tests (PostgreSQL, rolled-back
+    transaction): a valid request becomes active with its feed and the loader serves it; invalid
+    limits, an unknown disabled rule and a feed that was not imported are each rejected with their
+    code while the last good revision keeps deciding, and are not retried; a first revision with
+    signatures disabled needs no feed; a held lock gives `busy`; as `task_passport_gateway` the
+    activation works while requesting or importing a revision is `permission denied`. Checks:
+    gateway five checks PASS; `go test -race ./internal/catalog/...` ok; api `lint`, `typecheck`,
+    `test`, `build` PASS; `pnpm db:migration:run` applied the migration; `pnpm verify` 6 passed.
+    Live on the 55510 database with the gateway binary: `pnpm policy:import` of policy.yaml with
+    threshold 0.8 was accepted as revision 230, and within 2.5 s the pointer showed requested,
+    validated and active 230 with feed 134 and no error; a start-run command then admitted a
+    passport with admission revision 230; a second import naming feed_v9 (revision 231) was
+    rejected with `signature_feed_missing` while 230 stayed active. The feed row was inserted by
+    hand for that run, because the feed half of the import (c1) has not landed yet.
   - Report: "Central policy configuration and safe reload"
   - Blocked by: `catalog activation protocol`
 
@@ -2382,6 +2422,20 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     its action, or claim its resources.")
   - Tests: internal-boundary tests through the X-24 command: each cross-organization command and
     read is rejected, and the runtime rows are identical before and after.
+  - Progress (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
+    committed run (awaiting approval), an action awaiting approval, an internal report, a vendor and
+    invoices, and calls every mounted internal route with a valid service token and organization
+    B's verified operator context: start a run on A's invoices, cancel A's run, read A's report,
+    approve and reject A's action, read A's review. Each is rejected (start: 400 or 503, cancel and
+    report 404, approval and review 403 or 404), no response contains A's report text or vendor,
+    B gets no passport, and an md5 fingerprint of every row A owns in runtime.passports, runs, jobs,
+    actions, approvals, audit_events, review_payloads, demo.reports, outbox_messages, invoices and
+    vendors is identical before and after; A's own operator still reads the report (200) and
+    cancels the run (200). Checks: `pnpm test:db gateway` 688 passed, 0 failed, 0 skipped; gateway
+    five checks PASS; `pnpm verify` 6 passed. Missing half: lane w2's GO-24 run, usage and event
+    reads are not mounted yet; they join this test when they land. On the seeded test database the
+    cross-organization start-run gets 503 (its catalog binds no feed), so the scope rejection of
+    that call is shown by GO-13's tests instead.
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
