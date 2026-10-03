@@ -25,7 +25,7 @@ export function LoginForm() {
       const result = await ProductClient.signIn({ email, password });
       
       if (!result.ok) {
-        setError(getSafeMessage(result.error.kind));
+        setError(getSafeMessage(result.error));
         return;
       }
 

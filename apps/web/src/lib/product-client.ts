@@ -34,8 +34,21 @@ export const REASON_CODE_MESSAGES: Record<string, string> = {
   configuration_error: "A server configuration error occurred.",
 };
 
-export function getSafeMessage(code: string): string {
-  return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
+import { type FetchJsonError } from "./fetch-json";
+
+export function getSafeMessage(error: FetchJsonError | string): string {
+  if (typeof error === "string") {
+    return REASON_CODE_MESSAGES[error] || "An unknown error occurred.";
+  }
+  if (error.kind === "http") {
+    const code = (error.body as any)?.error?.code;
+    if (code === "unauthorized") return "Invalid credentials.";
+    if (code) return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
+    if (error.status === 401) return "Invalid credentials.";
+  }
+  if (error.kind === "network") return "The server could not be reached.";
+  if (error.kind === "timeout") return "The request timed out.";
+  return REASON_CODE_MESSAGES[error.kind] || "An unknown error occurred.";
 }
 
 // Type Guards for frozen contracts

@@ -9,8 +9,9 @@ export const UPSTREAM_PATHS = [
   "/api/health/ready",
   "/api/diagnostics/gateway",
 ] as const;
+export const UPSTREAM_PATHS_EXTRA = ["/api/auth/me"];
 
-export type UpstreamPath = (typeof UPSTREAM_PATHS)[number];
+export type UpstreamPath = (typeof UPSTREAM_PATHS)[number] | "/api/auth/me";
 
 export const UPSTREAM_PREFIXES = [
   ...UPSTREAM_PATHS,
