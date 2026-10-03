@@ -1763,9 +1763,9 @@ sizes are this roadmap's estimates.
     demonstration environment and deadline apply; whether a synthetic finance workflow with a
     simulated outbox is acceptable; which agent risks or developer-integration expectations to
     prioritize; and what evidence would make cost controls and exact-action approvals convincing,
-    and whether any sponsor-specific evaluation requirements are available. Also ask for the
-    detailed judging criteria, which "have not been established by this report" ("Sources and
-    evidence register", S1). Record every answer and the remaining uncertainty.
+    and whether any sponsor-specific evaluation requirements are available. (The detailed
+    judging criteria are now in `docs/product/competition-criteria.pdf` [S10], so that question is
+    dropped; report 1.2, D-3 in `docs/product/requirements.md`.) Record every answer and the remaining uncertainty.
   - Done when: decision 8's answer is recorded in `docs/product/README.md`, `docs/preparation-record.md`
     matches the required disclosure, and the remaining uncertainty is documented "before reuse or
     submission".
@@ -1774,7 +1774,8 @@ sizes are this roadmap's estimates.
     "Risk register and scope controls" (Rules remain unresolved)
   - Blocked by: nothing
 
-- [ ] **RS-02 · Ask for cross-track rules only if another track is considered**
+- [x] **RS-02 · Ask for cross-track rules only if another track is considered**
+  - **Dropped (2026-10-03):** no other track is considered (lead's delegate). HackYeah FAQ: one project per category, and submitting one project to more than one category is strongly discouraged (`docs/product/requirements.md`, F-4, F-5).
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: C · Size: S (estimate 0.5 h)
   - Depends on: RS-01 · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
@@ -1790,7 +1791,8 @@ sizes are this roadmap's estimates.
 
 ### M0 (hours 0-2)
 
-- [ ] **RS-03 · Write the official requirements sheet**
+- [x] **RS-03 · Write the official requirements sheet**
+  - **Done (2026-10-03):** `docs/product/requirements.md` (commits 155fa39, 58f50e5, 93e8357, e4dfe3b): every requirement of the rules [S9], criteria [S10], the general HackYeah rules and FAQ, with source sections and roadmap coverage; the repository PDFs are byte-identical to the published ones. `prettier --check` passed.
   - **Report 1.2 change:** The requirements sheet uses the rules [S9] and the criteria [S10], `docs/product/competition-criteria.pdf`.
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: RS-01 · Needs: nothing · Provides: X-05
@@ -1812,7 +1814,8 @@ sizes are this roadmap's estimates.
 
 ### M1 (hours 2-6)
 
-- [ ] **RS-04 · Write the demo specification and storyboard**
+- [x] **RS-04 · Write the demo specification and storyboard**
+  - **Done (2026-10-03):** `docs/product/storyboard.md` (commit e5d232e): twelve beats in three evidence segments, each with the report's proof, its capture and its sync points; with `requirements.md` this is the researcher's first integrated deliverable. Timing waits for the pitch length (RS-01) and SH-33.
   - **Report 1.2 change:** Twelve beats in three evidence segments: the invoice task and inherited export restriction; a live semantic-security and signature test; configuration, budget and reporting checks.
   - **Report 1.1 change:** Nine beats with their proofs; where the export replay is used; "Explain source inheritance and the distinction between a permitted read and a permitted export."
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: A · Size: M (estimate 3-6 h)
