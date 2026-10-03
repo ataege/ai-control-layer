@@ -186,3 +186,55 @@ func TestModelGatewayRefusesACallAcrossTwoCatalogRevisions(t *testing.T) {
 		t.Fatal("a call across two catalog revisions was dispatched")
 	}
 }
+
+// switchableCatalog is an active catalog whose revision limits a test lowers mid-run.
+type switchableCatalog struct {
+	mutex    sync.Mutex
+	snapshot catalog.Snapshot
+}
+
+func (source *switchableCatalog) Active(context.Context) (catalog.Snapshot, error) {
+	source.mutex.Lock()
+	defer source.mutex.Unlock()
+	return source.snapshot, nil
+}
+
+func (source *switchableCatalog) lowerSecurityCalls(limit int64) {
+	source.mutex.Lock()
+	defer source.mutex.Unlock()
+	source.snapshot.Limits.CallsSecurity = limit
+}
+
+// GO-86: lowering the active revision's security calls below a running passport's usage refuses
+// the next security reservation before any dispatch.
+func TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport(t *testing.T) {
+	pool := testdb.Open(t)
+	run := budgettest.OpenRun(t, pool, budgettest.Limits(20000))
+	var hits atomic.Int64
+	provider := providerDouble(t, func(writer http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		fmt.Fprint(writer, fixtureAnswer)
+	})
+	active := &switchableCatalog{snapshot: gatewaySnapshot([]string{"test-fixture"}, 20, 2).snapshot}
+	caller := NewCatalogAccountedCaller(provider, budgettest.NewDispatchRecordingStore(pool), fixedAccounting{}, active, pool, "test-fixture")
+	securityRequest := model.Request{Purpose: model.SecurityPurpose, ContextTokens: contextTokens, Messages: []model.Message{{Role: "user", Content: "fixture"}}}
+	for range 3 {
+		if _, err := caller.Call(context.Background(), run.RunID, testdb.ID(t), securityRequest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	active.lowerSecurityCalls(1)
+	if _, err := caller.Call(context.Background(), run.RunID, testdb.ID(t), securityRequest); !errors.Is(err, budget.ErrExhausted) {
+		t.Fatalf("security call after the catalog lowered the limit: %v", err)
+	}
+	if _, err := caller.Call(context.Background(), run.RunID, testdb.ID(t), agentRequest()); err != nil {
+		t.Fatalf("agent call: %v", err)
+	}
+	snapshot, err := budget.NewPostgresStore(pool).Snapshot(context.Background(), run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() != 4 || snapshot.Security.Calls != 3 || snapshot.Security.CallLimit != 12 {
+		t.Fatalf("provider hits %d, security calls %d (stored limit %d)", hits.Load(), snapshot.Security.Calls, snapshot.Security.CallLimit)
+	}
+}

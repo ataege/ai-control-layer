@@ -128,8 +128,7 @@ Proposed reason vocabulary (reports 1.1 and 1.2): `resource_out_of_scope`, `dest
 `security_evaluator_unavailable`, `security_allowance_exhausted`, `content_redacted`, `signature_match`,
 `policy_reload_rejected` and `model_not_allowed`. Decided by the lead's delegate (X-13): 28 codes, these
 20 plus `tool_not_registered`, `invalid_arguments`, `tool_not_allowed`, `decision_unavailable`,
-`content_blocked`, `content_too_large`, `multiple_actions_not_supported` and `run_expired`, on `main` in
-`packages/contracts/schemas/reason-code.schema.json`. "Scores and model explanations are evidence, not
+`content_blocked`, `content_too_large`, `multiple_actions_not_supported` and `run_expired`, on `main` in `packages/contracts/schemas/reason-code.schema.json` (29 with `limit_not_allowed`; 30 with `run_not_active`, item 26). "Scores and model explanations are evidence, not
 authorization." "Denial may identify an authorized
 alternative template without granting extra scope." "The UI, runtime, tests, and evidence should use
 the same vocabulary." The architecture's event names (`report.export_denied`,
@@ -199,16 +198,14 @@ writes each outcome down here when it is settled.
 ## Decisions recorded by the lead's delegate (3 October 2026)
 
 Each item below was **decided by the lead's delegate** on 3 October 2026 and recorded by the
-researcher. "On `main`" names what is merged at 44e925f (items 1 to 14) 55d9522 (items 15 to 20) or 53f34e6 (items 21 to 23);
+researcher. "On `main`" names what was merged when the researcher last checked each item: c968034 (3 October 2026, re-checked for every item after items 24 to 27 arrived);
 anything else is a decision, not an implemented behaviour.
 
 1. **Read path (`read path`).** Operator reads go through private Go `/internal` endpoints, mounted
-   behind the service token and the verified `X-Operator-Context`. On `main`: not yet; the gateway
-   mounts only `GET /internal/ping` behind the service token. The mount is lane 3c's work.
+   behind the service token and the verified `X-Operator-Context`. On `main`: yes. `api.Commands` mounts the start-run, cancel, control-evaluate, stored-report, approval, review, run-state, run-events, run-usage and security read routes behind the service token and the operator-context check (`services/gateway/internal/api/api.go`, `httpserver/internal_commands.go`).
 2. **Stored report read (`stored report read`).** Go serves `GET /internal/runs/{runId}/reports/{reportId}`
    (GO-37, Worker 2). Internal only content is withheld unless the viewer may read internal content,
-   which is any verified operator of that organization (the MVP has no vendor users). Labels and
-   lineage are always shown. On `main`: not yet.
+   which is any verified operator of that organization (the MVP has no vendor users). Labels and lineage are always shown. On `main`: the route is mounted (`provenance.StoredReportHandler`); the withholding rule was not traced.
 3. **Report storage (`report storage`).** Lineage in `runtime.report_lineage`, reports in
    `demo.reports`. On `main`: yes, migrations `1791041440000-AddReportsAndOutbox` (`demo.reports`) and
    `1791060000000-AddProvenanceColumnsAndLineage` (`runtime.report_lineage`).
@@ -235,17 +232,15 @@ anything else is a decision, not an implemented behaviour.
 9. **Feed grammar and trust (`feed grammar and trust`).** Normalized-substring rules. Trust is the
    authenticated import plus the SHA-256 of the file bytes, pinned by `signatures.revision`. There is
    no signing key; this is a documented limitation, so the feed is **not** called "signed". The feed
-   is `config/attack-signatures.json`, revision `feed_v1`, with four rules (SH-46). On `main`: not yet;
-   the feed is on branch `go/c1`.
+   is `config/attack-signatures.json`, revision `feed_v1`, with four rules (SH-46). On `main`: yes, `config/attack-signatures.json`, revision `feed_v1`, four rules (`prompt_ignore_previous_v1`, `code_exec_python_import_v1`, `unsafe_deserialization_pickle_v1`, `model_repo_trust_remote_code_v1`); its own scope text says it protects no model-loading infrastructure. Importing it into a catalog revision is item 16.
 10. **Reason codes (X-13).** 28 codes: the report's 20 plus `tool_not_registered`, `invalid_arguments`,
     `tool_not_allowed`, `decision_unavailable`, `content_blocked`, `content_too_large`,
-    `multiple_actions_not_supported` and `run_expired`. On `main`: yes, 28 values in
-    `packages/contracts/schemas/reason-code.schema.json`.
+    `multiple_actions_not_supported` and `run_expired`. On `main`: yes, 29 values in `packages/contracts/schemas/reason-code.schema.json`: these 28 plus `limit_not_allowed` (admission rejects requested limits above the catalog, GO-13). Item 26 adds `run_not_active`, making 30 once merged.
 11. **Worker readiness (decision 5, X-32).** While the worker loop is not running, `/health/ready`
     answers 503 with the real database check; no schema change. On `main`: yes
     (`services/gateway/internal/health/health.go`).
 12. **Task template.** Admission accepts exactly `reconcile_atlas_v1`, a Go-registered task template
-    constant. On `main`: the name appears in tests only; the admission constant is not merged yet.
+    constant. On `main`: yes, `admission.TaskTemplateReconcileAtlas` in `services/gateway/internal/admission/admission.go`.
 13. **Budget authority.** The ledger is the single authority for model calls, tokens, time and
     concurrency; `runtime.model_calls` is written only by `internal/budget`; `budget_reservations`
     holds tool attempts only (`docs/contracts/runtime-schema-alignment.md`). On `main`: yes
@@ -257,38 +252,30 @@ anything else is a decision, not an implemented behaviour.
     revisions to the requested one, plus `active_feed_revision_id`, in one transaction: that is its
     acknowledgement. On failure it records `last_error` and keeps the last good revision; with no good
     revision the gateway is not ready and admission refuses. Runs keep the revision on their passport.
-    On `main`: the pointer table `app.control_catalog_pointer` with `requested_revision_id`,
-    `validated_revision_id`, `active_revision_id`, `active_feed_revision_id` and `last_error`
-    (migration `1791038985994-AddControlCatalog`) and the `pnpm policy:import` script. Not on `main`:
-    Go's validation and acknowledgement (GO-73, lane 3c) and the import change (lane c1).
+    On `main`: the pointer table `app.control_catalog_pointer` (migration `1791038985994-AddControlCatalog`), the `pnpm policy:import` command and Go's validation and acknowledgement (`services/gateway/internal/catalog/activation.go`, GO-73). The feed half of the import is item 16.
 16. **Feed import (API-34).** Lane c1 builds the feed half of API-34 inside `pnpm policy:import`.
-    Pending the user's clearance with the web + API implementers. On `main`: not yet.
+    Pending the user's clearance with the web + API implementers. On `main`: not yet; `policy-catalog-importer.ts` and `import-policy.command.ts` do not mention the feed at c968034.
 17. **Reviewer authority.** A reviewer is a verified user whose `app.memberships` role list holds
     `reviewer` for that organization; a signed claim alone never suffices. The demonstration seed gives
-    the demo operator the roles `operator` and `reviewer`. On `main`: the memberships `roles` column
-    exists; the reviewer check is not merged, and `scripts/seed-demo.mjs` does not seed memberships
-    yet (its own TODO, SH-19).
+    the demo operator the roles `operator` and `reviewer`. On `main`: the memberships `roles` column, `ReviewerRole = "reviewer"` in `services/gateway/internal/policy/approvals.go` and migration `1791110000000-GrantGatewayMembershipRead`, which lets the gateway read `app.memberships`. `scripts/seed-demo.mjs` still does not seed memberships (its own TODO, SH-19), so the demo operator has no `reviewer` role yet.
 18. **Approval contract (X-10).** `POST /internal/actions/{actionId}/approval` with exactly
     `{"decision": "approve" | "reject"}`, and `GET /internal/actions/{actionId}/review` for the frozen
-    review payload. On `main`: not yet; the contract is commit `1c12eb9` on branch `go/3c`, and the
-    handlers are GO-44 (lane w3).
+    review payload. On `main`: yes, both routes are mounted by `api.Commands` (`services/gateway/internal/policy/approval_handlers.go`).
 19. **Frozen review payload.** It may contain the exact registered reporting address, for the
     authorized reviewer only; never in model context, events, logs or the audit export. GO-45 rechecks
     at execution that the address is unchanged. This amends the GO-07 rule that the address leaves the
     database only as the outbox recipient (`docs/roadmap/go.md`, GO-07 completion note: "only as a
-    run-scoped reference, resolved inside queue_report"). On `main`: not yet.
+    run-scoped reference, resolved inside queue_report"). On `main`: the review route exists; whether its payload carries the address as decided was not traced.
 20. **Gateway database role (GO-38).** The gateway connects as `task_passport_gateway` with a
     generated `POSTGRES_GATEWAY_PASSWORD` and refuses to start without it; `pnpm db:roles` sets the
-    login password, and `pnpm reset:demo` runs it too. On `main`: the role is created by migration
-    `1791050000000-CreateServiceRoles`, whose password wiring is still a comment; the change is on
-    branch `go/w2`, not merged.
+    login password, and `pnpm reset:demo` runs it too. On `main`: yes. The role is created by migration `1791050000000-CreateServiceRoles`; the gateway configuration requires `POSTGRES_GATEWAY_PASSWORD` (`internal/config/config.go`); `pnpm db:roles` (`scripts/db-roles.mjs`) sets the password. That `pnpm reset:demo` runs it too was not traced.
 
 21. **Final result format.** The model's final answer is exactly
     `{"status": "completed", "report_ids": [...]}` with one or two unique lowercase UUIDs. Every
     identifier must be a report of this run and organization; otherwise the answer is rejected, never
     trimmed, and the rejection counts as a correction under GO-29. Go stores
     `runs.result_reference = {"report_ids": [...]}` with no prose, in the same transaction as the
-    completion. On `main`: not yet; GO-26 is being built on lane 3c.
+    completion. On `main`: the format check `internal/runresult` (`Parse` rejects anything but the exact shape) and the `result_reference` write in `internal/repository/runs.go`. Its hook into the agent loop is item 27, not on `main`.
 22. **Measurement method (`measurement method`).** Decided by Worker 2 as the Go implementer for
     GO-81 and accepted by the lead's delegate: concurrency 1; warmup excluded; the configurations
     without a model interleaved sample by sample; GO-80's phase names (`policy_lookup`,
@@ -301,14 +288,39 @@ anything else is a decision, not an implemented behaviour.
     `classifier_v2` (lane c1, commit `b9f94c2` on branch `go/c1`) was measured at 0 wrong of 84 cases
     on `qwen3.5:4b`, against 4 of 84 for v1. Limits: v2 was written with the case it now catches in
     view, the benign probes are few, and variance between runs remains. A claim says "on this fixture
-    set", never universal detection. On `main`: not yet. The measurement is the lane's, not
+    set", never universal detection. On `main`: not yet (no `classifier_v` on `main` at c968034). The measurement is the lane's, not
     final-build evidence (X-59).
 
-The control evaluation adapter (X-91) is served as `POST /internal/control/evaluate` on lane 3c's
-branch (GO-82); a `model_input` evaluation never dispatches the agent model. On `main`: not yet.
+24. **Model call retries (`model call retries`).** There are no automatic model-call retries in the
+    MVP. A failed, timed-out or unknown agent or security call is never re-sent; its reservation settles
+    or is held as `usage_unknown`, and the run pauses (or the security check denies). This is the retry
+    policy the GO-02 decision refers to. On `main`: the failure path writes the call as usage-unknown and
+    holds the reservation (`internal/agent/loop_failure_postgres_test.go`, `internal/budget/README.md`);
+    the proof is Worker 3's GO-42 follow-up, pending.
+25. **Semantic check scope on action proposals (design point and limitation).** The semantic evaluator
+    classifies only free-text argument values. Arguments the strict decoder constrains (identifiers that
+    match their pattern, registered template names, UUIDs, run-scoped recipient references) get no
+    model call, and a `not_applicable` control record is written. For the four MVP tools that means no
+    semantic action call: the action control is the deterministic gate (scope, destination,
+    provenance) plus signature matching. Reason: the live smoke of run `da88594f` showed
+    `qwen3.5:4b` scoring benign `read_invoice` and `create_report` proposals at 0.85 to 1.0, so no
+    report could be created. This narrows the report's Figure 6, which shows a semantic action check
+    after the deterministic checks; it is recorded as a limitation, not hidden. On `main`: not yet
+    (lane c1).
+26. **Judge evaluations (X-91, GO-82).** Organization-wide for any verified operator of the
+    organization; the evaluating `actorId` is recorded; `maskedSummary.inputSource` is `"judge"`; an
+    evaluation is refused before any model call on a cancelled, expired or finished run, with the new
+    X-13 code `run_not_active` (30 codes). The judge client should admit its own dedicated run. Score
+    and category are returned, bounded per run by `calls_security`. On `main`: the route is mounted;
+    `run_not_active` and these rules were not found on `main` (no `run_not_active` at c968034).
+27. **Final result in the loop.** The final-result format of item 21 is hooked into the agent loop by
+    lane f3 (commit `e03ab44` on branch `go/f3`). On `main`: not yet.
 
-Known limitations recorded with these decisions: `command idempotency keys` is open, so two
-identical start-run requests create two runs; the signature feed has no signing key (item 9).
+The control evaluation adapter (X-91) is `POST /internal/control/evaluate` (GO-82); a `model_input`
+evaluation never dispatches the agent model. On `main`: the route is mounted by `api.Commands` and its
+request and response schemas are in `packages/contracts`; the `model_input` behaviour was not traced.
+
+Known limitations recorded with these decisions: `command idempotency keys` is open, so two identical start-run requests create two runs; the signature feed has no signing key (item 9); there are no automatic model-call retries (item 24); the semantic check does not run on the four MVP tools' action proposals (item 25).
 
 ## Open items between the report and the architecture specification
 

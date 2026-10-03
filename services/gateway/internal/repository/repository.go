@@ -20,6 +20,10 @@ var (
 	ErrNotFound = errors.New("runtime record not found")
 	// ErrInvalidTransition means the requested state change is not allowed from the stored state.
 	ErrInvalidTransition = errors.New("invalid runtime state transition")
+	// ErrCancelRequested refuses a change that would keep a run going after a cancellation was
+	// requested. The caller stops the run with run_cancelled instead; it is deliberately not an
+	// ErrInvalidTransition, so a caller that ignores lost races cannot ignore a cancellation.
+	ErrCancelRequested = errors.New("run cancellation requested")
 	// ErrUnavailable hides driver errors, which can name hosts and users.
 	ErrUnavailable = errors.New("runtime storage unavailable")
 )

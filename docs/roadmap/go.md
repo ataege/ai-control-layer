@@ -764,6 +764,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     and presenters" (Canonical arguments)
   - Blocked by: `canonical arguments`
   - Completed (2026-10-03): `internal/policy/canonical.go` (2b7cc5c, 582eafd, b6fb078; tool names and templates switched to `internal/contracts` in c07ca60). Strict decoding rejects invalid UTF-8, non-objects, unknown, case-variant and duplicate keys, missing or null fields, wrong types including numbers, trailing data, empty, over-long or control-character identifiers, unregistered templates, empty or repeated `source_invoice_ids` and a non-UUID `report_id`; the digest covers canonicalization version, action, run, tool, canonical arguments, passport, policy revision, recipient, affected resources with versions, outbound content and expiry. Checks: `go test -v ./internal/policy` 55 cases PASS (equivalent inputs give identical bytes for all four tools, 22 rejected inputs, 15 one-at-a-time material changes each change the digest); `pnpm verify` 6 passed, 0 failed, 0 skipped. Argument names match X-09 as frozen by 3c.
+  - Hardened (2026-10-03, lane w3, lead decision after lane c1's action-fix review): the decoder enforces record identifier shapes, invoice ids `^invoice_[A-Za-z0-9_-]{1,120}$` (also in `source_invoice_ids`) and vendor ids `^vendor_[A-Za-z0-9_-]{1,121}$`, inside the semantic check's constrained identifier format; prose inside an id is `invalid_arguments` before any check. `recipient_reference` stays bounded so a redirected recipient is stored and denied with `destination_not_allowed` (X-38 evidence unchanged). A grep of every lane's fixture ids found nothing legitimate that breaks.
 
 - [x] **GO-13 · Admit a start-run request and issue the passport, run and job together**
   - **Report 1.2 change:** The passport adds approved model references, the admission catalog revision, shared limits with agent and security sub-limits, concurrency and run expiry; model selection is constrained by the catalog allowlist.
@@ -2177,7 +2178,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
-- [ ] **GO-47 · Prove the legitimate task on the Go side**
+- [x] **GO-47 · Prove the legitimate task on the Go side**
   - **Report 1.1 change:** Work: internal report, denied export, vendor report, review, one outbox row; the reviewed bytes match the simulated queued content. Done when adds Implementer 5's first integrated deliverable, "The stored vendor report uses only approved invoice fields and creates one matching outbox effect." Beat 8.
   - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-27, GO-40, GO-45, GO-29, GO-64, GO-65 · Needs: X-16, X-34 · Provides: X-44, X-67 (part: reviewed outbox effect)
@@ -2208,6 +2209,15 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     semantic check (`semantic_injection_detected`) and stopped at the correction limit, outbox 0
     each time. Missing: the live run through the approval, after c1 limits the action-proposal
     semantic check to free-text arguments.
+  - Completed (2026-10-03): with c1's fix on `main` (855ae20, merged), the live run went through
+    the approval. `TestLiveStoryThroughTheProductionChain` (`qwen3.5:4b`, labelled live): step 1
+    proposed several actions at once and was denied (`multiple_actions_not_supported`); then
+    read_invoice A01 and A02, create_report `vendor_reconciliation_v1` (vendor_shareable, no
+    internal note), queue_report awaiting approval; the reviewer approved; the run resumed, the
+    approved action executed and queued one simulated outbox message to the registered address,
+    and the run completed (6 agent calls, 1 security call, 1 live verdict, outbox rows 1). The
+    model did not create the internal report in this run; the scripted run covers that beat.
+    Both runs: one outbox row, approved and to the trusted recipient.
   - Report: "Validation plan and evidence matrix" (critical check Legitimate task); "Live
     demonstration storyboard and proof checks" (beat 7)
   - Blocked by: nothing
@@ -2284,7 +2294,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     deferred scope" (Durable execution)
   - Blocked by: `dispatched attempts`
 
-- [ ] **GO-50 · Prove budget concurrency**
+- [x] **GO-50 · Prove budget concurrency**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-39, GO-45 · Needs: X-24, X-34, X-39 · Provides: X-52
   - Paths: none (concurrency tests in the packages above)
@@ -2296,6 +2306,17 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Tests: concurrent reservation tests with `go test -race ./...` through the X-24 command: of the
     competing requests only those the allowance covers succeed, the others are denied, and the
     totals reconcile.
+  - Completed (2026-10-03): W2 lane (taken over from the agent-runtime list), branch go/w2.
+    Model reservations (`internal/budget`, `TestPostgresCompetingReservationsCannotSpendTheSameAllowance`):
+    12 overlapping reservations of 1000 tokens, both purposes, for an allowance of 3000: 3
+    granted, 9 refused `ErrExhausted` before any dispatch with no reservation row; after two
+    settle (600 tokens each) and one stays usage-unknown, the ledger's used 1200 equals the
+    settled rows and its reserved 1000 equals the held row, 3 calls counted.
+    `TestPostgresCompetingCallsCannotExceedTheCallLimit`: 10 calls for a limit of 4: 4 granted.
+    Tool attempts (`internal/policy`, `TestPostgresCompetingExecutionsCannotSpendTheSameToolAttempts`):
+    6 allowed actions executed at once through the real executor against 2 remaining attempts: 2
+    succeeded (one attempt each, two adapter calls), 4 refused `allowance_exhausted` with no attempt
+    and still allowed. `go test -race -count=5` against `starter_test`: 5 of 5 for each.
   - Report: "Validation plan and evidence matrix" (critical check Budget concurrency); "Atomic
     allowances hard limits and estimated cost"; "Threat model limits and unresolved design choices"
     ("Verify that two concurrent attempts cannot consume one approval or allowance twice")
@@ -2341,6 +2362,13 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     `semantic_on_live` 5, 0 errors, p50 16,204,307 µs, provider p50 15,456,473 µs. The full table
     is in the gateway README. `go test ./cmd/benchmark`: ok. GO-80's recorded spans were empty
     (its writer is on go/f3, not `main`).
+  - Rerun (2026-10-03, quiet machine, at the lead's request):
+    `MODEL_NAME=qwen3.5:4b pnpm benchmark --live` at 3aeade7, load average 12.03 at the start
+    and 10.11 at the end (below 15 throughout): `semantic_off` 300 samples, total p50 1,311 µs,
+    p95 3,452 µs (deterministic p50 77 µs); `semantic_on_fixture` 300, p50 1,288 µs (semantic
+    13 µs); `semantic_on_live` 10, p50 1,930,552 µs, provider p50 1,919,761 µs, gateway overhead
+    p50 5,367 µs; 0 errors. The gateway README holds the table; it replaces the loaded-machine
+    numbers for the slides.
   - Report: "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: `measurement method`
 

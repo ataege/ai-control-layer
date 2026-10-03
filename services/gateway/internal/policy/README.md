@@ -11,7 +11,12 @@ digest").
 - `DecodeArguments(tool, raw)` decodes a proposal's arguments strictly into the tool's typed form.
   Rejected before any canonical form exists: invalid UTF-8, a non-object, unknown keys, keys that
   differ only by case, duplicate keys, missing or null fields, wrong types (numbers included),
-  trailing data, empty or over-long identifiers and control characters. Values are kept
+  trailing data, empty or over-long identifiers and control characters. Record identifiers must
+  have their documented shape: invoice ids `^invoice_[A-Za-z0-9_-]{1,120}$` (also in
+  `source_invoice_ids`), vendor ids `^vendor_[A-Za-z0-9_-]{1,121}$`, `report_id` a lowercase
+  uuid, `template` a registered name; prose inside an id is `invalid_arguments`. Recipient
+  references stay bounded, not pattern-strict, so a redirected recipient is stored and denied
+  with `destination_not_allowed` by the passport and run-scope checks. Values are kept
   byte-for-byte: nothing is trimmed, case-folded or Unicode-normalized.
 - `CanonicalArguments` encodes typed arguments as one compact JSON form with a fixed field order,
   so input field order, whitespace and equivalent escapes do not matter. Lists keep their order.

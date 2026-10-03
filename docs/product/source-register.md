@@ -31,9 +31,9 @@ a search summary; reread the page before a slide quotes it).
 | S16 | CVE-2023-44467, LangChain Experimental PALChain, https://nvd.nist.gov/vuln/detail/CVE-2023-44467 and https://github.com/advisories/GHSA-gjjr-63x4-v8cq                                                          | "langchain_experimental (aka LangChain Experimental) in LangChain before 0.0.306 allows an attacker to bypass the CVE-2023-36258 fix and execute arbitrary code via `__import__` in Python code, which is not prohibited by pal_chain/base.py." Backs the proposed `code_exec_python_os_import_v1` rule as a historical code-execution exploit on an AI framework. | Content checked through the NVD API (`services.nvd.nist.gov/rest/json/cves/2.0?cveId=CVE-2023-44467`); the NVD page renders with JavaScript. The record contains `__import__`, not the literal `__import__('os')`.                                                                         |
 | S17 | CVE-2023-36258, LangChain PALChain, https://nvd.nist.gov/vuln/detail/CVE-2023-36258                                                                                                                             | "An issue in LangChain before 0.0.236 allows an attacker to execute arbitrary code because Python code with os.system, exec, or eval can be used."                                                                                                                                                                                                                 | Content checked through the NVD API.                                                                                                                                                                                                                                                       |
 
-The three proposed signature rules (requirements.md, D-5) are now backed by S14, S15 and S16. S16
-names `__import__` in general; the proposed literal `__import__('os')` is narrower, which the Go
-implementer may widen to `__import__(` when writing the feed.
+The three proposed signature rules (requirements.md, D-5) are backed by S14, S15 and S16, and were adopted in
+`config/attack-signatures.json` on `main`. S16 names `__import__` in general, so the Go lane widened the
+proposed literal `__import__('os')` to `__import__(` (rule `code_exec_python_import_v1`).
 
 Internal design sources named by the report: `project-architecture.md` (in the repository),
 `project-architecture.mmd`, `task-execution-flow.mmd`, `report-information-flow.mmd`,

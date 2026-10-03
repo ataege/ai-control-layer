@@ -151,7 +151,8 @@ practicality and scalability.
   email delivery; export protection covers the two templates and stored lineage only; the audit
   export is not tamper-proof; "Production readiness is a future validation effort". Also: repeated
   identical start-run requests create separate runs (`command idempotency keys` open); the signature
-  feed is trusted by authenticated import and SHA-256, with no signing key. Plus every failed or cut
+  feed is trusted by authenticated import and SHA-256, with no signing key; no automatic model-call
+  retries; the semantic check does not run on the four tools' action proposals. Plus every failed or cut
   claim **[replace with final-build evidence]**.
 - Pre-event work and external resources, cited as HackYeah FAQ F-13 and F-14 require: the starter
   and design documents with their true preparation dates, Ollama, the model and the main libraries

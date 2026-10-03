@@ -213,7 +213,16 @@ func (caller *CatalogAccountedCaller) Call(ctx context.Context, runID, callID st
 	if allowed, err := caller.passportAllowsModel(ctx, runID); err != nil || !allowed {
 		return model.AccountedResult{}, ErrModelNotAllowed
 	}
-	accounted, err := model.NewAccountedCaller(caller.provider, caller.ledger, model.AccountingSettings{
+	// GO-86: the active revision narrows the run's ledger limits at reservation time.
+	reserver, ok := caller.ledger.(budget.CeilingReserver)
+	if !ok {
+		return model.AccountedResult{}, budget.ErrUnavailable
+	}
+	narrowedLedger := ceilingLedger{Store: caller.ledger, reserver: reserver, ceiling: budget.Ceiling{
+		CallsTotal: snapshot.Limits.CallsTotal, CallsAgent: snapshot.Limits.CallsAgent, CallsSecurity: snapshot.Limits.CallsSecurity,
+		TokensTotal: snapshot.Limits.TokensTotal, RequestTimeout: time.Duration(snapshot.Limits.RequestTimeoutSeconds) * time.Second,
+	}}
+	accounted, err := model.NewAccountedCaller(caller.provider, narrowedLedger, model.AccountingSettings{
 		AgentOutputTokens: settings.AgentOutputTokens, SecurityOutputTokens: settings.SecurityOutputTokens, TemplateTokens: settings.TemplateTokens,
 	})
 	if err != nil {
@@ -238,6 +247,17 @@ func (caller *CatalogAccountedCaller) Call(ctx context.Context, runID, callID st
 		release()
 	}
 	return result, callErr
+}
+
+// ceilingLedger reserves on the run's ledger under the active catalog's ceiling.
+type ceilingLedger struct {
+	budget.Store
+	reserver budget.CeilingReserver
+	ceiling  budget.Ceiling
+}
+
+func (ledger ceilingLedger) Reserve(ctx context.Context, runID, callID, purpose string, tokens int64) (budget.Reservation, error) {
+	return ledger.reserver.ReserveWithin(ctx, runID, callID, purpose, tokens, ledger.ceiling)
 }
 
 // passportAllowsModel reads the run's immutable passport scope: a model the passport does not name is
