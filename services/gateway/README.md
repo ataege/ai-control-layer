@@ -5,11 +5,13 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 
 ## Routes
 
-| Route                | Purpose                                                                                |
-| -------------------- | -------------------------------------------------------------------------------------- |
-| `GET /health/live`   | Process liveness. Never touches PostgreSQL.                                            |
-| `GET /health/ready`  | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.        |
-| `GET /internal/ping` | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database. |
+| Route                                           | Purpose                                                                                                           |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `GET /health/live`                              | Process liveness. Never touches PostgreSQL.                                                                       |
+| `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.                                   |
+| `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                            |
+| `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable`. |
+| `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                |
 
 Internal product commands are registered through `httpserver.Options.InternalCommands`, which
 always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
@@ -108,6 +110,8 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/contracts`       | Go lane 3c (repository, admission, passport, API)             |
 | `internal/repository`      | Go lane 3c (repository, admission, passport, API)             |
 | `internal/operatorcontext` | Go lane 3c (repository, admission, passport, API)             |
+| `internal/admission`       | Go lane 3c (repository, admission, passport, API)             |
+| `internal/api`             | Go lane 3c (repository, admission, passport, API)             |
 | `internal/tools`           | Go lane w2 (tools and provenance)                             |
 | `internal/policy`          | Go lane w3 (action gate and approvals)                        |
 | `internal/security`        | Go lane c1 (hybrid security controls)                         |
@@ -136,7 +140,8 @@ internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
-internal/admission/   start-run admission: passport, run and job in one transaction (GO-13)
+internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
+internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 

@@ -721,7 +721,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     "Illustrative passport and interface contracts" (Illustrative passport fields)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md` (which `app` records carry the operator's authority); `passport report fields`
 
-- [ ] **GO-14 · Serve `POST /internal/runs`**
+- [x] **GO-14 · Serve `POST /internal/runs`**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-13, GO-21 · Needs: X-07, X-08, X-13 · Provides: X-28
   - Paths: `services/gateway/internal/httpserver/server.go`,
@@ -739,6 +739,25 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     shared envelope with its reason code and leaves no passport row; unknown fields, an oversized
     body and a missing or forged context are rejected before admission runs.
     `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Completed (2026-10-03): `internal/api` registers `POST /internal/runs` through
+    `httpserver.Options.InternalCommands`, so it runs only behind the service token and the verified
+    `X-Operator-Context` (GO-21). The body decodes strictly (at most 64 KiB, no unknown fields, so an
+    organization or actor field is refused); identity comes only from the verified operator; GO-13
+    admission answers `201` `{runId, passportId}`, a `400` envelope with the X-13 code and the scope
+    or limit to change, or `503 decision_unavailable`. It never waits on a model or tool request.
+    The same command list mounts lane w2's GO-37 stored-report route with a viewer taken from the
+    verified operator. Tests: route tests with a labelled admission double (ids returned, only the
+    verified operator passed, rejection and unavailability mapped, bad bodies refused before
+    admission, no operator refused) and a PostgreSQL end-to-end test through the real guard,
+    admission and catalog (201 and a stored passport; a foreign invoice gives
+    `resource_out_of_scope` and no second passport). Checks: `pnpm --filter gateway run`
+    `format:check`, `lint`, `typecheck`, `test`, `build` PASS; `go test -race ./internal/api` with
+    PostgreSQL ok; `pnpm verify` 6 passed. Live: the built gateway on 127.0.0.1:18310 with tokens
+    signed by the API's jose library and the real key returned 201 for the seeded Atlas request
+    (run queued, agent_step job, ledger 20000, recipient reference), 400 `resource_out_of_scope` for
+    invoice_C01 and 400 `limit_not_allowed` for 25 model calls; the key never appeared in the log.
+    Not verified: the call from NestJS itself (no seeded app users; SH-19), and the `command timeout
+budget` item stays open (admission is one short transaction).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations; Decision and error semantics); "Technical architecture and service ownership"
     (Interfaces and repository strategy)
