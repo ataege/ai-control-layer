@@ -109,6 +109,8 @@ func (Runner) RunEffect(ctx context.Context, tx pgx.Tx, request EffectRequest) (
 		outcome, err = readVendor(ctx, tx, scope, request.CanonicalArguments)
 	case ToolCreateReport:
 		outcome, err = createReport(ctx, tx, scope, request)
+	case ToolQueueReport:
+		outcome, err = queueReport(ctx, tx, scope, request)
 	default:
 		return EffectResult{}, fmt.Errorf("%w: unregistered tool", errPrecondition)
 	}
