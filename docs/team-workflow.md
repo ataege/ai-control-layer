@@ -104,7 +104,8 @@ generated files land in `packages/ui` and belong to the frontend owner.
   Optional variables with a safe default (`API_HOST`, `GATEWAY_HOST`, `NODE_ENV`, `WEB_HOST`) are
   listed in the README's second table only.
 - Run `pnpm format` before committing. `pnpm verify` fails on unformatted files.
-- Nothing is pushed, published or deployed automatically.
+- Whoever completes a task, person or agent, commits and pushes it right away, as "Committing and
+  pushing" in `AGENTS.md` describes. Nothing is published or deployed automatically.
 - Secrets stay in the untracked `.env`. The service token never appears in web code, a
   `NEXT_PUBLIC_*` variable, a response or a log line.
 
@@ -149,7 +150,9 @@ The project is in the implementation phase. Every feature follows the same loop.
    environment variables to `.env.example` (names only), the Compose files and the README table
    through the infrastructure owner. When a design decision changes, tell the document owner, so
    the report's decision record, contracts, demonstration and claim-to-proof list change together.
-7. **A person pushes.** Agents never push. Merge small and often.
+7. **Commit and push.** One commit per completed task, with its ID in the subject, then
+   `git pull --rebase --autostash` and `git push` (`AGENTS.md`, "Committing and pushing"). Merge
+   small and often.
 
 The report settles several team-level decisions: four components and no message broker, one model
 provider called only by Go, organization-scoped authentication in NestJS with a seeded demo

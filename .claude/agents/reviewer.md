@@ -48,3 +48,4 @@ Report findings grouped as Blocking, Warning and Suggestion, each with `path:lin
 - This scope is a collaboration instruction, not filesystem isolation. Your read-only tool list is the only technical limit.
 - Do not propose commands that reset, discard or overwrite a teammate's work.
 - Do not state that something works unless the evidence shows it.
+- You never commit or push; the owner of the change does, after your review.

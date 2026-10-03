@@ -28,8 +28,8 @@ drops the eight figures, which reproduce `docs/product/task-passport-architectur
 
 - `- [ ]` is an open task. `- [x]` is a done task: its "Done when" was observed and the checks in
   "Definition of done" ran, with their results quoted.
-- The task owner ticks the box, in the change that completes the task or right after it, and quotes
-  the commands and their results in that change. Integration owns `docs` except `docs/product`
+- The task owner ticks the box in the commit that completes the task, quotes the commands and their
+  results in that commit, and pushes it (AGENTS.md, "Committing and pushing"). Integration owns `docs` except `docs/product`
   (AGENTS.md ownership table) and keeps the three files consistent.
 - A task that cannot finish because of an open decision stays open; its "Blocked by" names the
   decision.
@@ -1667,7 +1667,7 @@ sizes are this roadmap's estimates.
   - Depends on: RS-03, RS-08, SH-35 · Needs: X-59 · Provides: nothing
   - Paths: `docs/product`
   - Work: Build the checklist from the confirmed organizer requirements at M0, complete it at M6, and
-    submit with them; a person submits, nothing leaves the machine automatically. Before submitting,
+    submit with them; a person submits, and the submission is never automatic. Before submitting,
     bring `docs/product/task-passport-project-report.docx` up to the chosen model, contracts, policy
     and implementation scope of the submitted build, "so that the submission describes the final
     product accurately".
@@ -1763,7 +1763,8 @@ ticks the box.
    rejection of bad input or credentials, persistence and migrations), never tests that restate a
    constant; verify and quote; record it (the module in "Product modules" in `docs/architecture.md`,
    new variables in `.env.example`, Compose and the README table through infrastructure, design
-   changes to the document owner). A person pushes; agents never push.
+   changes to the document owner). Then commit and push the task as "Committing and pushing" in
+   AGENTS.md describes.
 2. **The checks of each touched area ran, from the repository root:**
    - frontend: `pnpm --filter web run lint`, `pnpm --filter web run typecheck`,
      `pnpm --filter web run test`, `pnpm --filter web run build`, `pnpm --filter @workspace/ui run lint`,
