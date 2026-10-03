@@ -301,9 +301,12 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Completed (2026-10-03): the outcome is recorded in `docs/product/README.md` ("GO-01: multiple-
     action model responses"). Implemented on go/f3: `agent.Stepper` (GO-10, 19d710e) rejects a
     response with several tool calls as `multiple_actions_not_supported` and never runs a subset
-    (`TestSeveralToolCallsRejectTheWholeResponse`); the loop (GO-11, faac792) stops the run with
-    that reason and stores no action (`TestSeveralActionsInOneResponseStopTheRun`). Bounded
-    correction instead of the stop comes with the GO-29 wiring.
+    (`TestSeveralToolCallsRejectTheWholeResponse`). Since the GO-29 wiring (fdd8ca6) the loop
+    denies such a response as `multiple_actions_not_supported`, stores no action, records one
+    `action.denied` event counted as a correction and returns bounded feedback to the model
+    (`TestSeveralActionsInOneResponseAreDeniedAndCounted`, renamed from
+    `TestSeveralActionsInOneResponseStopTheRun` when the stop became a correction); the correction
+    limit still stops the run. Both tests pass on go/f3 (2026-10-03, `go test -run` on PostgreSQL).
   - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
     should be rejected or handled by an explicitly defined policy"); "Design decision record" (One
     action per model step)
@@ -760,6 +763,11 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     entries. No inspected text is stored. Test
     `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
     depth is read from `runtime.jobs` by the summary.
+  - Completed, `approval_wait` (2026-10-03, 3c's roadmap audit): the resume of a review wait writes
+    an `approval_wait` span from the awaiting transition (the run's last update) to the resume, on
+    the loop's clock, with the waited-for action id. `TestResumeRecordsTheApprovalWaitSpan` (fake
+    loop clock 90 s after the awaiting transition: one span of exactly 90 s with the action id)
+    passes on PostgreSQL.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 
@@ -953,7 +961,7 @@ decision_unavailable`).
   - Blocked by: `classifier prompt and verdict schema`; `decision 6 in docs/product/README.md`
   - Completed (2026-10-03): `SemanticEvaluator` (5883988, context 8192 in a0672e9): one security-purpose call through `model.AccountedCaller` (reserved before dispatch), fixed instruction, untrusted text between nonce markers, strict `ParseVerdict` ({risk_category, score 0 to 1, reason_code}), `score >= threshold` applied in Go, one attempt and no retry; refused reservation is `security_allowance_exhausted`, timeout, transport, unknown usage and malformed verdict are `security_evaluator_unavailable`, both pause with no text. Checks: gateway checks all exit 0 with stub verdicts labelled as fixtures; live opt-in `GO_SECURITY_LIVE=1 ... go test -tags=model_live ./internal/security -run '^TestLiveSemanticEvaluator$'` PASS on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb): hostile note blocked (score 1), clean note passed (score 0). Not verified here: the latency rows in `runtime.timing_records` and the assessment rows, which the caller persists (GO-80, f3); the ledger usage row is written by `AccountedCaller`.
 
-- [ ] **GO-76 · Inspect tool results before they enter the agent context**
+- [x] **GO-76 · Inspect tool results before they enter the agent context**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-23, GO-74, GO-75 · Needs: X-86 · Provides: nothing
   - Paths: the worker package from GO-08; the enforcement package from GO-12
@@ -963,6 +971,18 @@ decision_unavailable`).
   - Report: "Architecture and chart reading guide" (Figure 10); "The enforcement loop and data minimization" (Minimize information before it enters the model)
   - Blocked by: nothing
   - Progress (2026-10-03): the pipeline function is done (91d15c7): `Inspector.InspectToolResult` runs the field limit and secret rules, signatures, then the semantic check on `internal_note.text` only (redacted text) over every string of the minimized result; blocked values become `[WITHHELD:<reason>]` while permitted values return, a guard failure withholds everything (`paused`); classification and sources unchanged. Checks: gateway checks all exit 0 (clean note unchanged, hostile note withheld, signature before semantic, secrets masked before the classifier, guard failures pause); `pnpm verify` 6 passed. Missing half (f3): calling it from the worker loop, pausing the run, persisting the records, and the worker test of the next model request's contents.
+  - Completed (2026-10-03): the worker half is on go/f3 (fdd8ca6, telemetry in GO-80). The loop
+    calls c1's `InspectToolResult` on every executed result before the context append; only the
+    inspected content enters the context, a pause (guard failure or exhausted security allowance)
+    releases nothing and pauses the run, and the decisions are stored as `runtime.control_assessments`
+    in the same transaction as the context entry, which with the action events is GO-76's safe
+    evidence (lead's decision; no extra X-12 event type). `TestToolResultInspectionBeforeAgentContext`
+    asserts the next model request's contents: the clean note passes with `internal_only`, a
+    signature match and a semantic verdict each withhold a hostile note (`[WITHHELD:...]`, stored
+    outcome `blocked`), and a guard failure pauses with no context entry and the security call held
+    `usage_unknown`; `TestUnusableInspectionsAreNeverReleased` and
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` cover invalid inspections and the
+    stored records. All pass on PostgreSQL (2026-10-03).
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
