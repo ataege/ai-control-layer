@@ -107,6 +107,8 @@ func (Runner) RunEffect(ctx context.Context, tx pgx.Tx, request EffectRequest) (
 		outcome, err = readInvoice(ctx, tx, scope, request.CanonicalArguments)
 	case ToolReadVendor:
 		outcome, err = readVendor(ctx, tx, scope, request.CanonicalArguments)
+	case ToolCreateReport:
+		outcome, err = createReport(ctx, tx, scope, request)
 	default:
 		return EffectResult{}, fmt.Errorf("%w: unregistered tool", errPrecondition)
 	}

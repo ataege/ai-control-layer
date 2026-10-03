@@ -130,6 +130,15 @@ func (world *testWorld) proposeAction(t *testing.T, step int, tool string, argum
 	return request
 }
 
+// newAttempt adds another open attempt for an existing action, as a safe retry would.
+func (world *testWorld) newAttempt(t *testing.T, actionID string, number int) string {
+	t.Helper()
+	attemptID := testdb.ID(t)
+	world.exec(t, `INSERT INTO runtime.execution_attempts (id, organization_id, action_id, attempt_number) VALUES ($1, $2, $3, $4)`,
+		attemptID, world.organizationID, actionID, number)
+	return attemptID
+}
+
 // count returns a single integer from a query.
 func (world *testWorld) count(t *testing.T, sql string, arguments ...any) int {
 	t.Helper()
