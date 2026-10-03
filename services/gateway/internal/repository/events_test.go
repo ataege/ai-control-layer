@@ -120,9 +120,10 @@ func TestPostgresConcurrentRunEventsAreReadWithoutGaps(t *testing.T) {
 	}
 	for rows.Next() {
 		var eventID int64
-		_ = rows.Scan(&eventID)
+		mustScan(t, rows, &eventID)
 		storedIDs = append(storedIDs, eventID)
 	}
+	mustFinishRows(t, rows)
 	rows.Close()
 	if len(storedIDs) != writers*eventsPerWriter || !reflect.DeepEqual(readIDs, storedIDs) {
 		t.Errorf("the cursor reader missed or repeated events: read %d, stored %d", len(readIDs), len(storedIDs))

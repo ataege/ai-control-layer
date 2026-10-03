@@ -84,20 +84,34 @@ The freeze time is the team's decision (SH-34); leave enough time to capture evi
 before 11:00. After the freeze, only critical fixes, each followed by recapturing the evidence it
 affects.
 
+**Freeze plan for today, 4 October (decided by the lead's delegate):**
+
+1. The Go code freezes at **08:00**.
+2. Lane c1 then runs `pnpm verify:controls` once more on the frozen commit, in a quiet window, and
+   commits its sanitized results under `docs/evidence/`. The slides cite that run.
+3. If the rerun fails, or cannot happen by **09:30**, the slides cite the run of build `cdfee55`
+   (`docs/evidence/verify-controls-2026-10-03T21-53-09Z.json`) with the words "evidence of build
+   `cdfee55`; later changes covered by the deterministic suite only".
+4. Whichever run is cited, the submission description and the slides name its commit, the file and
+   its SHA-256, and say "on this fixture set". A failed rerun is reported, not hidden.
+
+Fill in below: the frozen commit ___ at ___; rerun started ___, result ___; file ___, SHA-256 ___;
+which run the slides cite ___.
+
 Record each item at the freeze and again if a critical fix changes it:
 
-| Item                                      | How to record it                                                                                                                     | Value |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----- |
-| Submitted commit (build identifier, X-59) | `git rev-parse HEAD` on `main` after the last merge                                                                                  |       |
-| Branch pushed                             | `git status` shows nothing to push; the hash is on `origin/main`                                                                     |       |
-| Policy file                               | `shasum -a 256 config/policy.yaml`, plus the active catalog revision ID                                                              |       |
-| Signature feed                            | `shasum -a 256 config/attack-signatures.json`, plus its revision                                                                     |       |
-| Model                                     | `ollama list` name and ID of the model in `allowed_models` (decision 6)                                                              |       |
-| Test results                              | The machine-readable result file of the control suite (X-89) and its SHA-256                                                         |       |
-| Performance measurements                  | The benchmark output (X-95, SH-50) and its SHA-256                                                                                   |       |
-| Presentation PDF                          | `shasum -a 256` of the submitted PDF                                                                                                 |       |
-| Evidence bundle                           | SHA-256 of each screenshot, recording and export sample used on the slides (SH-32)                                                   |       |
-| Project report                            | `task-passport-project-report.docx` brought to the submitted model, contracts, policy and scope (RS-09 "Done when"), and its SHA-256 |       |
+| Item                                      | How to record it                                                                                                                     | Value                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Submitted commit (build identifier, X-59) | `git rev-parse HEAD` on `main` after the last merge                                                                                  |                                                                                                                                                                                                                                                                                                 |
+| Branch pushed                             | `git status` shows nothing to push; the hash is on `origin/main`                                                                     |                                                                                                                                                                                                                                                                                                 |
+| Policy file                               | `shasum -a 256 config/policy.yaml`, plus the active catalog revision ID                                                              |                                                                                                                                                                                                                                                                                                 |
+| Signature feed                            | `shasum -a 256 config/attack-signatures.json`, plus its revision                                                                     |                                                                                                                                                                                                                                                                                                 |
+| Model                                     | `ollama list` name and ID of the model in `allowed_models` (decision 6)                                                              |                                                                                                                                                                                                                                                                                                 |
+| Test results                              | The machine-readable result file of the control suite (X-89) and its SHA-256                                                         | Plan: rerun on the frozen commit (freeze 08:00, rerun in a quiet window, fallback to the `cdfee55` run at 09:30). Candidate until then: `docs/evidence/verify-controls-2026-10-03T21-53-09Z.json` (SHA-256 `5954f087ca2446e3d39d5a20e896db98c709ee3bcf1fb54ef1d8da790350ba58`, build `cdfee55`) |
+| Performance measurements                  | The benchmark output (X-95, SH-50) and its SHA-256                                                                                   |                                                                                                                                                                                                                                                                                                 |
+| Presentation PDF                          | `shasum -a 256` of the submitted PDF                                                                                                 |                                                                                                                                                                                                                                                                                                 |
+| Evidence bundle                           | SHA-256 of each screenshot, recording and export sample used on the slides (SH-32)                                                   |                                                                                                                                                                                                                                                                                                 |
+| Project report                            | `task-passport-project-report.docx` brought to the submitted model, contracts, policy and scope (RS-09 "Done when"), and its SHA-256 |                                                                                                                                                                                                                                                                                                 |
 
 - [ ] Every screenshot and recording names the build identifier above.
 - [ ] The demonstration machine runs exactly the submitted commit, policy, feed and model.
