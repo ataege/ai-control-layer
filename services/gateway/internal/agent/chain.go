@@ -42,7 +42,11 @@ type ChainConfig struct {
 	// is missing or invalid; every model call then fails closed.
 	Model           config.Model
 	ModelConfigured bool
-	Logger          *slog.Logger
+	// VerdictSource labels the semantic verdicts: empty means live (the real local model). A test
+	// that drives the chain with a fixture provider sets security.VerdictFixture, so its verdicts
+	// are never recorded as live detection (guardrail 9).
+	VerdictSource security.VerdictSource
+	Logger        *slog.Logger
 }
 
 // ProductionChain is the governed execution chain of the gateway process, built once. The judge
@@ -61,6 +65,8 @@ type ProductionChain struct {
 	Executor       *policy.Executor
 	Loop           *Loop
 	Worker         *worker.Service
+	// Expiry closes overdue approvals (GO-40); the gateway runs it next to the worker.
+	Expiry *ApprovalExpiry
 }
 
 // NewProductionChain builds the chain on the gateway pool and the process's catalog loader. It
@@ -90,8 +96,12 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	if err != nil {
 		return nil, err
 	}
+	verdictSource := chainConfig.VerdictSource
+	if verdictSource == "" {
+		verdictSource = security.VerdictLive
+	}
 	evaluator, err := security.NewSemanticEvaluator(securityCaller, security.EvaluatorOptions{
-		Model: modelName, ContextTokens: security.MinEvaluatorContextTokens, Source: security.VerdictLive,
+		Model: modelName, ContextTokens: security.MinEvaluatorContextTokens, Source: verdictSource,
 	})
 	if err != nil {
 		return nil, err
@@ -102,6 +112,11 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	gate := policy.NewGate(scopes, policy.NewPostgresRecorder(pool), policy.NewPostgresRelationships(pool),
 		policy.NewSecurityActionEvaluator(inspector, settings)).WithReviewFreezer(policy.NewPostgresReviewFreezer(pool))
 	executor := policy.NewExecutor(pool, scopes, tools.Runner{})
+	approvals := policy.NewApprovals(pool)
+	expiry, err := NewApprovalExpiry(approvals, chainConfig.Logger)
+	if err != nil {
+		return nil, err
+	}
 	stepper, err := NewStepper(modelCaller, callLog, modelName)
 	if err != nil {
 		return nil, err
@@ -113,7 +128,8 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	loop, err := NewLoop(LoopDependencies{
 		Runs: repository.New(pool), Stepper: stepper, Gate: gate, Executor: executor, Inspector: resultInspector,
 		Catalog: catalogSource, Scopes: scopes, Corrections: policy.NewCorrectionCounter(pool), Steps: budget.NewPostgresStore(pool),
-		Contexts: NewContextStore(pool), Telemetry: NewTelemetry(pool), Logger: chainConfig.Logger,
+		Contexts: NewContextStore(pool), Telemetry: NewTelemetry(pool), Recovery: NewRecovery(pool, budget.NewPostgresStore(pool)),
+		Results: PoolFinalResults{Pool: pool}, Continuations: approvals, Logger: chainConfig.Logger,
 	})
 	if err != nil {
 		return nil, err
@@ -135,6 +151,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	return &ProductionChain{
 		ModelCaller: modelCaller, SecurityCaller: securityCaller, Evaluator: evaluator, Inspector: inspector,
 		Catalog: catalogSource, Settings: settings, Scopes: scopes, Gate: gate, Executor: executor, Loop: loop, Worker: service,
+		Expiry: expiry,
 	}, nil
 }
 
@@ -183,6 +200,11 @@ func (caller *CatalogAccountedCaller) Call(ctx context.Context, runID, callID st
 	active, err := caller.accounting.Active(ctx)
 	if err != nil {
 		return model.AccountedResult{}, err
+	}
+	// Both reads must describe the same revision: a reload between them would mix the limits of one
+	// revision with the output ceilings of another, so the call is refused and nothing dispatched.
+	if active.RevisionID != snapshot.RevisionID {
+		return model.AccountedResult{}, catalog.ErrUnavailable
 	}
 	settings := active.Settings
 	if !slices.Contains(snapshot.Limits.AllowedModels, caller.modelName) {

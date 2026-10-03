@@ -256,7 +256,7 @@ func TestExpiredPassportExecutesNothing(t *testing.T) {
 	runner := &countingRunner{inner: tools.Runner{}}
 
 	result := world.executor(runner).Execute(context.Background(), world.run, actionID)
-	if result.Status != ExecutionRefused || result.ReasonCode != ReasonRunCancelled || runner.calls != 0 {
-		t.Fatalf("result = %s/%s with %d adapter calls; want refused/run_cancelled and none", result.Status, result.ReasonCode, runner.calls)
+	if result.Status != ExecutionRefused || result.ReasonCode != ReasonRunExpired || runner.calls != 0 {
+		t.Fatalf("result = %s/%s with %d adapter calls; want refused/run_expired and none", result.Status, result.ReasonCode, runner.calls)
 	}
 }

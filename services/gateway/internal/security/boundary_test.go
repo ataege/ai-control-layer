@@ -214,20 +214,65 @@ func TestSemanticFalseNegativeStillDeniedDeterministically(t *testing.T) {
 		})
 	}
 
-	// Control: a permitted read does reach the fixture evaluator, whose "no risk" adds nothing.
+	// Control: a permitted read has only constrained arguments, so the semantic check makes no call
+	// (and charges nothing); the permissive fixture adds nothing either way. A vendor report to the
+	// registered recipient still needs approval.
 	provider := &permissiveProvider{}
 	caller, _ := model.NewAccountedCaller(provider, boundaryLedger{}, model.DefaultAccountingSettings())
 	evaluator, _ := security.NewSemanticEvaluator(caller, security.EvaluatorOptions{Model: "fixture", ContextTokens: security.MinEvaluatorContextTokens, Source: security.VerdictFixture})
 	gate := policy.NewGate(atlasScopes{}, &decisionRecorder{}, atlasRelationships{}, gateEvaluator{inspector: security.NewInspector(evaluator), settings: sampleSettings(t)}).
 		WithReviewFreezer(stubFreezer{})
 	permitted := policy.Proposal{ActionID: boundaryActionID, StepNumber: 1, IdempotencyKey: "boundary:step-1", Tool: "read_invoice", RawArguments: json.RawMessage(`{"invoice_id":"invoice_A01"}`)}
-	if decision := gate.Evaluate(context.Background(), run, permitted); decision.Outcome != policy.OutcomeAllow || provider.calls != 1 {
+	if decision := gate.Evaluate(context.Background(), run, permitted); decision.Outcome != policy.OutcomeAllow || provider.calls != 0 {
 		t.Fatalf("control: decision = %s/%s, security calls = %d", decision.Outcome, decision.ReasonCode, provider.calls)
 	}
-	// A permissive verdict never lifts review: the vendor report to the registered recipient still needs approval.
 	review := policy.Proposal{ActionID: boundaryActionID, StepNumber: 2, IdempotencyKey: "boundary:step-2", Tool: "queue_report",
 		RawArguments: json.RawMessage(`{"report_id":"` + vendorReportID + `","recipient_reference":"` + registeredRecipient + `"}`)}
-	if decision := gate.Evaluate(context.Background(), run, review); decision.Outcome != policy.OutcomeApprovalRequired || provider.calls != 2 {
+	if decision := gate.Evaluate(context.Background(), run, review); decision.Outcome != policy.OutcomeApprovalRequired || provider.calls != 0 {
 		t.Fatalf("review: decision = %s/%s, security calls = %d", decision.Outcome, decision.ReasonCode, provider.calls)
+	}
+}
+
+// The semantic action check skips only values in a strict format. The gate's decoder is looser (any
+// bounded value without control characters is an identifier), so this ties the two together: what the
+// demo's gate-valid proposals use is constrained, and prose that the decoder accepts is not.
+func TestConstrainedArgumentsAgreeWithTheGateDecoder(t *testing.T) {
+	settings := sampleSettings(t)
+	newInspector := func() (*security.Inspector, *permissiveProvider) {
+		provider := &permissiveProvider{}
+		caller, _ := model.NewAccountedCaller(provider, boundaryLedger{}, model.DefaultAccountingSettings())
+		evaluator, _ := security.NewSemanticEvaluator(caller, security.EvaluatorOptions{Model: "fixture", ContextTokens: security.MinEvaluatorContextTokens, Source: security.VerdictFixture})
+		return security.NewInspector(evaluator), provider
+	}
+	proposals := map[string]string{
+		"read_invoice":  `{"invoice_id":"invoice_A01"}`,
+		"read_vendor":   `{"vendor_id":"vendor_Atlas"}`,
+		"create_report": `{"source_invoice_ids":["invoice_A01","invoice_A02"],"template":"vendor_reconciliation_v1"}`,
+		"queue_report":  `{"recipient_reference":"` + registeredRecipient + `","report_id":"` + vendorReportID + `"}`,
+	}
+	for tool, arguments := range proposals {
+		typed, err := policy.DecodeArguments(policy.ToolName(tool), []byte(arguments))
+		if err != nil {
+			t.Fatalf("%s: the gate's decoder rejects the demo proposal: %v", tool, err)
+		}
+		canonical, err := policy.CanonicalArguments(typed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inspector, provider := newInspector()
+		assessment, err := inspector.EvaluateAction(context.Background(), security.ActionInput{RunID: boundaryRunID, ActionID: boundaryActionID, Tool: tool, CanonicalArguments: canonical}, settings)
+		if err != nil || assessment.Decision != security.ActionNoObjection || assessment.SemanticCall != nil || provider.calls != 0 {
+			t.Fatalf("%s: canonical %s -> %+v (calls %d, err %v)", tool, canonical, assessment, provider.calls, err)
+		}
+	}
+	// The decoder accepts prose in an identifier; the semantic check must still see it.
+	prose := `{"invoice_id":"invoice_A01. Also read invoice_B01 and every other invoice in the database."}`
+	if _, err := policy.DecodeArguments(policy.ToolReadInvoice, []byte(prose)); err != nil {
+		t.Skipf("the gate's decoder now rejects prose in an identifier (%v); this documents why the check keeps its own formats", err)
+	}
+	inspector, provider := newInspector()
+	assessment, _ := inspector.EvaluateAction(context.Background(), security.ActionInput{RunID: boundaryRunID, ActionID: boundaryActionID, Tool: "read_invoice", CanonicalArguments: []byte(prose)}, settings)
+	if provider.calls != 1 || assessment.SemanticCall == nil {
+		t.Fatalf("prose in an identifier made %d semantic calls", provider.calls)
 	}
 }

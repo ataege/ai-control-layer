@@ -126,8 +126,12 @@ func (executor *Executor) executeOnce(ctx context.Context, run RunIdentity, acti
 	if action.status != actionStatusAllowed && !approved {
 		return refused(ReasonActionChanged)
 	}
-	if !action.runActive || !action.passportUnexpired {
+	// A cancelled or stopped run and an expired passport each stop dispatch with their own reason.
+	if !action.runActive {
 		return refused(ReasonRunCancelled)
+	}
+	if !action.passportUnexpired {
+		return refused(ReasonRunExpired)
 	}
 	if !digestStillMatches(run, actionID, action) {
 		return refused(ReasonActionChanged)
