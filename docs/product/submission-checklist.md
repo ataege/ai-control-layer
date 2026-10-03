@@ -6,8 +6,8 @@ rules [S9] §5, §6, §12 and §13; general HackYeah rules [S11] §4.3, §5.8 an
 package and deadline controls" and the hours 21-24 row of "Proposed 24-hour implementation
 sequence". Requirement IDs refer to [requirements.md](requirements.md).
 
-**Deadline.** Submission on HackTribe no later than **11:00 on 4 October 2026** (the lead's reading;
-the printed "11:00 PM" is organizer question 2). Until the organizers confirm, work to 11:00.
+**Deadline.** Submission on HackTribe no later than **11:00 AM on 4 October 2026**, confirmed in
+writing by the organizers on 3 October 2026: "until 11:00 AM tomorrow" (organizer question 2).
 "Any alterations and modifications made after the statutory time is expired will not be considered
 by the Jury." ([S9] §13)
 
