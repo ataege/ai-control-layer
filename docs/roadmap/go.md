@@ -2192,15 +2192,21 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     X-44 Go-half evidence captured (report references, the INV104 discrepancy, one outbox row to
     reports@atlas.example.com whose hash matches the stored content, the ordered events). Missing:
     the run through the approval with the decision 6 model and with a labelled provider double.
-  - Progress (2026-10-03): `internal/scenario` runs the story through `agent.NewProductionChain`.
-    With the labelled scripted provider it reaches the review wait with the right steps (reads,
-    internal report, denied export, vendor report, queue_report awaiting approval) and outbox 0;
-    `TestStoryAfterApproval` then approves through `policy.Approvals` and, once GO-40 resumes the
-    approved action, asserts one outbox row with the reviewed content hash and the registered
-    recipient, the completed run and its ordered events. Until GO-40 lands it checks that the
-    approved action stays unexecuted with outbox 0 and logs that GO-40 is pending.
-    Live (`qwen3.5:4b`, labelled live): the model reached the review wait for its vendor
-    report with outbox 0. Missing: GO-40, then both runs through the approval.
+  - Progress (2026-10-03): `internal/scenario` runs the story through `agent.NewProductionChain`
+    from real admission. Labelled scripted provider, complete (with f3's GO-40, 5d56898):
+    `TestStoryAfterApproval` approves the vendor report's exact queue_report through
+    `policy.Approvals`; the continuation resumes it (`run.resumed`), the original action executes
+    through the executor recheck, one outbox row goes to the registered address with the reviewed
+    content hash, the final answer names the reports and the run completes. Ordered events:
+    run.queued, run.started, 3 x (action.allowed, action.succeeded), action.allowed,
+    report.created, report.export_denied report_export_restricted, action.allowed,
+    report.created, approval.requested, run.awaiting_approval, approval.decided, run.resumed,
+    action.succeeded, run.completed. Live (`qwen3.5:4b`, labelled live, the approval step
+    included in `TestLiveStoryThroughTheProductionChain`): one run reached the review wait for its
+    vendor report; another had every proposal, even `read_invoice`, denied by the action-proposal
+    semantic check (`semantic_injection_detected`) and stopped at the correction limit, outbox 0
+    each time. Missing: the live run through the approval, after c1 limits the action-proposal
+    semantic check to free-text arguments.
   - Report: "Validation plan and evidence matrix" (critical check Legitimate task); "Live
     demonstration storyboard and proof checks" (beat 7)
   - Blocked by: nothing
