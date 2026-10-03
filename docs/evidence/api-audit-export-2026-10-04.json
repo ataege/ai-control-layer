@@ -1,0 +1,55 @@
+{
+  "capturedAt": "2026-10-03T22:48:23.615Z",
+  "codeCommit": "c70487eca532eec987f55a314751fa023f6f35a2",
+  "source": "Real authenticated API and Go gateway on the local synthetic demonstration database",
+  "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+  "summaryGeneratedAt": "2026-10-03T22:48:23.553798Z",
+  "events": {
+    "records": 14,
+    "pages": 2,
+    "groups": 5,
+    "countsMatchSummary": true,
+    "noDuplicateIds": true
+  },
+  "assessments": {
+    "records": 2,
+    "pages": 2,
+    "groups": 2,
+    "countsMatchSummary": true,
+    "noDuplicateIds": true
+  },
+  "csv": {
+    "events": {
+      "status": 200,
+      "rows": 14,
+      "columns": 10,
+      "cursorHeaderPresent": true,
+      "fieldsExactlyMatchSharedContract": true
+    },
+    "assessments": {
+      "status": 200,
+      "rows": 2,
+      "columns": 18,
+      "cursorHeaderPresent": true,
+      "fieldsExactlyMatchSharedContract": true
+    }
+  },
+  "judgeEventsPresent": true,
+  "stableCountsBeforeAndAfter": true,
+  "authorizationEvidence": {
+    "command": "pnpm test:db api",
+    "result": "59 passed, 0 failed, 0 skipped",
+    "scope": "Real session/membership checks; foreign-object denial uses explicitly labelled Go contract fixtures"
+  },
+  "formulaNeutralizationEvidence": {
+    "command": "pnpm --filter api run test",
+    "result": "366 passed",
+    "scope": "CSV formula trigger tests and strict response schema rejection tests"
+  },
+  "limitations": [
+    "Not an atomic snapshot across requests; aggregate counts were stable before and after this capture.",
+    "No new live-model approval/outbox execution was performed.",
+    "No semantic detection-quality claim; this capture includes real deterministic signature assessments.",
+    "Docker and browser proxy consumption were not verified."
+  ]
+}

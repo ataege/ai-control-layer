@@ -1571,7 +1571,8 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
-- [ ] **API-37 · Prove the audit export and security summary**
+- [x] **API-37 · Prove the audit export and security summary**
+  - Done (2026-10-04): sanitized capture docs/evidence/api-audit-export-2026-10-04.json records real authenticated API/Go summary reconciliation with 14 event records and 2 deterministic assessment records. Every decision/assessment group count matches; cursor pages contain no duplicate ids; JSON and CSV counts match and CSV fields exactly match the shared record schemas. Counts were stable before/after capture (not an atomic snapshot). A real judge signature input was denied as signature_match and produced the deterministic assessments. Authorization and CSV-formula regressions run in the existing API unit/database suites, with the Go fixture limitation explicit in the evidence. Checks: API lint, typecheck and build exited 0; API unit tests: "366 passed"; latest `pnpm test:db api` on unchanged code: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Evidence contains counts/metadata only, no raw content or credentials. Live-model approval/outbox execution, semantic detection quality, Docker and browser consumption were not verified.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: API-35, API-36 · Needs: X-89 · Provides: X-104
   - Paths: none (tests run through the X-89 suite)
