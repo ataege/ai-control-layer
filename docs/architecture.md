@@ -293,7 +293,8 @@ waiting on PostgreSQL answers 503 at once instead of holding up the drain.
 
 ## Product modules
 
-None yet. When the first code of a product module lands, add a row here in the same change.
+None yet. The intended product design is in [docs/product](product/README.md); it is a design, not
+implemented code. When the first code of a product module lands, add a row here in the same change.
 
 | Module | Owner service | Responsibility | Contracts | Tables |
 | ------ | ------------- | -------------- | --------- | ------ |

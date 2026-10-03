@@ -480,6 +480,7 @@ The full record is in [docs/preparation-record.md](docs/preparation-record.md).
 | [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service                                  |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                         |
 | [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                     |
+| [docs/product/README.md](docs/product/README.md)         | Product design diagrams (architecture, run lifecycle) and the open decisions against the starter                    |
 | [docs/preparation-record.md](docs/preparation-record.md) | Baseline record: what was prepared, third-party resources and licenses, decisions, deferred areas                   |
 | [AGENTS.md](AGENTS.md)                                   | Binding team instructions (identical to `CLAUDE.md`)                                                                |
 | [infra/README.md](infra/README.md)                       | Compose files, images, published ports, data volume                                                                 |

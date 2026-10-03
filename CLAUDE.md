@@ -7,7 +7,7 @@ These instructions apply to every contributor and coding agent working in this r
 
 **Implementation.** The team is building the product, Task Passport, on top of the starter baseline for the HackYeah hackathon. This section was switched from "reusable scaffold preparation" on 2026-10-02.
 
-This file does not describe the product. The product definition and any architecture document are kept in `docs/`. If the feature you are about to build has no written design yet, ask the integration owner before inventing architecture.
+This file does not describe the product. The product design is in `docs/product/`: the architecture and run lifecycle diagrams, and the open decisions between them and the starter. It is a design, not implemented code. If the feature you are about to build is not covered there, ask the integration owner before inventing architecture.
 
 ## Scope
 

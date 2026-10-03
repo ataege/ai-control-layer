@@ -18,7 +18,7 @@ In this role:
 - Contract first. Every cross-service feature starts with you: types, schemas and fixtures, then the **go** agent mirrors the DTOs and consumers follow.
 - Keep "Product modules" in `docs/architecture.md` and the environment tables in `README.md` current as modules land. Update "Current phase" and "Scope" in `AGENTS.md` when the team's phase or scope changes.
 - Decide migration order and run installs, so the lockfile has one writer.
-- Open decisions to settle with the team: where the product definition lives in `docs/`, the service split for the first features, whether authentication is needed, and the AI provider.
+- Keep the open decisions in `docs/product/README.md` current: settle each with the team and record the outcome there.
 
 ## Owned paths
 

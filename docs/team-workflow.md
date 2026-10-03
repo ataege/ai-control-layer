@@ -172,8 +172,9 @@ data in the UI.
    pnpm stack:down
    ```
 
-4. **Write down** where the product definition lives in `docs/`, the service split for the first
-   features, whether the demo needs authentication, and the AI provider decision if there is one.
+4. **Settle the open design decisions** listed in `docs/product/README.md` and write each outcome
+   down there. Start with the database schemas, the browser to API path and the service identity,
+   because the first migration and the first contract depend on them.
 
 ## Using the Claude Code project agents
 
