@@ -12,7 +12,29 @@ import type { FetchJsonError } from "./fetch-json";
  * the form can keep a selection to one vendor (admission rejects a set that mixes vendors). It is optional
  * until every producer sends it; an invoice without one is offered ungrouped.
  */
-export type OfferedInvoice = TaskFormOptions["invoices"][number] & { vendorId?: string };
+export type OfferedInvoice = TaskFormOptions["invoices"][number] & {
+  vendorId?: string;
+  /** ISO 4217 code of `amount`, which is in minor units; absent until every producer sends it. */
+  currency?: string;
+};
+
+/**
+ * An invoice amount for display. The amount is an integer in the currency's minor units, so it is only
+ * shown as money when the invoice names its currency; otherwise it is shown raw and said to be in minor
+ * units of an unstated currency, never guessed.
+ */
+export function formatInvoiceAmount(amount: number, currency: string | undefined): string {
+  if (currency !== undefined && /^[A-Z]{3}$/.test(currency)) {
+    try {
+      const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency });
+      const minorUnitDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
+      return `${formatter.format(amount / 10 ** minorUnitDigits)} (${currency})`;
+    } catch {
+      // An unknown currency code falls through to the raw figure below.
+    }
+  }
+  return `${amount} (minor units, currency not stated)`;
+}
 
 export interface InvoiceGroup {
   /** The vendor id, or null for invoices the server did not attribute to a vendor. */

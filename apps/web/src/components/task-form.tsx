@@ -15,6 +15,7 @@ import {
   describeStartFailure,
   EMPTY_FORM_STATE,
   firstProblemWithChoices,
+  formatInvoiceAmount,
   groupInvoicesByVendor,
   initialFormState,
   isInvoiceOutsideSelectedVendor,
@@ -164,7 +165,8 @@ export function TaskFormView({
                           htmlFor={`invoice-${invoice.id}`}
                           className="cursor-pointer font-normal"
                         >
-                          {invoice.number} · {invoice.date} · amount {invoice.amount} (minor units)
+                          {invoice.number} · {invoice.date} ·{" "}
+                          {formatInvoiceAmount(invoice.amount, invoice.currency)}
                         </Label>
                       </div>
                     );

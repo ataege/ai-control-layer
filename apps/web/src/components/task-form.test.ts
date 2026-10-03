@@ -59,13 +59,23 @@ describe("TaskFormView", () => {
     const html = render();
     expect(html).toContain("Atlas");
     expect(html).toContain("Borealis");
-    expect(html).toContain("INV104 · 2026-09-01 · amount 125000 (minor units)");
+    expect(html).toContain("INV104 · 2026-09-01 · 125000 (minor units, currency not stated)");
     // Atlas's invoice is selected, so Borealis's is not selectable; the selected one stays enabled.
     const borealisCheckbox = html.match(/<button[^>]*id="invoice-invoice_B01"[^>]*>/)?.[0] ?? "";
     const atlasCheckbox = html.match(/<button[^>]*id="invoice-invoice_A01"[^>]*>/)?.[0] ?? "";
     expect(atlasCheckbox).not.toBe("");
     expect(borealisCheckbox).toContain('disabled=""');
     expect(atlasCheckbox).not.toContain('disabled=""');
+  });
+
+  it("shows an invoice's amount as money once the invoice names its currency", () => {
+    const withCurrency = {
+      ...options,
+      invoices: options.invoices.map((invoice) => ({ ...invoice, currency: "EUR" })),
+    };
+    expect(render({ options: withCurrency })).toContain(
+      "INV104 · 2026-09-01 · \u20ac1,250.00 (EUR)",
+    );
   });
 
   it("states the limits ceiling without capping the input, so an over-limit request reaches admission", () => {
