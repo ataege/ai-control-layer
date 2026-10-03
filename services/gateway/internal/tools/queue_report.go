@@ -55,7 +55,8 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 		return adapterOutcome{}, err
 	}
 	if reason != "" {
-		return exportDenied(report, provenance.ExportDecision{ReasonCode: reason}), nil
+		// Refused before the lineage was checked: the event claims no lineage result.
+		return exportDenied(current, report, provenance.ExportDecision{ReasonCode: reason}, nil), nil
 	}
 
 	// The export decision reads the stored lineage and the current source versions only.
@@ -69,7 +70,7 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 	}
 	decision := provenance.AuthorizeExport(report, provenance.DestinationRegisteredVendor, versions)
 	if !decision.Allowed {
-		return exportDenied(report, decision), nil
+		return exportDenied(current, report, decision, text(lineageCheckFor(decision.ReasonCode))), nil
 	}
 	// The recipient must be the vendor of every source invoice of the report.
 	sameVendor, err := sourcesBelongToVendor(ctx, tx, current.organizationID, sourceIDs, recipient.vendorID)
@@ -77,7 +78,7 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 		return adapterOutcome{}, err
 	}
 	if !sameVendor {
-		return exportDenied(report, provenance.ExportDecision{ReasonCode: ReasonDestinationNotAllowed}), nil
+		return exportDenied(current, report, provenance.ExportDecision{ReasonCode: ReasonDestinationNotAllowed}, text("passed")), nil
 	}
 
 	var outboxMessageID string
@@ -90,31 +91,41 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 		return adapterOutcome{}, fmt.Errorf("tools: insert simulated outbox row: %w", err)
 	}
 	return succeeded(QueueResult{OutboxMessageID: outboxMessageID, ReportID: report.ID, Status: StatusQueuedSimulated},
-		contracts.EventActionSucceeded, reportSummary(report, "passed", "outbox_message_queued")), nil
+		contracts.EventActionSucceeded, reportSummary(report, text("passed"), "outbox_message_queued")), nil
+}
+
+// lineageCheckFor is the lineage result an export decision implies.
+func lineageCheckFor(reasonCode string) string {
+	switch reasonCode {
+	case ReasonReportLineageMissing:
+		return "missing"
+	case ReasonResourceVersionChanged, ReasonTemplateNotAllowed:
+		return "failed"
+	default:
+		return "passed"
+	}
 }
 
 // exportDenied is a refused export: no outbox row, a report.export_denied event with the stable
-// reason and, where the report itself may not leave, a report.safe_template_offered event naming
-// the already-permitted alternative ("Denial may identify an authorized alternative template
-// without granting extra scope").
-func exportDenied(report provenance.StoredReport, decision provenance.ExportDecision) adapterOutcome {
-	lineageCheck := "passed"
-	switch decision.ReasonCode {
-	case ReasonReportLineageMissing:
-		lineageCheck = "missing"
-	case ReasonResourceVersionChanged, ReasonTemplateNotAllowed:
-		lineageCheck = "failed"
-	}
+// reason and, where the report itself may not leave and the passport already permits the
+// alternative template, a report.safe_template_offered event naming it ("Denial may identify an
+// authorized alternative template without granting extra scope"). lineageCheck is nil when the
+// refusal came before the lineage was checked.
+func exportDenied(current scope, report provenance.StoredReport, decision provenance.ExportDecision, lineageCheck *string) adapterOutcome {
 	deny := contracts.DecisionDeny
 	denied := reportSummary(report, lineageCheck, "none")
 	outcome := adapterOutcome{
 		result: EffectResult{Outcome: OutcomeFailed, ReasonCode: decision.ReasonCode},
-		events: []eventRecord{{eventType: contracts.EventReportExportDenied, decision: &deny, summary: denied}},
 	}
-	if decision.AlternativeTemplate != "" {
-		alternative := contracts.ReportTemplate(decision.AlternativeTemplate)
+	alternativeAllowed := decision.AlternativeTemplate != "" && current.allowsTemplate(decision.AlternativeTemplate) &&
+		(decision.AlternativeTemplate != provenance.VendorReconciliationV1.Name || current.allowsProjection(provenance.VendorInvoiceFieldsV1.Name))
+	var alternative contracts.ReportTemplate
+	if alternativeAllowed {
+		alternative = contracts.ReportTemplate(decision.AlternativeTemplate)
 		denied.AlternativeTemplate = &alternative
-		outcome.events[0].summary = denied
+	}
+	outcome.events = append(outcome.events, eventRecord{eventType: contracts.EventReportExportDenied, decision: &deny, summary: denied})
+	if alternativeAllowed {
 		offered := reportSummary(report, lineageCheck, "none")
 		offered.AlternativeTemplate = &alternative
 		outcome.events = append(outcome.events, eventRecord{eventType: contracts.EventReportSafeTemplateOffered, summary: offered})
@@ -123,12 +134,12 @@ func exportDenied(report provenance.StoredReport, decision provenance.ExportDeci
 }
 
 // reportSummary is the masked metadata of a report event: references and Go-derived labels.
-func reportSummary(report provenance.StoredReport, lineageCheck, effect string) contracts.MaskedSummary {
+func reportSummary(report provenance.StoredReport, lineageCheck *string, effect string) contracts.MaskedSummary {
 	template := contracts.ReportTemplate(report.TemplateName)
 	reportID, classification := report.ID, report.Classification
 	return contracts.MaskedSummary{
 		ReportID: &reportID, Template: &template, Classification: &classification,
-		LineageCheck: text(lineageCheck), Effect: text(effect),
+		LineageCheck: lineageCheck, Effect: text(effect),
 	}
 }
 

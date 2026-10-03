@@ -391,3 +391,23 @@ type OperatorContext struct {
 	OrganizationID string   `json:"organizationId"`
 	Roles          []string `json:"roles"`
 }
+
+// ApprovalChoice is the reviewer's decision on one stored action (X-10).
+type ApprovalChoice string
+
+const (
+	ApprovalApprove ApprovalChoice = "approve"
+	ApprovalReject  ApprovalChoice = "reject"
+)
+
+// ApprovalChoices lists every approval choice.
+var ApprovalChoices = []ApprovalChoice{ApprovalApprove, ApprovalReject}
+
+// Valid reports whether the choice is part of the contract.
+func (choice ApprovalChoice) Valid() bool { return contains(ApprovalChoices, choice) }
+
+// ApprovalDecision is X-10: approve or reject one stored action, with no replacement payload.
+// Decode it strictly; any other field is refused and grants nothing.
+type ApprovalDecision struct {
+	Decision ApprovalChoice `json:"decision"`
+}

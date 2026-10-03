@@ -9,6 +9,7 @@
 // nothing changed. Unlike `pnpm db:seed`, it does not re-import policy.yaml, which would replace a
 // judge's active catalog revision.
 import { requireLocalReachableDatabase } from "./lib/database-probe.mjs";
+import { GATEWAY_ROLE, setGatewayRolePassword } from "./lib/database-roles.mjs";
 import {
   connectToDatabase,
   countRows,
@@ -52,6 +53,9 @@ try {
   }
   printStatus("info", `after: ${JSON.stringify(await countRows(client, resetTables))}`);
   printStatus("info", "app data (identity, control catalog) kept");
+  // The same step as `pnpm db:roles`, so the presentation flow cannot miss it.
+  await setGatewayRolePassword(client, environment);
+  printStatus("ok", `${GATEWAY_ROLE}: login password set (as pnpm db:roles)`);
 } catch (resetError) {
   printStatus("fail", `reset failed, nothing changed: ${resetError.message}`);
   process.exit(1);

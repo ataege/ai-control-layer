@@ -76,10 +76,9 @@ func BuildReportView(report StoredReport, viewer Viewer) ReportView {
 		Title: report.Title, ContentHash: hex.EncodeToString(report.ContentHash[:]),
 		Lineage: make([]LineageSummary, 0, len(report.Lineage)),
 	}
-	if template, registered := LookupTemplate(report.TemplateName); registered {
-		view.TemplateVersion = template.Version
-	}
 	for _, entry := range report.Lineage {
+		// The stored fact, not the registry's current version.
+		view.TemplateVersion = entry.TemplateVersion
 		if entry.ProjectionRuleVersion != nil {
 			version := *entry.ProjectionRuleVersion
 			view.ProjectionRuleVersion = &version

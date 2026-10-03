@@ -11,6 +11,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import type {
   ActionProposal,
   ApiReadinessResponse,
+  ApprovalDecision,
   ErrorResponse,
   GatewayDiagnosticsResponse,
   GatewayPingResponse,
@@ -257,6 +258,7 @@ export const typedSamples = {
     organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
     roles: ["operator", "reviewer"],
   } satisfies OperatorContext,
+  approvalDecision: { decision: "approve" } satisfies ApprovalDecision,
 };
 
 // Fixture file that each typed literal must equal, one per schema.
@@ -276,6 +278,7 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   runState: "run-state.paused-allowance.json",
   safeEvent: "safe-event.admission-rejected.json",
   operatorContext: "operator-context.operator.json",
+  approvalDecision: "approval-decision.approve.json",
 };
 
 test("typed samples are identical to their fixtures", () => {
