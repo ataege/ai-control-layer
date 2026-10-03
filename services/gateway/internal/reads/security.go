@@ -18,22 +18,25 @@ import (
 // it (GO-83, the Go side's draft until the shared contract lands it). It carries stable codes and
 // revisions only: never inspected text, model requests or classifier reasoning.
 type AssessmentRecord struct {
-	AssessmentID               string                `json:"assessmentId"`
-	RunID                      string                `json:"runId"`
-	EvaluationID               string                `json:"evaluationId"`
-	ActionID                   *string               `json:"actionId"`
-	SecurityModelCallID        *string               `json:"securityModelCallId"`
-	Boundary                   string                `json:"boundary"`
-	ControlClass               string                `json:"controlClass"`
-	ControlID                  string                `json:"controlId"`
-	Outcome                    string                `json:"outcome"`
-	ReasonCode                 *contracts.ReasonCode `json:"reasonCode"`
-	AdmissionCatalogRevisionID int64                 `json:"admissionCatalogRevisionId"`
-	EvaluatedCatalogRevisionID int64                 `json:"evaluatedCatalogRevisionId"`
-	MatchedRuleID              *string               `json:"matchedRuleId"`
-	FeedRevision               *string               `json:"feedRevision"`
-	// VerdictSource is "live" or "fixture" on a semantic record, null on a deterministic one: a
-	// fixture verdict is never semantic detection quality.
+	AssessmentID        string  `json:"assessmentId"`
+	RunID               string  `json:"runId"`
+	EvaluationID        string  `json:"evaluationId"`
+	ActionID            *string `json:"actionId"`
+	SecurityModelCallID *string `json:"securityModelCallId"`
+	Boundary            string  `json:"boundary"`
+	ControlClass        string  `json:"controlClass"`
+	ControlID           string  `json:"controlId"`
+	Outcome             string  `json:"outcome"`
+	// ReasonCode is the control's own stable code: an X-13 code, or a control-level one such as
+	// no_free_text_arguments on a semantic check that made no model call.
+	ReasonCode                 *string `json:"reasonCode"`
+	AdmissionCatalogRevisionID int64   `json:"admissionCatalogRevisionId"`
+	EvaluatedCatalogRevisionID int64   `json:"evaluatedCatalogRevisionId"`
+	MatchedRuleID              *string `json:"matchedRuleId"`
+	FeedRevision               *string `json:"feedRevision"`
+	// VerdictSource is "live" or "fixture" on a semantic record that classified something, null on
+	// a deterministic record and on a semantic one that made no model call (outcome not_applicable,
+	// for example no free-text arguments). A fixture verdict is never semantic detection quality.
 	VerdictSource *string         `json:"verdictSource"`
 	Verdict       *VerdictSummary `json:"verdict"`
 	// InputSource is "judge" when the assessment belongs to a judge's control evaluation (GO-82).
@@ -250,13 +253,10 @@ func readAssessmentPage(ctx context.Context, tx pgx.Tx, organizationID string, c
 		}
 		record.AssessmentID = strconv.FormatInt(recordID, 10)
 		record.AssessedAt = record.AssessedAt.UTC()
-		if record.ReasonCode, err = optionalReasonCode(reason); err != nil {
-			return AssessmentPage{}, err
-		}
+		record.ReasonCode = reason
 		if verdict != nil {
-			record.Verdict = &VerdictSummary{}
-			if contracts.DecodeStrict([]byte(*verdict), record.Verdict) != nil {
-				return AssessmentPage{}, errMalformedRecord
+			if record.Verdict, err = decodeVerdict(*verdict); err != nil {
+				return AssessmentPage{}, err
 			}
 		}
 		if !validAssessment(record) {
@@ -472,16 +472,39 @@ func optionalReasonCode(value *string) (*contracts.ReasonCode, error) {
 	return &code, nil
 }
 
+// validAssessment mirrors the repository's writer (validControlRecord): a semantic record names
+// its verdict source, except one that made no model call (not_applicable, no verdict, no call); a
+// deterministic record has no source, verdict or security call.
 func validAssessment(record AssessmentRecord) bool {
 	semantic := record.ControlClass == "semantic"
+	unclassified := semantic && record.Outcome == "not_applicable" && record.VerdictSource == nil &&
+		record.Verdict == nil && record.SecurityModelCallID == nil
+	sourceRule := (semantic && (record.VerdictSource != nil || unclassified)) ||
+		(!semantic && record.VerdictSource == nil && record.Verdict == nil && record.SecurityModelCallID == nil)
 	return uuidPattern.MatchString(record.RunID) && uuidPattern.MatchString(record.EvaluationID) &&
 		optionalUUID(record.ActionID) && optionalUUID(record.SecurityModelCallID) &&
 		identifierPattern.MatchString(record.Boundary) && oneOf(record.ControlClass, controlClasses) &&
 		identifierPattern.MatchString(record.ControlID) && identifierPattern.MatchString(record.Outcome) &&
+		(record.ReasonCode == nil || identifierPattern.MatchString(*record.ReasonCode)) &&
 		record.AdmissionCatalogRevisionID > 0 && record.EvaluatedCatalogRevisionID > 0 &&
 		optionalIdentifier(record.MatchedRuleID) && optionalIdentifier(record.FeedRevision) &&
-		optionalOneOf(record.VerdictSource, verdictSources) && semantic == (record.VerdictSource != nil) &&
-		(record.Verdict == nil || (semantic && validVerdict(*record.Verdict)))
+		optionalOneOf(record.VerdictSource, verdictSources) && sourceRule &&
+		(record.Verdict == nil || validVerdict(*record.Verdict))
+}
+
+// decodeVerdict reads a stored verdict strictly: exactly the three decided keys, all present and
+// non-null. A missing score is refused, never served as a measured 0.
+func decodeVerdict(stored string) (*VerdictSummary, error) {
+	var decoded struct {
+		RiskCategory *string  `json:"risk_category"`
+		Score        *float64 `json:"score"`
+		ReasonCode   *string  `json:"reason_code"`
+	}
+	if contracts.DecodeStrict([]byte(stored), &decoded) != nil ||
+		decoded.RiskCategory == nil || decoded.Score == nil || decoded.ReasonCode == nil {
+		return nil, errMalformedRecord
+	}
+	return &VerdictSummary{RiskCategory: *decoded.RiskCategory, Score: *decoded.Score, ReasonCode: *decoded.ReasonCode}, nil
 }
 
 func validVerdict(verdict VerdictSummary) bool {

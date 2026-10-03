@@ -1,0 +1,62 @@
+{
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "modelCalls": [
+    {
+      "purpose": "agent",
+      "dispatched": 3,
+      "completed": 2,
+      "failed": 0,
+      "usageUnknown": 1,
+      "inFlight": 0,
+      "settledTokens": 300,
+      "heldTokens": 40,
+      "usageUnknownReservations": 1
+    },
+    {
+      "purpose": "security",
+      "dispatched": 1,
+      "completed": 0,
+      "failed": 0,
+      "usageUnknown": 0,
+      "inFlight": 1,
+      "settledTokens": 0,
+      "heldTokens": 10,
+      "usageUnknownReservations": 0
+    }
+  ],
+  "ledger": {
+    "paused": false,
+    "tokens": {
+      "limit": 20000,
+      "reserved": 50,
+      "used": 300
+    },
+    "agentTokens": {
+      "limit": 12000,
+      "reserved": 40,
+      "used": 300
+    },
+    "securityTokens": {
+      "limit": null,
+      "reserved": 10,
+      "used": 0
+    },
+    "calls": {
+      "limit": 24,
+      "agentLimit": 12,
+      "securityLimit": 12,
+      "agent": 3,
+      "security": 1
+    },
+    "requestTimeoutMilliseconds": 20000,
+    "maxConcurrentCalls": 2,
+    "callsInFlight": 2
+  },
+  "toolAttempts": {
+    "total": 4,
+    "succeeded": 1,
+    "failed": 1,
+    "aborted": 1,
+    "open": 1
+  }
+}

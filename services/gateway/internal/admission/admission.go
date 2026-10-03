@@ -53,7 +53,8 @@ func unavailableAt(stage string) error { return &UnavailableError{Stage: stage} 
 // Rejection explains why a request exceeds the operator's authority.
 type Rejection struct {
 	Code contracts.ReasonCode
-	// Message names the scope or limit that must change; it never echoes record content.
+	// Message is fixed text naming the field, scope or limit that must change. It never echoes a
+	// request value or record content: it is stored as the event's safe message.
 	Message string
 }
 
@@ -178,23 +179,31 @@ func (admitter *Admitter) recordRejection(ctx context.Context, operator contract
 // validateRequest checks the request shape before any record is read.
 func validateRequest(request contracts.StartRunRequest) *Rejection {
 	if request.Template != TaskTemplateReconcileAtlas {
-		return reject(contracts.ReasonTemplateNotAllowed, "task template %q is not registered", boundedText(request.Template))
+		return reject(contracts.ReasonTemplateNotAllowed, "the task template is not registered")
 	}
 	if len(request.InvoiceIDs) == 0 || len(request.InvoiceIDs) > maximumRequestedInvoices {
 		return reject(contracts.ReasonInvalidArguments, "invoiceIds must name between 1 and %d invoices", maximumRequestedInvoices)
 	}
 	seen := make(map[string]bool, len(request.InvoiceIDs))
 	for _, invoiceID := range request.InvoiceIDs {
-		if strings.TrimSpace(invoiceID) == "" || len(invoiceID) > 256 {
-			return reject(contracts.ReasonInvalidArguments, "invoiceIds must not contain empty or over-long ids")
+		// The same shape the gate's decoder enforces, so every admitted invoice can be read.
+		if !contracts.ValidInvoiceID(invoiceID) {
+			return reject(contracts.ReasonInvalidArguments, "invoiceIds contains a value that is not an invoice id")
 		}
 		if seen[invoiceID] {
-			return reject(contracts.ReasonInvalidArguments, "invoiceIds repeats %q", boundedText(invoiceID))
+			return reject(contracts.ReasonInvalidArguments, "invoiceIds repeats an invoice")
 		}
 		seen[invoiceID] = true
 	}
 	if strings.TrimSpace(request.Destination) == "" {
 		return reject(contracts.ReasonInvalidArguments, "destination is required")
+	}
+	// The destination names the task's vendor (a vendor id today).
+	if !contracts.ValidVendorID(request.Destination) {
+		return reject(contracts.ReasonInvalidArguments, "destination is not a vendor id")
+	}
+	if request.VendorID != nil && !contracts.ValidVendorID(*request.VendorID) {
+		return reject(contracts.ReasonInvalidArguments, "vendorId is not a vendor id")
 	}
 	if request.ApprovalRequirement != nil && *request.ApprovalRequirement != ApprovalRuleReviewQueueReport {
 		return reject(contracts.ReasonInvalidArguments, "approvalRequirement must be %q", ApprovalRuleReviewQueueReport)
@@ -235,26 +244,26 @@ func resolveVendor(ctx context.Context, transaction pgx.Tx, organizationID strin
 	// Reported in request order; another organization's invoice looks the same as a missing one.
 	for _, invoiceID := range request.InvoiceIDs {
 		if _, found := vendorOfInvoice[invoiceID]; !found {
-			return "", reject(contracts.ReasonResourceOutOfScope, "invoice %q is not available to this organization", boundedText(invoiceID)), nil
+			return "", reject(contracts.ReasonResourceOutOfScope, "an invoice in invoiceIds is not available to this organization"), nil
 		}
 	}
 	taskVendorID := vendorOfInvoice[request.InvoiceIDs[0]]
 	for _, invoiceID := range request.InvoiceIDs {
 		if vendorOfInvoice[invoiceID] != taskVendorID {
-			return "", reject(contracts.ReasonResourceOutOfScope, "invoice %q belongs to another vendor than %q", boundedText(invoiceID), boundedText(request.InvoiceIDs[0])), nil
+			return "", reject(contracts.ReasonResourceOutOfScope, "the invoices in invoiceIds belong to more than one vendor"), nil
 		}
 	}
 	if request.VendorID != nil && *request.VendorID != taskVendorID {
-		return "", reject(contracts.ReasonResourceOutOfScope, "vendorId %q is not the vendor of the requested invoices", boundedText(*request.VendorID)), nil
+		return "", reject(contracts.ReasonResourceOutOfScope, "vendorId is not the vendor of the requested invoices"), nil
 	}
 	if request.Destination != taskVendorID {
-		return "", reject(contracts.ReasonDestinationNotAllowed, "destination %q is not the task's vendor", boundedText(request.Destination)), nil
+		return "", reject(contracts.ReasonDestinationNotAllowed, "destination is not the vendor of the requested invoices"), nil
 	}
 	var hasRegisteredAddress bool
 	err = transaction.QueryRow(ctx, `SELECT registered_reporting_address IS NOT NULL FROM demo.vendors
 		WHERE organization_id = $1 AND id = $2`, organizationID, taskVendorID).Scan(&hasRegisteredAddress)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !hasRegisteredAddress) {
-		return "", reject(contracts.ReasonDestinationNotAllowed, "vendor %q has no registered reporting address", boundedText(taskVendorID)), nil
+		return "", reject(contracts.ReasonDestinationNotAllowed, "the task's vendor has no registered reporting address"), nil
 	}
 	if err != nil {
 		return "", nil, err
@@ -327,16 +336,6 @@ func (admitter *Admitter) buildPassport(operator contracts.OperatorContext, requ
 		},
 	}
 	return passport, nil, nil
-}
-
-// boundedText keeps a caller-supplied value short in a rejection message.
-func boundedText(value string) string {
-	const maximumLength = 64
-	runes := []rune(value)
-	if len(runes) > maximumLength {
-		return string(runes[:maximumLength]) + "..."
-	}
-	return value
 }
 
 func nonNil[Value any](values []Value) []Value {

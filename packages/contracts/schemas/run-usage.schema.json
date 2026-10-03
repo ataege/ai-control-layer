@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-usage.schema.json",
+  "title": "RunUsage",
+  "description": "X-29 draft (GO-24): the usage of one run from recorded dispatches and the run's model ledger; unknown usage is its own count; no cost.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "modelCalls", "ledger", "toolAttempts"],
+  "properties": {
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "modelCalls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "purpose",
+          "dispatched",
+          "completed",
+          "failed",
+          "usageUnknown",
+          "inFlight",
+          "settledTokens",
+          "heldTokens",
+          "usageUnknownReservations"
+        ],
+        "properties": {
+          "purpose": {
+            "enum": ["agent", "security"]
+          },
+          "dispatched": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "usageUnknown": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "inFlight": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "settledTokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "heldTokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "usageUnknownReservations": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "ledger": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "paused",
+            "tokens",
+            "agentTokens",
+            "securityTokens",
+            "calls",
+            "requestTimeoutMilliseconds",
+            "maxConcurrentCalls",
+            "callsInFlight"
+          ],
+          "properties": {
+            "paused": {
+              "type": "boolean"
+            },
+            "tokens": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["limit", "reserved", "used"],
+              "properties": {
+                "limit": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reserved": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "used": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "agentTokens": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["limit", "reserved", "used"],
+              "properties": {
+                "limit": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reserved": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "used": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "securityTokens": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["limit", "reserved", "used"],
+              "properties": {
+                "limit": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reserved": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "used": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "calls": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["limit", "agentLimit", "securityLimit", "agent", "security"],
+              "properties": {
+                "limit": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "agentLimit": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "securityLimit": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "agent": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "security": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "requestTimeoutMilliseconds": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "maxConcurrentCalls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "callsInFlight": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "toolAttempts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "succeeded", "failed", "aborted", "open"],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "aborted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "open": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

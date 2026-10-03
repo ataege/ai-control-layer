@@ -51,12 +51,12 @@ var (
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// Record identifier shapes (X-09): a fixed prefix and letters, digits, underscores and hyphens, so
-// no prose fits inside an id. Both stay within the semantic action check's constrained identifier
-// format (at most 128 characters), so every id the gate accepts needs no semantic call.
+// Record identifier shapes (X-09) are contracts.InvoiceIDPattern and contracts.VendorIDPattern,
+// shared with admission; both stay within the semantic action check's constrained identifier
+// format, so every id the gate accepts needs no semantic call.
 var (
-	invoiceIDPattern = regexp.MustCompile(`^invoice_[A-Za-z0-9_-]{1,120}$`)
-	vendorIDPattern  = regexp.MustCompile(`^vendor_[A-Za-z0-9_-]{1,121}$`)
+	invoiceIDPattern = contracts.InvoiceIDPattern
+	vendorIDPattern  = contracts.VendorIDPattern
 )
 
 // replaySourcePattern is the label of a labelled replay (GO-05, GO-36): labelled_replay:<fixture id>.

@@ -152,8 +152,9 @@ func TestAccountedCallExhaustionAndSettlementFailure(t *testing.T) {
 	store.limit = 10000
 	store.settleError = errors.New("private database details")
 	result, err := caller.Call(context.Background(), "run", "call", accountedFixtureRequest())
-	if !errors.Is(err, ErrAccounting) || result.Provider.Message.Content != "" || store.reserved == 0 {
-		t.Fatal("failed settlement returned success")
+	// A failed settlement holds the reservation as unknown usage, never a success or a silent loss.
+	if !errors.Is(err, ErrUsageUnknown) || !result.UsageUnknown || !store.unknown || result.Provider.Message.Content != "" || store.reserved == 0 {
+		t.Fatalf("failed settlement: err %v, usage unknown %v, marked %v, reserved %d", err, result.UsageUnknown, store.unknown, store.reserved)
 	}
 }
 func TestEstimateIncludesEveryInputAndRejectsOverflow(t *testing.T) {
