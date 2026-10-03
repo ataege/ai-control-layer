@@ -92,13 +92,12 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/httpserver` | Go lane 3c (repository, admission, passport, API)             |
 | `internal/model`      | Go lane f3 (worker, agent, model, budget)                     |
 | `internal/budget`     | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/worker`     | Go lane f3 (worker, agent, model, budget)                     |
 | `internal/testdb`     | Shared Go lanes; the lead coordinates edits                   |
 | `internal/contracts`  | Go lane 3c (repository, admission, passport, API)             |
 | `internal/tools`      | Go lane w2 (tools and provenance)                             |
 | `internal/policy`     | Go lane w3 (action gate and approvals)                        |
 | `internal/security`   | Go lane c1 (hybrid security controls)                         |
-| `tool_result`         | Go lane c1 (hybrid security controls)                         |
-| `model_input`         | Go lane c1 (hybrid security controls)                         |
 | `internal/provenance` | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
