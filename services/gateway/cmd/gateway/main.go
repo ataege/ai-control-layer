@@ -24,6 +24,7 @@ import (
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/logging"
 	"starter/services/gateway/internal/operatorcontext"
+	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/repository"
 )
 
@@ -104,6 +105,7 @@ func run() error {
 		InternalCommands: api.Commands(api.Dependencies{
 			Admitter:  admission.New(runtimeRepository, catalog.NewLoader()),
 			Canceller: runtimeRepository,
+			Approvals: policy.NewApprovals(pool),
 			Database:  pool,
 		}),
 	})

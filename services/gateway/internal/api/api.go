@@ -13,6 +13,7 @@ import (
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/operatorcontext"
+	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/provenance"
 	"starter/services/gateway/internal/repository"
 )
@@ -39,10 +40,18 @@ type RunCanceller interface {
 	CancelRun(ctx context.Context, organizationID, runID string) (contracts.RunState, error)
 }
 
+// Approvals decides approvals and serves frozen review payloads (lane w3's GO-44);
+// *policy.Approvals implements it.
+type Approvals interface {
+	policy.ApprovalDecider
+	policy.ReviewReader
+}
+
 // Dependencies are what the internal routes need.
 type Dependencies struct {
 	Admitter  RunAdmitter
 	Canceller RunCanceller
+	Approvals Approvals
 	// Database serves the stored report read (GO-37); the gateway pool in production.
 	Database provenance.Beginner
 }
@@ -53,6 +62,8 @@ func Commands(dependencies Dependencies) []httpserver.InternalCommand {
 		{Pattern: StartRunRoutePattern, Handler: StartRunHandler(dependencies.Admitter)},
 		{Pattern: CancelRunRoutePattern, Handler: CancelRunHandler(dependencies.Canceller)},
 		{Pattern: provenance.StoredReportRoutePattern, Handler: provenance.StoredReportHandler(dependencies.Database, StoredReportViewer)},
+		{Pattern: policy.ApprovalRoutePattern, Handler: policy.ApprovalHandler(dependencies.Approvals)},
+		{Pattern: policy.ReviewRoutePattern, Handler: policy.ReviewHandler(dependencies.Approvals)},
 	}
 }
 

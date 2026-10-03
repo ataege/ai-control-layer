@@ -350,3 +350,16 @@ func TestPostgresCancelRunThroughTheRealBoundary(t *testing.T) {
 		t.Errorf("state %+v", state)
 	}
 }
+
+// The approval and review routes of lane w3 are mounted behind the same guard.
+func TestApprovalRoutesAreMountedBehindTheGuard(t *testing.T) {
+	handler := newHandler(t, Dependencies{})
+	for _, route := range []struct{ method, path string }{
+		{http.MethodPost, "/internal/actions/9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a/approval"},
+		{http.MethodGet, "/internal/actions/9e8d7c6b-5a49-4382-a716-5f4e3d2c1b0a/review"},
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, strings.NewReader(`{"decision":"approve"}`)))
+		assertError(t, recorder, http.StatusUnauthorized, "unauthorized")
+	}
+}
