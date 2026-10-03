@@ -509,6 +509,15 @@ describe different catalog revisions, so one call never mixes two revisions.
 `model.AccountedCaller` now joins the safe failure sentinel (`ErrTransport`, `ErrResponse`) to
 `ErrUsageUnknown`, never the provider's raw error.
 
+**Lowered limits on a running passport (GO-86).** The caller reserves through
+`budget.PostgresStore.ReserveWithin` with the active revision's call counts (total, agent,
+security), token total and request time as a `budget.Ceiling`. Under the ledger row lock each limit
+becomes the lower of the passport's and the revision's (GO-72's `catalog.EffectiveFor` rule), so a
+revision lowered below what a run has used refuses its next reservation with `budget.ErrExhausted`
+(`allowance_exhausted`). A raised revision widens nothing, and past usage is never refunded or
+rewritten; the ledger keeps the passport's stored limits. The catalog has no per-purpose token
+limits, so those stay the passport's.
+
 ## Model allowance ledger alignment (GO-39)
 
 Migration `1791130000000-AlignTokenLedger` applies alignment decisions 1 to 5 to the GO-06 ledger:

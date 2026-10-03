@@ -28,6 +28,9 @@ Rules:
   `errors.Is(err, ErrExhausted)`), or all slots are held (`ErrConcurrencyLimit`). It needs the call's
   dispatch record. It returns the request timeout, and `model.AccountedCaller` bounds the provider
   request with it.
+- `ReserveWithin` is `Reserve` under a `Ceiling` (the active catalog revision's call counts, token
+  total and request time): each limit is the lower of the stored one and the ceiling, under the same
+  lock, so a lowered revision refuses the next reservation and a raised one widens nothing (GO-86).
 - A call counts when its reservation is granted and is never refunded: a dispatched call is a call.
   `CountAgentCalls` is the agent loop's step count.
 - `MarkUnknown` keeps the whole reservation and the slot: a timeout or missing usage does not prove
