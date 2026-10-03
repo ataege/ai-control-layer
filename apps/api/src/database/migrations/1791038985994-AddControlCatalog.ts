@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import type { MigrationInterface, QueryRunner } from "typeorm";
 
 // The control catalog (API-31, SH-43): immutable policy and signature-feed revisions and the single
 // active-version pointer. Generated from the entities in src/policies; the schema creation and the

@@ -22,6 +22,33 @@ approves it and it merges into `main` through SH-11.
 The file is an import input, "not a second configuration authority": after an import, the stored
 revision is what counts, and editing the file changes nothing until the next accepted import.
 
+## Importing the file
+
+From the repository root, with the database migrated (`pnpm db:migration:run`):
+
+```sh
+pnpm policy:import                 # imports config/policy.yaml
+pnpm policy:import path/to/copy.yaml
+```
+
+The command (API-32) validates the whole file and then, in one transaction:
+
+- **Valid file:** stores a new immutable revision (`app.control_catalog_revisions`) and makes it the
+  requested revision. The very first accepted revision also becomes active. A later revision stays
+  requested until the authenticated reload (API-33) activates it after Go acknowledges it
+  (`catalog activation protocol`). Exit code 0.
+- **Invalid file:** stores nothing. It records the reason (`policy_reload_rejected`), the file
+  digest and up to 20 issues on the pointer (`app.control_catalog_pointer`); the active revision
+  stays. Exit code 1.
+
+Before the schema is checked, the file must be at most 64 KiB of valid UTF-8 without control
+characters (tab, line feed and carriage return are allowed) and hold one plain YAML document: no
+duplicate keys, no aliases and no custom tags. A leading byte order mark is kept in the stored text, so
+the stored text always matches the stored digest. A relative path is relative to the repository root.
+Rejection messages are fixed texts per kind of problem; they never repeat a key or value from the
+file. The command never runs at application
+startup, and it does not bind a signature feed: the feed import (API-34) does that.
+
 ## Values
 
 Every number in the sample is an illustrative value from the project report, labelled there as
@@ -51,14 +78,14 @@ has a default: every key in the tables is required.
 
 ### Top level
 
-| Key              | Type            | Rule                                               |
-| ---------------- | --------------- | -------------------------------------------------- |
-| `schema_version` | integer         | Must be `1`. A future schema change increments it. |
-| `allowed_models` | list of strings | Models and budgets group, see below.               |
-| `budgets`        | mapping         | Models and budgets group, see below.               |
-| `controls`       | mapping         | Controls group, see below.                         |
-| `signatures`     | mapping         | Attack feed group, see below.                      |
-| `reports`        | mapping         | Reports and audit group, see below.                |
+| Key              | Type            | Rule                                                               |
+| ---------------- | --------------- | ------------------------------------------------------------------ |
+| `schema_version` | integer         | Must be `1`, written as `1`. A future schema change increments it. |
+| `allowed_models` | list of strings | Models and budgets group, see below.                               |
+| `budgets`        | mapping         | Models and budgets group, see below.                               |
+| `controls`       | mapping         | Controls group, see below.                                         |
+| `signatures`     | mapping         | Attack feed group, see below.                                      |
+| `reports`        | mapping         | Reports and audit group, see below.                                |
 
 ### Models and budgets
 
@@ -74,7 +101,7 @@ NestJS validates the syntax of each entry. Whether a model is installed is known
 model runs, so Go checks it when it validates the candidate. A request for a model outside the active
 list is denied before dispatch (`model_not_allowed`), even on a previously admitted run.
 
-`budgets`, all positive integers (zero, negative or fractional values reject the file):
+`budgets`, all positive integers written in plain decimal digits (zero, negative or fractional values, and spellings such as `24.0`, `0x18` or `0o30`, reject the file):
 
 | Key                       | Sample | Meaning                                                                                 |
 | ------------------------- | ------ | --------------------------------------------------------------------------------------- |
