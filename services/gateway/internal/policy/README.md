@@ -226,3 +226,20 @@ and `approval_expired`. `recordAttempt` claims the action first (allowed or appr
 only then counts the run's attempts under `FOR NO KEY UPDATE` on the run row, the lock the event
 writer also takes; the earlier order (run lock first) deadlocked with a running effect. A losing
 concurrent execution is refused (`action_changed`).
+
+## Retries and unknown outcomes (GO-53, executor half)
+
+GO-53 belongs to Worker 2, who owns the effect transaction; the executor half lives here, built on
+`tools.ClassifyRunError` and `tools.RetrySafe`:
+
+- `RunEffect` returns an error: the transaction is rolled back, so no local effect committed. A
+  retry-safe known no-effect failure releases the action (back to `allowed` or `approved`; a
+  consumed grant was rolled back with it) and retries once under the same action id, through the
+  normal checks and a new attempt that counts against the passport's limit. A precondition failure
+  (the stored action, attempt or passport no longer matches) fails the action with an
+  `action.failed` event and returns `stopped`, so the worker stops the run; no retry.
+- The commit fails: the stored status is read back. `executed` or `failed` means the commit landed
+  and the result is returned; otherwise the attempt stays open (the one-open-attempt index blocks
+  any second attempt), the action becomes `unknown` with an `action.unknown` event
+  (`outcome_unknown`), and the result is `paused`. Nothing re-runs it.
+- An adapter refusal (`Outcome` failed) is `failed` with its reason, never retried.

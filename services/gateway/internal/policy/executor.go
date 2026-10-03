@@ -12,6 +12,7 @@ import (
 
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/provenance"
+	"starter/services/gateway/internal/repository"
 	"starter/services/gateway/internal/tools"
 )
 
@@ -36,9 +37,12 @@ const (
 	ExecutionFailed ExecutionStatus = "failed"
 	// ExecutionRefused: a fresh check failed before dispatch; no adapter was called.
 	ExecutionRefused ExecutionStatus = "refused"
-	// ExecutionPaused: a precondition or storage problem, or an unknown outcome. The run pauses;
-	// nothing is retried blindly.
+	// ExecutionPaused: a storage problem or an unknown outcome. The run pauses; nothing is
+	// retried blindly.
 	ExecutionPaused ExecutionStatus = "paused"
+	// ExecutionStopped: the effect's preconditions no longer hold (the stored action, attempt or
+	// passport). The action is failed; the worker stops the run with the reason. No retry.
+	ExecutionStopped ExecutionStatus = "stopped"
 )
 
 // ExecutionResult is what the worker receives. Result is the minimized form (GO-23) whose
@@ -56,6 +60,8 @@ type Executor struct {
 	pool   *pgxpool.Pool
 	scopes ScopeReader
 	runner tools.EffectRunner
+	// beforeCommit runs just before the effect's commit; tests use it to make the commit fail.
+	beforeCommit func()
 }
 
 // NewExecutor returns an executor. It creates nothing at construction.
@@ -75,9 +81,28 @@ type storedExecutableAction struct {
 	passportUnexpired   bool
 }
 
-// Execute runs one allowed action: fresh checks, then a committed attempt record, then the
-// adapter, the attempt completion and its event in one transaction.
+// maximumSafeRetries bounds the retries of a known no-effect failure within one Execute call;
+// every retry is a new attempt and counts against the passport's attempt limit.
+const maximumSafeRetries = 1
+
+// executionRetry is the internal signal of a rolled-back, retry-safe failure (GO-53).
+const executionRetry ExecutionStatus = "retry"
+
+// Execute runs one allowed or approved action: fresh checks, then a committed attempt record,
+// then the adapter, the attempt completion and its event in one transaction. A known no-effect
+// failure of a retry-safe tool is retried under the same action id (GO-53).
 func (executor *Executor) Execute(ctx context.Context, run RunIdentity, actionID string) ExecutionResult {
+	result := executor.executeOnce(ctx, run, actionID)
+	for retries := 0; result.Status == executionRetry; retries++ {
+		if retries >= maximumSafeRetries {
+			return ExecutionResult{Status: ExecutionPaused, ReasonCode: ReasonDecisionUnavailable, AttemptID: result.AttemptID}
+		}
+		result = executor.executeOnce(ctx, run, actionID)
+	}
+	return result
+}
+
+func (executor *Executor) executeOnce(ctx context.Context, run RunIdentity, actionID string) ExecutionResult {
 	refused := func(reason ReasonCode) ExecutionResult {
 		return ExecutionResult{Status: ExecutionRefused, ReasonCode: reason}
 	}
@@ -155,7 +180,6 @@ func (executor *Executor) Execute(ctx context.Context, run RunIdentity, actionID
 // so no effect was committed and the attempt is closed as aborted; a failed commit leaves the
 // outcome unknown and the attempt open.
 func (executor *Executor) runEffect(ctx context.Context, run RunIdentity, request tools.EffectRequest, consumeApproval bool) ExecutionResult {
-	outcome := ExecutionResult{AttemptID: request.AttemptID}
 	tx, err := executor.pool.Begin(ctx)
 	if err != nil {
 		executor.abortAttempt(ctx, run, request)
@@ -174,19 +198,48 @@ func (executor *Executor) runEffect(ctx context.Context, run RunIdentity, reques
 			return ExecutionResult{Status: ExecutionRefused, ReasonCode: contracts.ReasonApprovalExpired, AttemptID: request.AttemptID}
 		}
 	}
-	effect, err := executor.runner.RunEffect(ctx, tx, request)
-	if err == nil {
-		err = setExecutedStatus(ctx, tx, run, request.ActionID, effect.Outcome)
+	effect, runErr := executor.runner.RunEffect(ctx, tx, request)
+	statusErr := error(nil)
+	if runErr == nil {
+		statusErr = setExecutedStatus(ctx, tx, run, request.ActionID, effect.Outcome)
 	}
-	if err != nil {
+	if runErr != nil || statusErr != nil {
+		// Rolled back: every demo effect is local to this transaction, so nothing committed.
 		_ = tx.Rollback(ctx)
 		executor.abortAttempt(ctx, run, request)
+		failure := tools.ClassifyRunError(runErr)
+		switch {
+		case (runErr != nil && tools.RetrySafe(request.Tool, failure)) || (statusErr != nil && !errors.Is(statusErr, errActionNotExecutable)):
+			// Back to allowed or approved, so the retry claims the action again with fresh checks;
+			// a consumed grant was rolled back with the effect and is reused once.
+			if executor.releaseAction(ctx, run, request.ActionID, consumeApproval) != nil {
+				return ExecutionResult{Status: ExecutionPaused, ReasonCode: ReasonDecisionUnavailable, AttemptID: request.AttemptID}
+			}
+			return ExecutionResult{Status: executionRetry, AttemptID: request.AttemptID}
+		case runErr != nil && failure == tools.FailurePrecondition, errors.Is(statusErr, errActionNotExecutable):
+			executor.failAction(ctx, run, request)
+			return ExecutionResult{Status: ExecutionStopped, ReasonCode: ReasonActionChanged, AttemptID: request.AttemptID}
+		}
 		return ExecutionResult{Status: ExecutionPaused, ReasonCode: ReasonDecisionUnavailable, AttemptID: request.AttemptID}
 	}
+	if executor.beforeCommit != nil {
+		executor.beforeCommit()
+	}
 	if err := tx.Commit(ctx); err != nil {
-		// The commit may or may not have reached the database: never assume either way.
+		// The commit may or may not have reached the database. Establish the outcome from the
+		// stored status; when it cannot be established, record it as unknown and never retry.
+		if executor.commitLanded(ctx, run, request.ActionID) {
+			return executor.finishCommitted(request, effect)
+		}
+		executor.recordUnknownOutcome(ctx, run, request)
 		return ExecutionResult{Status: ExecutionPaused, ReasonCode: ReasonOutcomeUnknown, AttemptID: request.AttemptID}
 	}
+	return executor.finishCommitted(request, effect)
+}
+
+// finishCommitted turns a committed effect into the worker's minimized result.
+func (executor *Executor) finishCommitted(request tools.EffectRequest, effect tools.EffectResult) ExecutionResult {
+	outcome := ExecutionResult{AttemptID: request.AttemptID}
 
 	minimized, err := tools.MinimizeForModel(request.Tool, effect)
 	if err != nil {
@@ -307,7 +360,7 @@ func setExecutedStatus(ctx context.Context, tx pgx.Tx, run RunIdentity, actionID
 		return err
 	}
 	if tag.RowsAffected() != 1 {
-		return errors.New("action is not executing")
+		return errActionNotExecutable // the action is no longer executing
 	}
 	return nil
 }
@@ -398,4 +451,76 @@ func consumeApprovalGrant(ctx context.Context, tx pgx.Tx, run RunIdentity, reque
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
+}
+
+// releaseAction returns an action from executing to allowed or approved after a rolled-back,
+// retry-safe failure, so the retry claims it again through the normal checks.
+func (executor *Executor) releaseAction(ctx context.Context, run RunIdentity, actionID string, approved bool) error {
+	status := actionStatusAllowed
+	if approved {
+		status = string(contracts.ActionApproved)
+	}
+	tag, err := executor.pool.Exec(ctx,
+		`UPDATE runtime.actions SET status = $1, updated_at = now()
+		  WHERE id = $2 AND organization_id = $3 AND status = $4`,
+		status, actionID, run.OrganizationID, actionStatusExecuting)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return errActionNotExecutable
+	}
+	return nil
+}
+
+// failAction marks an action whose effect preconditions no longer hold as failed, with its
+// action.failed event. A failure to record it leaves the action executing, which blocks it.
+func (executor *Executor) failAction(ctx context.Context, run RunIdentity, request tools.EffectRequest) {
+	recordContext := context.WithoutCancel(ctx)
+	_ = repository.New(executor.pool).InTransaction(recordContext, func(tx repository.Tx) error {
+		tag, err := tx.Raw().Exec(recordContext,
+			`UPDATE runtime.actions SET status = $1, updated_at = now()
+			  WHERE id = $2 AND organization_id = $3 AND status = $4`,
+			actionStatusFailed, request.ActionID, run.OrganizationID, actionStatusExecuting)
+		if err != nil || tag.RowsAffected() != 1 {
+			return errActionNotExecutable
+		}
+		return appendActionEvent(recordContext, tx, run, request, contracts.EventActionFailed, ReasonActionChanged)
+	})
+}
+
+// commitLanded reads the action's status after a failed commit: executed or failed means the
+// effect's transaction reached the database.
+func (executor *Executor) commitLanded(ctx context.Context, run RunIdentity, actionID string) bool {
+	var status string
+	err := executor.pool.QueryRow(context.WithoutCancel(ctx),
+		`SELECT status FROM runtime.actions WHERE id = $1 AND organization_id = $2`, actionID, run.OrganizationID).Scan(&status)
+	return err == nil && (status == actionStatusExecuted || status == actionStatusFailed)
+}
+
+// recordUnknownOutcome keeps the attempt open (the one-open-attempt index then blocks any second
+// attempt), sets the action to unknown and writes action.unknown with outcome_unknown. The run
+// pauses for reconciliation through the worker; nothing re-queues the action.
+func (executor *Executor) recordUnknownOutcome(ctx context.Context, run RunIdentity, request tools.EffectRequest) {
+	recordContext := context.WithoutCancel(ctx)
+	_ = repository.New(executor.pool).InTransaction(recordContext, func(tx repository.Tx) error {
+		tag, err := tx.Raw().Exec(recordContext,
+			`UPDATE runtime.actions SET status = $1, updated_at = now()
+			  WHERE id = $2 AND organization_id = $3 AND status = $4`,
+			string(contracts.ActionUnknown), request.ActionID, run.OrganizationID, actionStatusExecuting)
+		if err != nil || tag.RowsAffected() != 1 {
+			return errActionNotExecutable
+		}
+		return appendActionEvent(recordContext, tx, run, request, contracts.EventActionUnknown, ReasonOutcomeUnknown)
+	})
+}
+
+// appendActionEvent writes one executor event about the action, references only.
+func appendActionEvent(ctx context.Context, tx repository.Tx, run RunIdentity, request tools.EffectRequest, eventType contracts.EventType, reason ReasonCode) error {
+	runID, actionID, revisionID := run.RunID, request.ActionID, request.CatalogRevisionID
+	_, err := tx.AppendEvent(ctx, repository.NewEvent{
+		OrganizationID: run.OrganizationID, RunID: &runID, ActionID: &actionID, EventType: eventType,
+		ReasonCode: &reason, CatalogRevisionID: &revisionID,
+	})
+	return err
 }
