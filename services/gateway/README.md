@@ -99,6 +99,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/security`   | Go lane c1 (hybrid security controls)                         |
 | `tool_result`         | Go lane c1 (hybrid security controls)                         |
 | `model_input`         | Go lane c1 (hybrid security controls)                         |
+| `internal/provenance` | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -119,6 +120,7 @@ internal/tools/       the four tool adapters and the effect runner the executor 
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
+internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
