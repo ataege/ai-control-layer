@@ -611,7 +611,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     browser or agent"); "Data ownership and the transition from starter to product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-09 · Add a fail-closed command client toward Go**
+- [x] **API-09 · Add a fail-closed command client toward Go**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: SH-11 · Needs: X-13 · Provides: nothing
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
@@ -630,6 +630,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     4xx envelope with a reason code, a 5xx, a timeout, a refused connection, a body that is not JSON
     and an unknown field each map to their own outcome; a redirect is not followed; the token never
     appears in a result or a log line: `pnpm --filter api run test`.
+    - Results (2026-10-03): GatewayClientService now exposes postCommand, mapping fetch responses strictly to a CommandOutcome discriminated union. COMMAND_TIMEOUT_MS defaults to 10s. Token is protected. Tests passing.
   - Report: "Illustrative passport and interface contracts" (Decision and error semantics); "Risk
     register and scope controls" (NestJS/Go contract drift)
   - Blocked by: `command timeout budget`

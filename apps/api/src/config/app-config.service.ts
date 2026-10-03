@@ -33,6 +33,10 @@ export class AppConfigService {
     return this.environment.GATEWAY_TIMEOUT_MS;
   }
 
+  get commandTimeoutMs(): number {
+    return this.environment.COMMAND_TIMEOUT_MS;
+  }
+
   get cookieSecret(): string {
     return this.environment.COOKIE_SECRET;
   }

@@ -5,6 +5,27 @@ import {
   REQUEST_ID_HEADER,
 } from "@workspace/contracts";
 import { AppConfigService } from "../config/app-config.service.js";
+import { z } from "zod";
+
+export type CommandFailureReason =
+  | "timeout"
+  | "unreachable"
+  | "unauthorized"
+  | "bad_request"
+  | "server_error"
+  | "invalid_response"
+  | "unexpected_status";
+
+export type CommandOutcome<T> =
+  | { success: true; data: T }
+  | { success: false; reason: CommandFailureReason; code?: string };
+
+const errorEnvelopeSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string().optional(),
+  }),
+});
 
 const PING_PATH = "/internal/ping";
 const READINESS_PATH = "/health/ready";
@@ -131,5 +152,69 @@ export class GatewayClientService {
       });
     }
     return check;
+  }
+
+  /** Posts a JSON command to the gateway, expecting a Zod-validated response. */
+  async postCommand<Schema extends z.ZodTypeAny>(
+    path: string,
+    requestId: string,
+    body: unknown,
+    responseSchema: Schema,
+  ): Promise<CommandOutcome<z.infer<Schema>>> {
+    try {
+      const response = await fetch(new URL(path, this.config.gatewayUrl), {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          [REQUEST_ID_HEADER]: requestId,
+          authorization: `Bearer ${this.config.gatewayServiceToken}`,
+        },
+        body: JSON.stringify(body),
+        redirect: "manual",
+        signal: AbortSignal.timeout(this.config.commandTimeoutMs),
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        const json = await readJsonObject(response);
+        if (!json) {
+          return { success: false, reason: "invalid_response" };
+        }
+        const parsed = responseSchema.safeParse(json);
+        if (parsed.success) {
+          return { success: true, data: parsed.data };
+        }
+        return { success: false, reason: "invalid_response" };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, reason: "unauthorized" };
+      }
+
+      if (response.status >= 400 && response.status < 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "bad_request", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "bad_request" };
+      }
+
+      if (response.status >= 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "server_error", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "server_error" };
+      }
+
+      return { success: false, reason: "unexpected_status" };
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        return { success: false, reason: "timeout" };
+      }
+      return { success: false, reason: "unreachable" };
+    }
   }
 }
