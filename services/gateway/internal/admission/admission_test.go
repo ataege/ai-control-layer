@@ -176,6 +176,11 @@ func TestPostgresAdmissionIssuesPassportRunAndJob(t *testing.T) {
 	if count := fixture.count(t, `SELECT count(*) FROM runtime.audit_events WHERE organization_id = $1 AND event_type = 'run.queued'`); count != 1 {
 		t.Error("no run.queued event")
 	}
+	var tokenLimit int64
+	err = fixture.outer.QueryRow(context.Background(), `SELECT token_limit FROM runtime.model_token_budgets WHERE run_id = $1`, passport.RunID).Scan(&tokenLimit)
+	if err != nil || tokenLimit != limits.TokensTotal {
+		t.Errorf("run ledger: limit %d err %v, want %d", tokenLimit, err, limits.TokensTotal)
+	}
 }
 
 func TestPostgresAdmissionRejectsWhatExceedsAuthority(t *testing.T) {

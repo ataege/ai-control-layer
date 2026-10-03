@@ -2,7 +2,8 @@
 // Go-registered task template, the active control catalog and the organization's demo records
 // (report: "Trusted authority and passport invariants"). A request that exceeds that authority is
 // rejected with a reason and the scope or limit that must change; admission never narrows it.
-// An admitted passport, its run and its first job commit in one transaction (Figure 4).
+// An admitted passport, its run, its first job and its token ledger commit in one transaction
+// (Figure 4).
 package admission
 
 import (
@@ -16,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"starter/services/gateway/internal/budget"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/provenance"
 	"starter/services/gateway/internal/repository"
@@ -92,6 +94,14 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 			return rejection
 		}
 		if err := tx.InsertAdmission(ctx, passport, repository.NewJob{ID: newUUID(), Kind: contracts.JobKindAgentStep}); err != nil {
+			return ErrUnavailable
+		}
+		// The run's token ledger opens with the passport (alignment decision 6); without it no
+		// model request can be reserved.
+		switch err := budget.OpenRunLedger(ctx, tx.Raw(), passport.OrganizationID, passport.RunID, passport.Limits); {
+		case errors.Is(err, budget.ErrInvalid):
+			return reject(contracts.ReasonLimitNotAllowed, "the token limits cannot open a run ledger")
+		case err != nil:
 			return ErrUnavailable
 		}
 		_, err = tx.AppendEvent(ctx, repository.NewEvent{
