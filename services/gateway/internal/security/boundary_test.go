@@ -103,6 +103,14 @@ func (atlasRelationships) ReportExport(_ context.Context, _, _, reportID string)
 	return policy.ExportVerdict{}, nil
 }
 
+// stubFreezer is a labelled review-freezer double: it freezes nothing real, so approval requests can
+// be observed (GO-43 denies an approval request when no freezer is configured).
+type stubFreezer struct{}
+
+func (stubFreezer) Freeze(_ context.Context, _ policy.RunIdentity, action policy.StoredAction, _ policy.PassportScope) (policy.FrozenReview, error) {
+	return policy.FrozenReview{PayloadID: "frozen-fixture", ReportID: action.ActionID}, nil
+}
+
 // gateEvaluator adapts security.EvaluateAction to policy.ActionEvaluator the way the README
 // describes: no_objection keeps the deterministic decision, block denies, pause is an error.
 type gateEvaluator struct {
@@ -210,7 +218,8 @@ func TestSemanticFalseNegativeStillDeniedDeterministically(t *testing.T) {
 	provider := &permissiveProvider{}
 	caller, _ := model.NewAccountedCaller(provider, boundaryLedger{}, model.DefaultAccountingSettings())
 	evaluator, _ := security.NewSemanticEvaluator(caller, security.EvaluatorOptions{Model: "fixture", ContextTokens: security.MinEvaluatorContextTokens, Source: security.VerdictFixture})
-	gate := policy.NewGate(atlasScopes{}, &decisionRecorder{}, atlasRelationships{}, gateEvaluator{inspector: security.NewInspector(evaluator), settings: sampleSettings(t)})
+	gate := policy.NewGate(atlasScopes{}, &decisionRecorder{}, atlasRelationships{}, gateEvaluator{inspector: security.NewInspector(evaluator), settings: sampleSettings(t)}).
+		WithReviewFreezer(stubFreezer{})
 	permitted := policy.Proposal{ActionID: boundaryActionID, StepNumber: 1, IdempotencyKey: "boundary:step-1", Tool: "read_invoice", RawArguments: json.RawMessage(`{"invoice_id":"invoice_A01"}`)}
 	if decision := gate.Evaluate(context.Background(), run, permitted); decision.Outcome != policy.OutcomeAllow || provider.calls != 1 {
 		t.Fatalf("control: decision = %s/%s, security calls = %d", decision.Outcome, decision.ReasonCode, provider.calls)
