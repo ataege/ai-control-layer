@@ -15,7 +15,7 @@ import { IdentityModule } from "../identity/identity.module.js";
   controllers: [AuthController],
   providers: [
     { provide: APP_GUARD, useClass: DefaultDenyGuard },
-    { provide: AUTH_PROVIDER, useClass: CookieAuthProvider }
+    { provide: AUTH_PROVIDER, useClass: CookieAuthProvider },
   ],
   exports: [AUTH_PROVIDER],
 })

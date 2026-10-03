@@ -1,10 +1,10 @@
 import { fetchJson, postJson, FetchJsonResult } from "./fetch-json";
-import type { 
-  StartRunRequest, 
-  StartRunResponse, 
-  TaskFormOptions, 
-  RunView, 
-  SanitizedEvent 
+import type {
+  StartRunRequest,
+  StartRunResponse,
+  TaskFormOptions,
+  RunView,
+  SanitizedEvent,
 } from "@workspace/contracts";
 
 export const REASON_CODE_MESSAGES: Record<string, string> = {
@@ -40,9 +40,14 @@ export function getSafeMessage(code: string): string {
 
 // Type Guards for frozen contracts
 function isStartRunResponse(data: unknown): data is StartRunResponse {
-  return typeof data === "object" && data !== null && 
-    "runId" in data && typeof (data as Record<string, unknown>).runId === "string" &&
-    "passportId" in data && typeof (data as Record<string, unknown>).passportId === "string";
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "runId" in data &&
+    typeof (data as Record<string, unknown>).runId === "string" &&
+    "passportId" in data &&
+    typeof (data as Record<string, unknown>).passportId === "string"
+  );
 }
 
 function isTaskFormOptions(data: unknown): data is TaskFormOptions {
@@ -53,37 +58,44 @@ function isRunView(data: unknown): data is RunView {
   return typeof data === "object" && data !== null && "id" in data && "status" in data;
 }
 
-function isSanitizedEventsResponse(data: unknown): data is { events: SanitizedEvent[]; nextCursor?: string } {
-  return typeof data === "object" && data !== null && "events" in data && Array.isArray((data as Record<string, unknown>).events);
+function isSanitizedEventsResponse(
+  data: unknown,
+): data is { events: SanitizedEvent[]; nextCursor?: string } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "events" in data &&
+    Array.isArray((data as Record<string, unknown>).events)
+  );
 }
 
 // Ensure the result matches the guard or return an invalid_json error.
 function enforceGuard<T>(
-  result: FetchJsonResult<unknown>, 
-  guard: (data: unknown) => data is T
+  result: FetchJsonResult<unknown>,
+  guard: (data: unknown) => data is T,
 ): FetchJsonResult<T> {
   if (!result.ok) {
     return result as FetchJsonResult<T>;
   }
-  
+
   if (result.data === undefined) {
-    return { 
-      ok: false, 
+    return {
+      ok: false,
       error: { kind: "invalid_json", status: result.status },
       durationMs: result.durationMs,
-      requestId: result.requestId
+      requestId: result.requestId,
     };
   }
 
   if (guard(result.data)) {
     return result as FetchJsonResult<T>;
   }
-  
-  return { 
-    ok: false, 
+
+  return {
+    ok: false,
     error: { kind: "invalid_json", status: result.status },
     durationMs: result.durationMs,
-    requestId: result.requestId
+    requestId: result.requestId,
   };
 }
 
@@ -93,13 +105,15 @@ export class ProductClient {
     return enforceGuard(result, isStartRunResponse);
   }
 
-
   static async getRun(id: string): Promise<FetchJsonResult<RunView>> {
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
     return enforceGuard(result, isRunView);
   }
 
-  static async getRunEvents(id: string, cursor?: string): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
+  static async getRunEvents(
+    id: string,
+    cursor?: string,
+  ): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
     const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`);
     return enforceGuard(result, isSanitizedEventsResponse);

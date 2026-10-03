@@ -84,7 +84,7 @@ describe("ProductClient", () => {
     it("maps known reason code", () => {
       expect(getSafeMessage("approval_required")).toBe("This action requires explicit approval.");
     });
-    
+
     it("returns generic message for unknown code", () => {
       expect(getSafeMessage("unknown_random_code")).toBe("An unknown error occurred.");
     });

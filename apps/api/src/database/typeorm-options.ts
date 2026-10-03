@@ -12,7 +12,6 @@ import { Organization } from "../identity/entities/organization.entity.js";
 import { Membership } from "../identity/entities/membership.entity.js";
 import { PasswordHash } from "../identity/entities/password-hash.entity.js";
 import { Session } from "../identity/entities/session.entity.js";
-import { FormOption } from "../runs/entities/form-option.entity.js";
 
 // This file runs as .ts (TypeORM CLI loader, tests) or .js (compiled app); load only the matching copies.
 const migrationFileExtension = import.meta.filename.endsWith(".ts") ? "ts" : "js";
@@ -39,7 +38,6 @@ export function buildTypeOrmOptions(databaseEnvironment: DatabaseEnvironment): D
       Membership,
       PasswordHash,
       Session,
-      FormOption,
     ],
     migrations: [join(import.meta.dirname, "migrations", `*.${migrationFileExtension}`)],
     // Schema changes happen only through explicit migration commands.

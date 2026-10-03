@@ -12,7 +12,7 @@ import { Membership } from "../identity/entities/membership.entity.js";
 /** Boots a Nest app from the given module metadata with the same HTTP wiring as main.ts. */
 export async function createTestApp(
   metadata: ModuleMetadata,
-  options: { mockAuth?: boolean } = { mockAuth: true }
+  options: { mockAuth?: boolean } = { mockAuth: true },
 ): Promise<NestExpressApplication> {
   const providers = [
     { provide: DataSource, useValue: { isInitialized: true } },
@@ -22,8 +22,16 @@ export async function createTestApp(
 
   if (options.mockAuth) {
     providers.push(
-      { provide: AUTH_PROVIDER, useValue: { authenticate: async () => ({ subjectId: "test-user" }) } },
-      { provide: getRepositoryToken(Membership), useValue: { findOne: async () => ({ userId: "test-user", organizationId: "test-org", roles: [] }) } }
+      {
+        provide: AUTH_PROVIDER,
+        useValue: { authenticate: async () => ({ subjectId: "test-user" }) },
+      },
+      {
+        provide: getRepositoryToken(Membership),
+        useValue: {
+          findOne: async () => ({ userId: "test-user", organizationId: "test-org", roles: [] }),
+        },
+      },
     );
   }
 
@@ -32,7 +40,7 @@ export async function createTestApp(
     imports: [...(metadata.imports || [])],
     providers,
   }).compile();
-  
+
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
   configureApp(app, ["http://localhost:3000"]);
   await app.init();

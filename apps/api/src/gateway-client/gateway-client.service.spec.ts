@@ -10,11 +10,31 @@ const SERVICE_TOKEN = "test-service-token-0123456789abcdef";
 const GATEWAY_TIMEOUT_MS = 150;
 const COMMAND_TIMEOUT_MS = 150;
 
-type StubBehaviour = "healthy" | "unauthorized" | "server-error" | "bad-request" | "not-ready" | "slow" | "garbage" | "redirect";
+type StubBehaviour =
+  | "healthy"
+  | "unauthorized"
+  | "server-error"
+  | "bad-request"
+  | "not-ready"
+  | "slow"
+  | "garbage"
+  | "redirect";
 
 function createClient(gatewayUrl: string): GatewayClientService {
-  const config: Pick<AppConfigService, "gatewayUrl" | "gatewayServiceToken" | "operatorContextSigningKey" | "gatewayTimeoutMs" | "commandTimeoutMs"> =
-    { gatewayUrl, gatewayServiceToken: SERVICE_TOKEN, operatorContextSigningKey: "test-signing-key-0123456789abcdef", gatewayTimeoutMs: GATEWAY_TIMEOUT_MS, commandTimeoutMs: COMMAND_TIMEOUT_MS };
+  const config: Pick<
+    AppConfigService,
+    | "gatewayUrl"
+    | "gatewayServiceToken"
+    | "operatorContextSigningKey"
+    | "gatewayTimeoutMs"
+    | "commandTimeoutMs"
+  > = {
+    gatewayUrl,
+    gatewayServiceToken: SERVICE_TOKEN,
+    operatorContextSigningKey: "test-signing-key-0123456789abcdef",
+    gatewayTimeoutMs: GATEWAY_TIMEOUT_MS,
+    commandTimeoutMs: COMMAND_TIMEOUT_MS,
+  };
   return new GatewayClientService(config as AppConfigService);
 }
 
@@ -89,7 +109,7 @@ describe("GatewayClientService", () => {
     expect(check.reason).toBeUndefined();
     expect(check.latencyMs).toBeGreaterThanOrEqual(0);
     expect(receivedPath).toBe("/internal/ping");
-          expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
+    expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
     expect(receivedHeaders["x-request-id"]).toBe("req-ping-1");
   });
 
@@ -169,15 +189,23 @@ describe("GatewayClientService", () => {
   describe("postCommand", () => {
     const { z } = require("zod");
     const testSchema = z.object({ result: z.string() });
+    // An explicit test operator context: the client itself never invents one.
+    const testOperatorContext = { userId: "user-1", organizationId: "org-1", roles: ["operator"] };
 
     it("posts a command and parses a successful response", async () => {
       stubBehaviour = "healthy";
       const payload = { input: "test" };
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-1", payload, z.object({ status: z.string(), service: z.string() }));
-      
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-1",
+        payload,
+        z.object({ status: z.string(), service: z.string() }),
+        testOperatorContext,
+      );
+
       expect(outcome).toEqual({ success: true, data: { status: "ok", service: "gateway" } });
       expect(receivedPath).toBe("/internal/runs");
-            expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
+      expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
       expect(receivedHeaders["x-operator-context"]).toMatch(/^eyJ/);
       const token = receivedHeaders["x-operator-context"] as string;
       const secret = new TextEncoder().encode("test-signing-key-0123456789abcdef");
@@ -188,7 +216,13 @@ describe("GatewayClientService", () => {
 
     it("handles an unauthorized response and does not expose the token", async () => {
       stubBehaviour = "unauthorized";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-2", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-2",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       expect(outcome).toEqual({ success: false, reason: "unauthorized" });
       const exposedText = JSON.stringify([outcome, loggedWarnings.mock.calls]);
       expect(exposedText).not.toContain(SERVICE_TOKEN);
@@ -197,32 +231,62 @@ describe("GatewayClientService", () => {
 
     it("handles a bad request response with a code", async () => {
       stubBehaviour = "bad-request";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-3", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-3",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       expect(outcome).toEqual({ success: false, reason: "bad_request", code: "invalid_input" });
     });
 
     it("handles a server error response with a code", async () => {
       stubBehaviour = "server-error";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-4", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-4",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       expect(outcome).toEqual({ success: false, reason: "server_error", code: "internal_error" });
     });
 
     it("handles a body that is not JSON", async () => {
       stubBehaviour = "garbage";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-5", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-5",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       expect(outcome).toEqual({ success: false, reason: "invalid_response" });
     });
 
     it("does not follow redirects", async () => {
       stubBehaviour = "redirect";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-6", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-6",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       // Fetch with redirect: "manual" returns 302 directly. It matches unexpected_status if we don't handle it
       expect(outcome).toEqual({ success: false, reason: "unexpected_status" });
     });
 
     it("handles a timeout", async () => {
       stubBehaviour = "slow";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-7", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-7",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       expect(outcome).toEqual({ success: false, reason: "timeout" });
     });
   });

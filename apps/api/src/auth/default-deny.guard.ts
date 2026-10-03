@@ -1,4 +1,11 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException, ServiceUnavailableException } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { IS_PUBLIC_KEY } from "./public.decorator.js";
 import type { Request } from "express";
@@ -17,7 +24,7 @@ declare global {
   }
 }
 
-/** 
+/**
  * Global guard that denies access to all routes unless they are marked with @Public().
  * As per decision 7 hold, protected routes return 501 Not Implemented.
  */
@@ -27,7 +34,7 @@ export class DefaultDenyGuard implements CanActivate {
     private reflector: Reflector,
     @Inject(AUTH_PROVIDER) private authProvider: AuthProvider,
     private dataSource: DataSource,
-    @InjectRepository(Membership) private membershipRepository: Repository<Membership>
+    @InjectRepository(Membership) private membershipRepository: Repository<Membership>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -35,7 +42,7 @@ export class DefaultDenyGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    
+
     if (isPublic) {
       return true;
     }
@@ -57,12 +64,12 @@ export class DefaultDenyGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException("Invalid or expired session");
     }
-    
+
     let membership;
     try {
       membership = await this.membershipRepository.findOne({
         where: { userId: principal.subjectId },
-        order: { createdAt: "ASC" }
+        order: { createdAt: "ASC" },
       });
     } catch {
       throw new ServiceUnavailableException("Database unavailable");

@@ -139,7 +139,7 @@ export interface StartRunResponse {
 /** Run View (X-11). */
 export interface RunView {
   id: string;
-  status: 'pending' | 'running' | 'paused' | 'failed' | 'completed';
+  status: "pending" | "running" | "paused" | "failed" | "completed";
   usage: {
     modelCalls: number;
     cost: number;

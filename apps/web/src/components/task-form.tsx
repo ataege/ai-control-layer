@@ -1,9 +1,22 @@
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@workspace/ui/components/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select";
 import { Textarea } from "@workspace/ui/components/textarea";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card";
 
 export function TaskForm() {
   return (
@@ -25,12 +38,12 @@ export function TaskForm() {
             </SelectContent>
           </Select>
         </div>
-        
+
         <div className="space-y-2">
           <Label htmlFor="reason">Business Reason</Label>
           <Textarea id="reason" placeholder="Explain why this task is needed..." />
         </div>
-        
+
         <div className="space-y-2">
           <Label htmlFor="amount">Allowance Amount (USD)</Label>
           <Input id="amount" type="number" placeholder="5000" />

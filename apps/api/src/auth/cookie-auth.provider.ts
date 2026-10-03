@@ -8,7 +8,7 @@ import { AuthProvider, AuthenticatedPrincipal } from "./auth.types.js";
 export class CookieAuthProvider implements AuthProvider {
   constructor(
     @InjectRepository(Session)
-    private readonly sessionRepository: Repository<Session>
+    private readonly sessionRepository: Repository<Session>,
   ) {}
 
   async authenticate(credential: string): Promise<AuthenticatedPrincipal> {

@@ -21,8 +21,7 @@ export type CommandFailureReason =
   | "network_error";
 
 export type CommandOutcome<T> =
-  | { success: true; data: T }
-  | { success: false; reason: CommandFailureReason; code?: string };
+  { success: true; data: T } | { success: false; reason: CommandFailureReason; code?: string };
 
 const errorEnvelopeSchema = z.object({
   error: z.object({
@@ -105,7 +104,7 @@ export class GatewayClientService {
       .setExpirationTime("1m")
       .setJti(randomUUID())
       .setIssuer("gateway-client");
-    
+
     return await jwt.sign(this.operatorKey);
   }
 
@@ -180,7 +179,7 @@ export class GatewayClientService {
     requestId: string,
     body: unknown,
     responseSchema: Schema,
-    context?: OperatorContext,
+    context: OperatorContext,
   ): Promise<CommandOutcome<z.infer<Schema>>> {
     try {
       const headers: Record<string, string> = {
@@ -189,13 +188,8 @@ export class GatewayClientService {
         [REQUEST_ID_HEADER]: requestId,
         authorization: `Bearer ${this.config.gatewayServiceToken}`,
       };
-      if (context) {
-        headers["x-operator-context"] = await this.buildToken(context);
-      } else {
-        // For tests that don't pass context but expect it, let's just pass a dummy one if needed
-        // Actually, the test will just pass no context. Let's make sure test passes.
-        headers["x-operator-context"] = await this.buildToken({ userId: "test", organizationId: "test", roles: [] });
-      }
+      // Every command carries the verified operator context; there is no fallback identity.
+      headers["x-operator-context"] = await this.buildToken(context);
 
       const response = await fetch(new URL(path, this.config.gatewayUrl), {
         method: "POST",

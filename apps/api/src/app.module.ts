@@ -9,6 +9,15 @@ import { IdentityModule } from "./identity/identity.module.js";
 import { RunsModule } from "./runs/runs.module.js";
 
 @Module({
-  imports: [AppConfigModule, DatabaseModule, HealthModule, DiagnosticsModule, AuthModule, RegistryModule, IdentityModule, RunsModule],
+  imports: [
+    AppConfigModule,
+    DatabaseModule,
+    HealthModule,
+    DiagnosticsModule,
+    AuthModule,
+    RegistryModule,
+    IdentityModule,
+    RunsModule,
+  ],
 })
 export class AppModule {}

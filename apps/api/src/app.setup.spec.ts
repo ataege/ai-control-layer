@@ -33,7 +33,12 @@ describe("App Setup (Decision 3: Forwarder)", () => {
         { provide: APP_GUARD, useClass: DefaultDenyGuard },
         { provide: AUTH_PROVIDER, useValue: { authenticate: async () => ({ subjectId: "test" }) } },
         { provide: DataSource, useValue: { isInitialized: true } },
-        { provide: getRepositoryToken(Membership), useValue: { findOne: async () => ({ userId: "test", organizationId: "test-org", roles: [] }) } },
+        {
+          provide: getRepositoryToken(Membership),
+          useValue: {
+            findOne: async () => ({ userId: "test", organizationId: "test-org", roles: [] }),
+          },
+        },
       ],
     }).compile();
 

@@ -1,4 +1,10 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@workspace/ui/components/card";
 
 const MOCK_EVENTS = [
   { id: 1, type: "START", message: "Task requested by user", time: "10:00 AM" },
@@ -17,7 +23,10 @@ export function RunTimeline() {
       <CardContent>
         <div className="space-y-4">
           {MOCK_EVENTS.map((event) => (
-            <div key={event.id} className="flex flex-col space-y-1 pb-4 border-b last:border-0 last:pb-0">
+            <div
+              key={event.id}
+              className="flex flex-col space-y-1 border-b pb-4 last:border-0 last:pb-0"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{event.type}</span>
                 <span className="text-xs text-muted-foreground">{event.time}</span>
