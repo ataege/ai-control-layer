@@ -12,6 +12,9 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 | `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                            |
 | `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable`. |
 | `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                |
+| `POST /internal/runs/{runId}/cancel`            | GO-41: records a cancellation; `200` X-11 run state, `404` unknown or another organization's run.                 |
+| `POST /internal/actions/{actionId}/approval`    | GO-44 (lane w3): approve or reject one stored action (X-10).                                                      |
+| `GET /internal/actions/{actionId}/review`       | GO-44 (lane w3): the frozen review payload, for a reviewer of the organization.                                   |
 
 Internal product commands are registered through `httpserver.Options.InternalCommands`, which
 always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
