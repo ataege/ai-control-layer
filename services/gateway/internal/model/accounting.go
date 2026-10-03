@@ -148,6 +148,13 @@ func (caller *AccountedCaller) Call(ctx context.Context, runID, callID string, r
 		if errors.Is(err, ErrTimeout) {
 			return result, ErrTimeout
 		}
+		// The safe sentinel of the failure travels with ErrUsageUnknown so callers can name it; the
+		// raw provider error never does.
+		for _, cause := range []error{ErrTransport, ErrResponse} {
+			if errors.Is(err, cause) {
+				return result, errors.Join(ErrUsageUnknown, cause)
+			}
+		}
 		return result, ErrUsageUnknown
 	}
 	settlement, err := caller.store.Settle(ctx, runID, callID, *input, *generated)

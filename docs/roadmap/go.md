@@ -1964,13 +1964,27 @@ typecheck` PASS; `pnpm verify` 6 passed.
     Goldman Sachs challenge" (Unpredictable costs)
   - Blocked by: `model call retries` (the retry part only)
 
-- [ ] **GO-79 · Enforce the model allowlist, request timeout and local concurrency cap**
+- [x] **GO-79 · Enforce the model allowlist, request timeout and local concurrency cap**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-39, GO-72 · Needs: X-82 · Provides: nothing
   - Paths: the model gateway package from GO-10
   - Work: Reject a model alias outside the active catalog and the passport before dispatch (`model_not_allowed`). Bound each request by the configured deadline and hold a concurrency slot in the reservation. "A stalled request is cancelled where supported; a client timeout does not prove inference stopped, so the concurrency/usage record is reconciled conservatively."
   - Done when: an unlisted model, a third concurrent request over a cap of two, and a request over the deadline do not dispatch or are recorded as timed out with their reservation retained.
   - Tests: concurrency tests with `go test -race`; timeout tests with a slow stub provider (labelled).
+  - Completed (2026-10-03): `agent.CatalogAccountedCaller` checks every call of either purpose
+    before reserving or dispatching: the configured model must be in the active catalog's and the
+    run passport's allowed models (`ErrModelNotAllowed`; the loop stops with `model_not_allowed`).
+    Each request is bounded by the catalog's request time and the ledger's (GO-39). A process-wide
+    cap of `local_max_concurrency` makes a further request wait for a slot within its deadline (a
+    wait that runs out requeues the job); after a timeout the slot stays held one more request
+    period and the ledger keeps the reservation and its per-run slot. Tests with a labelled HTTP
+    provider double: `TestModelGatewayRefusesModelsOutsideCatalogOrPassport` (no hit, nothing
+    reserved), `TestModelGatewayHoldsAThirdConcurrentRequestOverACapOfTwo` (3 runs, at most 2 at the
+    provider, the third waits and completes), `TestModelGatewayDeadlineRetainsTheReservationAndSlot`
+    (1 s catalog deadline; reservation unresolved, ledger and process slots held), with `-race`.
+    Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm verify` 6
+    passed, 0 failed, 0 skipped; `GOFLAGS=-p=3 pnpm test:db`: gateway "744 passed, 0 failed, 0
+    skipped; 188 need the database", api "16 passed".
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence matrix" (Model allowlist and current reductions, Local model resources)
   - Blocked by: nothing
 

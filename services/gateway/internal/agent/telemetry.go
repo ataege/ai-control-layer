@@ -2,13 +2,13 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"starter/services/gateway/internal/repository"
 	"starter/services/gateway/internal/security"
 )
 
@@ -98,27 +98,17 @@ func insertInspectionEvidence(ctx context.Context, transaction pgx.Tx, organizat
 	if evidence == nil {
 		return nil
 	}
+	// The repository is the one control_assessments writer (3c, GO-80): it validates every record.
+	evaluatedRevisionID := admissionRevisionID
 	for _, record := range evidence.Records {
-		var verdict []byte
-		if record.Verdict != nil {
-			encoded, err := json.Marshal(record.Verdict)
-			if err != nil {
-				return ErrTelemetry
-			}
-			verdict = encoded
+		if record.EvaluatedCatalogRevisionID > 0 {
+			evaluatedRevisionID = record.EvaluatedCatalogRevisionID
 		}
-		_, err := transaction.Exec(ctx, `
-			INSERT INTO runtime.control_assessments(organization_id, run_id, evaluation_id, action_id, security_model_call_id,
-				boundary, control_class, control_id, outcome, reason_code, admission_catalog_revision_id,
-				evaluated_catalog_revision_id, matched_rule_id, feed_revision, verdict_source, verdict)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-			organizationID, runID, evaluationID, optionalText(actionID), optionalText(record.SecurityModelCallID),
-			string(record.Boundary), string(record.ControlClass), record.ControlID, string(record.Outcome),
-			optionalText(record.ReasonCode), admissionRevisionID, record.EvaluatedCatalogRevisionID,
-			optionalText(record.MatchedRuleID), optionalText(record.FeedRevision), optionalText(string(record.VerdictSource)), verdict)
-		if err != nil {
-			return ErrTelemetry
-		}
+	}
+	keys := repository.ControlKeys{OrganizationID: organizationID, RunID: runID, EvaluationID: evaluationID, ActionID: actionID,
+		AdmissionCatalogRevisionID: admissionRevisionID, EvaluatedCatalogRevisionID: evaluatedRevisionID}
+	if err := repository.Join(transaction).InsertControlRecords(ctx, keys, evidence.Records); err != nil {
+		return ErrTelemetry
 	}
 	return insertSpans(ctx, transaction, organizationID, runID, inspectionSpans(evaluationID, actionID, evidence))
 }
