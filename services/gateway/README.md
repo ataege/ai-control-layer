@@ -80,20 +80,21 @@ As directed by the user on 3 October 2026, the user is the sole owner and implem
 The report's Implementer 3/4/5 labels group responsibilities; they do not assign separate people
 to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` for planned modules.
 
-| Existing package      | Owner                      |
-| --------------------- | -------------------------- |
-| `cmd/gateway`         | User (sole Go implementer) |
-| `cmd/modelcheck`      | User (sole Go implementer) |
-| `cmd/budgetcheck`     | User (sole Go implementer) |
-| `internal/config`     | User (sole Go implementer) |
-| `internal/logging`    | User (sole Go implementer) |
-| `internal/database`   | User (sole Go implementer) |
-| `internal/health`     | User (sole Go implementer) |
-| `internal/httpserver` | User (sole Go implementer) |
-| `internal/model`      | User (sole Go implementer) |
-| `internal/budget`     | User (sole Go implementer) |
-| `internal/testdb`     | User (sole Go implementer) |
-| `internal/policy`     | User (sole Go implementer) |
+| Existing package      | Owner                                           |
+| --------------------- | ----------------------------------------------- |
+| `cmd/gateway`         | User (sole Go implementer)                      |
+| `cmd/modelcheck`      | User (sole Go implementer)                      |
+| `cmd/budgetcheck`     | User (sole Go implementer)                      |
+| `internal/config`     | User (sole Go implementer)                      |
+| `internal/logging`    | User (sole Go implementer)                      |
+| `internal/database`   | User (sole Go implementer)                      |
+| `internal/health`     | User (sole Go implementer)                      |
+| `internal/httpserver` | User (sole Go implementer)                      |
+| `internal/model`      | User (sole Go implementer)                      |
+| `internal/budget`     | User (sole Go implementer)                      |
+| `internal/testdb`     | User (sole Go implementer)                      |
+| `internal/tools`      | W2 Go lane (tools and provenance), for the user |
+| `internal/policy`     | W3 Go lane (action gate), for the user          |
 
 New packages get their ownership row when their first real code lands.
 
@@ -110,6 +111,7 @@ internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
+internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -317,54 +319,50 @@ audience or key handoff. GO-62 mirrors the agreed operator-context contract when
 uses it without treating a valid signature alone as object authorization. No operator-context
 schema is currently present in `packages/contracts` on that main commit.
 
-## Proposed tool results and idempotency (GO-07)
+## Tool results and idempotency (GO-07)
 
-**Draft, 3 October 2026; not a frozen contract or implemented behavior.** Owner: the user, sole Go
-implementer. Sources: report, "Illustrative passport and interface contracts" (Proposed tool
-argument boundaries; Concrete synthetic business example; Narrow final result and context
-boundary) and "Durable state idempotency audit and uncertain outcomes".
+Recorded 3 October 2026 by the W2 Go lane (tools and provenance), with the lead's decisions:
+`vendor projection fields`, `source classification storage` (a classification column on the demo
+invoice note), `report storage` (lineage in `runtime.report_lineage`) and `internal report
+rendering` (deterministic server rendering only). The tools' typed **arguments** are the action
+proposal contract (X-09), drafted by another lane; until it is frozen the argument types stay
+internal to `internal/tools`. Sources: report, "Illustrative passport and interface contracts"
+(Proposed tool argument boundaries; Narrow final result and context boundary) and "Durable state
+idempotency audit and uncertain outcomes".
 
-SH-10 must freeze tool arguments and X-06 field rules before this draft is adopted. The lists below
-describe candidate result fields, not final JSON property names or database columns. No provider,
-limit value or shared wire contract is selected here.
+Every adapter checks the organization and the passport scope itself; an upstream check never
+replaces its own. The model-facing result is a typed Go struct, and its fields are the allowlist:
+nothing else reaches the worker (GO-23).
 
-| Tool            | Proposed result field allowlist                                                                                                                                                            | Protected values                                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `read_invoice`  | Invoice reference and version, associated vendor reference, external invoice reference, integer total in minor units plus currency code, status, synthetic untrusted note used in the demo | Raw fields outside the frozen allowlist are omitted; protected values required by the workflow remain run-scoped opaque references |
-| `read_vendor`   | Vendor reference and version, synthetic display name, trusted recipient reference                                                                                                          | Recipient address remains an opaque reference; no raw contact or bank details reach the model                                      |
-| `create_report` | Stored report reference and version, authorized source invoice references, registered template reference, structured duplicate-reference finding                                           | No unrestricted model prose or raw protected values; exact finding shape awaits the freeze                                         |
-| `queue_report`  | Report reference and version, simulated outbox entry reference and queued status                                                                                                           | Raw recipient and rendered review content stay out of model-facing results and general events                                      |
+| Tool            | Arguments (internal until X-09)    | Model-facing result fields                                                                                                                                                                          | Protected values                                                                                                             |
+| --------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `read_invoice`  | `invoice_id`                       | invoice id and version, vendor id, external reference, currency, total in minor units, issue and due date; the internal note with its classification only where the passport's field rules allow it | The note is readable for the internal investigation but carries its trusted `internal_only` classification; never exportable |
+| `read_vendor`   | `vendor_id`                        | vendor id and version, display name, a recipient reference                                                                                                                                          | The registered report recipient address: an opaque, run-scoped reference only                                                |
+| `create_report` | `template`, `source_invoice_ids`   | report id and version, template, classification, content hash, source invoice ids                                                                                                                   | Classification and lineage are derived by Go from trusted metadata; no model-supplied label or source list counts            |
+| `queue_report`  | `report_id`, `recipient_reference` | outbox message id, report id, status `queued_simulated`                                                                                                                                             | The address is resolved inside the adapter after its checks and never returned                                               |
 
-All four adapters verify organization and passport/resource relationships themselves. Opaque
-references resolve only after authorization inside the adapter, and do not resolve in another run
-or organization. A source version in a result is evidence for later precondition checks, not
-authority. The user accepted integer minor units plus currency on 3 October 2026. SH-10 must still decide
-versions, the note's inclusion and the registered template fields; this draft does not settle those open items.
+Opaque references: a recipient reference names its run and vendor (`recipient:<run_id>:<vendor_id>`).
+It is not a secret; it holds no address, and `queue_report` resolves it only when the run matches,
+the vendor belongs to the organization and to a passport-scoped invoice, and the vendor has a
+registered recipient. A reference from another run or organization does not resolve.
 
 Idempotency and retries follow the stable action identity:
 
 - `read_invoice` and `read_vendor` have no business write. A completed action returns its persisted
-  minimized result on recovery rather than silently reading a newer version under the same
-  completed action. A known failed read may retry if fresh checks pass and allowance remains.
-- `create_report` produces at most one report per action. A retry uses the same action and
-  idempotency key, and verifies the original material and preconditions; it cannot replace the
-  report with new content. Changed material requires a new proposal.
-- `queue_report` produces at most one simulated outbox entry per action, using the frozen reviewed
-  content and trusted recipient. A completed action returns the stored result. A retry cannot
-  create a new action identifier to bypass uniqueness or obtain a broader approval.
-- For both write tools, effect, completion and event share the transaction selected by SH-06;
-  database uniqueness is tied to action identity. This guarantee is conditional on SH-06 and the
-  migration constraints, not supplied by this draft.
-- Known-safe failed attempts may retry only with the same frozen action, fresh authorization,
-  current run/precondition checks and available allowance; each retry is a counted attempt.
-  Where an approval was consumed, retries stay bound to that same action and grant.
-- A timeout or lost connection is not proof of no effect. Establish the transaction outcome and
-  former worker ownership as GO-02 requires; otherwise persist unknown outcome, pause for
-  attention and do not blindly retry.
+  minimized result on recovery rather than reading a newer version under the same action. A known
+  failed read may retry if fresh checks pass and allowance remains.
+- `create_report` produces at most one report per action (`demo.reports` is unique on the action).
+  A retry uses the same action and idempotency key and cannot replace the report with new content;
+  changed material requires a new proposal.
+- `queue_report` produces at most one simulated outbox entry per action (`demo.outbox_messages` is
+  unique on the action), from the stored report's exact bytes and the trusted recipient. A retry
+  cannot create a new action identifier to bypass uniqueness or obtain a broader approval.
+- For both write tools the effect, its lineage, the attempt's completion and the event commit in one
+  transaction (GO-34).
+- A timeout or lost connection is not proof of no effect: establish the transaction outcome as
+  GO-02 requires, otherwise persist an unknown outcome and pause; never retry blindly.
 
-The simulated outbox creates a database record and sends no email. GO-17, GO-23, GO-31 to GO-35
-and GO-53 will test the adopted field rules, direct adapter authorization, stable identities,
-duplicate prevention and uncertain outcomes. GO-07 stays open until SH-10 and X-06 are settled.
+The simulated outbox creates a database record and sends no email.
 
 ## PostgreSQL test harness (GO-20)
 

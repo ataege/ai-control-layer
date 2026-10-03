@@ -64,7 +64,7 @@ export async function requireDemoTables(client) {
   }
 }
 
-const VENDOR_COLUMNS = ["id", "organization_id", "version", "name"];
+const VENDOR_COLUMNS = ["id", "organization_id", "version", "name", "registered_reporting_address"];
 const INVOICE_COLUMNS = [
   "id",
   "organization_id",
@@ -76,6 +76,7 @@ const INVOICE_COLUMNS = [
   "issued_on",
   "due_on",
   "internal_note",
+  "internal_note_classification",
 ];
 // Read back as text where pg would otherwise return another type (dates, bigint, char).
 const COLUMN_READ_EXPRESSIONS = {
