@@ -117,6 +117,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/policy`          | Go lane w3 (action gate and approvals)                        |
 | `internal/security`        | Go lane c1 (hybrid security controls)                         |
 | `internal/provenance`      | Go lane w2 (tools and provenance)                             |
+| `internal/reads`           | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -136,6 +137,7 @@ internal/contracts/   Go mirrors of the runtime wire contracts and strict decodi
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
+internal/reads/       operator reads: run state, usage and events; security summary, assessments and events (GO-24, GO-83)
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76), action check (GO-77 part)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
