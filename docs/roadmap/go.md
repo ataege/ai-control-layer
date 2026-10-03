@@ -1374,6 +1374,22 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
   - Tests: the scenario test asserts the allowlisted fields, the report's references to permitted
     invoices only and the seeded discrepancy, and its output can be retrieved as evidence. The X-24
     command; one live run, quoted.
+  - Progress (2026-10-03), live evidence, not yet this task's scenario: two live runs went through the
+    real gate, executor, adapters, review and outbox with qwen3.5:4b. (1) Run 66cbb01a on the 3c private
+    database (main 855ae20). (2) Clean-checkout rehearsal: a fresh `git clone` of main 87f22f0, set up
+    only by README.md and docs/setup.md (`pnpm install --frozen-lockfile`, `pnpm run setup`, a private
+    PostgreSQL, `pnpm db:migration:run`, `pnpm db:roles`, `pnpm db:seed`, `pnpm dev:gateway`), run
+    e350fea7. Both completed the same way: `read_invoice` A01 and A02, `create_report`
+    `vendor_reconciliation_v1` (Vendor shareable), `queue_report` held for review, approved through
+    `POST /internal/actions/{actionId}/approval`, resumed, one simulated outbox message, and a validated
+    result `{"report_ids":[<the vendor report>]}`. Agent model calls: 5 each; security calls: 1 each.
+    Setup caveats of the rehearsal: the signature feed was loaded by hand and imported a second time
+    with the gateway running, because the feed import is not on main and the first import activates
+    without gateway validation. The app organization, user and reviewer membership were inserted by hand
+    (SH-19 not on main). The operator-context token came from a development script, not the API. Not
+    shown: the model went straight to the vendor template, so neither run created the
+    `internal_investigation_v1` report, showed INV104 or triggered the internal-export denial that this
+    task and X-63 need.
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 3);
     "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
