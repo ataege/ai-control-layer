@@ -6,10 +6,37 @@ rules [S9] §5, §6, §12 and §13; general HackYeah rules [S11] §4.3, §5.8 an
 package and deadline controls" and the hours 21-24 row of "Proposed 24-hour implementation
 sequence". Requirement IDs refer to [requirements.md](requirements.md).
 
-**Deadline.** Submission on HackTribe no later than **11:00 on 4 October 2026** (the lead's reading;
-the printed "11:00 PM" is organizer question 2). Until the organizers confirm, work to 11:00.
+**Deadline.** Submission on HackTribe no later than **11:00 AM on 4 October 2026**, confirmed in
+writing by the organizers on 3 October 2026: "until 11:00 AM tomorrow" (organizer question 2).
 "Any alterations and modifications made after the statutory time is expired will not be considered
 by the Jury." ([S9] §13)
+
+## 0. First project draft on HackTribe (due now, 3 October)
+
+The organizers' announcement, relayed by the lead on 3 October 2026 at about 19:30 (verbatim in
+[organizer-questions.md](organizer-questions.md), answer 2): "Your first draft should mainly
+include: a few sentences about the project you are working on, information about the category you
+are competing in." "Clicking Submit does not mean that your work is finished. After submitting the
+draft, you can still freely edit and update your project until 11:00 AM tomorrow." The "Published"
+option "does not matter at this stage". The draft's own deadline time was not given: submit it as
+soon as possible.
+
+- [ ] Submit the first draft on HackTribe (a person does it): the few sentences below and the
+      category.
+- [ ] Category: **AI Control Layer** (Goldman Sachs).
+- [ ] Draft sentences, written as work in progress so they claim nothing that is not built yet:
+
+> Task Passport is an AI control layer we are building for the Goldman Sachs AI Control Layer
+> challenge. It governs one bounded agent task: a Go gateway issues a task passport (the tools,
+> records, recipients and model budget the task may use) and checks every model call and tool action
+> against it, with deterministic rules plus a separately metered semantic check on a local model. Our
+> demonstration uses synthetic invoices and a simulated outbox to show a case where reading an internal
+> note and contacting the vendor are both allowed, but sending a report built from that note is not;
+> the task then finishes through a separate vendor report built only from approved fields. The
+> submission will include an editable policy file with live reload, a security dashboard and audit
+> export, performance telemetry and an automated test suite.
+
+- [ ] After the draft: the final description replaces it before 11:00 AM on 4 October (section 4).
 
 ## 1. Before the freeze (M5, by about 08:00)
 
