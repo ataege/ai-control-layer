@@ -80,19 +80,20 @@ As directed by the user on 3 October 2026, the user is the sole owner and implem
 The report's Implementer 3/4/5 labels group responsibilities; they do not assign separate people
 to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` for planned modules.
 
-| Existing package      | Owner                      |
-| --------------------- | -------------------------- |
-| `cmd/gateway`         | User (sole Go implementer) |
-| `cmd/modelcheck`      | User (sole Go implementer) |
-| `cmd/budgetcheck`     | User (sole Go implementer) |
-| `internal/config`     | User (sole Go implementer) |
-| `internal/logging`    | User (sole Go implementer) |
-| `internal/database`   | User (sole Go implementer) |
-| `internal/health`     | User (sole Go implementer) |
-| `internal/httpserver` | User (sole Go implementer) |
-| `internal/model`      | User (sole Go implementer) |
-| `internal/budget`     | User (sole Go implementer) |
-| `internal/testdb`     | User (sole Go implementer) |
+| Existing package      | Owner                       |
+| --------------------- | --------------------------- |
+| `cmd/gateway`         | User (sole Go implementer)  |
+| `cmd/modelcheck`      | User (sole Go implementer)  |
+| `cmd/budgetcheck`     | User (sole Go implementer)  |
+| `internal/config`     | User (sole Go implementer)  |
+| `internal/logging`    | User (sole Go implementer)  |
+| `internal/database`   | User (sole Go implementer)  |
+| `internal/health`     | User (sole Go implementer)  |
+| `internal/httpserver` | User (sole Go implementer)  |
+| `internal/model`      | User (sole Go implementer)  |
+| `internal/budget`     | User (sole Go implementer)  |
+| `internal/testdb`     | User (sole Go implementer)  |
+| `internal/worker`     | Go worker lane (session f3) |
 
 New packages get their ownership row when their first real code lands.
 
@@ -108,6 +109,7 @@ internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
+internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -363,6 +365,39 @@ Idempotency and retries follow the stable action identity:
 The simulated outbox creates a database record and sends no email. GO-17, GO-23, GO-31 to GO-35
 and GO-53 will test the adopted field rules, direct adapter authorization, stable identities,
 duplicate prevention and uncertain outcomes. GO-07 stays open until SH-10 and X-06 are settled.
+
+## Worker and job lease (GO-08)
+
+`internal/worker` claims `runtime.jobs` rows and runs them one at a time (decision 5: PostgreSQL
+jobs with leases, no broker, one worker process). It keeps its own small job store until the
+runtime repository (`internal/repository`) exists; it moves there if that fits.
+
+- **Claim.** One `UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING`
+  picks the oldest job of the worker's kinds that is `queued`, or `running` with an expired lease,
+  and sets `status = 'running'`, `lease_owner` and `lease_expires_at` together. Each store method is
+  one statement, so no transaction or row lock outlives the call and nothing is held across a model
+  or tool request. Expiry is compared with the database clock only.
+- **Fence.** `lease_owner` is a fresh token per claim (`<worker id>/<random>`), not a worker id.
+  Renew, finish and release succeed only for the current token on a live lease; otherwise they
+  return `ErrLeaseLost` and change nothing. A worker that lost its own lease and claimed the job
+  again cannot write through the old claim.
+- **Renewal.** While the handler runs, the worker renews at a third of the lease (defaults: 30 s
+  lease, 1 s poll; constants, not environment variables). Any renewal failure cancels the handler's
+  context with `ErrLeaseLost`.
+- **Outcomes.** `Completed`, `Failed` or `Requeue(delay)`. A handler error leaves the job untouched,
+  so its lease expires and it is claimed again; the worker cannot tell what the handler committed.
+  Replay safety after such a reclaim is GO-02's rule, implemented in GO-49.
+- **Status values** (Go-internal, not the X-11 run state): `queued`, `running`, `completed`,
+  `failed`. GO-40 adds the review-wait status. Production code only updates jobs; the gateway role
+  has no `DELETE` on them.
+- `attempt_count` counts claims. It is not a dispatch attempt: `model_calls` and
+  `execution_attempts` are the dispatch records (GO-02).
+
+The worker is not started by the gateway process yet; GO-09 wires it with graceful shutdown and
+readiness, and GO-11 supplies the handler. Tests use a unique job kind per test, so no test claims
+another test's job. Their fixtures need a passport, which rejects `DELETE` by trigger: cleanup
+removes it with `SET LOCAL session_replication_role = replica`, which needs a superuser test
+database, and otherwise leaves the synthetic row and logs it.
 
 ## PostgreSQL test harness (GO-20)
 
