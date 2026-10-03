@@ -128,32 +128,43 @@ Each asset that every service depends on has exactly one owner:
 
 Run everything from the repository root. The commands below are the scripts in the root `package.json`.
 
-| Command                      | Runs                                                                 | Purpose                                           |
-| ---------------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
-| `pnpm install`               | (pnpm)                                                               | Install all workspace dependencies                |
-| `pnpm run setup`             | `node scripts/setup.mjs`                                             | Create the local `.env` with generated secrets    |
-| `pnpm infra:up`              | `node scripts/compose.mjs infra-up`                                  | Start local infrastructure containers             |
-| `pnpm infra:down`            | `node scripts/compose.mjs infra-down`                                | Stop local infrastructure containers              |
-| `pnpm stack:up`              | `node scripts/compose.mjs stack-up`                                  | Start the whole stack in containers               |
-| `pnpm stack:down`            | `node scripts/compose.mjs stack-down`                                | Stop the whole stack                              |
-| `pnpm dev`                   | `node scripts/dev.mjs`                                               | Run web, API and gateway on the host              |
-| `pnpm dev:web`               | `node scripts/dev.mjs web`                                           | Run only the web app                              |
-| `pnpm dev:api`               | `node scripts/dev.mjs api`                                           | Run only the API                                  |
-| `pnpm dev:gateway`           | `node scripts/dev.mjs gateway`                                       | Run only the gateway                              |
-| `pnpm lint`                  | `turbo run lint`                                                     | Lint every workspace                              |
-| `pnpm format`                | `prettier --write . && pnpm --filter gateway run format`             | Format all files                                  |
-| `pnpm format:check`          | `prettier --check . && pnpm --filter gateway run format:check`       | Check formatting without writing                  |
-| `pnpm typecheck`             | `turbo run typecheck`                                                | Typecheck every workspace                         |
-| `pnpm test`                  | `turbo run test`                                                     | Run every test suite                              |
-| `pnpm build`                 | `turbo run build`                                                    | Build every workspace                             |
-| `pnpm verify`                | `node scripts/verify.mjs`                                            | Run the full static verification sequence         |
-| `pnpm smoke`                 | `node scripts/smoke.mjs`                                             | Check the running services end to end             |
-| `pnpm check:instructions`    | `node scripts/check-instructions.mjs`                                | Validate the instruction files and project agents |
-| `pnpm db:migration:create`   | `node scripts/with-env.mjs pnpm --filter api run migration:create`   | Create an empty migration file                    |
-| `pnpm db:migration:generate` | `node scripts/with-env.mjs pnpm --filter api run migration:generate` | Generate a migration from entity changes          |
-| `pnpm db:migration:show`     | `node scripts/with-env.mjs pnpm --filter api run migration:show`     | List migrations and their state                   |
-| `pnpm db:migration:run`      | `node scripts/with-env.mjs pnpm --filter api run migration:run`      | Apply pending migrations                          |
-| `pnpm db:migration:revert`   | `node scripts/with-env.mjs pnpm --filter api run migration:revert`   | Revert the latest migration                       |
+| Command                      | Runs                                                                         | Purpose                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `pnpm install`               | (pnpm)                                                                       | Install all workspace dependencies                                           |
+| `pnpm run setup`             | `node scripts/setup.mjs`                                                     | Create the local `.env` with generated secrets                               |
+| `pnpm infra:up`              | `node scripts/compose.mjs infra-up`                                          | Start local infrastructure containers                                        |
+| `pnpm infra:down`            | `node scripts/compose.mjs infra-down`                                        | Stop local infrastructure containers                                         |
+| `pnpm stack:up`              | `node scripts/compose.mjs stack-up`                                          | Start the whole stack in containers                                          |
+| `pnpm stack:down`            | `node scripts/compose.mjs stack-down`                                        | Stop the whole stack                                                         |
+| `pnpm dev`                   | `node scripts/dev.mjs`                                                       | Run web, API and gateway on the host                                         |
+| `pnpm dev:web`               | `node scripts/dev.mjs web`                                                   | Run only the web app                                                         |
+| `pnpm dev:api`               | `node scripts/dev.mjs api`                                                   | Run only the API                                                             |
+| `pnpm dev:gateway`           | `node scripts/dev.mjs gateway`                                               | Run only the gateway                                                         |
+| `pnpm lint`                  | `turbo run lint`                                                             | Lint every workspace                                                         |
+| `pnpm format`                | `prettier --write . && pnpm --filter gateway run format`                     | Format all files                                                             |
+| `pnpm format:check`          | `prettier --check . && pnpm --filter gateway run format:check`               | Check formatting without writing                                             |
+| `pnpm typecheck`             | `turbo run typecheck`                                                        | Typecheck every workspace                                                    |
+| `pnpm test`                  | `turbo run test`                                                             | Run every test suite                                                         |
+| `pnpm build`                 | `turbo run build`                                                            | Build every workspace                                                        |
+| `pnpm verify`                | `node scripts/verify.mjs`                                                    | Run the full static verification sequence                                    |
+| `pnpm smoke`                 | `node scripts/smoke.mjs`                                                     | Check the running services end to end                                        |
+| `pnpm check:instructions`    | `node scripts/check-instructions.mjs`                                        | Validate the instruction files and project agents                            |
+| `pnpm db:migration:create`   | `node scripts/with-env.mjs pnpm --filter api run migration:create`           | Create an empty migration file                                               |
+| `pnpm db:migration:generate` | `node scripts/with-env.mjs pnpm --filter api run migration:generate`         | Generate a migration from entity changes                                     |
+| `pnpm db:migration:show`     | `node scripts/with-env.mjs pnpm --filter api run migration:show`             | List migrations and their state                                              |
+| `pnpm db:migration:run`      | `node scripts/with-env.mjs pnpm --filter api run migration:run`              | Apply pending migrations                                                     |
+| `pnpm db:migration:revert`   | `node scripts/with-env.mjs pnpm --filter api run migration:revert`           | Revert the latest migration                                                  |
+| `pnpm db:roles`              | `node scripts/db-roles.mjs`                                                  | Give the gateway role its login password (after migrations)                  |
+| `pnpm db:seed`               | `node scripts/seed-demo.mjs`                                                 | Load the synthetic demo records and request the policy and feed              |
+| `pnpm policy:import`         | `node scripts/with-env.mjs pnpm --filter api run policy:import`              | Import `config/policy.yaml` and its feed as a requested revision             |
+| `pnpm catalog:activate`      | `node scripts/with-env.mjs go -C services/gateway run ./cmd/catalogactivate` | Validate and activate the requested revision once, without a gateway         |
+| `pnpm reset:demo`            | `node scripts/reset-demo.mjs`                                                | Restore the demo and runtime data and activate the catalog                   |
+| `pnpm test:db`               | `node scripts/test-db.mjs`                                                   | Run the database tests against `<POSTGRES_DB>_test` (`--fresh` recreates it) |
+| `pnpm test:fixtures`         | `node --test "fixtures/*.test.mjs"`                                          | Check the synthetic fixtures and the semantic corpus                         |
+| `pnpm test:judge`            | `node --test scripts/judge-client.test.mjs`                                  | Test the judge client                                                        |
+| `pnpm verify:controls`       | `node scripts/verify-controls.mjs`                                           | Run the one-command control test suite and write its results file            |
+| `pnpm benchmark`             | `node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark`       | Measure the hybrid controls' latency (`--live` adds the model)               |
+| `pnpm judge`                 | `node scripts/judge-client.mjs`                                              | Draft judge client toward the API's live test entry                          |
 
 Always write `pnpm run setup`. Bare `pnpm setup` is a pnpm built-in that edits the shell profile; it does not run this repository's script.
 
