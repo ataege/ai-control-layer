@@ -101,7 +101,7 @@ export class RunsController {
     if (outcome.reason === 'bad_request') {
       throw new HttpException({ code: outcome.code ?? 'bad_request', message: 'Admission rejected' }, 400);
     }
-    throw new HttpException({ code: 'upstream_unavailable', message: 'Run start failed' }, 502);
+    throw new HttpException({ code: 'upstream_unreachable', message: 'Run start failed' }, 502);
   }
 
   @Get(':id')
