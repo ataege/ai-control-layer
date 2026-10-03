@@ -355,8 +355,11 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     document owner, as part of SH-04's outcome.
   - Tests: none (a decision).
   - Status: the user adopted report 1.2’s primary local-model path on 2026-10-03, replacing
-    the earlier OpenAI selection. The exact local model, hardware fit, client, reservation sizing
-    and agent/security usage accounting remain open. No provider integration or live call is implemented.
+    the earlier OpenAI selection. The user selected Ollama on a separate M1 Pro MacBook with
+    16 GB RAM; `qwen2.5:3b` is a provisional candidate and may change after testing.
+    A Go client and accounting proposal is recorded under GO-03 in the product README.
+    The final model freeze, measured hardware fit, endpoint, reservation strategy and SH-04 adoption
+    remain open. No provider integration or live call is implemented.
   - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
