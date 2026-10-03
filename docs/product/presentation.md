@@ -129,9 +129,12 @@ robustness; architecture; practicality.
 Report: "Actual automated test outcomes, audit export and performance observations." Criterion:
 self-testing suite; security reporting; architecture and performance.
 
-- One command: `make verify-controls` (or `pnpm verify:controls`). Results: **[replace with
-  final-build evidence: total cases, passed, failed, which are fixtures and which use the live
-  model]** (CL-22). Failed cases are shown, not hidden.
+- One command: `make verify-controls` (or `pnpm verify:controls`). Results (CL-22), from `docs/evidence/verify-controls-2026-10-03T21-53-09Z.json`:
+  PASS, 1145 cases on build `cdfee55` (Go 940, API unit 125, API database 29, fixtures 18, none failed or
+  skipped); live model `qwen3.5:4b`, `classifier_v2`: 28 of 29 matched, 0 false positives, 1 false negative
+  (`hostile_note_redirect_recipient_v1`, whose action the gate denies), "on this fixture set", with the
+  variance sentence. Failed cases are shown, not hidden: runs 1 and 2 earlier failed. **[confirm the build
+  identifier is the submitted one, or rerun (X-59)]**
 - Security summary and a sanitized JSON or CSV audit export sample **[replace with final-build
   evidence]** (CL-20). Metrics refresh by authenticated polling (D-8).
 - Performance: deterministic gate time against semantic and model time **[replace with final-build
