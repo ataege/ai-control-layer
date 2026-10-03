@@ -126,6 +126,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/security`        | Go lane c1 (hybrid security controls)                         |
 | `internal/provenance`      | Go lane w2 (tools and provenance)                             |
 | `internal/reads`           | Go lane w2 (tools and provenance)                             |
+| `internal/scenario`        | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -148,6 +149,7 @@ internal/policy/      action gate: canonical arguments and digest (GO-12), decis
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
 internal/reads/       operator reads: run state, usage and events; security summary, assessments and events (GO-24, GO-83)
+internal/scenario/    test-only: the core story through the production chain with a labelled fixture or the live model (GO-66, GO-67, GO-47, GO-56)
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76), action check (GO-77 part)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
@@ -410,6 +412,25 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Claim recovery without replay (GO-49)
+
+At the start of every claim of a running run, `agent.Recovery` reconciles what a former claim
+(stopped by a crash, a lost lease or a shutdown deadline) may have left at each step boundary,
+following GO-02's recovery rules:
+
+- a model call without an outcome (stopped after its dispatch record or its reservation) keeps its
+  whole reservation as `usage_unknown` (a call that never reserved is recorded `failed`) and the run
+  pauses with `outcome_unknown`; nothing is resent and nothing is counted as zero;
+- an action still `executing` with an open attempt pauses the run with `outcome_unknown` for
+  attention; it is never run again;
+- an executed action whose step has no context entries (stopped after the effect committed and
+  before the context append) gets its call and a withheld-result marker
+  (`{"withheld":true,"reason_code":"outcome_unknown"}`), so the model continues without the action
+  being executed again.
+
+Awaiting-approval, paused, stopped and completed runs keep their state and reason. The reads of
+actions and attempts are read-only.
+
 ## Production chain and gateway wiring (GO-11, GO-09)
 
 `agent.NewProductionChain(pool, loader, agent.ChainConfig{Model, ModelConfigured, Logger})` builds
@@ -419,7 +440,8 @@ the governed chain once, and `cmd/gateway` uses it with the same `catalog.Loader
   request timeout per call, the run's ledger, `model.AccountedCaller`, the Ollama provider
   (`MODEL_BASE_URL`, `MODEL_NAME`, 2-minute outer bound, 1 MiB request/response limits);
 - `SecurityCaller` (`agent.RecordingCaller`), `Evaluator` (`security.NewSemanticEvaluator`, context
-  8192, verdicts labelled `live`), `Inspector` (`security.NewInspector`);
+  8192, verdicts labelled `live`, or `ChainConfig.VerdictSource` = `fixture` for a test driving the
+  chain with a fixture provider), `Inspector` (`security.NewInspector`);
 - `Settings` (`agent.CatalogSettings`, policy's `SecuritySettingsSource` over the active snapshot;
   a revision that is no longer active has no settings), `Catalog` (`agent.PoolCatalog`);
 - `Gate` (`policy.NewGate` with `PassportScopeReader`, `PostgresRecorder`, `PostgresRelationships`
@@ -459,6 +481,8 @@ request time and by the ledger's (`budget.Reservation.RequestTimeout`, applied i
 runs out is `budget.ErrConcurrencyLimit`, which requeues the job). After a timeout or unknown usage
 the process slot stays held for one more request period, because a client timeout does not prove
 the provider stopped; the ledger keeps the reservation and its slot until the late settlement.
+A call is refused (`catalog.ErrUnavailable`) when the snapshot and the accounting projection
+describe different catalog revisions, so one call never mixes two revisions.
 `model.AccountedCaller` now joins the safe failure sentinel (`ErrTransport`, `ErrResponse`) to
 `ErrUsageUnknown`, never the provider's raw error.
 
@@ -513,12 +537,17 @@ references plus the stored steps; then, by result:
   `policy.CheckCorrections` applies the passport's limit (beyond it: `stopped` /
   `allowance_exhausted`), and otherwise the denied call and `policy.BuildDenialFeedback` (reason
   code, fixed safe message, permitted alternative only) join the context; approval required →
-  `awaiting_approval` (`approval.requested`, GO-40 resumes); allow → `policy.Executor.Execute`,
+  `awaiting_approval` (the run's own `run.awaiting_approval` event naming the action; `approval.requested`
+  stays the gate's; GO-40 resumes); allow → `policy.Executor.Execute`,
   then the tool-result inspection, then the step's call and inspected result are appended to
   `runtime.context_entries` and the loop continues;
 - several tool calls → an `action.denied` event with `multiple_actions_not_supported` (GO-01), then
   the same correction path: it counts against the correction limit;
-- a final answer → `completed` (GO-26 adds the narrow result validation);
+- a final answer → `runresult.Validate` (GO-26, 3c): only the exact JSON naming one or two reports
+  this run created completes the run, and the validated reference is stored with the completion in
+  the same transaction; any other answer is an `action.denied` event and goes through the same
+  correction path with a fixed message; a failed check pauses the run (`decision_unavailable`). The
+  agent instruction contains `runresult.FinalAnswerInstruction` verbatim;
 - a model failure: exhausted or paused allowance and overspend → `paused` / `allowance_exhausted`;
   unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
   `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
