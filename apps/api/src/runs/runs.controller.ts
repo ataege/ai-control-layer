@@ -18,6 +18,8 @@ import type {
   StartRunRequest,
   StartRunResponse,
   RunEventsPage,
+  RunState,
+  RunUsage,
 } from "@workspace/contracts";
 import type { Request } from "express";
 import { z } from "zod";
@@ -25,6 +27,12 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { GatewayClientService } from "../gateway-client/gateway-client.service.js";
 import { StartRunSchema } from "./dto/start-run.dto.js";
 import { RunEventsSchema } from "./run-events.schema.js";
+import { RunStateSchema, RunUsageSchema } from "./run-read.schemas.js";
+import {
+  gatewayData,
+  requireRecordId,
+  verifiedOperator,
+} from "../gateway-client/gateway-response.js";
 
 const StartRunResponseSchema = z.object({
   runId: z.string(),
@@ -35,6 +43,42 @@ const StartRunResponseSchema = z.object({
 @Controller("runs")
 export class RunsController {
   constructor(private readonly gateway: GatewayClientService) {}
+
+  @Get(":id")
+  @ApiOperation({ summary: "Read the authorized run state, including stored result references" })
+  async state(@Param("id") runId: string, @Req() request: Request): Promise<RunState> {
+    const operator = verifiedOperator(request);
+    requireRecordId(runId);
+    const state = gatewayData(
+      await this.gateway.getRead(
+        `/internal/runs/${runId}`,
+        request.requestId,
+        RunStateSchema,
+        operator,
+      ),
+    ) as RunState;
+    if (state.runId !== runId)
+      throw new ServiceUnavailableException("Invalid gateway run reference");
+    return state;
+  }
+
+  @Get(":id/usage")
+  @ApiOperation({ summary: "Read the authorized run's recorded usage" })
+  async usage(@Param("id") runId: string, @Req() request: Request): Promise<RunUsage> {
+    const operator = verifiedOperator(request);
+    requireRecordId(runId);
+    const usage = gatewayData(
+      await this.gateway.getRead(
+        `/internal/runs/${runId}/usage`,
+        request.requestId,
+        RunUsageSchema,
+        operator,
+      ),
+    ) as RunUsage;
+    if (usage.runId !== runId)
+      throw new ServiceUnavailableException("Invalid gateway run reference");
+    return usage;
+  }
 
   @Get(":id/events")
   @ApiOperation({ summary: "Read an authorized page of sanitized run events" })

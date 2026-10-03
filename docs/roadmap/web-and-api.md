@@ -708,7 +708,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     "Architecture and chart reading guide" (Interpreting the full architecture)
   - Blocked by: `form options`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
+- [x] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
+  - Done (2026-10-04): per the lead's clarification, two separate routes relay X-11 RunState (including resultReference) and RunUsage unchanged after verified membership and Go object authorization. Shared schemas and run-reference matching fail closed; no combined contract or default usage. Checks: API lint, typecheck and build exited 0; API unit tests: "180 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". HTTP tests cover authentication, malformed ids, exact forwarding, 401/403/404/503, transport failures, unknown fields and mismatched run references. No database writes.
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-08, X-11, X-24, X-29 ·
