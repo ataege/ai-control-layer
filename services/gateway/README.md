@@ -817,8 +817,9 @@ retries a run. Control assessments of a released result commit in the same trans
 context entries; those of a paused inspection are written on their own. Rows hold ids, outcomes,
 codes, revisions, the validated verdict (category, score, reason code) and durations, never
 inspected text, prompts or model output. Semantic rows carry their verdict source (`live` or
-`fixture`) and the `security`-purpose call they came from. `approval_wait` follows with GO-40;
-the concurrency slot with GO-79; queue depth is read from `runtime.jobs`.
+`fixture`) and the `security`-purpose call they came from. The resume of a review wait writes an
+`approval_wait` span from the awaiting transition to the resume, with the action id (GO-40); the
+concurrency slot is GO-79; queue depth is read from `runtime.jobs`.
 
 ## Bounded agent loop (GO-11)
 

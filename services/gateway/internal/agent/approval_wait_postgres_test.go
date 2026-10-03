@@ -292,3 +292,34 @@ func TestExpiredRunStopsFromTheWaitWithoutAResumedEvent(t *testing.T) {
 		t.Fatalf("an expired run queued %d messages or made %d model requests", outbox, len(stepper.contexts))
 	}
 }
+
+// GO-80: the resume records the review wait as an approval_wait span, from the awaiting transition
+// to the resume, measured on the loop's clock.
+func TestResumeRecordsTheApprovalWaitSpan(t *testing.T) {
+	wait := newReviewWait(t)
+	world := wait.world
+	if _, err := policy.NewApprovals(world.pool).Decide(context.Background(), wait.reviewer, wait.actionID, policy.ApprovalApprove); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	var awaitingSince time.Time
+	if err := world.pool.QueryRow(context.Background(), "SELECT updated_at FROM runtime.runs WHERE id = $1", world.runID).Scan(&awaitingSince); err != nil {
+		t.Fatal(err)
+	}
+	stepper := &scriptedStepper{callLog: budget.NewCallLog(world.pool), ledger: budget.NewPostgresStore(world.pool),
+		script: []func([]model.Message) (StepResult, error){wait.finishNamingTheReport}}
+	loop := newTestLoop(t, world, stepper)
+	loop.now = func() time.Time { return awaitingSince.Add(90 * time.Second) }
+	if _, err := loop.Handle(context.Background(), wait.continuationJob(t)); err != nil {
+		t.Fatal(err)
+	}
+	var spans int
+	var duration int64
+	var actionID string
+	if err := world.pool.QueryRow(context.Background(), `SELECT count(*), coalesce(max(duration_microseconds), 0), coalesce(max(action_id::text), '')
+		FROM runtime.timing_records WHERE organization_id = $1 AND phase = 'approval_wait'`, world.organizationID).Scan(&spans, &duration, &actionID); err != nil {
+		t.Fatal(err)
+	}
+	if spans != 1 || duration != (90*time.Second).Microseconds() || actionID != wait.actionID {
+		t.Fatalf("approval_wait spans %d, duration %d µs, action %s (want 1, 90 s, %s)", spans, duration, actionID, wait.actionID)
+	}
+}

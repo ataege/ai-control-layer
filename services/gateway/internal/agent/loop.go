@@ -253,6 +253,9 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		} else if err != nil {
 			return runEnd{}, false, err
 		}
+		// GO-80: the review wait lasted from the awaiting transition (the run's last update, since
+		// nothing else changes a waiting run) to this resume.
+		loop.recordSpans(ctx, run, Span{Phase: PhaseApprovalWait, Duration: max(loop.now().Sub(state.UpdatedAt), 0), ActionID: decided.ActionID})
 	default:
 		// Terminal or paused: this job has nothing to do.
 		return runEnd{}, false, nil
