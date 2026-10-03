@@ -59,7 +59,8 @@
             "decision_unavailable",
             "content_blocked",
             "content_too_large",
-            "limit_not_allowed"
+            "limit_not_allowed",
+            "run_not_active"
           ]
         },
         {
@@ -150,7 +151,8 @@
           "decision_unavailable",
           "content_blocked",
           "content_too_large",
-          "limit_not_allowed"
+          "limit_not_allowed",
+          "run_not_active"
         ]
       }
     }

@@ -34,6 +34,7 @@ var (
 	summaryClassifications = []string{"internal_only", "vendor_shareable"}
 	summaryLineageChecks   = []string{"passed", "failed", "missing"}
 	summaryEffects         = []string{"none", "read", "report_created", "outbox_message_queued"}
+	summaryInputSources    = []string{"judge"}
 )
 
 // AppendEvent validates the event against the X-12 contract and inserts it in this
@@ -135,7 +136,9 @@ func validSummary(summary contracts.MaskedSummary) bool {
 		(summary.Template == nil || summary.Template.Valid()) &&
 		(summary.AlternativeTemplate == nil || summary.AlternativeTemplate.Valid()) &&
 		(summary.SafeMessage == nil || (utf8.ValidString(*summary.SafeMessage) &&
-			utf8.RuneCountInString(*summary.SafeMessage) <= maximumSafeMessageLength))
+			utf8.RuneCountInString(*summary.SafeMessage) <= maximumSafeMessageLength)) &&
+		(summary.ActorID == nil || validUUID(*summary.ActorID)) &&
+		optionalOneOf(summary.InputSource, summaryInputSources)
 }
 
 func optionalOneOf(value *string, allowed []string) bool {

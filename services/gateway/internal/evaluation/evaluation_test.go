@@ -297,3 +297,67 @@ func TestPostgresEvaluateRecordsEvidenceAndStoresNoAction(t *testing.T) {
 		t.Error("evidence was written for another organization")
 	}
 }
+
+// c1's review finding: an inactive run spends nothing. A cancelled run, an expired passport and a
+// completed run are each denied before any model call, with no ledger reservation, for model
+// input and tool results alike; the evidence still records the judge input and its actor.
+func TestPostgresInactiveRunsAreDeniedBeforeAnyModelCall(t *testing.T) {
+	pool := testdb.Open(t)
+	outer, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = outer.Rollback(context.Background()) })
+	revisionID := catalogtest.ActivatePolicy(t, outer)
+	runtimeRepository := repository.New(outer)
+	operator := contracts.OperatorContext{UserID: testdb.ID(t), OrganizationID: testdb.ID(t), Roles: []string{"operator"}}
+	admit := func(issuedAt time.Time) string {
+		passport := contracts.Passport{PassportID: testdb.ID(t), RunID: testdb.ID(t), OrganizationID: operator.OrganizationID,
+			ActorID: operator.UserID, TaskVersion: "reconcile_atlas_v1", AdmissionCatalogRevisionID: revisionID,
+			IssuedAt: issuedAt, ExpiresAt: issuedAt.Add(15 * time.Minute)}
+		if err := runtimeRepository.InTransaction(context.Background(), func(tx repository.Tx) error {
+			return tx.InsertAdmission(context.Background(), passport, repository.NewJob{ID: testdb.ID(t), Kind: contracts.JobKindAgentStep})
+		}); err != nil {
+			t.Fatalf("admission fixture: %v", err)
+		}
+		return passport.RunID
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	cancelledRun := admit(now)
+	if _, err := runtimeRepository.CancelRun(context.Background(), operator.OrganizationID, cancelledRun); err != nil {
+		t.Fatal(err)
+	}
+	expiredRun := admit(now.Add(-time.Hour))
+	completedRun := admit(now)
+	if _, err := outer.Exec(context.Background(), `UPDATE runtime.runs SET status = 'completed' WHERE id = $1`, completedRun); err != nil {
+		t.Fatal(err)
+	}
+
+	caller := &fixtureCaller{verdict: benignVerdict}
+	evaluator := New(Dependencies{Repository: runtimeRepository, Catalog: catalog.NewLoader(), Database: outer,
+		Semantic: semanticEvaluator(t, caller), Inspector: security.NewInspector(semanticEvaluator(t, caller))})
+	text, tool := "Investigation note: amounts reconciled.", contracts.ToolReadInvoice
+	for runID, wantReason := range map[string]contracts.ReasonCode{
+		cancelledRun: contracts.ReasonRunCancelled, expiredRun: contracts.ReasonRunExpired, completedRun: contracts.ReasonRunNotActive,
+	} {
+		for _, request := range []contracts.ControlEvaluationRequest{
+			{RunID: runID, Kind: contracts.BoundaryModelInput, Text: &text},
+			{RunID: runID, Kind: contracts.BoundaryToolResult, Text: &text, Tool: &tool},
+		} {
+			response, err := evaluator.Evaluate(context.Background(), operator, request)
+			if err != nil || response.Decision != contracts.EvaluationDeny || response.ReasonCode == nil || *response.ReasonCode != wantReason {
+				t.Errorf("%s %s: %+v %v", wantReason, request.Kind, response, err)
+			}
+		}
+		var reservations, judged int
+		_ = outer.QueryRow(context.Background(), `SELECT count(*) FROM runtime.model_token_reservations WHERE run_id::text = $1`, runID).Scan(&reservations)
+		_ = outer.QueryRow(context.Background(), `SELECT count(*) FROM runtime.audit_events WHERE run_id = $1 AND event_type = 'control.evaluated'
+			AND masked_summary->>'inputSource' = 'judge' AND masked_summary->>'actorId' = $2`, runID, operator.UserID).Scan(&judged)
+		if reservations != 0 || judged != 2 {
+			t.Errorf("%s: %d reservations, %d labelled judge events", wantReason, reservations, judged)
+		}
+	}
+	if caller.calls != 0 {
+		t.Errorf("inactive runs made %d model calls", caller.calls)
+	}
+}

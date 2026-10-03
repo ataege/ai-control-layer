@@ -51,6 +51,8 @@ const (
 	ReasonContentTooLarge              ReasonCode = "content_too_large"
 	// ReasonLimitNotAllowed: a requested limit exceeds the active catalog; admission never narrows it.
 	ReasonLimitNotAllowed ReasonCode = "limit_not_allowed"
+	// ReasonRunNotActive: the run is completed, failed or stopped, so nothing is evaluated for it.
+	ReasonRunNotActive ReasonCode = "run_not_active"
 )
 
 // ReasonCodes lists every reason code in contract order.
@@ -64,6 +66,7 @@ var ReasonCodes = []ReasonCode{
 	ReasonPolicyReloadRejected, ReasonModelNotAllowed, ReasonMultipleActionsNotSupported,
 	ReasonRunExpired, ReasonToolNotRegistered, ReasonInvalidArguments, ReasonToolNotAllowed,
 	ReasonDecisionUnavailable, ReasonContentBlocked, ReasonContentTooLarge, ReasonLimitNotAllowed,
+	ReasonRunNotActive,
 }
 
 // Valid reports whether the code is part of the contract.
@@ -389,6 +392,10 @@ type MaskedSummary struct {
 	ReplaySource        *string         `json:"replaySource"`
 	AlternativeTemplate *ReportTemplate `json:"alternativeTemplate"`
 	SafeMessage         *string         `json:"safeMessage"`
+	// ActorID is the verified operator who caused the event when it is not the run's agent.
+	ActorID *string `json:"actorId"`
+	// InputSource is "judge" for a control evaluation of submitted input (GO-82); nil otherwise.
+	InputSource *string `json:"inputSource"`
 }
 
 func contains[Value comparable](values []Value, candidate Value) bool {

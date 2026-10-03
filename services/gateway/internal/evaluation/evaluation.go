@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 	"unicode/utf8"
 
 	"starter/services/gateway/internal/catalog"
@@ -67,11 +68,12 @@ type Dependencies struct {
 // Evaluator runs evaluations.
 type Evaluator struct {
 	dependencies Dependencies
+	now          func() time.Time
 }
 
 // New returns an evaluator over the agent path's components.
 func New(dependencies Dependencies) *Evaluator {
-	return &Evaluator{dependencies: dependencies}
+	return &Evaluator{dependencies: dependencies, now: time.Now}
 }
 
 // outcome is one boundary's result before it is recorded.
@@ -103,29 +105,58 @@ func (evaluator *Evaluator) Evaluate(ctx context.Context, operator contracts.Ope
 	if err != nil {
 		return contracts.ControlEvaluationResponse{}, ErrUnavailable
 	}
+	runState, err := dependencies.Repository.RunState(ctx, operator.OrganizationID, request.RunID)
+	if err != nil {
+		return contracts.ControlEvaluationResponse{}, ErrUnavailable
+	}
 	snapshot, err := dependencies.Catalog.Active(ctx, dependencies.Database)
 	if err != nil {
 		return contracts.ControlEvaluationResponse{}, ErrUnavailable
 	}
 
+	// An inactive run spends nothing: it is denied before any metered model call, for every kind.
 	var result outcome
-	switch request.Kind {
-	case contracts.BoundaryModelInput:
-		result = evaluator.modelInput(ctx, request.RunID, *request.Text, snapshot.Security)
-	case contracts.BoundaryToolResult:
-		result = evaluator.toolResult(ctx, request.RunID, string(*request.Tool), *request.Text, snapshot.Security)
-	case contracts.BoundaryActionProposal:
-		result = evaluator.actionProposal(ctx, operator.OrganizationID, request)
+	if reason, inactive := inactiveRunReason(runState, passport, evaluator.now()); inactive {
+		result = deny(reason, nil)
+	} else {
+		result = evaluator.evaluateKind(ctx, operator.OrganizationID, request, snapshot.Security)
 	}
 
 	evaluationID := newUUID()
 	response := buildResponse(evaluationID, request.RunID, passport.AdmissionCatalogRevisionID, snapshot, result)
-	if err := evaluator.recordEvidence(ctx, operator.OrganizationID, request.RunID, evaluationID,
+	if err := evaluator.recordEvidence(ctx, operator, request.RunID, evaluationID,
 		passport.AdmissionCatalogRevisionID, snapshot.RevisionID, result, response.SafeMessage); err != nil {
 		// The judge's input must appear in evidence; without it there is no decision to report.
 		return contracts.ControlEvaluationResponse{}, ErrUnavailable
 	}
 	return response, nil
+}
+
+// inactiveRunReason denies an evaluation of a cancelled, expired or finished run.
+func inactiveRunReason(state contracts.RunState, passport contracts.Passport, now time.Time) (contracts.ReasonCode, bool) {
+	switch {
+	case state.CancelRequestedAt != nil || (state.TerminalReason != nil && *state.TerminalReason == contracts.ReasonRunCancelled):
+		return contracts.ReasonRunCancelled, true
+	case state.Status == contracts.RunCompleted || state.Status == contracts.RunFailed || state.Status == contracts.RunStopped:
+		return contracts.ReasonRunNotActive, true
+	case !now.Before(passport.ExpiresAt):
+		return contracts.ReasonRunExpired, true
+	}
+	return "", false
+}
+
+// evaluateKind runs the boundary the request names.
+func (evaluator *Evaluator) evaluateKind(ctx context.Context, organizationID string, request contracts.ControlEvaluationRequest, settings security.Settings) outcome {
+	var result outcome
+	switch request.Kind {
+	case contracts.BoundaryModelInput:
+		result = evaluator.modelInput(ctx, request.RunID, *request.Text, settings)
+	case contracts.BoundaryToolResult:
+		result = evaluator.toolResult(ctx, request.RunID, string(*request.Tool), *request.Text, settings)
+	case contracts.BoundaryActionProposal:
+		result = evaluator.actionProposal(ctx, organizationID, request)
+	}
+	return result
 }
 
 // validateRequest enforces X-91's combinations: text for model_input and tool_result, a registered
@@ -289,8 +320,9 @@ func (decisionOnlyFreezer) Freeze(context.Context, policy.RunIdentity, policy.St
 }
 
 // recordEvidence writes the control.evaluated event and the control records in one transaction.
-func (evaluator *Evaluator) recordEvidence(ctx context.Context, organizationID, runID, evaluationID string,
+func (evaluator *Evaluator) recordEvidence(ctx context.Context, operator contracts.OperatorContext, runID, evaluationID string,
 	admissionRevisionID, activeRevisionID int64, result outcome, safeMessage string) error {
+	organizationID := operator.OrganizationID
 	var reason *contracts.ReasonCode
 	if result.reason != "" {
 		reasonCode := result.reason
@@ -302,6 +334,9 @@ func (evaluator *Evaluator) recordEvidence(ctx context.Context, organizationID, 
 		Effect:                     pointer("none"),
 		AlternativeTemplate:        result.alternativeTemplate,
 		SafeMessage:                &safeMessage,
+		// Judge evidence is labelled and attributed, so summaries count it apart from agent decisions.
+		ActorID:     pointer(operator.UserID),
+		InputSource: pointer("judge"),
 	}
 	for _, record := range result.records {
 		if record.MatchedRuleID != "" && record.ControlID == security.ControlSignatureMatch {
