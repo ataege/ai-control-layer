@@ -30,7 +30,7 @@ func diagnosticLookup(baseURL string) config.LookupFunc {
 func TestDiagnosticCallsBothPurposes(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
+		call := calls.Add(1)
 		var request struct {
 			Model   string         `json:"model"`
 			Stream  bool           `json:"stream"`
@@ -42,7 +42,11 @@ func TestDiagnosticCallsBothPurposes(t *testing.T) {
 				Output  int `json:"num_predict"`
 			} `json:"options"`
 		}
-		if json.NewDecoder(r.Body).Decode(&request) != nil || r.Method != "POST" || r.URL.Path != "/api/chat" || request.Model != "synthetic-fixture" || request.Stream || request.Think == nil || *request.Think || request.Format["type"] != "object" || len(request.Tools) != 0 || request.Options.Context != 4096 || request.Options.Output != 256 {
+		limit := 256
+		if call == 1 {
+			limit = 512
+		}
+		if json.NewDecoder(r.Body).Decode(&request) != nil || r.Method != "POST" || r.URL.Path != "/api/chat" || request.Model != "synthetic-fixture" || request.Stream || request.Think == nil || *request.Think || request.Format["type"] != "object" || len(request.Tools) != 0 || request.Options.Context != 4096 || request.Options.Output != limit {
 			t.Error("invalid diagnostic provider request")
 		}
 		_, _ = w.Write([]byte(`{"model":"synthetic-fixture","done":true,"message":{"role":"assistant","content":"{\"status\":\"ok\"}"},"prompt_eval_count":1,"eval_count":2}`))

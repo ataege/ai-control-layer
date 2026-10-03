@@ -40,7 +40,11 @@ func run(ctx context.Context, lookup config.LookupFunc, output io.Writer) error 
 	}
 	thinking := false
 	for _, purpose := range []model.Purpose{model.AgentPurpose, model.SecurityPurpose} {
-		result, err := client.Chat(ctx, model.Request{Purpose: purpose, Think: &thinking, ContextTokens: 4096, OutputTokens: 256, Format: probeSchema, Messages: []model.Message{{Role: "user", Content: `Synthetic connectivity diagnostic. Return only the JSON object {"status":"ok"}. This is not a task or a security assessment.`}}})
+		limit := model.DefaultAccountingSettings().AgentOutputTokens
+		if purpose == model.SecurityPurpose {
+			limit = model.DefaultAccountingSettings().SecurityOutputTokens
+		}
+		result, err := client.Chat(ctx, model.Request{Purpose: purpose, Think: &thinking, ContextTokens: 4096, OutputTokens: limit, Format: probeSchema, Messages: []model.Message{{Role: "user", Content: `Synthetic connectivity diagnostic. Return only the JSON object {"status":"ok"}. This is not a task or a security assessment.`}}})
 		if err != nil || len(result.Message.ToolCalls) != 0 || !validProbe(result.Message.Content) || result.Usage.InputTokens == nil || result.Usage.OutputTokens == nil {
 			_, _ = fmt.Fprintf(output, "diagnostic provider call (%s): FAIL (invalid or unavailable provider response)\n", purpose)
 			return fmt.Errorf("diagnostic provider call failed")

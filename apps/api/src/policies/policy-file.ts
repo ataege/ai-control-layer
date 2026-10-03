@@ -31,7 +31,7 @@ function boundaryList<const Boundary extends string>(supportedBoundaries: readon
   return uniqueList(z.enum(supportedBoundaries)).min(1);
 }
 
-const positiveCount = z.number().int().positive();
+const positiveCount = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const guardMode = z.enum(["block", "redact"]);
 
 export const policyFileSchema = z
@@ -43,7 +43,11 @@ export const policyFileSchema = z
       calls_agent: positiveCount,
       calls_security: positiveCount,
       tokens_total: positiveCount,
-      request_timeout_seconds: positiveCount,
+      // Optional v1 additions retain existing catalog revisions; Go applies MVP defaults.
+      agent_output_tokens: positiveCount.optional(),
+      security_output_tokens: positiveCount.optional(),
+      input_template_tokens: positiveCount.optional(),
+      request_timeout_seconds: positiveCount.max(86400),
       local_max_concurrency: positiveCount,
       run_expiry_minutes: positiveCount,
       tool_attempts: positiveCount,
@@ -249,6 +253,7 @@ export function validatePolicyFile(fileBytes: Uint8Array): PolicyFileValidation 
 
   const nonDecimalIntegers = integerValuePaths.filter((valuePath) => {
     const valueNode = document.getIn(valuePath, true);
+    if (valueNode === undefined) return false; // Schema already rejects missing required keys.
     return !isScalar(valueNode) || !decimalIntegerSource.test(String(valueNode.source));
   });
   if (nonDecimalIntegers.length > 0) {

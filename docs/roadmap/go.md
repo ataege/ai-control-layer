@@ -4,8 +4,8 @@
 project report, `docs/product/task-passport-project-report.docx` (version 1.2, "Official requirements and hybrid security controls", 3 October 2026; lines marked
 "Report 1.2 change" amend a task and win over older text and "Report 1.1 change" lines), the architecture specification
 `docs/product/project-architecture.md`, and the repository at commit `789bcd7`. Lines marked
-"Report 1.1 change" amend the task they sit in; where they disagree with the older fields, they win. Nothing in it is implemented: every
-task is open and every sync point it provides is unreached. Sizes are estimates, not a schedule. The
+"Report 1.1 change" amend the task they sit in; where they disagree with the older fields, they win. The task statuses below record implementation progress; unticked tasks and unrecorded sync
+points remain open. Sizes are estimates, not a schedule. The
 spine, `docs/roadmap/README.md`, is the contract for this file: its milestones, tiers, sync points
 (X), shared tasks (SH), open decisions, task format and definition of done apply here unchanged.
 
@@ -448,7 +448,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-06 · Bring up the model provider connection from Go**
+- [x] **GO-06 · Bring up the model provider connection from Go**
   - **Report 1.2 change:** Bring up the local model connection (for example Ollama) from X-84; by the M0 exit an agent request and a security-purpose request can be made within recorded limits.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: SH-04, GO-03 · Needs: X-01, X-04 · Provides: nothing
@@ -474,27 +474,26 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     become a failure, never a model output; neither the credential nor a request body appears in
     log or error text. `pnpm --filter gateway run test`; the live request run by hand, with its
     result quoted and the credential not printed.
-  - Progress (2026-10-03): the bounded native Ollama HTTP transport and labelled provider-double
-    tests are implemented in `internal/model`. It is not wired to startup or a public/internal route.
-    Model authority, durable shared/purpose reservations and concurrency checks remain pending.
-    The standalone `cmd/modelcheck` command and strict model environment loader are ready for
-    the other machine: two synthetic agent/security-purpose requests with schema validation,
-    explicit ceilings and safe diagnostic output. Its command is in the gateway README.
-    Developer-machine connection verification is complete: on 2026-10-03 at 14:56:15 UTC,
-    build `c8b6f55`, M2/8 GiB, Ollama 0.35.1 and `qwen3.5:4b` ID `2a654d98e6fb`,
-    `MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway run ./cmd/modelcheck`
-    exited 0 with two PASS records. Each reported 38 input and 6 output tokens; measured wall
-    times were 8752003584 ns (agent) and 333830375 ns (security). See the gateway README.
-    GO-06 remains open only for its GO-03/SH-04 model/accounting decision prerequisites;
-    presentation-machine rollout belongs to SH-45/X-84, and governed reservations and guard
-    quality belong to their later tasks. These two calls do not prove semantic guard quality.
-    Verification: `pnpm --filter gateway run test` passed, including the model package;
-    `pnpm verify` passed all six steps (6 passed, 0 failed, 0 skipped). The live model diagnostic
-    above passed; stack smoke was not run. No startup model dispatch is introduced.
+  - Completed (2026-10-03): bounded native Ollama transport, local preflight, trusted central
+    accounting settings, durable PostgreSQL shared reservations, unknown usage retention,
+    one-time late reconciliation and full overrun pause are implemented. The user adopted
+    reservation = JSON UTF-8 input bytes + 1024 template tokens + capped output; agent 512,
+    security 256, shared initial total 20000, think false and stream false. Values are editable
+    through the existing policy/catalog import. The catalog branch was merged as an intentional
+    dependency; the only merge conflict preserved both architecture module rows.
+    Four explicit qwen3.5:4b estimator fixtures passed. A live catalog-backed budget diagnostic
+    returned measured usage and correct refunds for both purposes; final used 62, reserved 0.
+    Exact commands, fixture outcomes and hardware limits are in the gateway README.
+    This completes the user's expanded GO-06 accounting acceptance. Worker/admission wiring,
+    call-count/concurrency enforcement, full catalog activation, semantic detection and the
+    presentation-machine check remain their own later tasks; there is no startup dispatch.
+    Verification: `pnpm verify` passed 6/6; `pnpm test:db` passed both sides with no skipped
+    database tests; `go -C services/gateway test -race ./... -count=1 -timeout=60s` passed with
+    PostgreSQL enabled; `pnpm smoke` passed 21/21 in host mode.
   - Report: "Relative implementation milestones and critical dependencies" (Proposed 24-hour
     implementation sequence, Hours 0-2); "Technical architecture and service ownership";
     "Architecture and chart reading guide" (Figure 1)
-  - Blocked by: `decision 6 in docs/product/README.md`
+  - Blocked by: nothing for this completed developer-machine/accounting scope
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 

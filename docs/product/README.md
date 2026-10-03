@@ -410,3 +410,25 @@ Model candidate reference: [Ollama qwen3.5:4b](https://ollama.com/library/qwen3.
 #### GO-06 developer connection evidence
 
 On 3 October 2026 at 14:56:15 UTC, the developer M2/8 GiB machine completed two explicit synthetic Go provider calls through Ollama 0.35.1 to `qwen3.5:4b` (ID `2a654d98e6fb`), with `think: false`. Both passed the diagnostic response schema and reported 38 input and 6 output tokens; the command exited 0. The gateway README records the build, command and measured durations. This establishes developer-machine connectivity only; GO-03/SH-04 model/accounting adoption is still pending. It does not establish a semantic security verdict, task reservations or presentation-machine readiness.
+
+### GO-06 MVP accounting adopted with the user (3 October 2026)
+
+The user settled the Go-side calculation dependency: reserve compact input JSON UTF-8 bytes
+(including system prompt, history, tool results, tools and schemas) plus 1,024 template tokens and
+maximum output before dispatch. Agent output is 512 and security output 256; both share an initial
+20,000-token total. Native Ollama uses `think: false`, `stream: false` and `options.num_predict`.
+The existing central policy/catalog carries these configurable settings; there is no second
+configuration authority. The three optional v1 budget additions are documented in `config/README.md`.
+
+Both valid counters on a completed response settle actual usage and refund unused allowance.
+Missing usage or timeout retains the full reservation as `usage_unknown`; missing counters are
+never zero. No automatic timeout retry occurs. Trusted late usage reconciles once. An overrun
+records the complete measured count and pauses further model dispatch. TypeORM provides the
+ledger migration; Go owns balance mutations. These settings are adopted MVP engineering choices,
+not sponsor requirements or a proof that the byte estimate bounds every possible tokenizer input.
+
+The gateway README records four successful live estimator fixtures and a live catalog-backed
+agent/security accounting diagnostic on the developer M2/8 GiB machine. GO-06 is complete for the
+user's expanded accounting scope. This does not settle presentation-machine readiness, the full
+SH-04 hardware freeze, semantic verdict quality, catalog activation, service-role grants or the
+future passport/worker wiring.

@@ -149,23 +149,35 @@ func validMessage(message Message) bool {
 	return message.Content != "" || len(message.ToolCalls) > 0
 }
 
-func (client *Ollama) Chat(ctx context.Context, request Request) (Result, error) {
-	var result Result
-	if ctx == nil || (request.Purpose != AgentPurpose && request.Purpose != SecurityPurpose) || len(request.Messages) == 0 || request.ContextTokens <= 0 || request.OutputTokens <= 0 || request.OutputTokens > request.ContextTokens {
-		return result, ErrRequest
+func validateRequest(request Request) error {
+	if (request.Purpose != AgentPurpose && request.Purpose != SecurityPurpose) || len(request.Messages) == 0 || request.ContextTokens <= 0 || request.OutputTokens <= 0 || request.OutputTokens > request.ContextTokens {
+		return ErrRequest
 	}
 	for _, message := range request.Messages {
 		if !validMessage(message) {
-			return result, ErrRequest
+			return ErrRequest
 		}
 	}
 	if len(request.Format) > 0 && !validObject(request.Format) && string(request.Format) != `"json"` {
-		return result, ErrRequest
+		return ErrRequest
 	}
 	for _, tool := range request.Tools {
 		if tool.Type != "function" || strings.TrimSpace(tool.Function.Name) == "" || !validObject(tool.Function.Parameters) {
-			return result, ErrRequest
+			return ErrRequest
 		}
+	}
+	return nil
+}
+
+// ValidateRequest performs local preflight without dispatching a model call.
+func (client *Ollama) ValidateRequest(request Request) error {
+	_, err := client.prepareRequest(request)
+	return err
+}
+
+func (client *Ollama) prepareRequest(request Request) ([]byte, error) {
+	if err := validateRequest(request); err != nil {
+		return nil, err
 	}
 	payload := struct {
 		Model    string          `json:"model"`
@@ -182,7 +194,19 @@ func (client *Ollama) Chat(ctx context.Context, request Request) (Result, error)
 	payload.Options.Context, payload.Options.Output = request.ContextTokens, request.OutputTokens
 	body, err := json.Marshal(payload)
 	if err != nil || int64(len(body)) > client.requestLimit {
+		return nil, ErrRequest
+	}
+	return body, nil
+}
+
+func (client *Ollama) Chat(ctx context.Context, request Request) (Result, error) {
+	var result Result
+	if ctx == nil {
 		return result, ErrRequest
+	}
+	body, err := client.prepareRequest(request)
+	if err != nil {
+		return result, err
 	}
 	requestContext, cancel := context.WithTimeout(ctx, client.timeout)
 	defer cancel()

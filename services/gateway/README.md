@@ -90,18 +90,21 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | `internal/health`     | User (sole Go implementer) |
 | `internal/httpserver` | User (sole Go implementer) |
 | `internal/model`      | User (sole Go implementer) |
+| `internal/budget`     | User (sole Go implementer) |
 
 New packages get their ownership row when their first real code lands.
 
 ```
 cmd/gateway/          wiring, signals, -healthcheck
 cmd/modelcheck/       explicit synthetic Ollama connectivity check
-internal/config/      environment validation
+cmd/budgetcheck/      explicit central-catalog and PostgreSQL accounting diagnostic
+internal/config/      environment and trusted accounting-catalog validation
 internal/logging/     JSON slog logger, Secret
 internal/database/    pgxpool construction
 internal/health/      handlers and wire DTOs
 internal/httpserver/  routes, middleware, error envelope, server lifecycle
-internal/model/       bounded Ollama HTTP transport (GO-06, not wired to startup)
+internal/model/       bounded Ollama transport and accounted calls
+internal/budget/      durable atomic shared token reservations
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -121,8 +124,9 @@ explicit zero as zero, including parseable usage on a rejected response. Go meas
 time separately from provider time. A timeout does not establish that remote inference stopped.
 
 This is transport code, not a completed governed model gateway. The worker must still check
-identity/passport and active model authority, reserve shared and purpose allowances, persist
-attempts and apply the concurrency cap before using it. The client is not called by startup or
+identity/passport and active model authority, reserve call-count/purpose allowances, persist
+attempts and apply the concurrency cap before using it. Token reservations are now implemented
+through `AccountedCaller` and the PostgreSQL ledger described below. The client is not called by startup or
 an HTTP route. The explicit diagnostic command below loads the infrastructure-agreed model variables. Runtime
 configuration wiring, remote-access setup and live presentation-machine evidence remain pending
 GO-03, SH-04 and the infrastructure handoff; existing startup behavior is unchanged.
@@ -147,7 +151,7 @@ tag can change without editing code. Invalid configuration exits unsuccessfully 
 
 It makes at most two sequential synthetic provider calls, labelled agent and security, through
 the same Go transport. Each has a 30-second deadline, 1 MiB request/response ceiling, 4096 context
-and 256 output tokens, a tiny fixed JSON schema, and explicit `think: false`. These are diagnostic
+and 512 agent / 256 security output tokens, a tiny fixed JSON schema, and explicit `think: false`. These are diagnostic
 settings, not adopted production limits. They must be supported by the installed Ollama/model.
 Each response must be a completed assistant response with exactly `{"status":"ok"}` and known
 input/output token counts. Only then does the command print a JSON `PASS` record with the purpose,
@@ -162,8 +166,8 @@ Provider-double tests do not replace live evidence; GO-06 status and its shared 
 prerequisites are recorded in the roadmap.
 
 If Go runs on a different machine, infrastructure must provide the trusted reachable endpoint
-and access arrangement. This task does not expose Ollama on the network or merge another owner's
-feature branch.
+and access arrangement. This task does not expose Ollama on the network. The central catalog dependency from
+`origin/feat/fd-catalog-and-tests` was merged into the Go feature branch for accounting integration.
 
 ### Developer-machine live result (2026-10-03)
 
@@ -186,6 +190,100 @@ Each call used `think: false`, context 4096, output ceiling 256, deadline 30 sec
 request/response limits. These are diagnostic settings. The durations are two observations, not
 a benchmark, a throughput estimate or proof of a maximum latency. The configured model remains
 a provisional choice, and the shared model/accounting decision remains pending GO-03/SH-04.
+
+## GO-06 token accounting
+
+The user adopted the MVP accounting decision on 3 October 2026. `AccountedCaller` validates
+requests before reserving, uses a single PostgreSQL run balance for agent and security calls,
+forces `think: false`, and caps native `options.num_predict` from trusted catalog settings.
+Input reservation is the UTF-8 length of compact JSON containing messages, tool definitions and
+response schema, plus 1,024 template tokens; output allowance is then added. This includes system
+prompts, history, tool results and tool-call arguments. These bytes are an estimate, not measured
+input tokens or a universal tokenizer upper bound.
+
+A completed response with both valid counters settles their full sum and refunds unused
+reservation. Missing counters, transport errors and timeouts retain the complete reservation as
+`usage_unknown`; no measured zero is invented. There is no automatic retry. A trusted late result
+can reconcile once, including after constructing a new store. Identical repeated settlement
+changes nothing; conflicting counters are rejected. A measured overrun records full usage and
+persists a pause that blocks later reservations. The future run controller must propagate this
+ledger pause to the run state; no worker or admission API is implemented by this task.
+
+The TypeORM migration `1791043000000-AddModelTokenBudgets.ts` creates only the ledger tables.
+Application startup performs no migration or budget creation. Go alone mutates the ledger;
+service-role grants and the future runtime-run relationship remain integration work.
+
+Central values live in `config/policy.yaml` and its accepted immutable catalog revision:
+`tokens_total: 20000`, `agent_output_tokens: 512`, `security_output_tokens: 256`, and
+`input_template_tokens: 1024`. Older v1 revisions use the last three defaults. Go reads the
+active revision in one SQL snapshot and never reads the YAML file as a second runtime authority.
+The accounting projection does not replace GO-72/73 full catalog/feed validation or activation.
+
+For an explicit diagnostic on the other machine, with the database already configured and Ollama
+running, use the existing commands from the repository root:
+
+```sh
+pnpm db:migration:run
+pnpm policy:import
+MODEL_NAME=qwen3.5:4b node scripts/with-env.mjs go -C services/gateway run ./cmd/budgetcheck
+pnpm test:db
+```
+
+`budgetcheck` creates one labelled synthetic ledger run and leaves it durable for inspection.
+It uses the active catalog model allowlist, shared total, timeout and accounting settings for two
+sequential calls. It exits unsuccessfully if the active catalog or ledger is missing. It is not an
+agent workflow, semantic-security evaluation or proof of passport/identity enforcement. Later
+imports remain requested until the catalog activation protocol accepts them; editing YAML alone
+never changes active settings.
+
+### Accounting verification, 3 October 2026
+
+The GO-06 working tree based on `e502857` was tested on M2/8 GiB with Ollama 0.35.1 and
+`qwen3.5:4b` ID `2a654d98e6fb`, against an isolated PostgreSQL 17.11 on loopback port 55432.
+The existing `pnpm db:migration:run` and `pnpm policy:import` succeeded. Explicit live
+`cmd/budgetcheck` exited 0 against active catalog revision 1:
+
+| Purpose  | Reservation | Measured total | Refunded |
+| -------- | ----------- | -------------- | -------- |
+| agent    | 1664        | 31             | 1633     |
+| security | 1408        | 31             | 1377     |
+
+Final shared balance: limit 20,000, used 62, reserved 0, paused false.
+
+The explicit estimator command also exited 0:
+
+```sh
+GO_MODEL_ESTIMATOR_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway test -tags=model_live ./internal/model -run '^TestLiveInputEstimator$' -count=1 -v
+```
+
+| Synthetic fixture          | Estimated input | Reported input |
+| -------------------------- | --------------- | -------------- |
+| System message and Unicode | 1246            | 56             |
+| History and tool result    | 1524            | 118            |
+| Tool schema                | 1410            | 287            |
+| Security response schema   | 1305            | 31             |
+
+All four sampled inputs fit the estimate. This is model/template sample evidence, not a general
+proof. Live model tests require the explicit tag and opt-in; ordinary verification makes no model
+requests. Database-backed native HTTP tests use a labelled provider double and cover measured
+settlement, missing counters, timeout without redispatch, insufficient allowance, concurrent
+agent/security reservations and untruncated overruns. Ledger tests additionally cover restart
+reads, concurrent late reconciliation and arithmetic overflow fencing.
+
+The same diagnostic also passed with a newly imported test policy setting agent output to 128,
+security output to 64 and template allowance to 800. Reservations became 1056 and 992, while
+measured usage remained 31 per call. This verifies values are read from the active catalog rather
+than fixed in the accounted caller.
+
+Verification commands on the isolated test database:
+
+- `pnpm test:db`: PASS, 11 Go database tests and 6 API database tests; no skipped database tests.
+- `go -C services/gateway test -race ./... -count=1 -timeout=60s`: PASS with PostgreSQL enabled.
+- `pnpm verify`: PASS, 6 passed, 0 failed, 0 skipped. Ordinary Go database tests intentionally skip
+  without settings; the database command above verifies them separately.
+- `pnpm smoke`: host PASS, 21 passed, 0 failed, 0 skipped.
+- `pnpm db:migration:run`, `pnpm db:migration:revert`, `pnpm db:migration:run`: PASS on a separate
+  empty test database. Reverting the ledger preserved the existing catalog tables.
 
 ## Integration handoff review (2026-10-03)
 
