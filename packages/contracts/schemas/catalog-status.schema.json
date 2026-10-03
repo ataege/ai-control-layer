@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "catalog-status.schema.json",
+  "title": "CatalogStatus",
+  "description": "WEB-29: the active control catalog as the gateway enforces it: revisions, digests, the last rejected activation and each registered control's setting. Never carries policy or feed text, a signature pattern or a secret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "activeRevisionId",
+    "requestedRevisionId",
+    "validatedRevisionId",
+    "policyDigest",
+    "feedRevisionId",
+    "feedRevision",
+    "feedDigest",
+    "feedRuleCount",
+    "lastError",
+    "controls",
+    "disabledRules"
+  ],
+  "properties": {
+    "activeRevisionId": { "type": ["integer", "null"], "minimum": 1 },
+    "requestedRevisionId": { "type": ["integer", "null"], "minimum": 1 },
+    "validatedRevisionId": { "type": ["integer", "null"], "minimum": 1 },
+    "policyDigest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "feedRevisionId": { "type": ["integer", "null"], "minimum": 1 },
+    "feedRevision": { "type": ["string", "null"], "minLength": 1 },
+    "feedDigest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "feedRuleCount": { "type": ["integer", "null"], "minimum": 0 },
+    "lastError": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message", "revisionId", "stage"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1 },
+            "message": { "type": "string" },
+            "revisionId": { "type": "integer", "minimum": 0 },
+            "stage": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "controls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["controlId", "controlClass", "enabled", "mode", "threshold", "boundaries"],
+        "properties": {
+          "controlId": {
+            "enum": ["secret_pattern", "semantic_injection", "signature_match"]
+          },
+          "controlClass": { "enum": ["deterministic", "semantic"] },
+          "enabled": { "type": "boolean" },
+          "mode": { "enum": ["block", "redact", null] },
+          "threshold": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "boundaries": {
+            "type": "array",
+            "items": { "enum": ["model_input", "tool_result", "action_proposal"] }
+          }
+        }
+      }
+    },
+    "disabledRules": { "type": "array", "items": { "type": "string" } }
+  }
+}
