@@ -1521,6 +1521,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Tests: API-34's import tests.
   - Report: "Hybrid security controls and managed attack signatures" (Trusted historical attack feed)
   - Blocked by: `feed grammar and trust`
+  - Progress (2026-10-03): `config/attack-signatures.json` written (0b50249, fixtures and `.prettierignore` in 6a0e9a0): issuer `task-passport-security`, revision `feed_v1`, `prompt_ignore_previous_v1` plus the three D-5 data-only rules (S15 to S17), SHA-256 `c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244`; Go rejects a digest mismatch, a revision mismatch and unknown disabled rule IDs (`SettingsFromCatalog`, GO-78 tests). Checks: gateway checks all exit 0; `pnpm test:fixtures` 17 passed; `pnpm verify` 6 passed. Missing half: API-34 importing the file (web + API lane, not built), so this stays open.
 
 ### M3 (hours 10-14)
 

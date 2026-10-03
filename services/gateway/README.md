@@ -136,7 +136,7 @@ internal/contracts/   Go mirrors of the runtime wire contracts and strict decodi
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
-internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76)
+internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76), action check (GO-77 part)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
 internal/repository/  runtime passports, runs, jobs and X-12 events (gap-free per-run cursor); guarded run transitions (GO-19, GO-22)
@@ -396,6 +396,49 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Bounded agent loop (GO-11)
+
+`agent.Loop` is the `worker.Handler` for `contracts.JobKindAgentStep` jobs. Per claim it runs up
+to 64 steps (a safety bound; the passport's agent call limit is the real step limit) and, before
+every model request, rereads the run and passport:
+
+- queued → `running` (`run.started`); terminal, awaiting approval or paused → nothing to do;
+- a cancellation request → `stopped` / `run_cancelled`; an expired passport → `stopped` /
+  `run_expired`; agent steps used up (`model_calls` with purpose `agent` ≥ `callsAgent`) →
+  `paused` / `allowance_exhausted` (alignment decision 7). None of these sends a model request.
+
+Each step: `Stepper.Step` (GO-10) with the fixed task message built from the passport's opaque
+references plus the stored steps; then, by result:
+
+- one proposal → `policy.Gate.Evaluate` with a fresh action id and idempotency key. A denial stops
+  the run with the gate's reason (GO-29 adds bounded correction); approval required →
+  `awaiting_approval` (`approval.requested`, GO-40 resumes); allow → `policy.Executor.Execute`,
+  then the tool-result inspection, then the step's call and inspected result are appended to
+  `runtime.context_entries` and the loop continues;
+- several tool calls → `stopped` / `multiple_actions_not_supported` (GO-01);
+- a final answer → `completed` (GO-26 adds the narrow result validation);
+- a model failure: exhausted or paused allowance and overspend → `paused` / `allowance_exhausted`;
+  unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
+  `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
+
+Run changes go through `repository.Tx.TransitionRun` with their event; a change another writer
+already made (a cancellation) is accepted. A cancelled claim context returns an error and leaves
+the job for lease expiry.
+
+**Stored context (`runtime.context_entries`, migration `1791070000000-AddAgentContextEntries`).**
+Append-only (gateway `SELECT, INSERT`): per executed step one `assistant_call` (tool and the gate's
+canonical arguments) and one `tool_result` holding only the inspected content. A restarted worker
+rebuilds the same request from these rows and never re-executes a completed action (GO-02, GO-07).
+jsonb re-renders stored JSON; the loop compacts it, and jsonb key order is deterministic.
+
+**Interim inspector.** Until c1's `InspectToolResult` (GO-76) is wired, `InterimUntrustedTextGuard`
+pauses the run (`security_evaluator_unavailable`) for any result carrying untrusted text and passes
+results without any. It is not a protection.
+
+Not wired into the gateway process yet: the production scope reader and admission (GO-13) are
+needed for a live run; the wiring commit adds `worker.Service`, this handler and the readiness
+reporter to `cmd/gateway/main.go`.
+
 ## Deterministic content controls (GO-74)
 
 `internal/security` applies the `secret_pattern` guard of the active catalog to designated text
@@ -622,6 +665,31 @@ f3's wiring (GO-76 in the loop); the tests here cover the function with the labe
 ledger doubles: clean note passes unchanged, hostile note withheld while the invoice fields
 return, signature hit before any semantic call, secrets masked before the classifier, whole-field
 semantic redaction, and every guard failure pausing with no result.
+
+## Action proposal check (security part of GO-77)
+
+`Inspector.EvaluateAction(ctx, ActionInput{RunID, ActionID, Tool, CanonicalArguments}, Settings)`
+is what Worker 3's gate calls for a stored proposal that its deterministic scope and provenance
+checks already allow or send to review (Figure 6). It returns `no_objection`, `block` or `pause`,
+never "allow": `no_objection` only means these controls add no restriction.
+
+1. Field limit: canonical arguments over `MaxFieldBytes - 128` bytes (or a tool name over 64) block
+   with `content_too_large`, so the semantic check always sees the whole proposal.
+2. Signatures on the tool name and every decoded string of the arguments (keys included), so a
+   JSON escape cannot hide a pattern.
+3. The semantic check on `Proposed tool call: <tool>` plus the canonical arguments, metered as a
+   security call. A hit blocks in either mode, because an action cannot be partly redacted.
+
+There are no secret rules at this boundary (`secret_pattern` does not support it). Invalid
+arguments (not one JSON object, duplicate keys), a missing run or tool, or any guard failure pause
+with `security_evaluator_unavailable` or `security_allowance_exhausted` and an error. The
+assessment carries the records and the semantic call for persistence.
+
+`internal/security` does not import `internal/policy`. The gate's adapter for
+`policy.ActionEvaluator` loads the active `Settings` (from `SettingsFromCatalog`) and maps:
+`no_objection` to `policy.OutcomeAllow` (no change to the deterministic decision), `block` to
+`policy.OutcomeDeny` with the reason code, and `pause` to the returned error, which the gate already
+turns into a deny.
 
 ## Worker and job lease (GO-08)
 

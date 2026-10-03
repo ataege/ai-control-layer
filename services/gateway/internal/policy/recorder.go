@@ -115,6 +115,14 @@ func decisionEvent(run RunIdentity, decision Decision) repository.NewEvent {
 		event.EventType, eventDecision = contracts.EventActionAllowed, contracts.DecisionAllow
 	case OutcomeApprovalRequired:
 		event.EventType, eventDecision = contracts.EventApprovalRequested, contracts.DecisionApprovalRequired
+		// References only: never the exact content or the recipient address.
+		if decision.Review != nil && decision.Review.ReportID != "" {
+			reportID := decision.Review.ReportID
+			template := contracts.ReportTemplate(decision.Review.Template)
+			classification := decision.Review.Classification
+			event.MaskedSummary.ReportID, event.MaskedSummary.Template = &reportID, &template
+			event.MaskedSummary.Classification = &classification
+		}
 	default:
 		event.EventType, eventDecision = contracts.EventActionDenied, contracts.DecisionDeny
 		if isExportDenial(decision.ReasonCode) {
