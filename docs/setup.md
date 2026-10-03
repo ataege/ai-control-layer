@@ -93,6 +93,14 @@ pnpm infra:up
 Starts the `postgres` service of `infra/compose.yaml` (`postgres:18-alpine`, named volume
 `starter_postgres-data`, published on `127.0.0.1:5432`) and returns when the health check passes.
 
+**Several checkouts on one machine** (a second clone or a git worktree) each need their own
+PostgreSQL. By default every checkout drives the same Compose project `starter` and its volume,
+whose password belongs to the checkout that created it, so a second `.env` does not authenticate
+and its `infra:down` stops the other checkout's database. Give each extra checkout its own
+`COMPOSE_PROJECT_NAME` and `POSTGRES_PORT` in its `.env`, as
+[infra/README.md](../infra/README.md#several-checkouts-on-one-machine), "Several checkouts on one
+machine", describes.
+
 ### Apply the migrations and give the gateway its database role
 
 ```sh
@@ -105,6 +113,31 @@ never as the bootstrap user. `pnpm db:roles` sets that role's login password fro
 `POSTGRES_GATEWAY_PASSWORD` in `.env`; it is explicit, idempotent and runs as the owner. Without the
 variable the gateway refuses to start; without the role password its readiness reports the database
 as down. `pnpm reset:demo` runs the same step.
+
+### Seed the demo data
+
+```sh
+pnpm db:seed
+```
+
+An explicit command (SH-18, still a draft); nothing seeds at startup. It loads the synthetic vendors
+and invoices of `fixtures/demo-records.json` into the `demo` tables, then runs `pnpm policy:import`
+to import `config/policy.yaml` together with its signature feed `config/attack-signatures.json`
+as the requested control-catalog revision when the catalog is still empty. The import only
+requests the revision: the gateway validates and activates it within a second or two of starting,
+or run `pnpm catalog:activate` once to activate it without a gateway. It is idempotent: a second
+run inserts nothing and never replaces a later catalog revision. It does not seed organizations,
+users or memberships (see "Known gaps on a clean checkout" below). Details: the README,
+"`pnpm db:seed`".
+
+Later, `pnpm reset:demo` restores the demo data: it empties every `demo` and `runtime` table,
+reseeds the synthetic records in the same transaction and keeps the `app` data, including the
+active control catalog (README, "`pnpm reset:demo`").
+
+### Local model
+
+Start Ollama, pull `qwen3.5:4b` and set `MODEL_NAME=qwen3.5:4b` in `.env` before starting the
+applications: section 7. Without `MODEL_NAME` the gateway starts but every model call fails closed.
 
 ### Start the applications
 
@@ -148,6 +181,23 @@ pnpm infra:down
 ```
 
 The volume, and therefore the data, is kept.
+
+### Known gaps on a clean checkout
+
+After the steps above the three services start. These gaps remain on `main`:
+
+- **Admission fails closed until the catalog is active.** The seed and `pnpm policy:import` only
+  request a revision; until the gateway (or `pnpm catalog:activate`) validates and activates it,
+  a start-run command answers 503 `decision_unavailable`. A database first seeded by the older
+  import needs one more `pnpm policy:import` before `pnpm catalog:activate` succeeds. There is no
+  supported manual feed load.
+- **Approving needs a reviewer membership that nothing seeds yet.** The gateway accepts an
+  approval only from an operator whose membership in `app.memberships` has the `reviewer` role. The
+  seed of the demonstration operator, organization and membership (SH-19) does not exist yet.
+- **Runs start only through the API's sign-in.** The gateway requires a signed `X-Operator-Context`,
+  which the API produces for a signed-in operator. There is no other supported way to obtain one,
+  and no operator can sign in until SH-19 seeds one, so start runs through the API once SH-19 is on
+  `main`.
 
 ## 3. How environment loading works
 
@@ -249,13 +299,17 @@ reachable with the `POSTGRES_*` values works:
 1. Create a role and a database on your PostgreSQL instance.
 2. Set `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` in
    `.env` to match.
-3. Skip `pnpm infra:up`; run `pnpm dev` and `pnpm smoke`.
+3. Skip `pnpm infra:up`; run `pnpm db:migration:run`, `pnpm db:roles` and `pnpm db:seed`, then
+   `pnpm dev` and `pnpm smoke`.
 
 Notes:
 
 - Both backends connect with the discrete variables; there is no connection URL variable.
 - The connections use no TLS settings. This is a local development setup.
-- The starter needs no extensions and creates no tables. The default `public` schema is enough.
+- The migrations create the `app`, `runtime` and `demo` schemas and the service roles, so
+  `POSTGRES_USER` needs the right to create schemas and roles (`CREATEROLE`); the Compose image's
+  user is a superuser. `pnpm db:seed` and `pnpm reset:demo` accept only a database on a loopback
+  address.
 - This is how the starter was verified on the preparation machine (PostgreSQL 18.4, not from the
   Docker image). Other PostgreSQL major versions were not tried.
 
@@ -270,9 +324,9 @@ pnpm stack:down
 `stack:up` builds three images (`infra/docker/*.Dockerfile`, build context is the repository root)
 and waits for all health checks. The image builds need no `.env` values, no database and no running
 service; starting the stack needs `.env` for the secrets, including `POSTGRES_GATEWAY_PASSWORD`.
-The containers never run migrations, so after `stack:up` run `pnpm db:migration:run` and then
-`pnpm db:roles` from the host against the published PostgreSQL port; the gateway's readiness stays
-red until the role has its password. Details and the `--debug` override:
+The containers never run migrations, so after `stack:up` run `pnpm db:migration:run`,
+`pnpm db:roles` and `pnpm db:seed` from the host against the published PostgreSQL port; the
+gateway's readiness stays red until the role has its password. Details and the `--debug` override:
 [infra/README.md](../infra/README.md).
 
 This mode ran on 2026-10-03 on macOS with Docker Desktop; the results are in "Verification status"
@@ -283,8 +337,10 @@ in the README. The gateway container reaches the host's Ollama at
 
 Report 1.2 makes a locally hosted model, for example through Ollama, the primary model path. Only
 the Go gateway calls it. Ollama is not a fifth application component: it runs on the host, outside
-Compose, and the starter neither installs nor starts it. Reading `MODEL_BASE_URL` and `MODEL_NAME`
-in Go is GO-06's work on another branch; until it lands, the gateway ignores both variables.
+Compose, and the starter neither installs nor starts it. The gateway reads `MODEL_BASE_URL` and
+`MODEL_NAME` at start (`services/gateway/internal/config/model.go`). When `MODEL_NAME` is missing or
+invalid it logs a warning and still starts, but every model call then fails closed and no run can
+take a step.
 
 ### Install
 
@@ -332,9 +388,11 @@ ollama run <model> "hello"
 ### Point the gateway at it
 
 Set `MODEL_NAME` in `.env` to the tag you pulled (empty in `.env.example`), for example
-`MODEL_NAME=qwen3.5:4b`. `MODEL_BASE_URL` defaults to `http://localhost:11434`; change it only if
-your Ollama listens elsewhere. Neither variable is a secret, and local Ollama needs no credential,
-so there is no API key variable.
+`MODEL_NAME=qwen3.5:4b`; it must be the exact tag, without whitespace. `.env.example` sets
+`MODEL_BASE_URL=http://localhost:11434`, and the gateway uses `http://127.0.0.1:11434` when the
+variable is empty; change it only if your Ollama listens elsewhere. It must be an HTTP or HTTPS
+origin without credentials, query or path. Neither variable is a secret, and local Ollama needs no
+credential, so there is no API key variable.
 
 Which processes receive them:
 
@@ -394,7 +452,8 @@ edited in the checkout, and the gateway reaches Ollama on `localhost`.
 
 **Full-container mode** (`pnpm stack:up`) stays the documented and verified alternative ("Alternative:
 full-container mode" below). How the API would read `config/policy.yaml` there (a bind mount of
-`config/`, or another path) is unverified; the import itself (API-32) is not on `main` yet.
+`config/`, or another path) is unverified; the import itself (`pnpm policy:import`, API-32) runs
+from the host.
 
 Both modes passed their smoke checks on this machine (README, "Verification status").
 
@@ -451,14 +510,17 @@ ollama run qwen3.5:4b --think=false "Say hello in one word."   # loads the model
 pnpm infra:up                      # PostgreSQL in Docker, waits for its health check
 pnpm db:migration:run              # applies pending migrations
 pnpm db:roles                      # gives the gateway's database role its password from .env
+pnpm db:seed                       # synthetic demo records and the policy.yaml catalog revision
 pnpm dev                           # web, API and gateway; leave it running
 
 # terminal 2, once the three services are up
 pnpm smoke
 ```
 
-- Seed (not on `main` yet: SH-18 for the policy fixture and synthetic records, SH-19 for the
-  demonstration operator): runs after the migrations, through its documented command.
+- `pnpm db:seed` (SH-18, draft) seeds the synthetic records and imports `config/policy.yaml`; it
+  is idempotent, so a second run changes nothing. The demonstration operator, organization and
+  membership (SH-19) and the signature-feed import (API-34) are not on `main` yet, so a run cannot
+  start yet (section 2, "Known gaps on a clean checkout").
 - The warm-up loads the model into memory (about 30 seconds on the first load in the rehearsal,
   then well under a second). Ollama unloads a model after five idle minutes by default; `ollama ps`
   shows whether it is loaded, so repeat the warm-up shortly before the presentation.
@@ -503,6 +565,8 @@ pnpm infra:down                    # stops PostgreSQL, keeps the volume
 pnpm infra:down                    # if host mode ran; Ctrl+C pnpm dev first
 pnpm stack:up                      # builds the images on the first run, waits for the health checks
 pnpm db:migration:run              # from the host: the API image has no migration tooling
+pnpm db:roles                      # the gateway's readiness stays red until its role has a password
+pnpm db:seed                       # synthetic demo records and the policy.yaml catalog revision
 pnpm smoke --mode=container
 pnpm stack:down                    # removes the containers and the network, keeps the volume
 ```
