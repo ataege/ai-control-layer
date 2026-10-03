@@ -710,16 +710,19 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     reason; a permitted read runs and its minimized result reaches the next model request; the
     steps and their order can be reconstructed from the stored records. The X-24 command;
     `pnpm --filter gateway run test`.
-  - Progress (2026-10-03): `agent.Loop` and the append-only `runtime.context_entries` (migration
-    `1791070000000-AddAgentContextEntries`, approved by the lead) are on go/f3 (faac792). Every
-    model request is preceded by the run check (cancellation, expiry, agent steps); proposals go
-    through the real gate and executor; inspected results are stored and reach the next request; a
-    restarted loop continues without re-executing. Database tests with the real repository, gate,
-    executor and `tools.Runner` and a labelled scripted stepper pass; `pnpm test:db` gateway "416
-    passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 13 migrations run, the new one
-    reverts and re-runs; `pnpm verify` 6 passed. Missing half: the live run of the done-when, with
-    w3's `PassportScopeReader`, c1's `InspectToolResult` replacing the interim fail-closed guard,
-    GO-29 correction and admission (GO-13), and the wiring into `cmd/gateway/main.go`.
+  - Progress (2026-10-03): `agent.Loop` with the append-only `runtime.context_entries` (faac792) now
+    uses the production pieces on go/f3: c1's `InspectToolResult` through `agent.SecurityInspector`
+    (the interim guard is removed), GO-29's correction counter, limit and denial feedback (stored as
+    `correction` entries, migration `1791100000000-AllowContextCorrections`), and
+    `agent.RecordingCaller` recording each security call in `model_calls` before dispatch. Database
+    tests with the real repository, gate, executor, `tools.Runner` and inspector (labelled scripted
+    stepper and fixture security model) pass, including a clean note passing with its
+    classification, a hostile note withheld by signature or semantic verdict, a guard failure
+    pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
+    gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
+    the new one reverts and re-runs; `pnpm verify` 6 passed. Missing half: wiring into
+    `cmd/gateway/main.go` with w3's `policy.CatalogSecuritySettings` (next merge) and the live run,
+    which also needs the signature-feed import (c1, API-34).
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
     (Figure 4); "Users operating model and proposed user journeys" (Journey 3 recover cancel or
