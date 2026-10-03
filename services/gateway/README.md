@@ -131,7 +131,7 @@ internal/contracts/   Go mirrors of the runtime wire contracts and strict decodi
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
-internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78)
+internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
@@ -573,6 +573,47 @@ GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
   node scripts/with-env.mjs go -C services/gateway test -tags=model_live ./internal/agent \
   -run '^TestLiveModelProposesATypedAction$' -count=1 -v
 ```
+
+## Tool-result inspection (GO-76)
+
+`Inspector.InspectToolResult(ctx, ToolResultInput, Settings)` is the Figure 10 step the worker
+calls after a tool effect is recorded and before the result becomes agent context. Its input is
+the minimized result (`tools.MinimizeForModel`): the model-facing JSON, the trusted source of its
+structured values, and the untrusted paths that also need the semantic check, with their trusted
+source. For `read_invoice` that is `internal_note.text` with the note's stored classification
+(Worker 2: the internal note is the only untrusted free text; the lead's delegate, 3 October 2026:
+semantic calls go to the internal note only).
+
+Every string value of the JSON (keys in sorted order) passes, in order:
+
+1. the field limit and the secret rules (`ApplyContentRules`): a masked value continues, a blocked
+   one stops;
+2. the signature rules on the original text (`MatchSignatures`);
+3. only on an untrusted path, the semantic check (`SemanticEvaluator.Evaluate`) on the redacted
+   text, so secrets never reach the classifier.
+
+Other string values are `tool_result_value` fields: deterministic rules only, never a model call.
+Numbers and booleans pass unchanged; `create_report` and `queue_report` results need no call.
+
+| Outcome    | Agent context                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| `pass`     | The result JSON, byte-identical.                                                                     |
+| `redacted` | Masked values only (`[REDACTED:<kind>]`, or `[REDACTED:semantic_risk]` for the whole field).         |
+| `blocked`  | Each blocked value replaced by `[WITHHELD:<reason>]`; the permitted values still return (per field). |
+| `paused`   | Nothing. A guard failure, exhausted security allowance or uninspectable result pauses the run.       |
+
+A result over `MaxResultBytes` (16 KiB) is withheld whole (`blocked`, `content_too_large`). Invalid
+or non-object JSON, duplicate keys, a missing run, or an untrusted path holding a non-string pauses.
+The note's `classification` and the `Source` of each value are never changed, so redaction or
+withholding never clears the source restriction. The inspection returns every `ControlRecord`
+(for `runtime.control_assessments`) and every semantic call result (usage and provider time) for
+the worker to persist; this package writes nothing.
+
+The worker test that asserts what the next model request contains, and the pause of the run, are
+f3's wiring (GO-76 in the loop); the tests here cover the function with the labelled provider and
+ledger doubles: clean note passes unchanged, hostile note withheld while the invoice fields
+return, signature hit before any semantic call, secrets masked before the classifier, whole-field
+semantic redaction, and every guard failure pausing with no result.
 
 ## Worker and job lease (GO-08)
 
