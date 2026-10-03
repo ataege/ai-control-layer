@@ -1227,7 +1227,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     boundary)
   - Blocked by: nothing
 
-- [ ] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
+- [x] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
   - Depends on: SH-05, GO-21, GO-22 · Needs: X-11, X-12 · Provides: X-29, X-30
   - Paths: `services/gateway/internal/httpserver/server.go`,
@@ -1257,6 +1257,15 @@ typecheck` PASS; `pnpm verify` 6 passed.
     fixtures) and PostgreSQL cases (usage values, other organization, gapless event paging,
     reads as `task_passport_gateway`). Missing: the mount in `internal/api` (3c), the usage view in
     `packages/contracts`, and `passport in the run view` (no passport is served).
+  - Completed (2026-10-03): 3c mounted the routes in `internal/api` (da44d15, merged into go/w2).
+    `TestPostgresReadRoutesThroughTheGatewayHandler` calls them through the production handler
+    tree (`httpserver.NewHandler` with `api.Commands`, service token and signed operator
+    context): the owner gets 200 with the run state (strict X-11), events (strict X-12) and usage
+    (now with the GO-39 ledger); another organization gets 404; no service token gets 401. 3c's
+    GO-57 test adds every cross-organization case. The organization-wide event check now uses
+    `repository.ValidStoredEvent`. `go test ./internal/reads` against `starter_test`: ok. Not
+    served: the passport (`passport in the run view` is still open); the usage view is a Go draft
+    until nestjs lands it in `packages/contracts`.
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
@@ -1318,6 +1327,25 @@ typecheck` PASS; `pnpm verify` 6 passed.
     field or lacks a reference is rejected and the run does not complete; a valid result completes
     the run with its recorded reason; the persisted result holds no free text the format does not
     allow. `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Progress (2026-10-03): `final result format` decided by the lead: the model's final answer is
+    exactly `{"status":"completed","report_ids":[...]}` naming one or two reports this run created
+    in its organization; nothing else, no prose. `internal/runresult.Validate` parses it strictly
+    (unknown or repeated keys, text around it, other statuses, more than two or repeated ids and
+    non-uuid ids are `invalid_arguments`) and checks every id is a `demo.reports` row of this run
+    and organization (another run's, another organization's or an unknown report is
+    `resource_out_of_scope`); it returns the canonical reference `{"report_ids":[...]}`.
+    `repository.RunTransition.ResultReference` persists it in `runtime.runs.result_reference` in the
+    same transaction as the transition to completed (refused for any other target or for a
+    reference outside the format), and X-11 `RunState.resultReference {reportIds}` exposes it
+    (schema, fixtures including a completed run, TS, Go). `runresult.FinalAnswerInstruction` is the
+    one wording for the agent prompt. Tests: 14 rejected formats, two valid ones, the instruction's
+    example parses; PostgreSQL: own reports validated, a sibling run's report (same organization),
+    another organization's and an unknown report rejected; a rejected final answer leaves the run
+    running and a forged or misplaced reference is refused; the validated reference completes the
+    run and reads back unchanged with no prose. Missing half: lane f3 calls `Validate` in the
+    loop's StepFinal, counts a rejection as a correction (GO-29, lead decision) and adds the
+    instruction to the agent prompt; then a reconciliation run completes only with a validated
+    result.
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary); "The enforcement loop and data minimization"; "Threat model limits and unresolved
     design choices" ("Final-output validation requires an output format and a data rule")
@@ -1726,7 +1754,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
     output)
   - Blocked by: `replay entry`
-  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. The demo-triggerable entry (cmd/replay) follows separately.
+  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. The demo-triggerable entry `cmd/replay` (`-run <finished run> -fixture <id>`) followed: it submits the labelled proposal through the production chain's gate, never executes it, and prints `LABELLED REPLAY` with the decision and reason; `TestDemoReplayOfAFinishedRunIsDeniedAndLabelled` and `TestDemoReplayRefusesWithoutWriting` cover it, and run against a test catalog without its feed it printed `deny / decision_unavailable` as UNEXPECTED, exit 1 (fail closed).
 
 - [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
   - **Report 1.1 change:** Serves the extended X-64 (classification, template and projection versions, content hash, destination class, lineage summary).
@@ -2432,6 +2460,14 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     version change (resource_version_changed) or an unregistered projection version
     (template_not_allowed), outbox 0. Missing: the "old approval is rejected" half (needs Worker
     3's GO-45 and GO-52) and revocations (SH-38).
+  - Progress (2026-10-03): the "old approval is rejected" half for changes is on `main` through
+    GO-45: Worker 3's `TestApprovedActionRechecksBeforeExecution` approves a queue_report, then
+    changes the source invoice version (refused `resource_version_changed`) or the active catalog
+    revision (refused `source_policy_changed`), with outbox 0 and no attempt; rerun on 55c851f
+    against `starter_test`: PASS (5 of 5 subtests). Template and projection versions are Go
+    constants, so a running gateway cannot change them during a review; a stored report with an
+    unregistered projection version is refused by the adapter test above. Missing: revoking a
+    source or template during review, which needs GO-52 and the revocation records (SH-38).
   - Report: "Validation plan and evidence matrix" (Source or template policy changes)
   - Blocked by: nothing
 
@@ -2544,7 +2580,7 @@ gateway` and `pnpm verify` as quoted in the commit. On the seeded test database 
     (Proposed browser and runtime operations)
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`
 
-- [ ] **GO-82 · Serve the control evaluation adapter contract**
+- [x] **GO-82 · Serve the control evaluation adapter contract**
   - **Report 1.2 change:** The judge reaches this endpoint through the NestJS live test entry (Figure 2; API-38, X-106).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-21, GO-76, GO-77 · Needs: X-79 · Provides: X-91
@@ -2552,10 +2588,34 @@ gateway` and `pnpm verify` as quoted in the commit. On the seeded test database 
   - Work: `POST /internal/control/evaluate`: "a documented Go client/HTTP contract for governed model calls and registered tool proposals". A call names a passport or run, a metered purpose, an allowed model and bounded input and output; a tool proposal names its registered adapter and typed arguments. It runs the same gates as the invoice agent; "the caller cannot issue a grant", and it exposes no shell, HTTP or model credentials.
   - Done when: a benign and an adversarial call through the endpoint receive the same decisions the agent path gives, and an unauthenticated call is rejected.
   - Tests: handler tests with the shared envelope; a database-backed test through the X-24 command.
+  - Completed (2026-10-03): `POST /internal/control/evaluate` (X-91, camelCase, landed in
+    `packages/contracts` and `internal/contracts`), behind the service token and the verified
+    operator context. `internal/evaluation` reuses lane f3's production chain: `model_input` runs
+    the content rules, the signatures and the semantic check at that boundary (never the agent
+    model); `tool_result` runs `chain.Inspector`; `action_proposal` runs the agent path's gate
+    (`chain.Scopes`, the relationships, `policy.NewSecurityActionEvaluator(chain.Inspector,
+chain.Settings)`) with a recorder and freezer that store nothing, so evaluated actions are
+    decisions only: nothing is stored as an action, executed or counted as a correction. The
+    evidence, an X-12 `control.evaluated` event and the control records keyed by the evaluation id
+    (through `repository.Tx.InsertControlRecords`), commits in one transaction; without it the
+    answer is 503. Every decision answers 200; a body outside X-91 is 400, another organization's
+    run 404. Tests: the three boundaries with the real security controls and a labelled fixture
+    model (benign allowed, signature and semantic attacks denied, secret redacted, oversized
+    blocked, no guard or a failing guard denied), a decision-only gate double, request validation,
+    a PostgreSQL test (evidence stored, inspected text in no event, no action row, another
+    organization not found) and route tests (200, 400, 404, 503, identity field refused, no
+    credentials 401). Checks: gateway five checks exit 0; `pnpm test:db gateway` and `pnpm verify`
+    as quoted in the commit. Live (gateway binary with the production chain, local qwen3.5:4b): a
+    hostile tool result was denied with `signature_match` (rule prompt_ignore_previous_v1, feed_v1),
+    an out-of-scope `read_invoice` proposal with `resource_out_of_scope` and no stored action, and
+    three `control.evaluated` events with their assessments were recorded. Not shown live: a
+    benign semantic allow. Under a machine load average of 50-90 the security call timed out
+    (usage unknown), and the evaluation correctly denied with `security_evaluator_unavailable`. The
+    benign allow is shown with the labelled fixture model.
   - Report: "Technical architecture and service ownership" (Small integration boundary); "Illustrative passport and interface contracts" (Proposed browser and runtime operations)
   - Blocked by: nothing
 
-- [ ] **GO-83 · Serve the security decision records, if the read path chooses Go endpoints**
+- [x] **GO-83 · Serve the security decision records, if the read path chooses Go endpoints**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: GO-21, GO-80 · Needs: X-85 · Provides: nothing
   - Paths: the internal API package from GO-21
@@ -2574,6 +2634,11 @@ gateway` and `pnpm verify` as quoted in the commit. On the seeded test database 
     shared lock; the test commits a lower event id after a higher one and reads both, once each
     (10 of 10 race runs). Timing rows were inserted by the test, since GO-80's writer is not on
     main. Missing: the mount in `internal/api` (3c) and the record shapes in `packages/contracts`.
+  - Completed (2026-10-03): mounted by 3c (da44d15). Through the production handler tree the
+    owner reads the summary, assessments and organization events (the committed run event
+    appears once its transaction is final); another organization gets only its own empty
+    records (this test and 3c's GO-57). The record shapes are Go drafts until nestjs lands them
+    in `packages/contracts` for API-35 and API-36.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
@@ -2603,6 +2668,19 @@ gateway` and `pnpm verify` as quoted in the commit. On the seeded test database 
     "On provider failure, show the actual failure state" holds for Go's records.
   - Tests: a table test that every emitted reason code has a safe message and a fixture value; a
     provider-failure test that records the actual failure state. `pnpm --filter gateway run test`.
+  - Progress (2026-10-03): W2 lane, branch go/w2. The Go-records half is done; the task stays open
+    for the SH-33 rehearsal. `contracts.ReasonCode.SafeMessage()` holds a fixed safe operator
+    message for each of the 29 X-13 codes (`TestEveryReasonCodeHasASafeMessage`: matches the
+    schema enum and the reason-code fixture, unique, storable as an event's safeMessage). Agent
+    run-end events carry a safeMessage, specific for each model failure, and the purpose `agent`
+    (`TestModelFailuresNameTheActualFailure`); tool events with a reason carry theirs (the export
+    denial asserts it). Provider failure (`TestUnreachableProviderRecordsTheActualFailureState`,
+    real stepper, accounted caller and ledger against an unreachable Ollama): `model_calls.outcome`
+    `usage_unknown`, the reservation held as `usage_unknown`, the run paused with
+    `outcome_unknown` and an event message saying the call failed or returned no usage (lead: no
+    new X-13 code). Error envelopes: no error text reaches them; admission echoes request ids
+    through `%q`. 3c adds the default safeMessage for every other reason-coded event in
+    `repository.AppendEvent` once this is on `main`.
   - Report: "Relative implementation milestones and critical dependencies" (Hours 18-21); "Live
     demonstration storyboard and proof checks" (Reliable demonstrations without invented
     behavior); "Illustrative passport and interface contracts" (Decision and error semantics)

@@ -28,9 +28,29 @@ func TestStepErrorsNeverContinueTheRun(t *testing.T) {
 		{ErrUnusableResponse, runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}},
 		{ErrRecording, runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}},
 	} {
-		if got := stepErrorEnd(testCase.err); got != testCase.want {
+		if got := stepErrorEnd(testCase.err); got.status != testCase.want.status || got.reason != testCase.want.reason {
 			t.Errorf("%v: got %+v, want %+v", testCase.err, got, testCase.want)
 		}
+	}
+}
+
+// GO-58: a model failure names which failure it was, in fixed text the event may store.
+func TestModelFailuresNameTheActualFailure(t *testing.T) {
+	for err, want := range map[error]string{
+		errors.Join(ErrModelCallFailed, model.ErrUsageUnknown): messageModelUsageUnknown,
+		errors.Join(ErrModelCallFailed, model.ErrTimeout):      messageModelTimeout,
+		ErrUnusableResponse: messageModelUnusable,
+		ErrRecording:        messageModelNotRecorded,
+		errors.Join(ErrModelCallFailed, budget.ErrNotFound): messageModelCallFailed,
+	} {
+		end := stepErrorEnd(err)
+		if end.message != want || end.purpose != string(model.AgentPurpose) || len(end.message) > 512 {
+			t.Errorf("%v: %+v", err, end)
+		}
+	}
+	// An allowance stop keeps the reason's own X-13 message.
+	if end := stepErrorEnd(errors.Join(ErrModelCallFailed, budget.ErrExhausted)); end.message != "" || end.purpose != string(model.AgentPurpose) {
+		t.Errorf("allowance stop: %+v", end)
 	}
 }
 

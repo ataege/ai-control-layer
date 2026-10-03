@@ -10,6 +10,7 @@ import (
 
 	"starter/services/gateway/internal/admission"
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/evaluation"
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/operatorcontext"
@@ -54,12 +55,24 @@ type RunReader interface {
 	reads.RunEventsReader
 }
 
+// ControlEvaluator evaluates one interaction (X-91); *evaluation.Evaluator implements it.
+type ControlEvaluator interface {
+	Evaluate(ctx context.Context, operator contracts.OperatorContext, request contracts.ControlEvaluationRequest) (contracts.ControlEvaluationResponse, error)
+}
+
+// ControlEvaluateRoutePattern is the control evaluation adapter (X-91, GO-82).
+const ControlEvaluateRoutePattern = "POST /internal/control/evaluate"
+
+// maximumEvaluateBodyBytes bounds the evaluate body: 4 KiB of text plus the envelope.
+const maximumEvaluateBodyBytes = 16 << 10
+
 // Dependencies are what the internal routes need.
 type Dependencies struct {
 	Admitter  RunAdmitter
 	Canceller RunCanceller
 	Approvals Approvals
 	Runs      RunReader
+	Evaluator ControlEvaluator
 	// Database serves the stored report read (GO-37); the gateway pool in production.
 	Database provenance.Beginner
 }
@@ -69,6 +82,7 @@ func Commands(dependencies Dependencies) []httpserver.InternalCommand {
 	return []httpserver.InternalCommand{
 		{Pattern: StartRunRoutePattern, Handler: StartRunHandler(dependencies.Admitter)},
 		{Pattern: CancelRunRoutePattern, Handler: CancelRunHandler(dependencies.Canceller)},
+		{Pattern: ControlEvaluateRoutePattern, Handler: ControlEvaluateHandler(dependencies.Evaluator)},
 		{Pattern: provenance.StoredReportRoutePattern, Handler: provenance.StoredReportHandler(dependencies.Database, StoredReportViewer)},
 		{Pattern: policy.ApprovalRoutePattern, Handler: policy.ApprovalHandler(dependencies.Approvals)},
 		{Pattern: policy.ReviewRoutePattern, Handler: policy.ReviewHandler(dependencies.Approvals)},
@@ -139,6 +153,36 @@ func CancelRunHandler(canceller RunCanceller) http.Handler {
 				"The cancellation could not be recorded.")
 		default:
 			health.WriteJSON(responseWriter, http.StatusOK, state)
+		}
+	})
+}
+
+// ControlEvaluateHandler evaluates one interaction of the operator's run through the agent path's
+// controls (X-91). Every decision, a denial included, answers 200; a body outside X-91 is 400, an
+// unknown or another organization's run 404, and an evaluation that cannot decide or record its
+// evidence 503 decision_unavailable. The caller cannot issue a grant.
+func ControlEvaluateHandler(evaluator ControlEvaluator) http.Handler {
+	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		operator, verified := operatorcontext.FromContext(request.Context())
+		if !verified || evaluator == nil {
+			httpserver.WriteError(responseWriter, request, http.StatusUnauthorized, "unauthorized", "Missing or invalid operator context.")
+			return
+		}
+		var evaluationRequest contracts.ControlEvaluationRequest
+		if !httpserver.DecodeJSONBody(responseWriter, request, maximumEvaluateBodyBytes, &evaluationRequest) {
+			return
+		}
+		response, err := evaluator.Evaluate(request.Context(), operator, evaluationRequest)
+		switch {
+		case errors.Is(err, evaluation.ErrInvalid):
+			httpserver.WriteError(responseWriter, request, http.StatusBadRequest, "bad_request", "The request is not a valid control evaluation.")
+		case errors.Is(err, evaluation.ErrNotFound):
+			httpserver.WriteError(responseWriter, request, http.StatusNotFound, "not_found", "Run not found.")
+		case err != nil:
+			httpserver.WriteError(responseWriter, request, http.StatusServiceUnavailable, string(contracts.ReasonDecisionUnavailable),
+				"The evaluation could not be decided or recorded; nothing was allowed.")
+		default:
+			health.WriteJSON(responseWriter, http.StatusOK, response)
 		}
 	})
 }

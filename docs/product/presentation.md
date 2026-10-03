@@ -81,7 +81,8 @@ and guardrails.
 - Fails closed: timeout, unavailable model, malformed verdict or exhausted security allowance pauses
   or denies (CL-12).
 - A semantic verdict restricts, never grants (AGENTS.md guardrail 8). Evaluation: **[replace with final-build evidence:
-  fixture count, model, false positives, false negatives]**. No universal-detection claim.
+  fixture count, model, prompt version, false positives, false negatives]**, worded "on this fixture
+  set". No universal-detection claim.
 
 ## Slide 6. The denied export
 
@@ -132,8 +133,9 @@ self-testing suite; security reporting; architecture and performance.
 - Security summary and a sanitized JSON or CSV audit export sample **[replace with final-build
   evidence]** (CL-20). Metrics refresh by authenticated polling (D-8).
 - Performance: deterministic gate time against semantic and model time **[replace with final-build
-  evidence: counts, p50, p95, machine, model, warmup, payload size, concurrency]** (CL-21). "Report
-  count, errors, p50 and p95 only after collecting observations."
+  evidence: counts, p50, p95, machine, model, warmup, payload size, concurrency]** (CL-21), measured
+  on an idle machine with the method of decision 22. "Report count, errors, p50 and p95 only after
+  collecting observations."
 
 ## Slide 10. Integration, scope and limitations
 

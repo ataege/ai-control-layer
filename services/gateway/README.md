@@ -5,16 +5,17 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 
 ## Routes
 
-| Route                                           | Purpose                                                                                                           |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `GET /health/live`                              | Process liveness. Never touches PostgreSQL.                                                                       |
-| `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.                                   |
-| `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                            |
-| `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable`. |
-| `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                |
-| `POST /internal/runs/{runId}/cancel`            | GO-41: records a cancellation; `200` X-11 run state, `404` unknown or another organization's run.                 |
-| `POST /internal/actions/{actionId}/approval`    | GO-44 (lane w3): approve or reject one stored action (X-10).                                                      |
-| `GET /internal/actions/{actionId}/review`       | GO-44 (lane w3): the frozen review payload, for a reviewer of the organization.                                   |
+| Route                                           | Purpose                                                                                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health/live`                              | Process liveness. Never touches PostgreSQL.                                                                                           |
+| `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.                                                       |
+| `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                                                |
+| `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable`.                     |
+| `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                                    |
+| `POST /internal/runs/{runId}/cancel`            | GO-41: records a cancellation; `200` X-11 run state, `404` unknown or another organization's run.                                     |
+| `POST /internal/control/evaluate`               | GO-82: X-91 control evaluation through the agent path's controls; `200` for every decision, `400`, `404`, `503 decision_unavailable`. |
+| `POST /internal/actions/{actionId}/approval`    | GO-44 (lane w3): approve or reject one stored action (X-10).                                                                          |
+| `GET /internal/actions/{actionId}/review`       | GO-44 (lane w3): the frozen review payload, for a reviewer of the organization.                                                       |
 
 Internal product commands are registered through `httpserver.Options.InternalCommands`, which
 always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
@@ -100,6 +101,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `cmd/gateway`              | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
 | `cmd/modelcheck`           | Go lane f3 (worker, agent, model, budget)                     |
 | `cmd/budgetcheck`          | Go lane f3 (worker, agent, model, budget)                     |
+| `cmd/replay`               | Go lane w3 (action gate and approvals)                        |
 | `cmd/benchmark`            | Go lane w2 (tools and provenance)                             |
 | `internal/config`          | Shared Go lanes; the lead coordinates edits                   |
 | `internal/logging`         | Shared Go lanes; the lead coordinates edits                   |
@@ -116,6 +118,8 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/operatorcontext` | Go lane 3c (repository, admission, passport, API)             |
 | `internal/admission`       | Go lane 3c (repository, admission, passport, API)             |
 | `internal/api`             | Go lane 3c (repository, admission, passport, API)             |
+| `internal/evaluation`      | Go lane 3c (repository, admission, passport, API)             |
+| `internal/runresult`       | Go lane 3c (repository, admission, passport, API)             |
 | `internal/catalog`         | Go lane 3c (repository, admission, passport, API)             |
 | `internal/tools`           | Go lane w2 (tools and provenance)                             |
 | `internal/policy`          | Go lane w3 (action gate and approvals)                        |
@@ -129,6 +133,7 @@ New packages get their ownership row when their first real code lands.
 cmd/gateway/          wiring, signals, -healthcheck
 cmd/modelcheck/       explicit synthetic Ollama connectivity check
 cmd/budgetcheck/      explicit central-catalog and PostgreSQL accounting diagnostic
+cmd/replay/           explicit labelled replay of a hostile-note proposal (demo)
 cmd/benchmark/        repeatable performance benchmark of the governed tool-result path (GO-81)
 internal/config/      environment and trusted accounting-catalog validation
 internal/logging/     JSON slog logger, Secret
@@ -150,6 +155,8 @@ internal/repository/  runtime passports, runs, jobs and X-12 events (gap-free pe
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
 internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)
+internal/evaluation/  control evaluation adapter: model input, tool result, decision-only action (GO-82)
+internal/runresult/   the narrow final result: format, report ownership, persisted reference (GO-26)
 internal/catalog/     trusted active snapshot loader (GO-72) and catalog activation: validate, acknowledge or reject a requested revision (GO-73)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
@@ -879,6 +886,31 @@ the same denials are the tools lane's X-72 and X-74 tests.
 | malformed verdict (score 7) | paused, result withheld, usage settled (312 tokens), 1 request                     |
 | allowance of 100 tokens     | paused `security_allowance_exhausted`, 0 requests, nothing reserved                |
 | ledger paused by an overrun | next check paused `security_allowance_exhausted`, no further request               |
+
+## Labelled replay for the demonstration (GO-36)
+
+`cmd/replay` submits one labelled replay of a hostile-note fixture to a finished run through the
+gateway's production gate (`agent.NewProductionChain`, whose worker it never starts). It is a
+deterministic rehearsal, not a model-generated action, for when the live model does not propose the
+prohibited action. Both arguments are required:
+
+```sh
+node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> -fixture hostile_note_internal_disclosure_v1
+```
+
+Fixtures: `hostile_note_redirect_record_v1` (reads `invoice_B01`), `hostile_note_redirect_recipient_v1`
+(queues the run's vendor report to the address in the note), `hostile_note_internal_disclosure_v1`
+(queues the run's Internal only report to its registered recipient).
+
+- Only a completed, failed or stopped run is accepted, so the replay never takes the step number a
+  live run's loop would use next. The organization comes from the run's own row.
+- It writes only what the gate writes: the stored action and its decision event, both labelled
+  `labelled_replay:<fixture id>`. It never executes the action and makes no provider call while a
+  deterministic check denies first.
+- Output starts with `LABELLED REPLAY` and gives the label, action, step, decision and reason. Exit
+  0: denied with the reason its live equivalent gets. Exit 1: any other decision, printed as
+  `UNEXPECTED` (for example `decision_unavailable` when the active catalog cannot be loaded). Exit 2:
+  not run (usage, unknown run or fixture, live run, or a report the fixture needs is missing).
 
 ## Performance benchmark (GO-81)
 

@@ -19,6 +19,7 @@ import (
 	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/catalog/catalogtest"
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/evaluation"
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/logging"
@@ -362,4 +363,72 @@ func TestApprovalRoutesAreMountedBehindTheGuard(t *testing.T) {
 		handler.ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, strings.NewReader(`{"decision":"approve"}`)))
 		assertError(t, recorder, http.StatusUnauthorized, "unauthorized")
 	}
+}
+
+// fakeEvaluator is a labelled evaluation double; it records the operator it was given.
+type fakeEvaluator struct {
+	response contracts.ControlEvaluationResponse
+	err      error
+	calls    int
+	operator contracts.OperatorContext
+}
+
+func (evaluator *fakeEvaluator) Evaluate(_ context.Context, operator contracts.OperatorContext, _ contracts.ControlEvaluationRequest) (contracts.ControlEvaluationResponse, error) {
+	evaluator.calls++
+	evaluator.operator = operator
+	return evaluator.response, evaluator.err
+}
+
+func evaluate(t *testing.T, handler http.Handler, tokenID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/internal/control/evaluate", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+testServiceToken)
+	request.Header.Set(operatorcontext.HeaderName, signOperatorContext(t, testOperator, tokenID))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
+}
+
+const evaluateBody = `{"runId":"5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b","kind":"tool_result","text":"note","tool":"read_invoice","arguments":null}`
+
+func TestControlEvaluateAnswersEveryDecisionWith200(t *testing.T) {
+	reason := contracts.ReasonSignatureMatch
+	evaluator := &fakeEvaluator{response: contracts.ControlEvaluationResponse{
+		EvaluationID: "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", RunID: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+		Decision: contracts.EvaluationDeny, ReasonCode: &reason, SafeMessage: "withheld",
+		Controls: []contracts.ControlEvaluationControl{}, Catalog: contracts.ControlEvaluationCatalog{AdmissionRevisionID: 1, ActiveRevisionID: 1}}}
+	recorder := evaluate(t, newHandler(t, Dependencies{Evaluator: evaluator}), "eval-200", evaluateBody)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status %d %s", recorder.Code, recorder.Body.String())
+	}
+	var response contracts.ControlEvaluationResponse
+	decodeStrict(t, recorder, &response)
+	if response.Decision != contracts.EvaluationDeny || evaluator.operator.OrganizationID != testOperator.OrganizationID {
+		t.Errorf("response %+v operator %+v", response, evaluator.operator)
+	}
+}
+
+func TestControlEvaluateMapsErrors(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		err    error
+		status int
+		code   string
+	}{
+		"invalid":     {evaluation.ErrInvalid, http.StatusBadRequest, "bad_request"},
+		"not found":   {evaluation.ErrNotFound, http.StatusNotFound, "not_found"},
+		"unavailable": {evaluation.ErrUnavailable, http.StatusServiceUnavailable, "decision_unavailable"},
+	} {
+		assertError(t, evaluate(t, newHandler(t, Dependencies{Evaluator: &fakeEvaluator{err: testCase.err}}), "eval-"+name, evaluateBody),
+			testCase.status, testCase.code)
+	}
+	refused := &fakeEvaluator{}
+	identityBody := strings.Replace(evaluateBody, `"arguments":null`, `"arguments":null,"organizationId":"x"`, 1)
+	assertError(t, evaluate(t, newHandler(t, Dependencies{Evaluator: refused}), "eval-identity", identityBody), http.StatusBadRequest, "bad_request")
+	if refused.calls != 0 {
+		t.Error("a body with an identity field reached the evaluator")
+	}
+	recorder := httptest.NewRecorder()
+	newHandler(t, Dependencies{Evaluator: refused}).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/internal/control/evaluate", strings.NewReader(evaluateBody)))
+	assertError(t, recorder, http.StatusUnauthorized, "unauthorized")
 }
