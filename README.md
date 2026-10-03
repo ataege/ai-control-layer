@@ -4,10 +4,13 @@ A monorepo with a Next.js web app, a NestJS API, a Go service and one PostgreSQL
 together with health checks, diagnostics, shared contracts and development tooling. The team is
 building Task Passport on top of it at HackYeah.
 
-**Status: implementation phase.** The baseline contains infrastructure and
-reusable components only: no entities, no tables, no authentication implementation and no product
-features. Product work is added on top of it, each feature in the service that owns its
-responsibility. The product definition is the project report in [docs/product](docs/product/README.md), and the
+**Status: implementation phase.** Product work is under way on top of the starter baseline, each
+feature in the service that owns its responsibility: TypeORM migrations for the `app`, `runtime`
+and `demo` schemas and the service database roles, session sign-in in the API, and Go admission,
+the agent loop, approvals, report provenance and the hybrid security controls. What is still
+missing on a clean checkout is listed in
+[docs/setup.md, "Known gaps on a clean checkout"](docs/setup.md#known-gaps-on-a-clean-checkout).
+The product definition is the project report in [docs/product](docs/product/README.md), and the
 binding rules are in [AGENTS.md](AGENTS.md). Baseline items that are still
 unverified are listed under [Verification status](#verification-status).
 
@@ -73,11 +76,24 @@ Linux and WSL were not exercised on the preparation machine (macOS); see
 Run everything from the repository root.
 
 ```sh
-pnpm install       # install all workspace dependencies
-pnpm run setup     # report prerequisites, create .env with generated local secrets
-pnpm infra:up      # start PostgreSQL in Docker and wait until it is healthy
-pnpm dev           # run web, api and gateway on the host (Ctrl+C stops all three)
+pnpm install            # install all workspace dependencies
+pnpm run setup          # report prerequisites, create .env with generated local secrets
+pnpm infra:up           # start PostgreSQL in Docker and wait until it is healthy
+pnpm db:migration:run   # apply the migrations (app, runtime and demo schemas, service roles)
+pnpm db:roles           # give the gateway's database role its password from .env
+pnpm db:seed            # load the synthetic demo records and import config/policy.yaml
+pnpm dev                # run web, api and gateway on the host (Ctrl+C stops all three)
 ```
+
+Before `pnpm dev`, start Ollama, pull `qwen3.5:4b` and set `MODEL_NAME=qwen3.5:4b` in `.env`
+([docs/setup.md](docs/setup.md#7-local-model-ollama), section 7). Without `MODEL_NAME` the gateway
+still starts, but every model call fails closed. `pnpm reset:demo` restores the demo later: it
+empties the `demo` and `runtime` tables, reseeds the synthetic records and keeps the `app` data,
+including the active control catalog. Even after these steps a run cannot start yet; see
+[Known gaps on a clean checkout](docs/setup.md#known-gaps-on-a-clean-checkout).
+
+Several checkouts on one machine (for example git worktrees) each need their own PostgreSQL: see
+[infra/README.md, "Several checkouts on one machine"](infra/README.md#several-checkouts-on-one-machine).
 
 In a second terminal:
 
@@ -288,25 +304,19 @@ workspace defines every task: `@workspace/ui` has only `lint` and `typecheck`, a
 ## Migrations
 
 There is one migration toolchain for the shared database: TypeORM in `apps/api`. Migration files
-live in `apps/api/src/database/migrations`. The baseline shipped none, defined no entities and created
-no tables; the first entity and migration follow
-[docs/team-workflow.md](docs/team-workflow.md#adding-the-first-entity-and-migration). Nothing runs migrations at application startup (`synchronize: false`,
-`migrationsRun: false`). The gateway never migrates.
+live in `apps/api/src/database/migrations`. They create the `app`, `runtime` and `demo` schemas
+and their tables (the `app` tables back the API's TypeORM entities; the `runtime` and `demo` tables
+are hand-written, with no entities) and the service database roles `task_passport_gateway` and
+`task_passport_api` with their table privileges. Only the gateway connects as its role so far.
+Nothing runs migrations at application startup (`synchronize: false`, `migrationsRun: false`).
+The gateway never migrates.
 
 The commands need the root `.env` and, except for `create`, a reachable PostgreSQL. `<Name>` must
-consist of letters and digits and start with a letter.
+consist of letters and digits and start with a letter. `pnpm db:migration:show` lists every
+migration and whether it ran; `pnpm db:migration:run` applies the pending ones in timestamp order.
+After `run`, `pnpm db:roles` sets the gateway role's password (see "Command reference").
 
-Expected results in the untouched starter (zero entities, zero migrations):
-
-| Command                             | Result                                                                                                                                                                                                      |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm db:migration:generate <Name>` | Prints `No changes in database schema were found - cannot generate a migration. To create a new empty migration use "typeorm migration:create" command` and **exits 1**. Creates no table. This is correct. |
-| `pnpm db:migration:show`            | Exits 0 with an empty list. First command that creates TypeORM's empty bookkeeping table `migrations` in the `public` schema; `run` and `revert` also create it when it is missing.                         |
-| `pnpm db:migration:run`             | `No migrations are pending`                                                                                                                                                                                 |
-| `pnpm db:migration:revert`          | `No migrations were found in the database. Nothing to revert!`                                                                                                                                              |
-| `pnpm db:migration:create <Name>`   | Writes `apps/api/src/database/migrations/<timestamp>-<Name>.ts`.                                                                                                                                            |
-
-Generated files are not formatted; run `pnpm format` afterwards. How to add the first entity and
+Generated files are not formatted; run `pnpm format` afterwards. How to add an entity and its
 migration: [docs/team-workflow.md](docs/team-workflow.md#adding-the-first-entity-and-migration).
 
 ## Testing and verification
@@ -503,7 +513,8 @@ It uses the API's installed `pg` client, so it adds no dependency.
 
 ### `pnpm reset:demo` (draft)
 
-An explicit reset for the judge environment (`make reset-demo` calls it); nothing runs it at
+An explicit reset for the judge environment (the planned `make reset-demo` target will call it; no
+`Makefile` is on `main` yet); nothing runs it at
 startup. Decided scope: it truncates every table of the `demo` and `runtime` schemas and reseeds the
 synthetic demo records, in one transaction, so either the fixtures are fully restored or nothing
 changed. It keeps the app data (users, memberships, control-catalog revisions), so a judge's policy
@@ -526,10 +537,13 @@ JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run_id> --case indirect
 pnpm judge --help
 ```
 
-**Draft:** it is written against the proposal in `docs/contracts/control-evaluation-draft.md`; the
-live test entry (X-106) and `POST /internal/control/evaluate` (X-91) are not approved or implemented
-yet, so today every call ends with "No decision". Its only credential is the operator's session
-cookie; it never reads `.env`. It exits 0 when a decision came back, whatever the decision, and
+**Draft.** The Go side exists: `POST /internal/control/evaluate` (X-91, GO-82) is served by the
+gateway (`services/gateway/internal/api`), with its frozen schemas in `packages/contracts`. The
+NestJS live test entry the client calls, `POST /api/control/evaluate` (X-106, API-38), is not in
+`apps/api` yet, so today every call ends with "No decision". The client's request body follows the
+earlier proposal in `docs/contracts/control-evaluation-draft.md`, which differs from the frozen X-91
+schema, and no operator is seeded yet (SH-19) to sign in with. Its only credential is the
+operator's session cookie; it never reads `.env`. It exits 0 when a decision came back, whatever the decision, and
 non-zero when none did. For a fixture case it says whether the decision matches the case's label; a
 label is a test expectation, not detection quality. `pnpm test:judge` tests the client against a
 local stand-in server.
@@ -576,7 +590,7 @@ No script removes the volume for you: `infra:down` and `stack:down` always keep 
    pnpm infra:up
    ```
 
-   Afterwards re-apply migrations with `pnpm db:migration:run` once the project has any.
+   Afterwards run `pnpm db:migration:run`, `pnpm db:roles` and `pnpm db:seed` again.
 
 ## Verification status
 
