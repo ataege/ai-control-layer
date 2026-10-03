@@ -357,9 +357,9 @@ func inspectChannels(t *testing.T, world *storyWorld, agentRequests, securityReq
 		len(events), len(assessments), len(timings), len(contexts))
 }
 
-// TestStoryAfterApproval continues the story through the reviewer's approval: GO-47's resume,
-// execution, the single outbox row and the completed run. While the approved action is not
-// resumed (GO-40) it checks only that nothing was sent and says so in the log.
+// TestStoryAfterApproval continues the story through the reviewer's approval: GO-40's resume of the
+// original action, its execution, the single outbox row, the completed run (GO-47), and GO-56's
+// inspection of the channels written after the approval, the outbox row included.
 func TestStoryAfterApproval(t *testing.T) {
 	world := openStory(t, nil)
 	world.runQueuedJob(t)
@@ -371,14 +371,17 @@ func TestStoryAfterApproval(t *testing.T) {
 		t.Fatalf("approve: %v", err)
 	}
 	world.runQueuedJob(t)
+	// The run resumed and executed the original stored action (same id), exactly once.
 	if _, _, status := world.actionAt(t, 7); status != "succeeded" {
-		// GO-40 (resume the approved action) is not on this branch: nothing may have been sent.
-		// Once it lands, the action executes and the assertions below run instead.
-		if outbox := world.count(t, `SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1`); status != "approved" || outbox != 0 {
-			t.Fatalf("without the resume: action %s, outbox %d; want approved and 0", status, outbox)
-		}
-		t.Logf("GO-40 pending: the approved queue_report is not resumed yet (status %s); outbox 0", status)
-		return
+		t.Fatalf("the approved queue_report was not executed after the approval (status %s)", status)
+	}
+	if resumed := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE organization_id = $1 AND run_id = $2 AND event_type = 'run.resumed'`,
+		world.passport.RunID); resumed != 1 {
+		t.Fatalf("run.resumed events %d, want 1", resumed)
+	}
+	if attempts := world.count(t, `SELECT count(*) FROM runtime.execution_attempts WHERE organization_id = $1 AND action_id = $2`,
+		queueActionID); attempts != 1 {
+		t.Fatalf("attempts of the approved action %d, want 1", attempts)
 	}
 
 	// GO-47 (X-44, Go half): one outbox row with the reviewed content and the trusted recipient.
@@ -413,4 +416,19 @@ func TestStoryAfterApproval(t *testing.T) {
 	rows.Close()
 	t.Logf("evidence GO-47 (X-44, Go half, fixture provider): reports %s; one outbox row to the registered address with the reviewed content hash; events %v",
 		vendorID, events)
+
+	// GO-56 on the agent path after the approval: the outbox row holds the address only as its
+	// recipient and never the internal note; every other channel holds neither (the frozen review
+	// payload, reviewer-only, is the one other place the address may be).
+	var outboxRow string
+	if err := world.pool.QueryRow(context.Background(), `SELECT row_to_json(outbox)::text FROM demo.outbox_messages AS outbox
+		WHERE organization_id = $1`, world.organizationID).Scan(&outboxRow); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(outboxRow, world.note) || strings.Count(outboxRow, world.address) != 1 ||
+		!strings.Contains(outboxRow, `"recipient":"`+world.address+`"`) {
+		t.Fatalf("GO-56: the outbox row holds a protected value outside its recipient: %s", outboxRow)
+	}
+	agentRequests, securityRequests := world.provider.requests()
+	inspectChannels(t, world, agentRequests, securityRequests)
 }
