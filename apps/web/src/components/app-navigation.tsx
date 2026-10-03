@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 
 const NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { href: "/", label: "Home", icon: <HouseIcon aria-hidden="true" /> },
+  { href: "/tasks/new", label: "New Task", icon: <LayoutGridIcon aria-hidden="true" /> },
   { href: "/components", label: "Components", icon: <LayoutGridIcon aria-hidden="true" /> },
   { href: "/diagnostics", label: "Diagnostics", icon: <ActivityIcon aria-hidden="true" /> },
 ];

@@ -107,6 +107,11 @@ export class ProductClient {
   }
 
 
+  static async getOptions(): Promise<FetchJsonResult<TaskFormOptions>> {
+    const result = await fetchJson("/api/runs/options");
+    return enforceGuard(result, isTaskFormOptions);
+  }
+
   static async getRun(id: string): Promise<FetchJsonResult<RunView>> {
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
     return enforceGuard(result, isRunView);
