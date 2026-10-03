@@ -592,6 +592,22 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Tests: specs: forged `x-forwarded-for` and `x-forwarded-host` headers change nothing (forwarder
     option), or a credentialed preflight from an allowed origin passes while another origin gets no
     CORS headers (direct option): `pnpm --filter api run test`; `pnpm smoke`.
+  - Evidence (2026-10-04, branch `web/audit-01-02` merged with main 3e54f50, host mode, own PostgreSQL):
+    live through the web app at port 3160 as the seeded demo operator. No cookie: `GET /api/runs/{id}`
+    401; an `Authorization`, `X-Operator-Context` and `X-Service-Token` header without a cookie: 401;
+    wrong password: 401; sign-in 200 with `session=...; HttpOnly; SameSite=Lax` (Secure only when
+    `NODE_ENV=production`, so not over http in development). With the cookie: `POST /api/runs` 201,
+    `GET /api/runs/{id}` the frozen `RunState`, `GET /api/runs/{id}/events?after=0&limit=3` a `SafeEvent`
+    page, `GET /api/runs/{id}/usage` a `RunUsage`. `GET /api/runs/{id}/passport` and `GET /api/auth/me`
+    answer 404 from the API (routes not built yet). `/api/internal/runs` and an encoded dot-segment path
+    answer 404. `pnpm smoke` (host mode) after the pages were compiled: 34 passed, 0 failed, 8 skipped
+    (service logs are not captured in host mode; one database password is under 16 characters); a first
+    run failed 12 checks on 10 s page timeouts while `next dev` compiled the pages. `pnpm --filter web
+exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal, both `Set-Cookie`,
+    config per request, command body, events query, 204, unbuffered response). A real bug was fixed: a
+    204, 205 or 304 from the API became a 502. `pnpm verify`: 6 passed, 0 failed.
+  - Not covered: service logs for secrets (host mode); a browser (checks used curl). The events route's
+    `buffer: false` and the query string on `POST /api/runs` were reported to the owner of those files.
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
@@ -790,7 +806,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-02 · Build the browser to API path chosen in decision 3**
+- [x] **WEB-02 · Build the browser to API path chosen in decision 3**
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: A · Size: M (estimate 3-7 h)
   - Depends on: SH-02 · Needs: X-03 · Provides: X-31 (part)
   - Paths: `apps/web/src/server/upstream-proxy.ts`, `apps/web/src/server/upstream-proxy.test.ts`,

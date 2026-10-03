@@ -64,3 +64,21 @@ Gaps:
 Cosmetic: `/security` nav link without a page (12); truthful label components render only on
 `/components` (13); the web's reason-code messages cover about 22 of 31 codes, `run/labels.ts` is
 complete (14); the home page renders a permanently empty `RunTimeline` (15).
+
+## Status after the run-page rebuild (main 3e54f50)
+
+Re-checked on 2026-10-04 on a merge of `origin/main` (3e54f50) into this branch. The run-page rebuild
+is `fix/run-page`, merged as e4cbb88, whose last commit is 37f34d5. "Read" means the source was read;
+"live" means observed through the web proxy against a running API and gateway.
+
+| Item                  | Status                                                                                                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, 2                  | Fixed (read): `isRunView` and `RunView` are gone from `lib/product-client.ts` and the run page. Live: `GET /api/runs/{id}` returned the frozen `RunState` with `runId` through the proxy. |
+| 3                     | Fixed (read, live): the client sends `after`; `GET /api/runs/{id}/events?after=0&limit=3` returned a `SafeEvent` page through the proxy.                                                  |
+| 4                     | Fixed (read): `RunEventTimeline`, `RunStatePanel` and `PassportPanel` are mounted in `app/runs/[id]/page.tsx`.                                                                            |
+| 5                     | Not re-checked.                                                                                                                                                                           |
+| 6                     | Still open (live): `GET /api/runs/{id}/passport` and `GET /api/auth/me` answer 404 from the API for a real run and a signed-in operator. Waiting for the API routes (Noyan).              |
+| 8                     | Partly fixed: a web `usage` route exists and `GET /api/runs/{id}/usage` returned a `RunUsage` live; whether the page shows it was not checked. Estimated cost stays an open item.         |
+| 9                     | Partly fixed (read): `approval` and `reports` branches were merged; the review screen was not re-checked.                                                                                 |
+| 12                    | Fixed (read): `app/security` exists.                                                                                                                                                      |
+| 7, 10, 11, 13, 14, 15 | Not re-checked.                                                                                                                                                                           |
