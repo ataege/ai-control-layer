@@ -361,8 +361,11 @@ func TestPostgresReserveWithinNarrowsButNeverWidens(t *testing.T) {
 	}
 	// Lowered to one security call while three are used: refused, the agent purpose unaffected.
 	lowered := budget.Ceiling{CallsSecurity: 1}
-	if _, err := reserveAndSettle(budget.PurposeSecurity, 10, lowered); !errors.Is(err, budget.ErrExhausted) {
-		t.Fatalf("security call after the limit was lowered below usage: %v", err)
+	_, err := reserveAndSettle(budget.PurposeSecurity, 10, lowered)
+	var refusal *budget.ReservationRefusal
+	if !errors.Is(err, budget.ErrExhausted) || !errors.As(err, &refusal) || refusal.Kind != budget.RefusalPurposeCalls ||
+		refusal.Limit != 1 || refusal.Remaining != 0 || refusal.Purpose != budget.PurposeSecurity {
+		t.Fatalf("security call after the limit was lowered below usage: %v %+v", err, refusal)
 	}
 	if _, err := reserveAndSettle(budget.PurposeAgent, 10, lowered); err != nil {
 		t.Fatalf("agent call under a security-only ceiling: %v", err)
@@ -375,8 +378,9 @@ func TestPostgresReserveWithinNarrowsButNeverWidens(t *testing.T) {
 		t.Fatalf("call after the token total was lowered below usage: %v", err)
 	}
 	// A raised ceiling never widens the passport: 2000 shared tokens with 40 used.
-	if _, err := reserveAndSettle(budget.PurposeAgent, 1961, budget.Ceiling{TokensTotal: 1 << 40}); !errors.Is(err, budget.ErrExhausted) {
-		t.Fatalf("a raised token ceiling widened the passport: %v", err)
+	if _, err := reserveAndSettle(budget.PurposeAgent, 1961, budget.Ceiling{TokensTotal: 1 << 40}); !errors.As(err, &refusal) ||
+		refusal.Kind != budget.RefusalTokenTotal || refusal.Requested != 1961 || refusal.Remaining != 1960 {
+		t.Fatalf("a raised token ceiling widened the passport: %v %+v", err, refusal)
 	}
 	// The shorter request timeout applies; a longer one does not.
 	if reservation, err := reserveAndSettle(budget.PurposeAgent, 10, budget.Ceiling{RequestTimeout: 5 * time.Second}); err != nil ||

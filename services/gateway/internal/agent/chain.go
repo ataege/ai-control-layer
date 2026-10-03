@@ -91,6 +91,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	callLog := budget.NewCallLog(pool)
 	catalogSource := PoolCatalog{Loader: loader, Pool: pool}
 	modelCaller := NewCatalogAccountedCaller(provider, budget.NewPostgresStore(pool), poolAccounting{pool: pool}, catalogSource, pool, modelName)
+	modelCaller.logger = chainConfig.Logger
 
 	securityCaller, err := NewRecordingCaller(callLog, modelCaller, modelName)
 	if err != nil {
@@ -160,6 +161,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 // at the next dispatch, then reserves on the run's ledger and calls the provider through
 // model.AccountedCaller (GO-79).
 type CatalogAccountedCaller struct {
+	logger     *slog.Logger
 	provider   model.ChatProvider
 	ledger     budget.Store
 	accounting AccountingSource
@@ -218,7 +220,7 @@ func (caller *CatalogAccountedCaller) Call(ctx context.Context, runID, callID st
 	if !ok {
 		return model.AccountedResult{}, budget.ErrUnavailable
 	}
-	narrowedLedger := ceilingLedger{Store: caller.ledger, reserver: reserver, ceiling: budget.Ceiling{
+	narrowedLedger := ceilingLedger{Store: caller.ledger, reserver: reserver, logger: caller.logger, ceiling: budget.Ceiling{
 		CallsTotal: snapshot.Limits.CallsTotal, CallsAgent: snapshot.Limits.CallsAgent, CallsSecurity: snapshot.Limits.CallsSecurity,
 		TokensTotal: snapshot.Limits.TokensTotal, RequestTimeout: time.Duration(snapshot.Limits.RequestTimeoutSeconds) * time.Second,
 	}}
@@ -258,10 +260,18 @@ type ceilingLedger struct {
 	budget.Store
 	reserver budget.CeilingReserver
 	ceiling  budget.Ceiling
+	logger   *slog.Logger
 }
 
 func (ledger ceilingLedger) Reserve(ctx context.Context, runID, callID, purpose string, tokens int64) (budget.Reservation, error) {
-	return ledger.reserver.ReserveWithin(ctx, runID, callID, purpose, tokens, ledger.ceiling)
+	reservation, err := ledger.reserver.ReserveWithin(ctx, runID, callID, purpose, tokens, ledger.ceiling)
+	// A refused reservation names its limit in the log: references and numbers only, no content.
+	var refusal *budget.ReservationRefusal
+	if errors.As(err, &refusal) && ledger.logger != nil {
+		ledger.logger.Info("model reservation refused", "run_id", runID, "call_id", callID, "purpose", refusal.Purpose,
+			"limit_kind", string(refusal.Kind), "limit", refusal.Limit, "estimate_tokens", refusal.Requested, "remaining", refusal.Remaining)
+	}
+	return reservation, err
 }
 
 // passportAllowsModel reads the run's immutable passport scope: a model the passport does not name is

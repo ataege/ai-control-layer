@@ -192,10 +192,11 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
    `docs/setup.md` section 7). `MODEL_BASE_URL` and `MODEL_NAME` go in `.env`.
 2. `pnpm run setup` writes `GATEWAY_SERVICE_TOKEN`, `OPERATOR_CONTEXT_SIGNING_KEY` and
    `POSTGRES_GATEWAY_PASSWORD` into `.env` (a missing secret is added to an existing file).
-3. `pnpm infra:up`, then `pnpm db:migration:run` (19 migrations) and `pnpm db:roles` (the gateway
-   role's password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml`
-   with the signature feed as a requested revision; the gateway's watcher (or `pnpm catalog:activate`
-   without a running gateway) validates and activates it. Without an active, enforceable catalog
+3. `pnpm infra:up`, then `pnpm db:migration:run` and `pnpm db:roles` (the gateway role's
+   password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml` with its
+   signature feed (`pnpm policy:import` does the import alone). An import only requests the
+   revision: the running gateway validates and activates it within seconds, or
+   `pnpm catalog:activate` does it once without a gateway. Without an active, enforceable catalog,
    admission, every inspection and the replay fail closed and readiness is `503`.
 4. `pnpm dev` (or `pnpm dev:gateway`, or `pnpm stack:up` for containers). `GET /health/ready` is
    `200` only with the database reachable, the worker running and an enforceable catalog active.
@@ -773,6 +774,13 @@ reservation stuck as `reserved`; if the settlement still fails, the call is mark
 (reservation and slot held) and returns `model.ErrUsageUnknown`, which pauses the run. The wait for
 a process slot is bounded on its own by one request period, and the provider's request deadline
 starts only once the slot is held.
+
+**Refused reservations are logged.** `budget.ReserveWithin` refuses with a
+`budget.ReservationRefusal` naming the limit (`token_total`, `purpose_tokens`, `calls_total`,
+`purpose_calls`, `concurrency_slot`, `ledger_paused`), the requested estimate, the limit and what
+remained; it unwraps to `ErrExhausted`, `ErrConcurrencyLimit` or `ErrPaused`. The production chain
+logs each refusal of either purpose as `model reservation refused` with the run and call ids, the
+purpose, `limit_kind`, `limit`, `estimate_tokens` and `remaining`: references and numbers only.
 
 **Limitation: unknown calls hold their slots.** A `usage_unknown` reservation keeps its ledger slot
 until a trusted late settlement (`Reconcile`). Such calls normally pause the run; a run that kept
@@ -1367,11 +1375,13 @@ Fixtures: `hostile_note_redirect_record_v1` (reads `invoice_B01`), `hostile_note
   `UNEXPECTED` (for example `decision_unavailable` when the active catalog cannot be loaded). Exit 2:
   not run (usage, unknown run or fixture, live run, or a report the fixture needs is missing).
 
-It needs an enforceable active catalog with its signature feed, like the gateway itself. Until the
-feed import is on `main`, load `config/attack-signatures.json` into `app.signature_feed_revisions`
-and the pointer's `active_feed_revision_id` by hand. Checked on 2026-10-03 on a private test
-database that way: all three fixtures printed the expected denial, exit 0, with every action and
-event labelled and no execution attempt.
+It needs an enforceable active catalog with its signature feed, like the gateway itself:
+`pnpm policy:import` stores the policy and the feed and requests the revision, and
+`pnpm catalog:activate` (or a running gateway's watcher) activates it. No feed is loaded by hand.
+Checked on 2026-10-03 at `main` 93e1c96 that way, against the finished run of a live
+`TestLiveStoryThroughTheProductionChain` in the demo database: all three fixtures printed the
+expected denial, exit 0, nothing executed, and the run's outbox kept its one approved row. The
+presenter's steps are in `docs/demo-runbook.md`.
 
 ## Performance benchmark (GO-81)
 
@@ -1407,9 +1417,8 @@ Measurement method (open item `measurement method`, decided by the Go lane for G
   load average, database, active catalog and feed revisions, payload and note sizes, and
   separately aggregates what the gateway recorded in `runtime.timing_records` during real runs.
 
-It needs an enforceable active catalog with its signature feed; without one it fails closed. Until
-the feed import (API-34) is on `main`, load `config/attack-signatures.json` into
-`app.signature_feed_revisions` and the pointer's `active_feed_revision_id` by hand.
+It needs an enforceable active catalog with its signature feed; without one it fails closed. Run
+`pnpm policy:import` and then `pnpm catalog:activate` (or start the gateway) once on the database.
 
 ### Result on the developer machine (2026-10-03, quiet)
 
