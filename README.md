@@ -260,7 +260,7 @@ All root scripts, as defined in `package.json`:
 | `pnpm build`                            | Builds contracts, web, API and the gateway binary (`services/gateway/bin/gateway`).                               |
 | `pnpm verify`                           | Runs `check:instructions`, `format:check`, `lint`, `typecheck`, `test`, `build` and prints a summary.             |
 | `pnpm smoke` (`--mode=host\|container`) | HTTP checks against the running services.                                                                         |
-| `pnpm test:db` (`gateway\|api`)         | Database-backed tests against the PostgreSQL in `.env`; see "Testing and verification".                           |
+| `pnpm test:db` (`gateway\|api`)         | Tests against a dedicated `<POSTGRES_DB>_test` database (`--fresh` recreates it); see "Testing and verification". |
 | `pnpm db:seed`                          | DRAFT: loads the synthetic demo records from `fixtures/`; see "Testing and verification".                         |
 | `pnpm reset:demo`                       | DRAFT: truncates the demo and runtime data and reseeds the demo records; see "Testing and verification".          |
 | `pnpm judge`                            | DRAFT judge client: submits one input to the NestJS live test entry; see "Testing and verification".              |
@@ -353,8 +353,29 @@ database makes it fail.
 Database-backed tests against a real PostgreSQL, for both sides or one (`pnpm test:db gateway`,
 `pnpm test:db api`). It needs `.env` and a running database (`pnpm infra:up`, or your own
 container); real environment variables override `.env`, so `POSTGRES_PORT=55435 pnpm test:db`
-points it at another instance. `pnpm test` and `pnpm verify` stay free of a database. Every test it
-runs receives the `POSTGRES_*` settings and `TEST_DATABASE_REQUIRED=1`.
+points it at another instance. `pnpm test` and `pnpm verify` stay free of a database.
+
+It never runs against the demo database. The tests commit rows, some of them immutable
+(`runtime.audit_events`), that would otherwise appear in the demo's security summary and audit
+export. The command uses a dedicated test database, `<POSTGRES_DB>_test` (for example
+`starter_test`), on the same server with the same owner credentials; the name is derived, not
+configurable. It refuses to run when that name would equal `POSTGRES_DB` or exceed PostgreSQL's
+63-byte identifier limit, and when `POSTGRES_HOST` does not resolve only to a loopback address.
+Before the tests, inside this explicit command only:
+
+1. With `--fresh` (`pnpm test:db --fresh`, also combinable with a side, `pnpm test:db api --fresh`)
+   it drops the test database first.
+2. It creates the test database if it is missing, connected to the `postgres` maintenance database
+   as `POSTGRES_USER`.
+3. It runs `pnpm db:migration:run` and then `pnpm db:seed` with `POSTGRES_DB` set to the test
+   database, so the test database has the current schema, the synthetic demo records and an active
+   control catalog, as the demo has. Both are idempotent, so a plain rerun reuses the database.
+
+It prints the name of the test database it uses (never the password). Every test it runs receives
+the `POSTGRES_*` settings with `POSTGRES_DB` set to the test database, and
+`TEST_DATABASE_REQUIRED=1`; `GATEWAY_TEST_DATABASE_URL` is removed. Rows the tests leave behind stay
+in the test database; `--fresh` clears them. The demo database is never written by this command;
+`pnpm reset:demo` remains the way to restore the demo database.
 
 Conventions:
 
@@ -370,9 +391,10 @@ Conventions:
   dependencies.
 
 A skip is never a pass. The summary marks each side PASS, FAIL or SKIPPED, and the command exits
-non-zero unless every selected side passed: an unreachable database or a failing test is FAIL; a
-test skipped while the database is available, or a side with no database-backed tests, is
-SKIPPED. Go runs with `-count=1`, so a cached pass cannot hide a database that is down.
+non-zero unless every selected side passed: an unreachable database, a test database that cannot
+be created, migrated or seeded, or a failing test is FAIL; a test skipped while the database is
+available, or a side with no database-backed tests, is SKIPPED. Go runs with `-count=1`, so a
+cached pass cannot hide a database that is down.
 
 ### `pnpm db:seed` (draft)
 
