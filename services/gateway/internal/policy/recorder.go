@@ -42,11 +42,11 @@ func (recorder *PostgresRecorder) StoreAction(ctx context.Context, action Stored
 	_, err := recorder.pool.Exec(ctx,
 		`INSERT INTO runtime.actions
 		   (id, organization_id, run_id, step_number, tool, canonical_arguments,
-		    canonicalization_version, action_digest, idempotency_key, evaluated_catalog_revision_id, status)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		    canonicalization_version, action_digest, idempotency_key, evaluated_catalog_revision_id, status, replay_source)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		action.ActionID, action.OrganizationID, action.RunID, action.StepNumber, string(action.Tool),
 		[]byte(action.CanonicalArguments), action.CanonicalizationVersion, action.ActionDigest[:],
-		action.IdempotencyKey, action.EvaluatedRevisionID, actionStatusProposed)
+		action.IdempotencyKey, action.EvaluatedRevisionID, actionStatusProposed, nullableText(action.ReplaySource))
 	if err == nil {
 		return nil
 	}
@@ -142,6 +142,10 @@ func decisionEvent(run RunIdentity, decision Decision) repository.NewEvent {
 	}
 	effect := "none"
 	event.MaskedSummary.Effect = &effect
+	if decision.ReplaySource != "" {
+		replaySource := decision.ReplaySource
+		event.MaskedSummary.ReplaySource = &replaySource
+	}
 	if decision.AlternativeTemplate != "" {
 		alternative := contracts.ReportTemplate(decision.AlternativeTemplate)
 		event.MaskedSummary.AlternativeTemplate = &alternative
@@ -211,4 +215,12 @@ func lineageCheckFor(reason ReasonCode) *string {
 		check = "missing"
 	}
 	return &check
+}
+
+// nullableText stores an empty string as NULL.
+func nullableText(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }

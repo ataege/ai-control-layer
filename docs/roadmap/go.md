@@ -423,7 +423,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-05 · Decide: how the labelled action replay enters a run and is marked**
+- [x] **GO-05 · Decide: how the labelled action replay enters a run and is marked**
   - **Report 1.1 change:** A recorded proposal enters a run for the export test (beat 5) and for the supporting rehearsal of an out-of-scope read (beat 9); the beat 6 sentence is dropped. Report field: "Supporting rehearsals hostile instructions limits and uncertainty".
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 0.5-1 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -451,6 +451,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     invented behavior); "Illustrative invoice scenario and future domain adaptations" (Scene 2 a
     hostile instruction in a business document)
   - Blocked by: nothing
+  - Completed (2026-10-03): the recorded decision (option 1, a labelled Go runtime scenario) is implemented by GO-36: the label lives on the stored action (X-09 `replaySource`, `runtime.actions.replay_source`) and in every event (X-12 `maskedSummary.replaySource`); evidence in GO-36.
 
 ## M0: hours 0-2
 
@@ -1705,7 +1706,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-36 · Replay a prohibited proposal through the real gate, labelled**
+- [x] **GO-36 · Replay a prohibited proposal through the real gate, labelled**
   - **Report 1.2 change:** The replay stays labelled and is supplementary: "the delivered semantic control and its real-model tests must still work".
   - **Report 1.1 change:** The stored proposals are the export of a genuinely created internal report and the out-of-scope read or redirect. Tier A: the denied export is in the slice, and the report asks for a labelled replay when the live model does not propose the send.
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
@@ -1727,6 +1728,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
     output)
   - Blocked by: `replay entry`
+  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` 6/6. The demo-triggerable entry (cmd/replay) follows separately.
 
 - [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
   - **Report 1.1 change:** Serves the extended X-64 (classification, template and projection versions, content hash, destination class, lineage summary).
