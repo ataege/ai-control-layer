@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "operator-context.schema.json",
+  "title": "OperatorContext",
+  "description": "X-14: the verified operator context NestJS signs into the X-Operator-Context JWT (claim ctx) on every runtime command. Ids are the uuid ids of app.users and app.organizations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["userId", "organizationId", "roles"],
+  "properties": {
+    "userId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "organizationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "roles": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+      }
+    }
+  }
+}
