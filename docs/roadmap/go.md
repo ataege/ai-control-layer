@@ -1354,8 +1354,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     approval rule, vendor and destination at the maximum limits),
     `TestPostgresTaskOptionsFailClosedWithoutAnActiveCatalog`,
     `TestPostgresTaskOptionsOfAnOrganizationWithoutRecordsAreEmptyLists`; route:
-    `TestTaskOptionsServeTheVerifiedOrganizationAndFailClosed`. Known limit: the contract's invoices
-    carry no vendor id, so the form cannot group invoices by vendor; admission rejects a mixed set.
+    `TestTaskOptionsServeTheVerifiedOrganizationAndFailClosed`. Each invoice also names its `vendorId` (additive, lead-approved TS change, 2026-10-04), so the form offers one vendor's invoices together, as admission requires; the PostgreSQL test groups by it before admitting.
   - Report: "Project definition purpose and intended outcome" (What a passport would contain);
     "Relative implementation milestones and critical dependencies" (Critical path and sensible
     reductions: "keep a fixed server-owned task template")

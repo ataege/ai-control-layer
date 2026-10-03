@@ -121,13 +121,15 @@ type TaskFormOption struct {
 	Name string `json:"name"`
 }
 
-// TaskFormInvoice is an invoice's display fields only: reference number, issue date (YYYY-MM-DD)
-// and total in minor units. Never its internal note.
+// TaskFormInvoice is an invoice's display fields only: reference number, issue date (YYYY-MM-DD),
+// total in minor units and its vendor (so the form offers one vendor's invoices together, as
+// admission requires). Never its internal note.
 type TaskFormInvoice struct {
-	ID     string `json:"id"`
-	Number string `json:"number"`
-	Date   string `json:"date"`
-	Amount int64  `json:"amount"`
+	ID       string `json:"id"`
+	Number   string `json:"number"`
+	Date     string `json:"date"`
+	Amount   int64  `json:"amount"`
+	VendorID string `json:"vendorId"`
 }
 
 // TaskFormApprovalRequirement is one registered approval rule.

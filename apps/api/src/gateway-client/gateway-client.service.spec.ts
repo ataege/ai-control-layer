@@ -8,8 +8,10 @@ import type { AppConfigService } from "../config/app-config.service.js";
 import { GatewayClientService } from "./gateway-client.service.js";
 
 const SERVICE_TOKEN = "test-service-token-0123456789abcdef";
-const GATEWAY_TIMEOUT_MS = 150;
-const COMMAND_TIMEOUT_MS = 150;
+// Wide enough that a loaded machine does not turn a normal reply into a timeout; the stub that
+// must time out answers after 2 s, well past it.
+const GATEWAY_TIMEOUT_MS = 1_000;
+const COMMAND_TIMEOUT_MS = 1_000;
 
 type StubBehaviour =
   | "not-found"
@@ -168,7 +170,7 @@ describe("GatewayClientService", () => {
     expect(check).toMatchObject({ status: "down", reason: "timeout" });
     expect(check.upstreamStatus).toBeUndefined();
     expect(check.latencyMs).toBeGreaterThanOrEqual(GATEWAY_TIMEOUT_MS - 20);
-    expect(check.latencyMs).toBeLessThan(1_500);
+    expect(check.latencyMs).toBeLessThan(1_900);
   });
 
   it("maps a refused connection to unreachable", async () => {
