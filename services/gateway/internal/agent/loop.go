@@ -213,11 +213,17 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	if err != nil {
 		return runEnd{}, false, err
 	}
+	passport, err := runs.Passport(ctx, run.OrganizationID, run.RunID)
+	if err != nil {
+		return runEnd{}, false, err
+	}
 	switch state.Status {
 	case contracts.RunQueued:
 		// The first claim starts the run. Another writer (a cancellation) may win the race.
 		if err = loop.transition(ctx, run, runEnd{status: contracts.RunRunning}); errors.Is(err, repository.ErrInvalidTransition) {
 			return runEnd{}, true, nil
+		} else if errors.Is(err, repository.ErrCancelRequested) {
+			return cancelledEnd, false, nil
 		} else if err != nil {
 			return runEnd{}, false, err
 		}
@@ -232,8 +238,14 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		if !found {
 			return runEnd{}, false, nil
 		}
+		// A cancelled or expired run stops from the wait without a run.resumed event.
+		if end, stopped := loop.stopBeforeWork(state, passport); stopped {
+			return end, false, nil
+		}
 		if err = loop.transition(ctx, run, runEnd{status: contracts.RunRunning, actionID: decided.ActionID, resumed: true}); errors.Is(err, repository.ErrInvalidTransition) {
 			return runEnd{}, true, nil
+		} else if errors.Is(err, repository.ErrCancelRequested) {
+			return cancelledEnd, false, nil
 		} else if err != nil {
 			return runEnd{}, false, err
 		}
@@ -242,15 +254,8 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		return runEnd{}, false, nil
 	}
 
-	passport, err := runs.Passport(ctx, run.OrganizationID, run.RunID)
-	if err != nil {
-		return runEnd{}, false, err
-	}
-	if state.CancelRequestedAt != nil {
-		return runEnd{status: contracts.RunStopped, reason: contracts.ReasonRunCancelled}, false, nil
-	}
-	if !loop.now().Before(passport.ExpiresAt) {
-		return runEnd{status: contracts.RunStopped, reason: contracts.ReasonRunExpired}, false, nil
+	if end, stopped := loop.stopBeforeWork(state, passport); stopped {
+		return end, false, nil
 	}
 	// GO-72: the active catalog narrows the immutable passport before every model request. A
 	// missing or invalid catalog dispatches nothing and leaves the job for a later claim.
@@ -280,6 +285,10 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		return runEnd{}, false, err
 	}
 	agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: effective.AllowedModels}
+	// A cancel that landed during the checks above dispatches no model request.
+	if end, stopped, err := loop.cancelledSince(ctx, run); err != nil || stopped {
+		return end, false, err
+	}
 	result, err := loop.dependencies.Stepper.Step(ctx, agentRun, buildTaskContext(passport, entries))
 	if result.CallID != "" {
 		loop.recordSpans(ctx, run, Span{Phase: PhaseProvider, Duration: result.Duration, Failed: err != nil, ModelCallID: result.CallID})
@@ -292,6 +301,11 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 			return runEnd{}, false, err
 		}
 		return stepErrorEnd(err), false, nil
+	}
+	// A cancel that landed during the model request: its result is not acted on, a final answer
+	// does not complete the run.
+	if end, stopped, err := loop.cancelledSince(ctx, run); err != nil || stopped {
+		return end, false, err
 	}
 
 	switch result.Kind {
@@ -358,13 +372,13 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return loop.correct(ctx, run, effective, stepNumber, proposedCall(proposal), decision, "")
 	}
 
-	return loop.executeAllowed(ctx, run, agentRun, passport, settings, stepNumber, actionID, proposal)
+	return loop.executeAllowed(ctx, run, agentRun, passport, effective, settings, stepNumber, actionID, proposal)
 }
 
 // executeAllowed runs an allowed or approved stored action through the executor, inspects its
 // result and stores the step's context.
 func (loop *Loop) executeAllowed(ctx context.Context, run policy.RunIdentity, agentRun Run, passport contracts.Passport,
-	settings security.Settings, stepNumber int, actionID string, proposal contracts.ActionProposal) (runEnd, bool, error) {
+	effective catalog.Effective, settings security.Settings, stepNumber int, actionID string, proposal contracts.ActionProposal) (runEnd, bool, error) {
 	executionStarted := time.Now()
 	execution := loop.dependencies.Executor.Execute(ctx, run, actionID)
 	loop.recordSpans(ctx, run, Span{Phase: PhaseCommit, Duration: time.Since(executionStarted),
@@ -374,7 +388,17 @@ func (loop *Loop) executeAllowed(ctx context.Context, run policy.RunIdentity, ag
 	case policy.ExecutionPaused:
 		return runEnd{status: contracts.RunPaused, reason: contractReason(execution.ReasonCode)}, false, nil
 	case policy.ExecutionRefused:
-		return refusalEnd(contractReason(execution.ReasonCode)), false, nil
+		reason := contractReason(execution.ReasonCode)
+		if !correctableRefusal(reason) {
+			return refusalEnd(reason), false, nil
+		}
+		// GO-45/GO-29: an action whose fresh check failed (an expired grant, a changed record, action
+		// or source policy) executes nothing and is a counted denial with bounded feedback.
+		if err := loop.recordRejection(ctx, run, reason, actionID); err != nil {
+			return runEnd{}, false, err
+		}
+		denial := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(reason), ActionID: actionID}
+		return loop.correct(ctx, run, effective, stepNumber, proposedCall(proposal), denial, "")
 	default:
 		// A known adapter refusal; GO-29 turns it into bounded correction feedback.
 		return runEnd{status: contracts.RunStopped, reason: contractReason(execution.ReasonCode)}, false, nil
@@ -484,12 +508,12 @@ func (loop *Loop) continueDecidedAction(ctx context.Context, run policy.RunIdent
 	proposal := contracts.ActionProposal{Tool: contracts.ToolName(decided.Tool), Arguments: decided.CanonicalArguments}
 	if decided.Status == contracts.ActionApproved && decided.GrantOpen {
 		agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: effective.AllowedModels}
-		end, proceed, err := loop.executeAllowed(ctx, run, agentRun, passport, settings, decided.StepNumber, decided.ActionID, proposal)
+		end, proceed, err := loop.executeAllowed(ctx, run, agentRun, passport, effective, settings, decided.StepNumber, decided.ActionID, proposal)
 		return true, end, proceed, err
 	}
 	reason, message := contracts.ReasonApprovalExpired, ""
 	if decided.Status == contracts.ActionRejected {
-		reason, message = contracts.ReasonApprovalRequired, rejectedActionMessage
+		reason, message = contracts.ReasonApprovalRejected, rejectedActionMessage
 	}
 	if err = loop.recordRejection(ctx, run, reason, decided.ActionID); err != nil {
 		return true, runEnd{}, false, err
@@ -539,6 +563,10 @@ func (loop *Loop) endRun(ctx context.Context, run policy.RunIdentity, end runEnd
 	writeContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	err := loop.transition(writeContext, run, end)
+	if errors.Is(err, repository.ErrCancelRequested) {
+		// A cancel landed while the step ran: the run stops instead of pausing, waiting or completing.
+		err = loop.transition(writeContext, run, cancelledEnd)
+	}
 	if errors.Is(err, repository.ErrInvalidTransition) {
 		loop.dependencies.Logger.Info("run already changed by another writer", "run_id", run.RunID, "wanted_status", string(end.status))
 		return nil
@@ -643,6 +671,50 @@ func stepErrorEnd(err error) runEnd {
 	default:
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}
 	}
+}
+
+// correctableRefusal reports whether an executor refusal is a policy outcome about the action
+// itself, which the model can correct, rather than a run-level stop or an unavailable dependency.
+func correctableRefusal(reason contracts.ReasonCode) bool {
+	switch reason {
+	case contracts.ReasonApprovalExpired, contracts.ReasonApprovalRequired, contracts.ReasonActionChanged,
+		contracts.ReasonResourceVersionChanged, contracts.ReasonSourcePolicyChanged, contracts.ReasonResourceOutOfScope,
+		contracts.ReasonDestinationNotAllowed, contracts.ReasonReportExportRestricted, contracts.ReasonTemplateNotAllowed,
+		contracts.ReasonToolNotAllowed:
+		return true
+	default:
+		return false
+	}
+}
+
+// cancelledEnd stops a run whose cancel was requested.
+var cancelledEnd = runEnd{status: contracts.RunStopped, reason: contracts.ReasonRunCancelled}
+
+// stopBeforeWork stops a run whose cancel was requested or whose passport expired.
+func (loop *Loop) stopBeforeWork(state contracts.RunState, passport contracts.Passport) (runEnd, bool) {
+	if state.CancelRequestedAt != nil {
+		return cancelledEnd, true
+	}
+	if !loop.now().Before(passport.ExpiresAt) {
+		return runEnd{status: contracts.RunStopped, reason: contracts.ReasonRunExpired}, true
+	}
+	return runEnd{}, false
+}
+
+// cancelledSince re-reads the run: a cancel stamped since the step began stops it, and a run another
+// writer already moved out of running ends this claim without a change.
+func (loop *Loop) cancelledSince(ctx context.Context, run policy.RunIdentity) (runEnd, bool, error) {
+	state, err := loop.dependencies.Runs.RunState(ctx, run.OrganizationID, run.RunID)
+	if err != nil {
+		return runEnd{}, false, err
+	}
+	if state.CancelRequestedAt != nil {
+		return cancelledEnd, true, nil
+	}
+	if state.Status != contracts.RunRunning {
+		return runEnd{}, true, nil
+	}
+	return runEnd{}, false, nil
 }
 
 // refusalEnd maps an executor refusal (a fresh check failed before dispatch).
