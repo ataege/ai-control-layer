@@ -1339,6 +1339,24 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Work: Read the active-version pointer before new evaluations and dispatches "rather than relying indefinitely on a stale cache", and record both the admission and the evaluated revision in each decision. Optional settings apply at the next evaluation; removed models and lowered budgets apply as current restrictions; raised limits never exceed the passport. "With no valid initial catalog, the gateway is not ready and cannot dispatch work" (a readiness contract change through SH-14).
   - Done when: a changed optional threshold changes the next decision and the decision records the new revision, while the passport ceiling stays unchanged.
   - Tests: database-backed tests through the X-24 command for a threshold change, a lowered budget and a raised budget.
+  - Progress (2026-10-03): `internal/catalog` is the trusted active snapshot loader.
+    `Loader.Active(ctx, querier)` reads the active pointer on every call (in the caller's
+    transaction when given one), joins the active revision and the bound signature-feed revision,
+    and returns one snapshot: revision id, feed revision id, the limits (re-checked) and c1's
+    `security.SettingsFromCatalog` settings; it memoizes parsing only per immutable revision pair.
+    Anything missing or invalid is `ErrUnavailable` (no active revision, signature matching without
+    a feed, a feed revision other than the policy's, invalid limits, unknown disabled rules).
+    `EffectiveFor(passport, snapshot)` narrows the passport by the active catalog (removed models,
+    lowered budgets and disabled templates apply at once; raised values never exceed the passport)
+    and carries the admission and evaluated revision ids for decisions. Tests (PostgreSQL, isolated
+    revisions and feed in a rolled-back transaction): a threshold change is in the next snapshot
+    with the new revision id; five fail-closed cases; a disabled signature control needs no feed;
+    lowered and raised catalogs against a passport. Checks: gateway five checks PASS; `go test -race
+./internal/catalog` ok; `pnpm verify` 6 passed. Missing half: the gate (lane w3), the worker
+    and model path (f3) and the security controls (c1) must call `Loader.Active` before every
+    evaluation and dispatch and record both revisions; the readiness change ("no valid catalog,
+    not ready") waits on a readiness contract change; no path imports the signature feed yet, so
+    the active snapshot is unavailable while the policy enables signature matching.
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
