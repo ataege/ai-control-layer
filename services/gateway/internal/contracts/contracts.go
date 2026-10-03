@@ -104,6 +104,44 @@ var ReportTemplates = []ReportTemplate{TemplateInternalInvestigation, TemplateVe
 // Valid reports whether the template is one of the fixed templates.
 func (template ReportTemplate) Valid() bool { return contains(ReportTemplates, template) }
 
+// TaskFormOptions mirrors the TaskFormOptions contract (API-12) served by GO-25: the choices
+// the task form offers, read from the operator's organization and the active catalog.
+type TaskFormOptions struct {
+	Templates            []TaskFormOption              `json:"templates"`
+	Vendors              []TaskFormOption              `json:"vendors"`
+	Invoices             []TaskFormInvoice             `json:"invoices"`
+	Destinations         []TaskFormOption              `json:"destinations"`
+	ApprovalRequirements []TaskFormApprovalRequirement `json:"approvalRequirements"`
+	Limits               TaskFormLimits                `json:"limits"`
+}
+
+// TaskFormOption is one selectable id with its display name.
+type TaskFormOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// TaskFormInvoice is an invoice's display fields only: reference number, issue date (YYYY-MM-DD)
+// and total in minor units. Never its internal note.
+type TaskFormInvoice struct {
+	ID     string `json:"id"`
+	Number string `json:"number"`
+	Date   string `json:"date"`
+	Amount int64  `json:"amount"`
+}
+
+// TaskFormApprovalRequirement is one registered approval rule.
+type TaskFormApprovalRequirement struct {
+	ID          string `json:"id"`
+	Description string `json:"description"`
+}
+
+// TaskFormLimits are the highest values admission accepts in StartRunRequest.limits.
+type TaskFormLimits struct {
+	MaxModelCalls     int64 `json:"maxModelCalls"`
+	MaxTimeoutSeconds int64 `json:"maxTimeoutSeconds"`
+}
+
 // StartRunRequest is X-07, landed by the web + API implementer and accepted unchanged.
 // Its optional fields may be absent, unlike the Go-owned contracts below.
 type StartRunRequest struct {

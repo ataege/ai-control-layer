@@ -21,6 +21,7 @@ var fixtureTargets = map[string]func() any{
 	"start-run-request.full.json":                      func() any { return new(StartRunRequest) },
 	"start-run-request.minimal.json":                   func() any { return new(StartRunRequest) },
 	"start-run-response.created.json":                  func() any { return new(StartRunResponse) },
+	"task-form-options.atlas.json":                     func() any { return new(TaskFormOptions) },
 	"reason-code.report-export-restricted.json":        func() any { return new(ReasonCode) },
 	"passport.atlas.json":                              func() any { return new(Passport) },
 	"action-proposal.read-invoice.json":                func() any { return new(ActionProposal) },

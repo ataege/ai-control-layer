@@ -18,6 +18,8 @@ export const UPSTREAM_PREFIXES = [
   "/api/runs",
   "/api/actions",
   "/api/auth",
+  "/api/control",
+  "/api/security",
 ] as const;
 
 // Longer than the API's own upstream timeouts, so its mapped status arrives first.
