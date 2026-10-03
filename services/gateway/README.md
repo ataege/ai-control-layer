@@ -403,6 +403,25 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Claim recovery without replay (GO-49)
+
+At the start of every claim of a running run, `agent.Recovery` reconciles what a former claim
+(stopped by a crash, a lost lease or a shutdown deadline) may have left at each step boundary,
+following GO-02's recovery rules:
+
+- a model call without an outcome (stopped after its dispatch record or its reservation) keeps its
+  whole reservation as `usage_unknown` (a call that never reserved is recorded `failed`) and the run
+  pauses with `outcome_unknown`; nothing is resent and nothing is counted as zero;
+- an action still `executing` with an open attempt pauses the run with `outcome_unknown` for
+  attention; it is never run again;
+- an executed action whose step has no context entries (stopped after the effect committed and
+  before the context append) gets its call and a withheld-result marker
+  (`{"withheld":true,"reason_code":"outcome_unknown"}`), so the model continues without the action
+  being executed again.
+
+Awaiting-approval, paused, stopped and completed runs keep their state and reason. The reads of
+actions and attempts are read-only.
+
 ## Production chain and gateway wiring (GO-11, GO-09)
 
 `agent.NewProductionChain(pool, loader, agent.ChainConfig{Model, ModelConfigured, Logger})` builds

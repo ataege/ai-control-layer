@@ -2183,6 +2183,18 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     ends with exactly one effect per action and no unaccounted dispatch; a run stopped by its limit,
     a cancelled run, a run with an unresolved reservation and a run in the attention state keep
     their state and recorded reason across the restart. The X-24 command.
+  - Progress (2026-10-03): `agent.Recovery` runs at the start of every claim of a running run: an
+    unresolved model call keeps its reservation as `usage_unknown` (or `failed` when it never
+    reserved) and pauses the run with `outcome_unknown` with no resend; an action still executing
+    with an open attempt pauses the run for attention; an executed action without context entries is
+    restored as its call plus a withheld-result marker without re-execution; awaiting, paused,
+    stopped and completed runs keep their state and reason. Tests pass on PostgreSQL:
+    `TestRecoveryPausesARunWithAnUnresolvedModelCall` (after the reservation and after the dispatch
+    record only), `TestRecoveryContinuesAfterAnEffectCommittedWithoutItsContext` (one execution
+    attempt), `TestRecoveryPausesOnAnActionStillExecuting`,
+    `TestRestartKeepsWaitingAndEndedRunsAsTheyWere`. Missing half: resuming an approval wait's
+    original stored action after a restart, which needs GO-40 (waiting on w3's `ExpireOverdue` and
+    `DecidedActionFor`).
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Validation plan and evidence
     matrix" (critical check Waiting-state restart); "Functional requirements MVP boundary and
     deferred scope" (Durable execution)

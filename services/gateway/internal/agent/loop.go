@@ -86,6 +86,7 @@ type LoopDependencies struct {
 	Steps       StepCounter
 	Contexts    *ContextStore
 	Telemetry   *Telemetry
+	Recovery    *Recovery
 	Logger      *slog.Logger
 }
 
@@ -99,7 +100,8 @@ type Loop struct {
 func NewLoop(dependencies LoopDependencies) (*Loop, error) {
 	if dependencies.Runs == nil || dependencies.Stepper == nil || dependencies.Gate == nil || dependencies.Executor == nil ||
 		dependencies.Inspector == nil || dependencies.Catalog == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
-		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Telemetry == nil || dependencies.Logger == nil {
+		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Telemetry == nil || dependencies.Recovery == nil ||
+		dependencies.Logger == nil {
 		return nil, ErrInvalid
 	}
 	return &Loop{dependencies: dependencies, now: time.Now}, nil
@@ -117,6 +119,25 @@ type runEnd struct {
 // cancelled, expired or out of agent steps. An error leaves the job for lease expiry.
 func (loop *Loop) Handle(ctx context.Context, job worker.Job) (worker.Outcome, error) {
 	runIdentity := policy.RunIdentity{OrganizationID: job.OrganizationID, RunID: job.RunID}
+	// GO-49: a running run may carry what a former claim left behind; reconcile it first.
+	state, err := loop.dependencies.Runs.RunState(ctx, runIdentity.OrganizationID, runIdentity.RunID)
+	if err != nil {
+		return worker.Outcome{}, err
+	}
+	if state.Status == contracts.RunRunning {
+		recoveryContext, cancelRecovery := context.WithTimeout(ctx, recoveryTimeout)
+		end, recoverErr := loop.recoverClaim(recoveryContext, runIdentity)
+		cancelRecovery()
+		if recoverErr != nil {
+			return worker.Outcome{}, recoverErr
+		}
+		if end.status != "" {
+			if err = loop.endRun(ctx, runIdentity, end); err != nil {
+				return worker.Outcome{}, err
+			}
+			return worker.Completed(), nil
+		}
+	}
 	for range maximumStepsPerClaim {
 		if err := ctx.Err(); err != nil {
 			return worker.Outcome{}, err

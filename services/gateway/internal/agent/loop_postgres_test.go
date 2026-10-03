@@ -371,6 +371,7 @@ func newTestLoopWithCatalog(t *testing.T, world *loopWorld, stepper ModelStepper
 		Steps:       budget.NewPostgresStore(world.pool),
 		Contexts:    NewContextStore(world.pool),
 		Telemetry:   NewTelemetry(world.pool),
+		Recovery:    NewRecovery(world.pool, budget.NewPostgresStore(world.pool)),
 		Logger:      slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
 	})
 	if err != nil {
