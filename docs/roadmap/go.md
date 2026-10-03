@@ -1253,7 +1253,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
-- [ ] **GO-77 · Apply the semantic risk check to otherwise permitted action proposals**
+- [x] **GO-77 · Apply the semantic risk check to otherwise permitted action proposals**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: GO-15, GO-75 · Needs: nothing · Provides: nothing
   - Paths: the enforcement package from GO-12
@@ -1262,6 +1262,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: gate tests with a permissive and a blocking stubbed verdict (labelled as stubs).
   - Report: "Architecture and chart reading guide" (Figure 6); "The enforcement loop and data minimization"
   - Blocked by: nothing
+  - Completed (2026-10-03): policy side in `internal/policy/security_check.go` with c1's `security.Inspector.EvaluateAction` (c1 commit 64a8278, merged from go/c1). The gate calls it only after a deterministic allow or approval requirement; `no_objection` keeps the outcome, `block` denies with the control's reason before any review material is frozen, `pause` or a failure denies (`security_evaluator_unavailable`), which the worker treats as a pause; settings come from `security.SettingsFromCatalog` for the evaluated revision; every control record is written to `runtime.control_assessments` in the decision transaction. Checks: `TestDeterministicDenialRunsNoSecurityCheck` (a forbidden action gets no security check), `TestStubbedSemanticBlockStopsAPermittedActionBeforeReview` (labelled stub verdict; nothing frozen), `TestSemanticCheckRestrictsButNeverGrants` and `TestSecurityActionCheckThroughTheGate` with the real inspector and the real sample feed (clean no objection, signature block, missing evaluator and unloadable settings pause, review never skipped) PASS; `pnpm test:db gateway` 565 passed, 0 failed, 0 skipped including `TestSecurityRecordsAreWrittenWithTheDecision`; `pnpm verify` 6/6. Not verified here: a live semantic verdict and its `security_model_call_id` foreign key (needs the metered evaluator wired by the worker lane), and `CatalogSecuritySettings` against an imported catalog revision in the database.
 
 - [x] **GO-78 · Match the signature-feed rules**
   - **Report 1.2 change:** Figure 6 applies the known-signature checks to action proposals too ("Fast typed schema scope and known-signature checks"), and Figure 10 to tool results ("Fast field size and signature checks").

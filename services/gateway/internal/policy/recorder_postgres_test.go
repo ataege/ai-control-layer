@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/security"
 	"starter/services/gateway/internal/testdb"
 )
 
@@ -273,5 +274,39 @@ func TestCorrectionCounterCountsEveryDenialOfTheRun(t *testing.T) {
 	// A new counter (as after a worker restart) reads the same durable count.
 	if again, _ := NewCorrectionCounter(pool).CorrectionsUsed(ctx, run); again != 3 {
 		t.Fatalf("count after restart = %d, want 3", again)
+	}
+}
+
+func TestSecurityRecordsAreWrittenWithTheDecision(t *testing.T) {
+	world := openExecutorWorld(t, 12)
+	ctx := context.Background()
+	world.scope.AllowedInvoiceIDs = append(world.scope.AllowedInvoiceIDs, hostileInvoiceID)
+	world.scope.AdmissionCatalogRevisionID = 2
+	evaluator := NewSecurityActionEvaluator(security.NewInspector(nil), fixedSettings{settings: sampleSettings(t, false)})
+	gate := NewGate(&fakeScopes{scope: world.scope, revision: 3}, NewPostgresRecorder(world.pool), nil, evaluator)
+	world.nextStep++
+	actionID := testdb.ID(t)
+	decision := gate.Evaluate(ctx, world.run, Proposal{ActionID: actionID, StepNumber: world.nextStep, IdempotencyKey: testdb.ID(t),
+		Tool: "read_invoice", RawArguments: json.RawMessage(`{"invoice_id":"` + hostileInvoiceID + `"}`)})
+	if decision.Outcome != OutcomeDeny || decision.ReasonCode != ReasonCode(security.ReasonSignatureMatch) {
+		t.Fatalf("decision = %s/%s, want deny/signature_match", decision.Outcome, decision.ReasonCode)
+	}
+	var controlClass, outcome, matchedRule, boundary string
+	var admission, evaluated int64
+	var recordAction *string
+	if err := world.pool.QueryRow(ctx,
+		`SELECT control_class, outcome, coalesce(matched_rule_id, ''), boundary, admission_catalog_revision_id,
+		        evaluated_catalog_revision_id, action_id::text
+		   FROM runtime.control_assessments WHERE run_id = $1`, world.run.RunID).
+		Scan(&controlClass, &outcome, &matchedRule, &boundary, &admission, &evaluated, &recordAction); err != nil {
+		t.Fatalf("read control assessment: %v", err)
+	}
+	if controlClass != "deterministic" || outcome != "block" || matchedRule != "prompt_ignore_previous_v1" ||
+		boundary != "action_proposal" || admission != 2 || evaluated != 3 || recordAction == nil || *recordAction != actionID {
+		t.Fatalf("assessment = %s %s %s %s %d %d %v", controlClass, outcome, matchedRule, boundary, admission, evaluated, recordAction)
+	}
+	var eventType string
+	if err := world.pool.QueryRow(ctx, `SELECT event_type FROM runtime.audit_events WHERE action_id = $1`, actionID).Scan(&eventType); err != nil || eventType != "action.denied" {
+		t.Fatalf("event = %q, err %v; want action.denied", eventType, err)
 	}
 }

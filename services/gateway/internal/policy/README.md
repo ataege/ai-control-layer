@@ -161,3 +161,24 @@ detectable; the action's own digest stays untouched. `StaleSources` compares the
 versions with the current ones by exact integer equality (the `record versions` rule), which GO-45
 uses for `resource_version_changed`. The content and the address stay in restricted storage: the
 `approval.requested` event carries only the report id, template and classification.
+
+## Semantic action check (GO-77, policy side)
+
+`SecurityActionEvaluator` adapts c1's `security.Inspector.EvaluateAction` to the gate's
+`ActionEvaluator`. The gate calls it only after the deterministic checks allowed the action or sent
+it to review (Figure 6), so a forbidden action never causes a security request. The inspector runs
+the field limit, the signature rules and then the metered semantic check at the
+`action_proposal` boundary:
+
+- `no_objection`: the gate's outcome stays (allow, or approval required: never skipped);
+- `block`: deny with the control's reason (for example `signature_match`), before any review
+  material is frozen;
+- `pause` or any failure: deny with the reason (`security_evaluator_unavailable` when none), which
+  the worker treats as a pause.
+
+`CatalogSecuritySettings` loads the settings of the action's evaluated revision with
+`security.SettingsFromCatalog` (the revision's content and the active pointer's feed with its pinned
+digest); a missing or unenforceable revision pauses. Every control record of the check is written
+to `runtime.control_assessments` in the decision's transaction (one evaluation id, the action, the
+admission and evaluated revisions, matched rule and feed revision, verdict and source for semantic
+rows), never the inspected text.

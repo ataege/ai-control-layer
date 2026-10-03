@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/security"
 )
 
 // Outcome is one of the gate's three decisions. Anything that is not a clean allow or approval
@@ -71,7 +72,9 @@ type PassportScope struct {
 	RecipientReferences   []string
 	ApprovalRequiredTools []ToolName // the passport's approval rule, for example every queue_report
 	ToolAttemptLimit      int        // governed tool attempts per run, safe retries included
-	ExpiresAt             time.Time
+	// AdmissionCatalogRevisionID is the catalog revision the passport was admitted under.
+	AdmissionCatalogRevisionID int64
+	ExpiresAt                  time.Time
 }
 
 // StoredAction is the immutable record of a proposal, written before any evaluation.
@@ -102,6 +105,10 @@ type Decision struct {
 	AlternativeTemplate string
 	// Review is the frozen review material of an approval request (GO-43).
 	Review *FrozenReview
+	// ControlRecords are the security controls' evidence for this decision (GO-77), written to
+	// runtime.control_assessments with the decision.
+	ControlRecords             []security.ControlRecord
+	AdmissionCatalogRevisionID int64
 }
 
 // ScopeReader loads the passport scope and the active catalog revision for a verified run.
@@ -138,9 +145,18 @@ type ExportVerdict struct {
 }
 
 // ActionEvaluator is the semantic action check of GO-77, called only for a proposal the
-// deterministic checks already allow or send to review. It may restrict, never grant.
+// deterministic checks already allow or send to review. It may restrict, never grant: its
+// outcome is allow (no objection) or deny, and an error is a deny that the worker treats as a
+// pause. Its control records are kept even when it fails.
 type ActionEvaluator interface {
-	EvaluateAction(ctx context.Context, run RunIdentity, action StoredAction) (Outcome, ReasonCode, error)
+	EvaluateAction(ctx context.Context, run RunIdentity, action StoredAction) (ActionCheck, error)
+}
+
+// ActionCheck is the evaluator's answer and its evidence.
+type ActionCheck struct {
+	Outcome    Outcome
+	ReasonCode ReasonCode
+	Records    []security.ControlRecord
 }
 
 // Gate decides allow, deny or approval required for one proposed action at a time.
@@ -245,6 +261,7 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 		return Decision{
 			Outcome: outcome, ReasonCode: reason, ActionID: proposal.ActionID,
 			ActionStored: true, ActionDigest: digest, EvaluatedRevisionID: revisionID,
+			AdmissionCatalogRevisionID: scope.AdmissionCatalogRevisionID,
 		}
 	}
 
@@ -301,16 +318,21 @@ func (gate *Gate) restrictSemantically(ctx context.Context, run RunIdentity, act
 	if gate.evaluator == nil {
 		return decision
 	}
-	semanticOutcome, semanticReason, err := gate.evaluator.EvaluateAction(ctx, run, action)
+	check, err := gate.evaluator.EvaluateAction(ctx, run, action)
+	decision.ControlRecords = check.Records
 	switch {
 	case err != nil:
-		decision.Outcome, decision.ReasonCode = OutcomeDeny, ReasonDecisionUnavailable
-	case semanticOutcome == OutcomeDeny:
-		decision.Outcome, decision.ReasonCode = OutcomeDeny, semanticReason
+		// A guard failure pauses: the deny carries the evaluator's reason when it gives one.
+		decision.Outcome, decision.ReasonCode = OutcomeDeny, check.ReasonCode
 		if decision.ReasonCode == "" {
 			decision.ReasonCode = ReasonDecisionUnavailable
 		}
-	case semanticOutcome == OutcomeAllow:
+	case check.Outcome == OutcomeDeny:
+		decision.Outcome, decision.ReasonCode = OutcomeDeny, check.ReasonCode
+		if decision.ReasonCode == "" {
+			decision.ReasonCode = ReasonDecisionUnavailable
+		}
+	case check.Outcome == OutcomeAllow:
 		// No change: a semantic allow never upgrades approval required to allow.
 	default:
 		decision.Outcome, decision.ReasonCode = OutcomeDeny, ReasonDecisionUnavailable
