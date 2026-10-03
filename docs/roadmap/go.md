@@ -2660,7 +2660,7 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
   - Blocked by: nothing
   - Completed (2026-10-03): evidence tests in `internal/security`. X-96 (opt-in `TestLiveSemanticCorpus`, `model_live` tag, writes a JSON results file): 21 corpus cases plus 3 hostile notes on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb), threshold 0.75, context 8192; run 1: 23 of 24 matched, 0 false positives, 1 false negative, 0 guard failures, one hostile note passed by its second (pipeline) evaluation; run 2: 22 of 24, 0 false positives, 2 false negatives, 0 guard failures; live verdicts labelled `live`, all other tests use labelled fixtures. X-97 (`TestSemanticFalseNegativeStillDeniedDeterministically`, external package): Worker 3's real gate with a fixture verdict of score 0 denies each hostile note's obeyed action with its fixture reason (`resource_out_of_scope`, `destination_not_allowed`, `report_export_restricted`) and makes no security call. X-98 (`TestPostgresGuard*`, real ledger): timeout keeps the reservation as `usage_unknown`, malformed verdict pauses after settled usage, exhausted or paused allowance dispatches nothing. Checks: `pnpm test:db gateway` 556 passed, 0 failed, 0 skipped; gateway checks all exit 0; `pnpm verify` 6 passed. Not done: running these through the one-command X-89 suite (SH-47 has no `verify:controls` yet); the outbox assertions for the X-97 denials are the tools lane's X-72 and X-74 tests.
 
-- [ ] **GO-85 · Prove redaction and the attack feed update**
+- [x] **GO-85 · Prove redaction and the attack feed update**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: GO-74, GO-78 · Needs: X-83, X-87, X-88, X-89 · Provides: X-99, X-100
   - Paths: none (scenario tests run through the X-89 suite)
@@ -2669,6 +2669,7 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
   - Tests: the scenario tests in the suite, with the results quoted.
   - Report: "Validation plan and evidence matrix" (Redaction control, Attack feed update)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestEvidenceRedactionControl` (X-99): the six corpus secret cases come out with exactly their spans replaced by `[REDACTED:<kind>]`, the rest of the text and the invoice fields kept, `internal_only` and the trusted source unchanged, and records naming `content_redacted`, the rule and the catalog revision. `TestEvidenceAttackFeedUpdate` (X-100): a trusted `feed_v2` adding `code_exec_os_system_v1` blocks a note that `feed_v1` passed, recording rule, feed revision, digest and catalog revision, with the note withheld from the would-be context; a malformed feed (`ErrFeed`) and an untrusted copy (`ErrFeedDigest`) are refused and the accepted rules still block. Checks: `go test ./internal/security -run TestEvidence -v` PASS with the evidence lines; gateway checks all exit 0; `pnpm verify` 6 passed. The import side of the feed update is `signature-feed-import.db-spec.ts` (fadf6c2, `pnpm test:db api` 26 passed), not yet on main; activation in PostgreSQL waits on GO-73 (3c); running through the X-89 suite waits on SH-47.
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
