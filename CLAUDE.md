@@ -157,7 +157,7 @@ Always write `pnpm run setup`. Bare `pnpm setup` is a pnpm built-in that edits t
 
 One workspace at a time: `pnpm --filter <name> run lint|typecheck|test|build`, where `<name>` is `web`, `api`, `gateway` or `@workspace/contracts`. `@workspace/ui` has only `lint` and `typecheck`, and `@workspace/config` has no scripts.
 
-No migration exists yet. The migration owner adds the first one with the first table (see `docs/team-workflow.md`). Report 1.2 names the test and reset commands `make verify-controls` and `make reset-demo`; this repository has no Makefile and runs everything through the root `package.json`, so how those commands are provided is open (`test command` in `docs/roadmap/README.md`). Nothing runs migrations or creates tables at application startup.
+No migration exists yet. The migration owner adds the first one with the first table (see `docs/team-workflow.md`). Report 1.2 names the test and reset commands `make verify-controls` and `make reset-demo`; the lead decided on 2026-10-03 that they are thin targets in a root `Makefile` that only call the pnpm scripts `verify:controls` and `reset:demo`, so the logic stays in the root `package.json` and `make` is optional (`test command` in `docs/roadmap/README.md`). Nothing runs migrations or creates tables at application startup.
 
 ## Implementation workflow
 
