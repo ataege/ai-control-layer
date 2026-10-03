@@ -34,6 +34,7 @@ var reasonMessages = map[ReasonCode]string{
 	ReasonContentTooLarge:              "The content exceeds the inspected size limit and was withheld.",
 	ReasonLimitNotAllowed:              "The requested limit exceeds what the active policy allows.",
 	ReasonRunNotActive:                 "The run is no longer active, so nothing was evaluated for it.",
+	ReasonApprovalRejected:             "The reviewer rejected this action; it was not run.",
 }
 
 // genericReasonMessage answers a value outside the vocabulary; it names nothing about the value.

@@ -198,7 +198,8 @@ export type ReasonCode =
   | "content_blocked"
   | "content_too_large"
   | "limit_not_allowed"
-  | "run_not_active";
+  | "run_not_active"
+  | "approval_rejected";
 
 /** The four registered tools. */
 export type ToolName = "read_invoice" | "read_vendor" | "create_report" | "queue_report";

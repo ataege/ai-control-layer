@@ -120,7 +120,8 @@
             "content_blocked",
             "content_too_large",
             "limit_not_allowed",
-            "run_not_active"
+            "run_not_active",
+            "approval_rejected"
           ]
         },
         {

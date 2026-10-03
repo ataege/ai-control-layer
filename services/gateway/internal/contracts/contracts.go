@@ -53,6 +53,8 @@ const (
 	ReasonLimitNotAllowed ReasonCode = "limit_not_allowed"
 	// ReasonRunNotActive: the run is completed, failed or stopped, so nothing is evaluated for it.
 	ReasonRunNotActive ReasonCode = "run_not_active"
+	// ReasonApprovalRejected: the reviewer rejected the exact action, so it was not run (GO-40).
+	ReasonApprovalRejected ReasonCode = "approval_rejected"
 )
 
 // ReasonCodes lists every reason code in contract order.
@@ -66,7 +68,7 @@ var ReasonCodes = []ReasonCode{
 	ReasonPolicyReloadRejected, ReasonModelNotAllowed, ReasonMultipleActionsNotSupported,
 	ReasonRunExpired, ReasonToolNotRegistered, ReasonInvalidArguments, ReasonToolNotAllowed,
 	ReasonDecisionUnavailable, ReasonContentBlocked, ReasonContentTooLarge, ReasonLimitNotAllowed,
-	ReasonRunNotActive,
+	ReasonRunNotActive, ReasonApprovalRejected,
 }
 
 // Valid reports whether the code is part of the contract.
