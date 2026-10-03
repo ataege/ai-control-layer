@@ -248,6 +248,11 @@ async function checkWebPagesAndLeaks() {
   const secrets = [
     { label: "service token", value: serviceToken },
     { label: "database password", value: databasePassword },
+    { label: "session signing secret", value: environment.AUTH_JWT_SECRET ?? "" },
+    {
+      label: "operator-context signing key",
+      value: environment.OPERATOR_CONTEXT_SIGNING_KEY ?? "",
+    },
   ];
   for (const { label, value } of secrets) {
     const checkName = `leak check: no ${label} in web pages and assets`;
