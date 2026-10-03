@@ -301,9 +301,12 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Completed (2026-10-03): the outcome is recorded in `docs/product/README.md` ("GO-01: multiple-
     action model responses"). Implemented on go/f3: `agent.Stepper` (GO-10, 19d710e) rejects a
     response with several tool calls as `multiple_actions_not_supported` and never runs a subset
-    (`TestSeveralToolCallsRejectTheWholeResponse`); the loop (GO-11, faac792) stops the run with
-    that reason and stores no action (`TestSeveralActionsInOneResponseStopTheRun`). Bounded
-    correction instead of the stop comes with the GO-29 wiring.
+    (`TestSeveralToolCallsRejectTheWholeResponse`). Since the GO-29 wiring (fdd8ca6) the loop
+    denies such a response as `multiple_actions_not_supported`, stores no action, records one
+    `action.denied` event counted as a correction and returns bounded feedback to the model
+    (`TestSeveralActionsInOneResponseAreDeniedAndCounted`, renamed from
+    `TestSeveralActionsInOneResponseStopTheRun` when the stop became a correction); the correction
+    limit still stops the run. Both tests pass on go/f3 (2026-10-03, `go test -run` on PostgreSQL).
   - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
     should be rejected or handled by an explicitly defined policy"); "Design decision record" (One
     action per model step)
@@ -760,6 +763,11 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     entries. No inspected text is stored. Test
     `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
     depth is read from `runtime.jobs` by the summary.
+  - Completed, `approval_wait` (2026-10-03, 3c's roadmap audit): the resume of a review wait writes
+    an `approval_wait` span from the awaiting transition (the run's last update) to the resume, on
+    the loop's clock, with the waited-for action id. `TestResumeRecordsTheApprovalWaitSpan` (fake
+    loop clock 90 s after the awaiting transition: one span of exactly 90 s with the action id)
+    passes on PostgreSQL.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 
@@ -832,7 +840,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     relationships matter); "Functional requirements MVP boundary and deferred scope" (Trusted
     admission); "Threat model limits and unresolved design choices" (Verification priorities);
     "Illustrative passport and interface contracts" (Illustrative passport fields)
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md` (which `app` records carry the operator's authority); `passport report fields`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03) (which `app` records carry the operator's authority); `passport report fields`
 
 - [x] **GO-14 · Serve `POST /internal/runs`**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
@@ -871,10 +879,12 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     invoice_C01 and 400 `limit_not_allowed` for 25 model calls; the key never appeared in the log.
     Not verified: the call from NestJS itself (no seeded app users; SH-19), and the `command timeout
 budget` item stays open (admission is one short transaction).
+  - Commits (audit 2026-10-03): d83f92e (route), a8d412b (the failed admission stage logged behind `503
+decision_unavailable`).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations; Decision and error semantics); "Technical architecture and service ownership"
     (Interfaces and repository strategy)
-  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-15 · Store each proposed action and decide allow, deny or approval required**
   - **Report 1.2 change:** Order per Figure 6: deterministic scope and provenance first, then the semantic check of GO-77 for otherwise permitted proposals.
@@ -951,7 +961,7 @@ budget` item stays open (admission is one short transaction).
   - Blocked by: `classifier prompt and verdict schema`; `decision 6 in docs/product/README.md`
   - Completed (2026-10-03): `SemanticEvaluator` (5883988, context 8192 in a0672e9): one security-purpose call through `model.AccountedCaller` (reserved before dispatch), fixed instruction, untrusted text between nonce markers, strict `ParseVerdict` ({risk_category, score 0 to 1, reason_code}), `score >= threshold` applied in Go, one attempt and no retry; refused reservation is `security_allowance_exhausted`, timeout, transport, unknown usage and malformed verdict are `security_evaluator_unavailable`, both pause with no text. Checks: gateway checks all exit 0 with stub verdicts labelled as fixtures; live opt-in `GO_SECURITY_LIVE=1 ... go test -tags=model_live ./internal/security -run '^TestLiveSemanticEvaluator$'` PASS on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb): hostile note blocked (score 1), clean note passed (score 0). Not verified here: the latency rows in `runtime.timing_records` and the assessment rows, which the caller persists (GO-80, f3); the ledger usage row is written by `AccountedCaller`.
 
-- [ ] **GO-76 · Inspect tool results before they enter the agent context**
+- [x] **GO-76 · Inspect tool results before they enter the agent context**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-23, GO-74, GO-75 · Needs: X-86 · Provides: nothing
   - Paths: the worker package from GO-08; the enforcement package from GO-12
@@ -961,6 +971,18 @@ budget` item stays open (admission is one short transaction).
   - Report: "Architecture and chart reading guide" (Figure 10); "The enforcement loop and data minimization" (Minimize information before it enters the model)
   - Blocked by: nothing
   - Progress (2026-10-03): the pipeline function is done (91d15c7): `Inspector.InspectToolResult` runs the field limit and secret rules, signatures, then the semantic check on `internal_note.text` only (redacted text) over every string of the minimized result; blocked values become `[WITHHELD:<reason>]` while permitted values return, a guard failure withholds everything (`paused`); classification and sources unchanged. Checks: gateway checks all exit 0 (clean note unchanged, hostile note withheld, signature before semantic, secrets masked before the classifier, guard failures pause); `pnpm verify` 6 passed. Missing half (f3): calling it from the worker loop, pausing the run, persisting the records, and the worker test of the next model request's contents.
+  - Completed (2026-10-03): the worker half is on go/f3 (fdd8ca6, telemetry in GO-80). The loop
+    calls c1's `InspectToolResult` on every executed result before the context append; only the
+    inspected content enters the context, a pause (guard failure or exhausted security allowance)
+    releases nothing and pauses the run, and the decisions are stored as `runtime.control_assessments`
+    in the same transaction as the context entry, which with the action events is GO-76's safe
+    evidence (lead's decision; no extra X-12 event type). `TestToolResultInspectionBeforeAgentContext`
+    asserts the next model request's contents: the clean note passes with `internal_only`, a
+    signature match and a semantic verdict each withhold a hostile note (`[WITHHELD:...]`, stored
+    outcome `blocked`), and a guard failure pauses with no context entry and the security call held
+    `usage_unknown`; `TestUnusableInspectionsAreNeverReleased` and
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` cover invalid inspections and the
+    stored records. All pass on PostgreSQL (2026-10-03).
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
@@ -1048,7 +1070,7 @@ budget` item stays open (admission is one short transaction).
 typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-19 · Build the runtime repository with guarded state transitions**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 4-8 h)
@@ -1120,6 +1142,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     `pnpm test:db` passes Go and API with no skips; after stopping test PostgreSQL, `pnpm test:db gateway`
     correctly exits 1. `pnpm verify` passes all six steps. No service wiring is changed, so no
     additional smoke was run for GO-20.
+  - Commit (audit 2026-10-03): 3cfa292.
   - Report: "Atomic allowances hard limits and estimated cost" ("the application must choose and
     verify the appropriate transaction boundaries"); "Validation plan and evidence matrix"
     (Interpreting results honestly)
@@ -1175,7 +1198,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Validation plan and evidence
     matrix" ("a hidden URL is not a protection")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-22 · Write safe decision events with every state change**
   - **Report 1.2 change:** Events add the metered purpose, admission and active catalog revisions, matched rule and feed revision; safe summaries omit raw notes, secrets, model requests and classifier reasoning.
@@ -1210,15 +1233,15 @@ typecheck` PASS; `pnpm verify` 6 passed.
     check, effect, replay source, alternative template, safe message); another organization reads
     and writes nothing; a row with an extra summary key fails closed; a failed state change leaves
     no event (GO-19 test). Checks: gateway five checks PASS; `go test -race -count=3
-./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Waits on other lanes:
-    decision, approval and execution events are written by lanes w3, w2 and f3, which must switch
-    their raw inserts to `repository.Join(tx).AppendEvent` for the ordering guarantee.
+./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Commit: 47f3dca. Audit
+    2026-10-03 on main cdfee55: the only `INSERT INTO runtime.audit_events` in the gateway is
+    `repository/events.go`, so every lane's events go through `AppendEvent` and its run lock.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
     semantics)
   - Blocked by: nothing
 
-- [ ] **GO-23 · Enforce tool-result field allowlists and minimize the model context**
+- [x] **GO-23 · Enforce tool-result field allowlists and minimize the model context**
   - **Report 1.2 change:** Untrusted authorized free text passes GO-74 and GO-76 before it becomes agent context.
   - **Report 1.1 change:** The authorized internal note may enter the model context with its restriction; the architecture places context minimization in the model gateway (`Go package layout`).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
@@ -1241,6 +1264,17 @@ typecheck` PASS; `pnpm verify` 6 passed.
     outcome and reason, unknown tools refused) and lists the untrusted note text for GO-74/GO-76.
     Missing half: building every model request only from the task template and minimized results is
     the worker/model lane (f3), which calls MinimizeForModel.
+  - Completed (2026-10-04): both halves are on `main`. The executor minimizes every effect
+    result (`policy/executor.go:249`, `tools.MinimizeForModel`) before the worker sees it; the
+    loop builds every model request from the fixed task message (the passport's opaque
+    references) plus the stored, inspected context entries (`agent.buildTaskContext`), and a
+    restart replays only those entries. Tests, rerun on go/w2 against `starter_test`:
+    `TestMinimizeDropsFieldsOutsideTheAllowlist`, `TestMinimizeReturnsOnlyOutcomeAndReasonForAFailure`,
+    `TestMinimizeFailsClosedForUnknownToolsAndOutcomes`, `TestProtectedFieldsStayInTheirAllowedChannels`
+    (`internal/tools`), `TestRestartedLoopContinuesWithoutReexecuting`,
+    `TestToolResultInspectionBeforeAgentContext` (`internal/agent`): PASS. The serialized model
+    requests of the story run hold no registered address and the note only where read_invoice
+    authorizes it (GO-56, `internal/scenario`).
   - Report: "The enforcement loop and data minimization" (Minimize information before it enters the
     model); "Illustrative passport and interface contracts" (Narrow final result and context
     boundary)
@@ -1282,9 +1316,9 @@ typecheck` PASS; `pnpm verify` 6 passed.
     context): the owner gets 200 with the run state (strict X-11), events (strict X-12) and usage
     (now with the GO-39 ledger); another organization gets 404; no service token gets 401. 3c's
     GO-57 test adds every cross-organization case. The organization-wide event check now uses
-    `repository.ValidStoredEvent`. `go test ./internal/reads` against `starter_test`: ok. Not
-    served: the passport (`passport in the run view` is still open); the usage view is a Go draft
-    until nestjs lands it in `packages/contracts`.
+    `repository.ValidStoredEvent`. `go test ./internal/reads` against `starter_test`: ok. The
+    passport is not served in the run view: the open item `passport in the run view` decides
+    whether it should be. The usage view is in `packages/contracts` as `RunUsage` (Go-owned).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
@@ -1455,6 +1489,23 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
       "- INV104: A01, A02". The lead decided that demo beat 5 (the denied internal export) uses the
       labelled replay (`cmd/replay`), said openly, since the live model attempts it in fewer than 2
       of 3 runs.
+  - Clean-checkout rehearsals (2026-10-03, lane 3c): four live runs from a fresh `git clone`, set up
+    only by README.md and docs/setup.md (`pnpm install --frozen-lockfile`, `pnpm run setup`, a private
+    PostgreSQL, `pnpm db:migration:run`, `pnpm db:roles`, `pnpm db:seed`, `pnpm dev:gateway`),
+    qwen3.5:4b, operator context from a development script, app organization, user and reviewer
+    membership inserted by hand (SH-19 not on main). (1) 68f4872d (main 1dad371, feed loaded by hand and
+    imported twice): internal_investigation_v1 (Internal only), vendor report approved and queued, then
+    the internal report's queue_report denied live with `report_export_restricted`; paused
+    `allowance_exhausted` when the 10th agent reservation exceeded the 20000-token total (lane f3's
+    diagnosis). (2) 8b59f19f (go/3c 41af095, no hand feed load; readiness 503 before the seed, 200 after
+    the gateway activated it): the same export denial, then the model retried it and stopped on the
+    two-correction limit. (3) 03806160 (go/3c adda68a, tokens_total 40000, the code-fence rule) and (4)
+    7c354f81 (main cdfee55, every fix including the denial and final-answer feedback, only the app
+    records by hand) both completed in under a minute: both reports created, the vendor report approved
+    through `POST /internal/actions/{actionId}/approval` and queued (one simulated outbox message), and
+    the stored result `{"report_ids":[<internal>,<vendor>]}`; 7 agent and 1 security calls each, no
+    denial and no correction. Runs (3) and (4) did not attempt the internal export, so the live export
+    denial is shown by runs (1) and (2) only.
 
 - [ ] **GO-71 · Record the conservative context manifest, if `internal report rendering` admits model prose** Dropped: `internal report rendering` is deterministic only (lead's delegate, 2026-10-03)
   - Owner: Go implementer (report role: Implementer 3, agent runtime, and Implementer 5, provenance) · Tier: B · Size: S (estimate 2-4 h)
@@ -1497,7 +1548,7 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
   - Blocked by: nothing
   - Completed (2026-10-03): `internal/policy` (1eb72bb; the report check became GO-64's export verdict in 95dcc43). `read_vendor` needs a vendor of the organization linked to a passport invoice; `create_report` a registered and passport template and passport sources; `queue_report` a passport recipient reference that names this run; an unreadable relationship or a missing reader denies. Checks: `TestGateChecksArgumentRelationships` 12 cases PASS; `pnpm test:db gateway` 292 passed, 0 failed, 0 skipped at 1eb72bb with `TestPostgresRelationships` against real demo rows (vendor and report of another organization included); `pnpm verify` 6/6. Outbound use of a readable field is the report restriction of GO-64.
 
-- [ ] **GO-29 · Return structured denial feedback and stop at the correction limit**
+- [x] **GO-29 · Return structured denial feedback and stop at the correction limit**
   - **Report 1.1 change:** Tier A (the slice's safe continuation). After an export denial the feedback names `vendor_reconciliation_v1` only when the passport permits that template and its source set, and grants no new authority. Proof: the blocked export continues to the newly rendered vendor report in the same passport and run; exhausted or unauthorized recovery stops. Report: MVP Bounded recovery; Figure 6; beat 7.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-11, GO-15, GO-27, GO-36, GO-64, GO-65 · Needs: X-06, X-13, X-16, X-34 · Provides: X-67 (part: continuation and stop)
@@ -1528,6 +1579,7 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     deferred scope" (Bounded recovery); "Live demonstration storyboard and proof checks" (beat 6)
   - Blocked by: nothing
   - Progress (2026-10-03): the policy side is done (18402ab): `BuildDenialFeedback` (fixed safe message, the vendor template alternative only when the passport permits it and its sources, the passport's invoice references after an out-of-scope read, no protected value), `CorrectionCounter.CorrectionsUsed` from the run's durable denial events (malformed proposals included) and `CheckCorrections`. Checks: unit tests PASS; `pnpm test:db gateway` 439 passed, 0 failed, 0 skipped with `TestCorrectionCounterCountsEveryDenialOfTheRun`; `pnpm verify` 6/6. Missing: f3's loop calling them and stopping the run, and the beat-6 scenario through the labelled replay (GO-36).
+  - Completed (2026-10-04): MVP Bounded recovery and X-67 hold through the production chain. A recoverable branch continues within one run and allowance: lane w2's `TestStoryAfterApproval` (`internal/scenario`, labelled scripted provider, 0b16044) denies the internal export (`report_export_restricted`, step 5), the same run continues to the vendor report, its approval and the executed queue_report (step 7) and completes; it asserts `CorrectionsUsed` = 1, both queue_report actions in the one run under its one passport, and the ledger within that passport's limits. Evidence line: "one run e4460084-cb2d-41d4-a921-a509ff2272e7 under passport 859693f0-fcd5-4405-894e-e6cb84b89029 from the denied export to the queued report; corrections 1 of 2; calls agent 8 of 12, security 1, total 9 of 24; tokens used 441 of 40000, reserved 0". Repeated forbidden proposals stop exactly at the limit: lane f3's `TestDenialBeyondTheCorrectionLimitStopsTheRun` (stopped, `allowance_exhausted`). No feedback text holds a protected value: `TestDenialFeedbackHoldsNoProtectedValue` over every X-13 code; the correction feedback also says "Do not propose this action again." for final denials and that the permitted alternative is done once the vendor report is queued (ee886dd). The proposal in the story is a labelled scripted provider, not a replay; the replay label is proven by GO-36. Checks: see the commit.
 
 - [x] **GO-64 · Deny a restricted report export at the gate before approval**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
@@ -1876,9 +1928,9 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
     output)
   - Blocked by: `replay entry`
-  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. The demo-triggerable entry `cmd/replay` (`-run <finished run> -fixture <id>`) followed: it submits the labelled proposal through the production chain's gate, never executes it, and prints `LABELLED REPLAY` with the decision and reason; `TestDemoReplayOfAFinishedRunIsDeniedAndLabelled` and `TestDemoReplayRefusesWithoutWriting` cover it, run against a test catalog without its feed it printed `deny / decision_unavailable` as UNEXPECTED, exit 1 (fail closed); with `config/attack-signatures.json` loaded by hand as the active feed (private `starter_test`, finished run d33cc6de) all three fixtures printed the expected denial through the production gate, exit 0: `resource_out_of_scope`, `destination_not_allowed`, `report_export_restricted`, each action and event labelled, 0 execution attempts, no model configured.
+  - Completed (2026-10-03): migration `1791140000000-AddActionReplaySource` and `internal/policy/replay.go`: `ReplayProposal` turns each hostile note of X-34 into the prohibited proposal a model would make if it obeyed it, labelled `labelled_replay:<fixture id>` on the stored action and on every event it produces; it goes through the production gate and executor with no replay branch, no provider call and no usage. Checks: fresh database, 18 migrations run, revert and re-run of 1791140000000 succeeded; `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 749 passed, 0 failed, 0 skipped with `TestLabelledReplayIsDeniedByTheRealGate` (evidence X-36: redirect record -> `resource_out_of_scope`, redirect recipient -> `destination_not_allowed`, internal disclosure -> `report_export_restricted`, each the same reason as its unlabelled live equivalent, the executor refuses, every event labelled, outbox 0, attempts 0, model calls 0), `TestReplayFixturesExistInTheHostileNotes` and `TestMalformedReplayLabelIsDenied`; `pnpm verify` did not pass: its test step failed on five apps/api gateway-client timing tests under machine load (they pass alone, 15/15), corrected in 7955b9f. Clean rerun (2026-10-04, main 590ce21 plus c0e8631): `GOFLAGS=-p=3 pnpm test:db --fresh gateway` exit 0, 940 passed, 0 failed, 0 skipped, with `TestLabelledReplayIsDeniedByTheRealGate`, `TestReplayFixturesExistInTheHostileNotes`, `TestMalformedReplayLabelIsDenied`, `TestDemoReplayOfAFinishedRunIsDeniedAndLabelled`, `TestDemoReplayRefusesWithoutWriting` and `cmd/replay` `TestUsageErrorsRunNothing` passing; `pnpm verify` exit 0, 6/6 passed (check:instructions, format:check, lint, typecheck, test, build). The demo-triggerable entry `cmd/replay` (`-run <finished run> -fixture <id>`) followed: it submits the labelled proposal through the production chain's gate, never executes it, and prints `LABELLED REPLAY` with the decision and reason; `TestDemoReplayOfAFinishedRunIsDeniedAndLabelled` and `TestDemoReplayRefusesWithoutWriting` cover it, run against a test catalog without its feed it printed `deny / decision_unavailable` as UNEXPECTED, exit 1 (fail closed); with `config/attack-signatures.json` loaded by hand as the active feed (private `starter_test`, finished run d33cc6de) all three fixtures printed the expected denial through the production gate, exit 0: `resource_out_of_scope`, `destination_not_allowed`, `report_export_restricted`, each action and event labelled, 0 execution attempts, no model configured.
 
-- [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
+- [x] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
   - **Report 1.1 change:** Serves the extended X-64 (classification, template and projection versions, content hash, destination class, lineage summary).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-21, GO-32 · Needs: X-33 · Provides: X-64
@@ -1898,6 +1950,15 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     `GET /internal/runs/{runId}/reports/{reportId}` with the ReportView (X-64 draft), organization-
     and run-scoped, internal content withheld without MayReadInternal; handler tests pass against
     w2_check. Missing: the route mount in internal/api (3c) and the X-64 TypeScript contract.
+  - Completed (2026-10-04): `stored report read` is decided (a Go endpoint; every verified operator
+    of the organization may read internal content). The route is mounted by `api.Commands`; X-64
+    is in `packages/contracts` as `ReportView` (schema, TS type, fixtures `report-view.vendor.json`
+    and `report-view.internal-withheld.json`; Go-owned, lane w2). Tests:
+    `TestStoredReportHandlerServesTheViewersOrganizationOnly` and
+    `TestStoredReportHandlerWithholdsInternalContentFromOtherViewers` (`internal/provenance`),
+    `TestReadContractFixturesMatchTheGoTypes` (strict decode of both fixtures into
+    `provenance.ReportView`), and 3c's GO-57 cross-organization test through the mounted route
+    (another organization 404, the owner 200): PASS.
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary)
   - Blocked by: `stored report read`; `final result format`; `report storage`
@@ -2070,6 +2131,13 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
 ./internal/api` with PostgreSQL ok; contracts `test` PASS; `pnpm verify` 6 passed. Not covered
     here: interrupting an in-flight model request (the loop stops at its next check), and the
     approval command refusing a decision on a stopped run, which is lane w3's GO-44 check.
+  - Audit 2026-10-03: (1) the right to cancel is a verified operator of the run's organization; no
+    per-run or role-specific management right exists, so the Tests line's "actor without the right" case
+    is covered only as another organization's operator (404). Lead decision (2026-10-03): any verified operator of the organization may cancel its runs; cancelling only restricts and never grants, so no extra role is needed. (2)
+    Since 025a339 (lane f3 maps it, edb712c) a cancellation that lands during a step is never
+    overwritten: `TransitionRun` refuses running, awaiting_approval, paused and completed once
+    `cancel_requested_at` is set (`ErrCancelRequested`), and the loop stops the run with `run_cancelled`
+    (`TestPostgresCancelledRunCannotBeKeptGoing`, `TestApprovedActionOfACancelledRunDoesNotResume`).
   - Report: "Atomic allowances hard limits and estimated cost" (Cancellation and time limits);
     "Illustrative passport and interface contracts" (Proposed browser and runtime operations);
     "Exact action approval versioning and execution rechecks" (Versioned policy and current
@@ -2317,7 +2385,11 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     approved action executed and queued one simulated outbox message to the registered address,
     and the run completed (6 agent calls, 1 security call, 1 live verdict, outbox rows 1). The
     model did not create the internal report in this run; the scripted run covers that beat.
-    Both runs: one outbox row, approved and to the trusted recipient.
+    Both runs: one outbox row, approved and to the trusted recipient. Since 3c's roadmap audit (2026-10-04),
+    `TestStoryAfterApproval` asserts the resume unconditionally (the approved action succeeded
+    with one attempt, one `run.resumed`, one outbox row, completed) and fails when the resume is
+    skipped (checked by removing the continuation run: "the approved queue_report was not
+    executed after the approval (status approved)").
   - Report: "Validation plan and evidence matrix" (critical check Legitimate task); "Live
     demonstration storyboard and proof checks" (beat 7)
   - Blocked by: nothing
@@ -2504,6 +2576,16 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     240, before fd67778) had still reserved that call.
     Calls, tokens and time exhaustion are covered by lane f3's GO-39/GO-79 tests and not repeated
     live here.
+  - Audit 2026-10-03, the automated tests behind the cases not repeated live (all on main cdfee55):
+    calls `TestPostgresCallLimitsSubBudgetsAndConcurrency` and
+    `TestModelLimitStopsTheRunBeforeTheNextDispatch`; tokens `TestPostgresConcurrentSharedBudget` and
+    `TestPostgresOverrunPausesWithoutClipping`; request time
+    `TestModelGatewayDeadlineRetainsTheReservationAndSlot`; run expiry
+    `TestRunsThatMayNotContinueSendNoModelRequest` (expired passport); concurrency cap
+    `TestModelGatewayHoldsAThirdConcurrentRequestOverACapOfTwo`; removed model
+    `TestModelGatewayRefusesModelsOutsideCatalogOrPassport`; lowered catalog limit on a running passport
+    `TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport`; threshold in the next snapshot
+    `TestPostgresActiveSnapshotFollowsThePointer`. The live runs above remain one-off evidence.
   - Report: "Validation plan and evidence matrix" (Policy reload and rollback safety, Model allowlist and current reductions, Local model resources)
   - Blocked by: nothing
 
@@ -2739,9 +2821,12 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     address appears in none; the note only in what the model may read (read_invoice's result)
     and in the internal report. On the adapter path (6ef3f0b, `TestProtectedFieldsStayInTheirAllowedChannels`):
     the outbox row holds the address only as its recipient and the queued vendor report. Not
-    covered: the persisted final result holds report ids only (GO-26's narrow result), and the
-    loop's outbox row after an approval waits for GO-40 (`TestStoryAfterApproval`); a transformed
-    or encoded value is not found by a literal search ("without claiming universal detection").
+    covered: the persisted final result holds report ids only (GO-26's narrow result); a
+    transformed or encoded value is not found by a literal search ("without claiming universal
+    detection"). Since GO-40, `TestStoryAfterApproval` also inspects the agent path after the
+    approval: the outbox row holds the address exactly once, as its recipient, and never the note;
+    8 model requests, 19 events, 77 assessments, 104 timing records, 14 context entries, the vendor
+    report and the log hold no address.
   - Report: "Validation plan and evidence matrix" (critical check Field minimization); "Risk
     register and scope controls" (Data leakage through secondary views); "The enforcement loop and
     data minimization"; "Functional requirements MVP boundary and deferred scope" (Data
@@ -2779,6 +2864,10 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
 gateway` and `pnpm verify` as quoted in the commit. On the seeded test database the
     cross-organization start-run answers 503 (its catalog binds no feed), so the scope rejection of
     that call is shown by GO-13's tests.
+  - Audit 2026-10-03: the route matrix had left out `POST /internal/control/evaluate`, so "every mounted
+    route" overstated it. It now includes it: another organization's operator evaluating input against
+    the run gets 404, and the organization fingerprints are unchanged
+    (`TestPostgresAnotherOrganizationCannotReachTheRunOrItsResources`).
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
@@ -2937,7 +3026,7 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
 
 ### All Go areas
 
-- [x] **GO-61 · Supply the Go technical handoff text**
+- [ ] **GO-61 · Supply the Go technical handoff text**
   - **Report 1.2 change:** The handoff adds local model acquisition and setup, the adapter contract, `policy.yaml`, the feed schema and revision, telemetry and the measured limits.
   - **Report 1.1 change:** Adds provenance, templates, the projection and the 13 reason codes; limitation: "The lineage mechanism covers fixed templates and registered adapters".
   - Owner: Go implementer (all report roles on this side) · Tier: B · Size: S (estimate 1-2 h)
@@ -2954,7 +3043,8 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     "the demonstration matches the submitted build and its documented limitations".
   - Tests: a teammate who did not write the Go code follows the Go setup text on a clean checkout
     and runs the go checks.
-  - Completed (2026-10-03): W2 lane. "Technical handoff (GO-61)" in `services/gateway/README.md`,
+  - Progress (2026-10-04): W2 lane; re-verify at the freeze against the final build (X-59) and
+    with the Tests line's dry run. "Technical handoff (GO-61)" in `services/gateway/README.md`,
     written from the code on `main` 87f22f0: the Go setup steps (pointing into `docs/setup.md`);
     how a run flows through the packages, from admission to the final result, the review wait,
     the reads and catalog activation; a table of every boundary with its check and fail-closed

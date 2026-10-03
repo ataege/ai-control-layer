@@ -171,12 +171,22 @@ func validateRevision(ctx context.Context, transaction pgx.Tx, revisionID int64)
 func WatchRequested(ctx context.Context, database Beginner, interval time.Duration, logger *slog.Logger) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	failing := false
 	for {
 		outcome, err := ActivateRequested(ctx, database)
 		switch {
 		case err != nil && ctx.Err() == nil:
-			// Readiness reports an unreachable database; a failed check is retried next tick.
-			logger.Debug("catalog activation check failed")
+			// A failed check is retried next tick. It is named once when checks start failing (a
+			// lasting failure means no import can activate), not on every tick.
+			if !failing {
+				logger.Warn("catalog activation checks are failing; no requested revision can be activated")
+			}
+			failing = true
+		case err == nil && failing:
+			logger.Info("catalog activation checks work again")
+			failing = false
+		}
+		switch {
 		case outcome == ActivationActivated:
 			logger.Info("catalog revision validated and activated")
 		case outcome == ActivationRejected:

@@ -240,6 +240,12 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
    semantic check. Only the inspected result enters `runtime.context_entries`.
 8. **Finish** (`runresult`). Only the exact final answer `{"status":"completed","report_ids":[...]}`
    naming reports this run created completes the run; the validated reference is stored with it.
+   One Markdown code fence (` ``` ` or ` ```json `) enclosing the whole answer is
+   accepted (lead decision); text outside it, two fences or a non-object inside are rejected, and
+   the stored reference never contains the fence. `runresult.Cause` names a rejection with a fixed
+   kind for the log and `maskedSummary.rejectionCause` (`not_json`, `extra_text`, `code_fence`,
+   `wrong_status`, `wrong_fields`; `unknown_report` for another run's report), never the answer's
+   text.
 9. **Reads and probes** (`reads`, `provenance`, `evaluation`). NestJS reads run state, usage,
    events, the stored report and the security records through private routes; judges probe the
    controls through `POST /internal/control/evaluate` without running the agent.
@@ -811,8 +817,9 @@ retries a run. Control assessments of a released result commit in the same trans
 context entries; those of a paused inspection are written on their own. Rows hold ids, outcomes,
 codes, revisions, the validated verdict (category, score, reason code) and durations, never
 inspected text, prompts or model output. Semantic rows carry their verdict source (`live` or
-`fixture`) and the `security`-purpose call they came from. `approval_wait` follows with GO-40;
-the concurrency slot with GO-79; queue depth is read from `runtime.jobs`.
+`fixture`) and the `security`-purpose call they came from. The resume of a review wait writes an
+`approval_wait` span from the awaiting transition to the resume, with the action id (GO-40); the
+concurrency slot is GO-79; queue depth is read from `runtime.jobs`.
 
 ## Bounded agent loop (GO-11)
 

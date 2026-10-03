@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "security-summary.schema.json",
   "title": "SecuritySummary",
-  "description": "X-93 input (GO-83): the organization's security records aggregated: runs by status, decisions by type, decision, reason and input source, assessments by control, outcome, verdict source and input source, model usage per purpose (judge probes' security calls also counted apart), observed timings per phase in microseconds.",
+  "description": "X-93 input (GO-83): the organization's security records aggregated: runs by status, decisions by type, decision, reason, input source and rejection cause, assessments by control, outcome, verdict source and input source, model usage per purpose (judge probes' security calls also counted apart), observed timings per phase in microseconds.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -54,7 +54,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["eventType", "decision", "reasonCode", "inputSource", "count"],
+        "required": [
+          "eventType",
+          "decision",
+          "reasonCode",
+          "inputSource",
+          "rejectionCause",
+          "count"
+        ],
         "properties": {
           "eventType": {
             "enum": [
@@ -141,6 +148,23 @@
             "anyOf": [
               {
                 "enum": ["judge"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rejectionCause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "not_json",
+                  "extra_text",
+                  "code_fence",
+                  "wrong_status",
+                  "wrong_fields",
+                  "unknown_report"
+                ]
               },
               {
                 "type": "null"

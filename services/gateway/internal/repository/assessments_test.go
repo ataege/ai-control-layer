@@ -50,9 +50,10 @@ func TestPostgresControlRecordsAreWrittenWithTheirKeys(t *testing.T) {
 	var stored []row
 	for rows.Next() {
 		var value row
-		_ = rows.Scan(&value.class, &value.outcome, &value.rule, &value.source, &value.hasVerdict, &value.revision, &value.noAction)
+		mustScan(t, rows, &value.class, &value.outcome, &value.rule, &value.source, &value.hasVerdict, &value.revision, &value.noAction)
 		stored = append(stored, value)
 	}
+	mustFinishRows(t, rows)
 	want := []row{
 		{"deterministic", "block", "prompt_ignore_previous_v1", "", false, 3, true},
 		// A record without its own revision takes the evaluation's.

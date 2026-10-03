@@ -139,7 +139,8 @@ func validSummary(summary contracts.MaskedSummary) bool {
 			utf8.RuneCountInString(*summary.SafeMessage) <= maximumSafeMessageLength)) &&
 		(summary.ActorID == nil || validUUID(*summary.ActorID)) &&
 		(summary.EvaluationID == nil || validUUID(*summary.EvaluationID)) &&
-		optionalOneOf(summary.InputSource, summaryInputSources)
+		optionalOneOf(summary.InputSource, summaryInputSources) &&
+		optionalOneOf(summary.RejectionCause, contracts.RejectionCauses)
 }
 
 func optionalOneOf(value *string, allowed []string) bool {

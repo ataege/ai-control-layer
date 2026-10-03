@@ -3,8 +3,13 @@ package catalog
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"starter/services/gateway/internal/catalog/catalogtest"
 	"starter/services/gateway/internal/testdb"
@@ -158,5 +163,28 @@ func TestPostgresGatewayRoleMayOnlyAcknowledge(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Errorf("%s as the gateway role: %v", name, err)
 		}
+	}
+}
+
+// failingDatabase stands in for a database whose transactions cannot start.
+type failingDatabase struct{}
+
+func (failingDatabase) Begin(context.Context) (pgx.Tx, error) {
+	return nil, errors.New("connection refused")
+}
+
+// A lasting activation failure is named once at the default level, not on every tick and not
+// only at Debug, so an import that can never activate is visible.
+func TestWatchRequestedWarnsOnceWhileChecksFail(t *testing.T) {
+	var logged strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logged, nil))
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+	WatchRequested(ctx, failingDatabase{}, 10*time.Millisecond, logger)
+	if count := strings.Count(logged.String(), "level=WARN msg=\"catalog activation checks are failing"); count != 1 {
+		t.Errorf("warnings = %d, want 1; log:\n%s", count, logged.String())
+	}
+	if strings.Contains(logged.String(), "connection refused") {
+		t.Error("the driver error reached the log")
 	}
 }

@@ -350,3 +350,29 @@ func TestNotApplicableSemanticRecordIsStoredWithAnAllow(t *testing.T) {
 		t.Fatalf("stored %d records, semantic outcome %s, verdict source %v", stored, semanticOutcome, verdictSource)
 	}
 }
+
+// CorrectionCounter.Feedback reads the run's progress from its stored actions and reports: a
+// vendor report queued for approval makes a denied internal export say the alternative is done.
+func TestCorrectionFeedbackReadsTheRunsProgress(t *testing.T) {
+	ctx := context.Background()
+	export := Decision{Outcome: OutcomeDeny, ReasonCode: ReasonReportExportRestricted, AlternativeTemplate: TemplateVendorReconciliation}
+
+	// A vendor report exists but nothing queues it yet.
+	stored := openReviewWorld(t)
+	feedback, err := NewCorrectionCounter(stored.pool).Feedback(ctx, stored.run, export, stored.scope)
+	if err != nil || feedback.AlternativeTemplate != TemplateVendorReconciliation || strings.Contains(feedback.SafeMessage, alternativeCompletedSentence) {
+		t.Fatalf("before queueing: %+v, err %v", feedback, err)
+	}
+	// The vendor report's queue_report awaits approval.
+	queued := openApprovalWorld(t)
+	feedback, err = NewCorrectionCounter(queued.pool).Feedback(ctx, queued.run, export, queued.scope)
+	if err != nil || feedback.AlternativeTemplate != "" || !strings.Contains(feedback.SafeMessage, alternativeCompletedSentence) {
+		t.Fatalf("after queueing: %+v, err %v", feedback, err)
+	}
+	// Another run of the same organization is not this run's progress.
+	other := RunIdentity{OrganizationID: queued.run.OrganizationID, RunID: testdb.ID(t)}
+	if feedback, err = NewCorrectionCounter(queued.pool).Feedback(ctx, other, export, queued.scope); err != nil ||
+		strings.Contains(feedback.SafeMessage, alternativeCompletedSentence) {
+		t.Fatalf("another run: %+v, err %v", feedback, err)
+	}
+}

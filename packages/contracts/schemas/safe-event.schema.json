@@ -159,7 +159,8 @@
         "safeMessage",
         "actorId",
         "inputSource",
-        "evaluationId"
+        "evaluationId",
+        "rejectionCause"
       ],
       "properties": {
         "purpose": {
@@ -321,6 +322,23 @@
             {
               "type": "string",
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rejectionCause": {
+          "anyOf": [
+            {
+              "enum": [
+                "not_json",
+                "extra_text",
+                "code_fence",
+                "wrong_status",
+                "wrong_fields",
+                "unknown_report"
+              ]
             },
             {
               "type": "null"
