@@ -548,10 +548,11 @@ pnpm judge --help
 
 **Draft.** The Go side exists: `POST /internal/control/evaluate` (X-91, GO-82) is served by the
 gateway (`services/gateway/internal/api`), with its frozen schemas in `packages/contracts`. The
-NestJS live test entry the client calls, `POST /api/control/evaluate` (X-106, API-38), is not in
-`apps/api` yet, so today every call ends with "No decision". The client's request body follows the
-earlier proposal in `docs/contracts/control-evaluation-draft.md`, which differs from the frozen X-91
-schema, and no operator is seeded yet (SH-19) to sign in with. Its only credential is the
+NestJS live test entry, `POST /api/control/evaluate` (X-106, API-38), now exists in `apps/api`
+(`runs/control-evaluation.controller.ts`), and `pnpm db:seed` seeds the demonstration operator
+(SH-19). But this client's request body still follows the earlier proposal in
+`docs/contracts/control-evaluation-draft.md`, which differs from the frozen X-91 schema, so it is not
+verified end to end; the judge console page (`/judge`, being built) is the supported path. Its only credential is the
 operator's session cookie; it never reads `.env`. It exits 0 when a decision came back, whatever the decision, and
 non-zero when none did. For a fixture case it says whether the decision matches the case's label; a
 label is a test expectation, not detection quality. `pnpm test:judge` tests the client against a
