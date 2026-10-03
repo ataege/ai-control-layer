@@ -1294,7 +1294,8 @@ this side starts and reviews.
     interface contracts" (Proposed browser and runtime operations)
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-21 · Forward cancellation through `POST /api/runs/{id}/cancel`**
+- [x] **API-21 · Forward cancellation through `POST /api/runs/{id}/cancel`**
+  - Done (2026-10-04): forwards cancellation with verified membership and no extra role, per product decision 30. Returns Go's X-11 state unchanged; browser command fields are refused; a timeout is 504 outcome_unconfirmed and never cancellation success. Swagger states that future dispatches stop and committed effects remain. Checks: API lint, typecheck and build exited 0; API unit tests: "192 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Real API/Go calls returned 200 for state, usage and cancel and persisted cancelRequestedAt; the current gateway returned the run.cancel_requested event. Host smoke: "28 passed, 0 failed, 5 skipped" (host logs unavailable). No database writes by NestJS.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: API-10, API-16 · Needs: X-42 · Provides: X-43 (part: cancel); X-55 (part: cancel
     command)

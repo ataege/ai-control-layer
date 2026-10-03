@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  HttpCode,
   HttpException,
   InternalServerErrorException,
   Post,
@@ -78,6 +79,40 @@ export class RunsController {
     if (usage.runId !== runId)
       throw new ServiceUnavailableException("Invalid gateway run reference");
     return usage;
+  }
+
+  @Post(":id/cancel")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Request cancellation: stops future dispatches and preserves committed effects",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Go's recorded run state after the cancellation request.",
+  })
+  async cancel(
+    @Param("id") runId: string,
+    @Body() body: unknown,
+    @Req() request: Request,
+  ): Promise<RunState> {
+    const operator = verifiedOperator(request);
+    requireRecordId(runId);
+    if (!z.strictObject({}).optional().safeParse(body).success) {
+      throw new BadRequestException("Cancellation accepts no command fields");
+    }
+    const state = gatewayData(
+      await this.gateway.postCommand(
+        `/internal/runs/${runId}/cancel`,
+        request.requestId,
+        {},
+        RunStateSchema,
+        operator,
+      ),
+      true,
+    ) as RunState;
+    if (state.runId !== runId)
+      throw new ServiceUnavailableException("Invalid gateway run reference");
+    return state;
   }
 
   @Get(":id/events")

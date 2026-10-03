@@ -43,6 +43,8 @@ const KNOWN_ERROR_CODES = new Set([
   "allowance_exhausted",
   "run_cancelled",
   "outcome_unknown",
+  "outcome_unconfirmed",
+  "upstream_unavailable",
   "semantic_injection_detected",
   "security_evaluator_unavailable",
   "security_allowance_exhausted",
