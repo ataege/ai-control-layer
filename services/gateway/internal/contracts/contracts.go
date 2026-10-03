@@ -237,6 +237,9 @@ type StoredAction struct {
 	Status                     ActionStatus `json:"status"`
 	ExpiresAt                  *time.Time   `json:"expiresAt"`
 	CreatedAt                  time.Time    `json:"createdAt"`
+	// ReplaySource is labelled_replay:<fixture id> for a labelled replay (GO-36); nil for a model
+	// proposal.
+	ReplaySource *string `json:"replaySource"`
 }
 
 // RunStatus is the state of a run (X-11).
@@ -280,14 +283,19 @@ type RunState struct {
 type EventType string
 
 const (
-	EventAdmissionRejected         EventType = "admission.rejected"
-	EventRunQueued                 EventType = "run.queued"
-	EventRunStarted                EventType = "run.started"
-	EventRunPaused                 EventType = "run.paused"
-	EventRunCompleted              EventType = "run.completed"
-	EventRunFailed                 EventType = "run.failed"
-	EventRunStopped                EventType = "run.stopped"
-	EventRunCancelRequested        EventType = "run.cancel_requested"
+	EventAdmissionRejected  EventType = "admission.rejected"
+	EventRunQueued          EventType = "run.queued"
+	EventRunStarted         EventType = "run.started"
+	EventRunPaused          EventType = "run.paused"
+	EventRunCompleted       EventType = "run.completed"
+	EventRunFailed          EventType = "run.failed"
+	EventRunStopped         EventType = "run.stopped"
+	EventRunCancelRequested EventType = "run.cancel_requested"
+	// EventRunAwaitingApproval is the run's transition to awaiting_approval; approval.requested
+	// stays the gate's event for the action.
+	EventRunAwaitingApproval EventType = "run.awaiting_approval"
+	// EventRunResumed is the run's return to running when its continuation job is claimed.
+	EventRunResumed                EventType = "run.resumed"
 	EventModelCompleted            EventType = "model.completed"
 	EventActionProposed            EventType = "action.proposed"
 	EventActionAllowed             EventType = "action.allowed"
@@ -308,7 +316,7 @@ const (
 // EventTypes lists every event type.
 var EventTypes = []EventType{
 	EventAdmissionRejected, EventRunQueued, EventRunStarted, EventRunPaused, EventRunCompleted,
-	EventRunFailed, EventRunStopped, EventRunCancelRequested, EventModelCompleted, EventActionProposed, EventActionAllowed,
+	EventRunFailed, EventRunStopped, EventRunCancelRequested, EventRunAwaitingApproval, EventRunResumed, EventModelCompleted, EventActionProposed, EventActionAllowed,
 	EventActionDenied, EventApprovalRequested, EventApprovalDecided, EventActionExecuting,
 	EventActionSucceeded, EventActionFailed, EventActionUnknown, EventReportCreated,
 	EventReportExportDenied, EventReportSafeTemplateOffered, EventControlEvaluated,
@@ -411,4 +419,93 @@ func (choice ApprovalChoice) Valid() bool { return contains(ApprovalChoices, cho
 // Decode it strictly; any other field is refused and grants nothing.
 type ApprovalDecision struct {
 	Decision ApprovalChoice `json:"decision"`
+}
+
+// ControlBoundary is the boundary an evaluated interaction is checked at (X-91).
+type ControlBoundary string
+
+const (
+	BoundaryModelInput     ControlBoundary = "model_input"
+	BoundaryToolResult     ControlBoundary = "tool_result"
+	BoundaryActionProposal ControlBoundary = "action_proposal"
+)
+
+// ControlBoundaries lists every evaluation boundary.
+var ControlBoundaries = []ControlBoundary{BoundaryModelInput, BoundaryToolResult, BoundaryActionProposal}
+
+// Valid reports whether the boundary is part of the contract.
+func (boundary ControlBoundary) Valid() bool { return contains(ControlBoundaries, boundary) }
+
+// ControlEvaluationRequest is X-91: one interaction of an admitted run, evaluated through the same
+// gates as the agent path. Identity comes from the verified operator context only; the call never
+// dispatches the agent model and the caller cannot issue a grant.
+type ControlEvaluationRequest struct {
+	RunID string          `json:"runId"`
+	Kind  ControlBoundary `json:"kind"`
+	// Text is the untrusted text for model_input and tool_result; nil for action_proposal.
+	Text *string `json:"text"`
+	// Tool is the tool a tool_result is attributed to, or the proposed tool; nil for model_input.
+	Tool *ToolName `json:"tool"`
+	// Arguments are the proposed tool's snake_case arguments (X-09) for action_proposal.
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+// EvaluationDecision is the outcome of one evaluated interaction.
+type EvaluationDecision string
+
+const (
+	EvaluationAllow            EvaluationDecision = "allow"
+	EvaluationDeny             EvaluationDecision = "deny"
+	EvaluationRedact           EvaluationDecision = "redact"
+	EvaluationApprovalRequired EvaluationDecision = "approval_required"
+)
+
+// EvaluationDecisions lists every evaluation decision.
+var EvaluationDecisions = []EvaluationDecision{EvaluationAllow, EvaluationDeny, EvaluationRedact, EvaluationApprovalRequired}
+
+// ControlEvaluationControl is one control that ran for an evaluation.
+type ControlEvaluationControl struct {
+	Boundary     ControlBoundary `json:"boundary"`
+	ControlClass string          `json:"controlClass"`
+	Control      string          `json:"control"`
+	Outcome      string          `json:"outcome"`
+	ReasonCode   *string         `json:"reasonCode"`
+	RuleID       *string         `json:"ruleId"`
+	FeedRevision *string         `json:"feedRevision"`
+}
+
+// ControlEvaluationSemantic is the validated verdict when the semantic check ran.
+type ControlEvaluationSemantic struct {
+	Source       string  `json:"source"`
+	RiskCategory string  `json:"riskCategory"`
+	Score        float64 `json:"score"`
+	ReasonCode   string  `json:"reasonCode"`
+}
+
+// ControlEvaluationContent is the server-redacted text of a redact decision.
+type ControlEvaluationContent struct {
+	Text string `json:"text"`
+}
+
+// ControlEvaluationCatalog names the revisions an evaluation used.
+type ControlEvaluationCatalog struct {
+	AdmissionRevisionID int64  `json:"admissionRevisionId"`
+	ActiveRevisionID    int64  `json:"activeRevisionId"`
+	FeedRevisionID      *int64 `json:"feedRevisionId"`
+}
+
+// ControlEvaluationResponse is X-91's answer. Evaluated actions are decisions only: nothing is
+// stored as an action or executed, so ActionID is always nil.
+type ControlEvaluationResponse struct {
+	EvaluationID        string                     `json:"evaluationId"`
+	RunID               string                     `json:"runId"`
+	ActionID            *string                    `json:"actionId"`
+	Decision            EvaluationDecision         `json:"decision"`
+	ReasonCode          *ReasonCode                `json:"reasonCode"`
+	SafeMessage         string                     `json:"safeMessage"`
+	AlternativeTemplate *ReportTemplate            `json:"alternativeTemplate"`
+	Controls            []ControlEvaluationControl `json:"controls"`
+	Semantic            *ControlEvaluationSemantic `json:"semantic"`
+	Content             *ControlEvaluationContent  `json:"content"`
+	Catalog             ControlEvaluationCatalog   `json:"catalog"`
 }

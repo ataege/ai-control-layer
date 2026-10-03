@@ -2424,7 +2424,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-57 · Prove organization access at the internal boundary**
+- [x] **GO-57 · Prove organization access at the internal boundary**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-14, GO-21, GO-41, GO-44 · Needs: X-22, X-24, X-34 · Provides: X-56
   - Paths: `services/gateway/internal/httpserver/server_test.go`
@@ -2437,20 +2437,22 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     its action, or claim its resources.")
   - Tests: internal-boundary tests through the X-24 command: each cross-organization command and
     read is rejected, and the runtime rows are identical before and after.
-  - Progress (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
+  - Completed (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
     committed run (awaiting approval), an action awaiting approval, an internal report, a vendor and
     invoices, and calls every mounted internal route with a valid service token and organization
     B's verified operator context: start a run on A's invoices, cancel A's run, read A's report,
-    approve and reject A's action, read A's review. Each is rejected (start: 400 or 503, cancel and
-    report 404, approval and review 403 or 404), no response contains A's report text or vendor,
-    B gets no passport, and an md5 fingerprint of every row A owns in runtime.passports, runs, jobs,
-    actions, approvals, audit_events, review_payloads, demo.reports, outbox_messages, invoices and
-    vendors is identical before and after; A's own operator still reads the report (200) and
-    cancels the run (200). Checks: `pnpm test:db gateway` 688 passed, 0 failed, 0 skipped; gateway
-    five checks PASS; `pnpm verify` 6 passed. Missing half: lane w2's GO-24 run, usage and event
-    reads are not mounted yet; they join this test when they land. On the seeded test database the
-    cross-organization start-run gets 503 (its catalog binds no feed), so the scope rejection of
-    that call is shown by GO-13's tests instead.
+    approve and reject A's action, read A's review, read A's run state, events and usage (lane w2's
+    GO-24). Each is rejected (start 400 or 503; cancel, report, run state, events and usage 404;
+    approval and review 403 or 404); the organization-wide security summary, assessments and events
+    (GO-83) answer B with none of A's run, action, report or organization ids; no response contains
+    A's report text or vendor; B gets no passport; and an md5 fingerprint of every row A owns in
+    runtime.passports, runs, jobs, actions, approvals, audit_events, review_payloads, demo.reports,
+    outbox_messages, invoices and vendors is identical before and after. A's own operator still
+    reads the report, the run state and the events (200) and cancels the run (200). Checks: `go test
+./internal/api` against the test database PASS; gateway five checks PASS; `pnpm test:db
+gateway` and `pnpm verify` as quoted in the commit. On the seeded test database the
+    cross-organization start-run answers 503 (its catalog binds no feed), so the scope rejection of
+    that call is shown by GO-13's tests.
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
