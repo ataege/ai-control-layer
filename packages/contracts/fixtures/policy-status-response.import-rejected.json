@@ -1,0 +1,12 @@
+{
+  "requestedRevisionId": "3",
+  "validatedRevisionId": "2",
+  "activeRevisionId": "2",
+  "activeFeedRevisionId": "1",
+  "lastError": {
+    "code": "policy_reload_rejected",
+    "message": "budgets: limits are invalid",
+    "revisionId": null,
+    "stage": "import_validation"
+  }
+}

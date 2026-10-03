@@ -100,3 +100,25 @@ X-12's `SafeEvent` by reference (`safe-event.schema.json`). Points that matter t
 
 Changing a contract means updating the type, the schema, the fixtures and the Go DTO together.
 The nestjs role (the web + API implementer) coordinates and merges those changes after a quick shared review, and the go role mirrors the Go DTO. Each contract's recorded owner is listed in `docs/product/README.md`.
+
+## NestJS policy reload contracts (API-33)
+
+These public HTTP contracts are NestJS-owned and do not add a Go command endpoint:
+
+- `PolicyReloadRequest`: POST `/api/policies/reload`, exactly `{}`. The reviewer and imported actor
+  come from the verified current membership, never the request. No file upload or browser-selected path.
+- `PolicyReloadResponse`: HTTP 202 requested with requestedRevisionId/fileDigest/feedRevision,
+  or HTTP 200 unchanged with revisionId. IDs are positive decimal strings, preserving PostgreSQL
+  bigint precision. feedRevision is the publisher's version label (for example feed_v1), null when absent.
+- `PolicyReloadErrorResponse`: the shared envelope shape plus an optional error.issues list of
+  safe path/message pairs for HTTP 400 policy/feed rejection. This is a separate NestJS schema;
+  the Go-owned error schema is unchanged. A pending edit is HTTP 409 error.code revision_pending.
+- `PolicyStatusResponse`: reviewer-only GET `/api/policies/status`, with requested/validated/active
+  revision IDs, activeFeedRevisionId and lastError. Error mapping is approved by the lead:
+  Go code/message/revision_id/stage become code/message/revisionId/stage; importer issues become
+  policy_reload_rejected, joined issue messages, null revisionId and import_validation stage.
+  No raw source text, digest extras or arbitrary stored error fields are returned.
+
+Schemas and fixtures use the policy-reload-request, policy-reload-response,
+policy-reload-error-response and policy-status-response prefixes. Typed fixture tests pin each shape.
+Only Go's catalog watcher validates and activates a requested revision; 202 is not activation success.

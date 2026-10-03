@@ -56,7 +56,13 @@ API-15's browser presentation remains the web owner's verification task, with no
 API-12 is implemented against the lead-approved private Go GET /internal/task-options route;
 the shared schema is validated and the response is returned unchanged. Real Go/API/web proxy
 reads returned identical 200 responses; source failures never return default choices.
-API-33 authenticated policy reload is awaiting implementation against the lead's supplied flow.
+API-33 exposes reviewer-only POST /api/policies/reload (exactly {}) and GET /api/policies/status.
+NestJS imports the fixed repository policy/feed with verified-user provenance and only requests
+a revision. It calls no Go endpoint: the watcher activates asynchronously. 202 requested is not
+activation; unchanged files return 200, validation issues 400, pending edits 409 revision_pending.
+Status returns the stored pointers and the four sanitized lastError fields; feedRevision in the
+requested response is the feed version label, not its database ID. Shared policy schemas/fixtures
+and their ownership are documented in packages/contracts/README.md.
 The merged web still expects draft combined RunView and cursor query naming;
 its owner must adopt the separate shared RunState/RunUsage and events after parameter.
 Host smoke after the web merge reports 22 passed, 8 failed, 6 skipped: / and /components redirect

@@ -127,8 +127,10 @@ repository-root `.env` itself, and real environment variables win over the file.
 
 ## Verification and handoff limits
 
-API lint, typecheck and build passed; unit tests: 384 passed; database tests: 69 passed,
-0 failed, 0 skipped; `pnpm verify`: 6 passed, 0 failed, 0 skipped. The real web/API
+API lint, typecheck and build passed; unit tests: 407 passed; database tests: 71 passed,
+0 failed, 0 skipped; policy/shared contract tests: 9 passed. `pnpm verify` currently reports
+4 passed, 2 failed, 0 skipped: the merged web has formatting failures and two homepage tests fail.
+Those failures are not reported as passing and require the web owner. The real web/API
 sign-in → profile → sign-out → revoked-profile check returned 200/200/200/401. These results
 cover this branch's current code, not a frozen submission build. The sanitized audit evidence
 and its build identifier are linked in the handoff.
@@ -136,9 +138,19 @@ and its build identifier are linked in the handoff.
 The merged web middleware redirects `/` and `/components` to login. Current host smoke still
 expects 200 there and reported 22 passed, 8 failed, 6 skipped after restarting the stack.
 The web/script owners must settle that expectation; it is not recorded as passing.
-API-12 form options now forward GET /internal/task-options unchanged through the shared schema;
-real Go/API/web-proxy reads returned 200 with identical bodies. API-33 authenticated reload
-remains to be implemented against the lead's supplied flow.
+API-12 form options forward GET /internal/task-options unchanged through the shared schema;
+real Go/API/web-proxy reads returned 200 with identical bodies.
+API-33 provides reviewer-only POST /api/policies/reload with exactly {} and GET /api/policies/status.
+Reload reads the fixed repository config/policy.yaml and its named feed using the same bounded
+reader as the CLI. The importer records reload/verified-user provenance and requests a revision;
+Go's watcher activates it asynchronously. Responses are 202 requested, 200 unchanged,
+400 with safe issue pairs or 409 revision_pending. Status shows stored revision pointers and the
+sanitized last error. It never returns file content or waits for activation. Docker must make the
+repository config files available at their expected path; missing files fail with 503.
+Real authenticated API/Go checks observed unchanged 200, requested 202 followed by watcher
+activation, invalid policy 400 with issue pairs and preservation of the active revision, and
+the approved importer lastError mapping. The new catalog row recorded the verified actor.
+The original configuration bytes were restored and reactivated after the check.
 The draft judge CLI needs the lead's X-91 update. Activity uses polling, not SSE.
 API-15 browser presentation, teammate clean-checkout setup, Docker, and a new live-model
 approval/outbox rehearsal were not verified in this API work. Fixtures prove contract and
