@@ -1555,7 +1555,8 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
-- [ ] **API-36 · Serve the sanitized audit export**
+- [x] **API-36 · Serve the sanitized audit export**
+  - Done (2026-10-04): lead-approved GET /api/security/export?kind=events|assessments&format=json|csv&after=...&limit=... checks reviewer from verified membership before any Go call. Browser after maps to Go cursor; maximum page size is 500. JSON returns exactly the shared Go page; CSV serializes only existing record fields and neutralizes formula triggers (including whitespace/control prefixes), with Go nextCursor in X-Next-Cursor. Invalid cursor ranges, ordering, foreign event organizations, unknown fields and transport errors fail closed. Checks: API lint, typecheck and build exited 0; API unit tests: "264 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; real authenticated API/Go event and assessment exports returned 200 in both JSON and CSV. Tests include missing session, non-reviewer refusal before Go and CSV formula cases. No added record fields or runtime/demo writes; full reconciliation evidence remains API-37.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: API-16 · Needs: X-79, X-85 · Provides: X-94
   - Paths: `apps/api/src` (the activity module)

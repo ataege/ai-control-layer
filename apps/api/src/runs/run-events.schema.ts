@@ -7,7 +7,7 @@ import type { SafeEvent, RunEventsPage } from "@workspace/contracts";
 const { if: conditional, then: consequence, ...eventShape } = eventContract;
 void conditional;
 void consequence;
-const eventSchema = z
+export const SafeEventSchema = z
   .fromJSONSchema(eventShape as Parameters<typeof z.fromJSONSchema>[0])
   .superRefine((value, context) => {
     const event = value as SafeEvent;
@@ -27,7 +27,7 @@ export const RunEventsSchema = z
   .superRefine((value, context) => {
     const page = value as RunEventsPage;
     for (const event of page.events) {
-      if (!eventSchema.safeParse(event).success) {
+      if (!SafeEventSchema.safeParse(event).success) {
         context.addIssue({ code: "custom", message: "Invalid event" });
       }
     }
