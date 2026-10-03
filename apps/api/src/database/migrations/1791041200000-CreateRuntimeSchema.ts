@@ -36,17 +36,19 @@ export class CreateRuntimeSchema1791041200000 implements MigrationInterface {
         CONSTRAINT "passports_expiry_after_issue" CHECK ("expires_at" > "issued_at")
       )`,
     );
-    // "Once admitted, the passport remains fixed": no UPDATE, from any service.
+    // "Once admitted, the passport remains fixed": no UPDATE and no row DELETE, from any service.
+    // TRUNCATE is deliberately not blocked: `pnpm reset:demo` truncates the runtime schema as the
+    // owner, and the service roles (SH-26) grant neither DELETE nor TRUNCATE.
     await queryRunner.query(
-      `CREATE FUNCTION "runtime"."reject_passport_update"() RETURNS trigger LANGUAGE plpgsql AS $$
+      `CREATE FUNCTION "runtime"."reject_passport_change"() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
         RAISE EXCEPTION 'runtime.passports rows are immutable';
       END;
       $$`,
     );
     await queryRunner.query(
-      `CREATE TRIGGER "passports_immutable" BEFORE UPDATE ON "runtime"."passports"
-       FOR EACH ROW EXECUTE FUNCTION "runtime"."reject_passport_update"()`,
+      `CREATE TRIGGER "passports_immutable" BEFORE UPDATE OR DELETE ON "runtime"."passports"
+       FOR EACH ROW EXECUTE FUNCTION "runtime"."reject_passport_change"()`,
     );
 
     // One run per passport (Figure 4: "The passport, run, and job are stored together").
@@ -133,8 +135,8 @@ export class CreateRuntimeSchema1791041200000 implements MigrationInterface {
     );
 
     // GO-02: a durable record committed before each model dispatch. It proves intent to dispatch,
-    // not delivery. Missing token counts mean unknown usage, never zero. The reservation link is
-    // added with the reservations (SH-27).
+    // not delivery. Token reservations and usage are not here: the Go implementer's GO-06 ledger
+    // (runtime.model_token_reservations) is the one token authority.
     await queryRunner.query(
       `CREATE TABLE "runtime"."model_calls" (
         "id" uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -143,15 +145,10 @@ export class CreateRuntimeSchema1791041200000 implements MigrationInterface {
         "purpose" text NOT NULL,
         "model" text NOT NULL,
         "outcome" text,
-        "input_tokens" integer,
-        "output_tokens" integer,
         "dispatch_recorded_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
         "completed_at" TIMESTAMP WITH TIME ZONE,
         CONSTRAINT "model_calls_pkey" PRIMARY KEY ("id"),
         CONSTRAINT "model_calls_purpose" CHECK ("purpose" IN ('agent', 'security')),
-        CONSTRAINT "model_calls_tokens_nonnegative"
-          CHECK (("input_tokens" IS NULL OR "input_tokens" >= 0)
-             AND ("output_tokens" IS NULL OR "output_tokens" >= 0)),
         CONSTRAINT "model_calls_run_fkey" FOREIGN KEY ("run_id", "organization_id")
           REFERENCES "runtime"."runs" ("id", "organization_id") ON DELETE RESTRICT
       )`,
@@ -177,13 +174,14 @@ export class CreateRuntimeSchema1791041200000 implements MigrationInterface {
     );
 
     // Sanitized decision events (X-12): masked metadata only, never raw notes, secrets or model
-    // requests. `id` is the cursor. Identity values are assigned at insert, not commit, so a
+    // requests. `run_id` is null only for events that have no run (a rejected admission, a failed
+    // policy reload); no placeholder run is ever created for them. `id` is the cursor. Identity values are assigned at insert, not commit, so a
     // reader paging by id must not skip in-flight rows; how the cursor handles that is Go's choice.
     await queryRunner.query(
       `CREATE TABLE "runtime"."audit_events" (
         "id" bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
         "organization_id" uuid NOT NULL,
-        "run_id" uuid NOT NULL,
+        "run_id" uuid,
         "action_id" uuid,
         "event_type" text NOT NULL,
         "decision" text,
@@ -192,6 +190,7 @@ export class CreateRuntimeSchema1791041200000 implements MigrationInterface {
         "masked_summary" jsonb NOT NULL DEFAULT '{}',
         "occurred_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
         CONSTRAINT "audit_events_pkey" PRIMARY KEY ("id"),
+        CONSTRAINT "audit_events_action_needs_run" CHECK ("action_id" IS NULL OR "run_id" IS NOT NULL),
         CONSTRAINT "audit_events_run_fkey" FOREIGN KEY ("run_id", "organization_id")
           REFERENCES "runtime"."runs" ("id", "organization_id") ON DELETE RESTRICT,
         CONSTRAINT "audit_events_action_fkey" FOREIGN KEY ("action_id", "organization_id")
@@ -200,6 +199,9 @@ export class CreateRuntimeSchema1791041200000 implements MigrationInterface {
     );
     await queryRunner.query(
       `CREATE INDEX "audit_events_run_cursor" ON "runtime"."audit_events" ("run_id", "id")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "audit_events_organization_cursor" ON "runtime"."audit_events" ("organization_id", "id")`,
     );
   }
 
@@ -212,7 +214,7 @@ export class CreateRuntimeSchema1791041200000 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "runtime"."runs"`);
     // Dropping the table drops its trigger; the function goes after it.
     await queryRunner.query(`DROP TABLE "runtime"."passports"`);
-    await queryRunner.query(`DROP FUNCTION "runtime"."reject_passport_update"()`);
+    await queryRunner.query(`DROP FUNCTION "runtime"."reject_passport_change"()`);
     // Without CASCADE: this fails rather than dropping objects a later migration added to `runtime`.
     await queryRunner.query(`DROP SCHEMA "runtime"`);
   }

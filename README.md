@@ -360,7 +360,8 @@ Conventions:
 
 - Go (`services/gateway`): a test that needs the database skips visibly when no database is
   configured, so `pnpm test` lists it as skipped. The command runs `go test -count=1 -json ./...`
-  once without the `POSTGRES_*` settings and `TEST_DATABASE_REQUIRED`; the tests that skip there are
+  once without the `POSTGRES_*` settings, `TEST_DATABASE_REQUIRED` and
+  `GATEWAY_TEST_DATABASE_URL`; the tests that skip there are
   the database tests. It then runs the suite again with the database, where every test must pass.
   How a test detects the database is the Go side's choice.
 - API (`apps/api`): files named `*.db-spec.ts` under `src`. The API's own Vitest config includes

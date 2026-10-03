@@ -1,15 +1,17 @@
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
 // DRAFT (SH-44), pending the Go implementer's approval; builds on the SH-16 draft
-// (1791041200000-CreateRuntimeSchema), which is not approved yet either. Go owns these tables:
+// (1791041200000-CreateRuntimeSchema), which is not approved yet either. Model-purpose token usage
+// is not here: it lives in the Go implementer's GO-06 ledger (runtime.model_token_reservations,
+// with purpose and input, output and actual tokens per call), the one token authority. Go owns these tables:
 // no NestJS entities, hand-written SQL, no data. Every row carries `organization_id` and points
 // at its run by (run_id, organization_id).
 //
 // Value lists that report 1.2 settles are checked here (the two control classes, the two metered
 // purposes, the live/fixture verdict source). Vocabularies that are still drafts (control ids and
 // boundaries from the draft policy.yaml, outcomes, reason codes) are text until they freeze.
-export class AddControlAssessmentsUsageTiming1791041320000 implements MigrationInterface {
-  name = "AddControlAssessmentsUsageTiming1791041320000";
+export class AddControlAssessmentsAndTiming1791041320000 implements MigrationInterface {
+  name = "AddControlAssessmentsAndTiming1791041320000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Targets for organization-safe references to a model call, and to a call of a given purpose.
@@ -76,36 +78,6 @@ export class AddControlAssessmentsUsageTiming1791041320000 implements MigrationI
       `CREATE INDEX "control_assessments_run_evaluation" ON "runtime"."control_assessments" ("run_id", "evaluation_id")`,
     );
 
-    // Usage of one model call, by metered purpose ("separate agent/guard usage"). Null token
-    // counts with usage_known = false mean unknown usage, never zero.
-    await queryRunner.query(
-      `CREATE TABLE "runtime"."model_usage" (
-        "model_call_id" uuid NOT NULL,
-        "organization_id" uuid NOT NULL,
-        "run_id" uuid NOT NULL,
-        "purpose" text NOT NULL,
-        "model" text NOT NULL,
-        "usage_known" boolean NOT NULL,
-        "input_tokens" integer,
-        "output_tokens" integer,
-        "recorded_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        CONSTRAINT "model_usage_pkey" PRIMARY KEY ("model_call_id"),
-        CONSTRAINT "model_usage_purpose" CHECK ("purpose" IN ('agent', 'security')),
-        CONSTRAINT "model_usage_known_has_tokens"
-          CHECK (NOT "usage_known" OR ("input_tokens" IS NOT NULL AND "output_tokens" IS NOT NULL)),
-        CONSTRAINT "model_usage_tokens_nonnegative"
-          CHECK (("input_tokens" IS NULL OR "input_tokens" >= 0)
-             AND ("output_tokens" IS NULL OR "output_tokens" >= 0)),
-        CONSTRAINT "model_usage_call_fkey" FOREIGN KEY ("model_call_id", "organization_id", "purpose")
-          REFERENCES "runtime"."model_calls" ("id", "organization_id", "purpose") ON DELETE RESTRICT,
-        CONSTRAINT "model_usage_run_fkey" FOREIGN KEY ("run_id", "organization_id")
-          REFERENCES "runtime"."runs" ("id", "organization_id") ON DELETE RESTRICT
-      )`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX "model_usage_run_purpose" ON "runtime"."model_usage" ("run_id", "purpose")`,
-    );
-
     // One measured span per row, so each span attaches to what it measured ("Measure monotonic
     // durations for policy lookup, deterministic controls, semantic evaluator dispatch/response
     // and total gateway handling"; plus provider, approval wait and commit). Microseconds,
@@ -145,7 +117,6 @@ export class AddControlAssessmentsUsageTiming1791041320000 implements MigrationI
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP TABLE "runtime"."timing_records"`);
-    await queryRunner.query(`DROP TABLE "runtime"."model_usage"`);
     await queryRunner.query(`DROP TABLE "runtime"."control_assessments"`);
     await queryRunner.query(
       `ALTER TABLE "runtime"."model_calls" DROP CONSTRAINT "model_calls_id_organization_purpose"`,

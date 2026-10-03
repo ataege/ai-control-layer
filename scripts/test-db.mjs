@@ -29,6 +29,9 @@ const VITEST_CONFIG_PATH = fromRepositoryRoot("scripts", "vitest.db.config.mjs")
 // Set for every test this command runs: a database test can treat a missing database as a failure.
 const DATABASE_REQUIRED_VARIABLE = "TEST_DATABASE_REQUIRED";
 const SIDES = ["gateway", "api"];
+// Connection URLs the Go database tests also accept (GO-06 reads GATEWAY_TEST_DATABASE_URL first);
+// the identification run removes them too, or those tests would not skip there.
+const DATABASE_URL_VARIABLES = ["GATEWAY_TEST_DATABASE_URL"];
 
 /** Runs a command, echoing its stdout line by line through `onStdoutLine`; resolves the exit code. */
 function runWithLineOutput(command, commandArguments, { env, cwd, onStdoutLine }) {
@@ -61,7 +64,10 @@ function runWithLineOutput(command, commandArguments, { env, cwd, onStdoutLine }
 function withoutDatabaseSettings(environment) {
   return Object.fromEntries(
     Object.entries(environment).filter(
-      ([name]) => !name.startsWith("POSTGRES_") && name !== DATABASE_REQUIRED_VARIABLE,
+      ([name]) =>
+        !name.startsWith("POSTGRES_") &&
+        name !== DATABASE_REQUIRED_VARIABLE &&
+        !DATABASE_URL_VARIABLES.includes(name),
     ),
   );
 }

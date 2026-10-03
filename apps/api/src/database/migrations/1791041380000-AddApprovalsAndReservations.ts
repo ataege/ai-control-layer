@@ -2,8 +2,13 @@ import type { MigrationInterface, QueryRunner } from "typeorm";
 
 // DRAFT (SH-27), pending the Go implementer's approval; builds on the SH-16 and SH-44 drafts.
 // Go owns these tables: no NestJS entities, hand-written SQL, no data. Every row carries
-// `organization_id` and references its parents by (id, organization_id). Actual usage stays in
-// `runtime.model_usage` (SH-44); a reservation holds only what was reserved and its state.
+// `organization_id` and references its parents by (id, organization_id).
+//
+// Model tokens are not here: the Go implementer's GO-06 ledger (runtime.model_token_budgets and
+// runtime.model_token_reservations) is the one token authority. `budget_reservations` below is a
+// PROPOSAL for only what that ledger does not cover: tool-attempt reservations, call counts per
+// purpose (the agent/security sub-budget split of the shared call ceiling), the concurrency slot
+// and the request deadline. See docs/contracts/runtime-schema-alignment.md.
 export class AddApprovalsAndReservations1791041380000 implements MigrationInterface {
   name = "AddApprovalsAndReservations1791041380000";
 
@@ -87,10 +92,11 @@ export class AddApprovalsAndReservations1791041380000 implements MigrationInterf
        FOR EACH ROW EXECUTE FUNCTION "runtime"."guard_approval_update"()`,
     );
 
-    // One reservation per dispatch, committed before it ("Reserve allowance before agent and
-    // guard dispatch"). A model reservation counts against the shared ceiling and its purpose's
-    // sub-budget; a tool reservation covers one tool attempt. Settlement compares with
-    // runtime.model_usage. `unresolved` keeps the allowance when usage or completion is unknown
+    // PROPOSAL: one row per dispatch, committed before it ("Reserve allowance before agent and
+    // guard dispatch"), for the limits the token ledger does not hold. A model row counts as one
+    // call of its purpose, so Go checks calls_total, calls_agent and calls_security by counting
+    // rows; a tool row covers one tool attempt (tool_attempts). States follow the token ledger's
+    // vocabulary: `usage_unknown` keeps the allowance and the slot when completion is unknown
     // ("retains unresolved reservations rather than treating consumption as zero").
     await queryRunner.query(
       `CREATE TABLE "runtime"."budget_reservations" (
@@ -100,23 +106,21 @@ export class AddApprovalsAndReservations1791041380000 implements MigrationInterf
         "purpose" text NOT NULL,
         "model_call_id" uuid,
         "execution_attempt_id" uuid,
-        "reserved_input_tokens" integer,
-        "reserved_output_tokens" integer,
         "concurrency_slot" smallint,
+        "request_deadline_at" TIMESTAMP WITH TIME ZONE,
         "state" text NOT NULL DEFAULT 'reserved',
         "reserved_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
         "resolved_at" TIMESTAMP WITH TIME ZONE,
         CONSTRAINT "budget_reservations_pkey" PRIMARY KEY ("id"),
         CONSTRAINT "budget_reservations_purpose" CHECK ("purpose" IN ('agent', 'security', 'tool')),
-        CONSTRAINT "budget_reservations_state" CHECK ("state" IN ('reserved', 'settled', 'unresolved')),
+        CONSTRAINT "budget_reservations_state" CHECK ("state" IN ('reserved', 'usage_unknown', 'settled')),
         CONSTRAINT "budget_reservations_resolved_pair"
           CHECK (("state" = 'reserved') = ("resolved_at" IS NULL)),
         CONSTRAINT "budget_reservations_dispatch_link" CHECK (
           ("purpose" = 'tool' AND "execution_attempt_id" IS NOT NULL AND "model_call_id" IS NULL)
           OR ("purpose" <> 'tool' AND "model_call_id" IS NOT NULL AND "execution_attempt_id" IS NULL)),
-        CONSTRAINT "budget_reservations_model_tokens" CHECK (
-          "purpose" = 'tool'
-          OR ("reserved_input_tokens" >= 0 AND "reserved_output_tokens" > 0)),
+        CONSTRAINT "budget_reservations_deadline_after_reservation"
+          CHECK ("request_deadline_at" IS NULL OR "request_deadline_at" > "reserved_at"),
         CONSTRAINT "budget_reservations_slot_positive"
           CHECK ("concurrency_slot" IS NULL OR "concurrency_slot" > 0),
         CONSTRAINT "budget_reservations_one_per_model_call" UNIQUE ("model_call_id"),
@@ -131,12 +135,12 @@ export class AddApprovalsAndReservations1791041380000 implements MigrationInterf
           REFERENCES "runtime"."execution_attempts" ("id", "organization_id") ON DELETE RESTRICT
       )`,
     );
-    // A slot stays held while the request may still be running: reserved, or unresolved because
-    // "a client timeout does not prove inference stopped". The slot limit itself is the
+    // A slot stays held while the request may still be running: reserved, or usage_unknown
+    // because "a client timeout does not prove inference stopped". The slot limit itself is the
     // passport's concurrency ceiling, checked by Go.
     await queryRunner.query(
       `CREATE UNIQUE INDEX "budget_reservations_slot_in_use" ON "runtime"."budget_reservations" ("run_id", "concurrency_slot")
-       WHERE "concurrency_slot" IS NOT NULL AND "state" IN ('reserved', 'unresolved')`,
+       WHERE "concurrency_slot" IS NOT NULL AND "state" IN ('reserved', 'usage_unknown')`,
     );
     await queryRunner.query(
       `CREATE INDEX "budget_reservations_run_purpose_state" ON "runtime"."budget_reservations" ("run_id", "purpose", "state")`,
