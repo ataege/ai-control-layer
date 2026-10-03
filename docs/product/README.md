@@ -87,22 +87,29 @@ version and export denial fields alongside those contracts." The web + API imple
 them in `packages/contracts`; each recorded owner decides its contract's shape after a quick shared
 review, and Go stays the authority for action canonicalization and artifact classification.
 
-| Contract                                                                                                                                                                  | Owner        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| Start-run request                                                                                                                                                         | not recorded |
-| Passport representation                                                                                                                                                   | not recorded |
-| Action proposal                                                                                                                                                           | not recorded |
-| Approval decision                                                                                                                                                         | not recorded |
-| Run state                                                                                                                                                                 | not recorded |
-| Safe event                                                                                                                                                                | not recorded |
-| Report and lineage summary (report 1.1: "Shared schemas should define supported requests, report lineage summaries and errors")                                           | not recorded |
-| Authenticated operator context (repository addition, not in the report's list; depends on decision 7)                                                                     | not recorded |
-| Policy activation and catalog revision, including the `policy.yaml` schema (report 1.2)                                                                                   | not recorded |
-| Semantic verdict, the guard result (report 1.2: "a schema-validated risk category, score in the configured numeric range and a bounded reason code")                      | not recorded |
-| Per-purpose reservations and usage (report 1.2)                                                                                                                           | not recorded |
-| Security summary and audit export record (report 1.2)                                                                                                                     | not recorded |
-| Telemetry fields (report 1.2)                                                                                                                                             | not recorded |
-| Control evaluation adapter, `POST /internal/control/evaluate` (report 1.2: "a documented Go client/HTTP contract for governed model calls and registered tool proposals") | not recorded |
+| Contract                                                                                                                                                                  | Owner                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Start-run request                                                                                                                                                         | web + API implementer                                                       |
+| Passport representation                                                                                                                                                   | Go implementer                                                              |
+| Action proposal                                                                                                                                                           | Go implementer                                                              |
+| Approval decision                                                                                                                                                         | web + API implementer                                                       |
+| Run state                                                                                                                                                                 | Go implementer                                                              |
+| Safe event                                                                                                                                                                | Go implementer                                                              |
+| Report and lineage summary (report 1.1: "Shared schemas should define supported requests, report lineage summaries and errors")                                           | Go implementer                                                              |
+| Authenticated operator context (repository addition, not in the report's list; depends on decision 7)                                                                     | web + API implementer, with the Go implementer (waits on decisions 4 and 7) |
+| Policy activation and catalog revision, including the `policy.yaml` schema (report 1.2)                                                                                   | web + API implementer                                                       |
+| Semantic verdict, the guard result (report 1.2: "a schema-validated risk category, score in the configured numeric range and a bounded reason code")                      | Go implementer                                                              |
+| Per-purpose reservations and usage (report 1.2)                                                                                                                           | Go implementer                                                              |
+| Security summary and audit export record (report 1.2)                                                                                                                     | web + API implementer                                                       |
+| Telemetry fields (report 1.2)                                                                                                                                             | Go implementer                                                              |
+| Control evaluation adapter, `POST /internal/control/evaluate` (report 1.2: "a documented Go client/HTTP contract for governed model calls and registered tool proposals") | Go implementer                                                              |
+
+Owners recorded by the lead on 2026-10-03 (SH-07, contract part). The owner decides the shape after
+the quick shared review; anyone may draft. Because the Go implementer owns most contracts and is
+also building GO-06, the web + API side drafts the Go-owned contracts in `packages/contracts` on its
+branch for the Go implementer's approval. A contract is frozen when its owner approves the draft and
+it is merged into `main` through SH-11; until then it is a draft, and nothing built on it counts as
+done. The M0 freeze (SH-10) is this per-contract approval, not one meeting.
 
 Proposed reason vocabulary (reports 1.1 and 1.2): `resource_out_of_scope`, `destination_not_allowed`,
 `report_export_restricted`, `report_lineage_missing`, `source_policy_changed`, `template_not_allowed`,
@@ -233,8 +240,9 @@ All existing Go packages (`cmd/gateway`, `internal/config`, `internal/logging`, 
 Future packages inherit this responsibility assignment and receive their package row when real
 code lands. No empty packages are created by this update.
 
-This records the Go ownership portion of SH-07 only. Shared contract owners are still unrecorded,
-so SH-07 as a whole remains open. NestJS contract coordination and shared migration, database-role,
+This records the Go ownership portion of SH-07. The lead has since recorded shared contract
+owners in the table above; contracts remain drafts until owner approval and the SH-11 merge.
+SH-07 remains open for the shared-track assignment and researcher role. NestJS contract coordination and shared migration, database-role,
 infrastructure and document responsibilities remain with their recorded roles; owning Go adapters
 does not automatically transfer that shared work to the user.
 
@@ -352,7 +360,7 @@ and execution boundary. No canonicalization code or digest is implemented yet.
 Go implementer recorded in the SH-07 Go ownership update above.
 Source: report, "Live demonstration storyboard and proof checks" (Reliable demonstrations without
 invented behavior) and "Illustrative invoice scenario and future domain adaptations" (Scene 2).
-Replay ownership and approach are recorded. SH-07's shared contract ownership remains incomplete;
+Replay and contract ownership are recorded. The shared-track assignment and researcher role remain open;
 X-09 and X-12 still need their freeze before replay implementation.
 
 Chosen approach: a labelled Go runtime scenario test substitutes one stored prohibited proposal

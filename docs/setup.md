@@ -107,7 +107,9 @@ stop signal is killed after 8 seconds.
 The gateway is compiled to `services/gateway/bin/gateway-dev` and that binary is run, so it stays
 in the runner's process group and is covered by the forced stop. It has no hot reload: restart
 `pnpm dev` (or `pnpm dev:gateway`) after changing Go code. The web process is started without
-`GATEWAY_SERVICE_TOKEN` and without any `POSTGRES_*` variable.
+`GATEWAY_SERVICE_TOKEN`, without any `POSTGRES_*` variable and without any `MODEL_*` variable; the
+API process is started without any `MODEL_*` variable (see section 3 for the API's own `.env`
+load). The local model is set up separately, in section 7.
 
 Both backends start even when PostgreSQL is down. They report it through their readiness endpoints
 and recover without a restart once the database is reachable.
@@ -137,14 +139,14 @@ The volume, and therefore the data, is kept.
 There is one environment file, `.env` in the repository root. Workspaces have no `.env` files of
 their own.
 
-| Entry point                                         | How it gets the variables                                                                                                                                                                          |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`, `pnpm dev:web\|api\|gateway`            | `scripts/dev.mjs` reads `.env` and passes the merged environment to the API and the gateway; the web process gets it without `GATEWAY_SERVICE_TOKEN` and `POSTGRES_*`. Fails if `.env` is missing. |
-| `pnpm db:migration:*`                               | `scripts/with-env.mjs` reads `.env`, then runs the command. Fails if `.env` is missing.                                                                                                            |
-| `pnpm infra:*`, `pnpm stack:*`                      | `scripts/compose.mjs` passes `--env-file .env` to `docker compose`. Fails if `.env` is missing.                                                                                                    |
-| `pnpm smoke`                                        | Reads `.env` for the ports and for the two secrets it searches for and sends.                                                                                                                      |
-| API started directly (`node dist/main.js`)          | The API itself loads the repository-root `.env` if present. A missing file is fine when the variables are set.                                                                                     |
-| `pnpm lint`, `typecheck`, `test`, `build`, `verify` | Need no `.env`. Turborepo runs tasks in strict environment mode, so only `NODE_ENV` and the Go variables pass through from your shell.                                                             |
+| Entry point                                         | How it gets the variables                                                                                                                                                                                                            |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`, `pnpm dev:web\|api\|gateway`            | `scripts/dev.mjs` reads `.env` and passes the merged environment to the gateway; the API gets it without `MODEL_*`; the web process gets it without `GATEWAY_SERVICE_TOKEN`, `POSTGRES_*` and `MODEL_*`. Fails if `.env` is missing. |
+| `pnpm db:migration:*`                               | `scripts/with-env.mjs` reads `.env`, then runs the command. Fails if `.env` is missing.                                                                                                                                              |
+| `pnpm infra:*`, `pnpm stack:*`                      | `scripts/compose.mjs` passes `--env-file .env` to `docker compose`. Fails if `.env` is missing.                                                                                                                                      |
+| `pnpm smoke`                                        | Reads `.env` for the ports and for the two secrets it searches for and sends.                                                                                                                                                        |
+| API started directly (`node dist/main.js`)          | The API itself loads the repository-root `.env` if present. A missing file is fine when the variables are set.                                                                                                                       |
+| `pnpm lint`, `typecheck`, `test`, `build`, `verify` | Need no `.env`. Turborepo runs tasks in strict environment mode, so only `NODE_ENV` and the Go variables pass through from your shell.                                                                                               |
 
 Rules:
 
@@ -158,11 +160,18 @@ Rules:
   web launchers reject a `WEB_PORT` that is not a whole number from 1 to 65535.
 - **Containers do not read `.env` directly.** Compose interpolates the values it needs and
   overrides the wiring variables with service names (see the README, "Full-container mode"). The
-  `web` container receives neither the service token nor any `POSTGRES_*` variable.
+  `web` container receives neither the service token nor any `POSTGRES_*` variable. Only the
+  `gateway` service lists `MODEL_BASE_URL` and `MODEL_NAME` (unverified, see section 6).
 - **The web process on the host follows the same rule.** `pnpm dev` and `pnpm dev:web` remove
-  `GATEWAY_SERVICE_TOKEN` and every `POSTGRES_*` variable from the environment of the web child,
-  including ones set in your shell. `scripts/with-env.mjs` does not filter: it passes the full
-  environment to whatever command you give it.
+  `GATEWAY_SERVICE_TOKEN`, every `POSTGRES_*` variable and every `MODEL_*` variable from the
+  environment of the web child, including ones set in your shell. `scripts/with-env.mjs` does not
+  filter: it passes the full environment to whatever command you give it, `MODEL_*` included.
+- **`MODEL_*` reach the gateway child only.** `pnpm dev` and `pnpm dev:api` also remove every
+  `MODEL_*` variable from the environment of the API child. Known gap: the API then loads the root
+  `.env` itself (`apps/api/src/config/app-config.module.ts`) for every key not already set, so on
+  the host the running API process still holds `MODEL_BASE_URL` and `MODEL_NAME` when they are in
+  `.env`. Both are non-secret, so no credential is exposed; how the API stops loading Go-only keys
+  is open in SH-13. The API container has no `.env`, so this gap does not apply there.
 - **Secrets stay in `.env`.** Never copy them into `.env.example` or any tracked file.
 
 ## 4. Running a single service
@@ -246,3 +255,100 @@ service; starting the stack needs `.env` for the two secrets. Details and the `-
 [infra/README.md](../infra/README.md).
 
 This mode was not executed on the preparation machine. See "Verification status" in the README.
+The gateway container is set to reach the host's Ollama at `http://host.docker.internal:11434`
+(unverified; see section 7 for the Linux caveat).
+
+## 7. Local model (Ollama)
+
+Report 1.2 makes a locally hosted model, for example through Ollama, the primary model path. Only
+the Go gateway calls it. Ollama is not a fifth application component: it runs on the host, outside
+Compose, and the starter neither installs nor starts it. Reading `MODEL_BASE_URL` and `MODEL_NAME`
+in Go is GO-06's work on another branch; until it lands, the gateway ignores both variables.
+
+### Install
+
+- macOS: the app from <https://ollama.com/download>, or `brew install ollama`.
+- Linux: the official install script from <https://ollama.com/download> (Linux tab).
+- WSL 2: install Ollama inside the WSL distribution with the Linux script, so the gateway, which
+  also runs inside WSL, reaches it on `localhost`. A Windows-native Ollama is not necessarily
+  reachable on `localhost` from WSL 2. Not exercised on any team machine.
+
+Check with `ollama --version`.
+
+### Start the server
+
+The macOS app keeps a server running while it is open. Otherwise start one in its own terminal:
+
+```sh
+ollama serve
+```
+
+Either way the server listens on `http://localhost:11434`, Ollama's default port.
+
+### Pull a model
+
+Which model is still open (decision 6 in `docs/product/README.md`). Candidates to try are small
+quantized models of about 3-4B parameters, for example:
+
+```sh
+ollama pull qwen2.5:3b
+ollama pull llama3.2:3b
+```
+
+These are examples to try, not a decision. Check the model's license on its Ollama library page
+before using it, and record it with the team's model choice.
+
+### Verify
+
+```sh
+curl http://localhost:11434/api/tags
+ollama run <model> "hello"
+```
+
+`/api/tags` lists the pulled models as JSON; `ollama run` should print a short answer and exit.
+
+### Point the gateway at it
+
+Set `MODEL_NAME` in `.env` to the tag you pulled (empty in `.env.example`), for example
+`MODEL_NAME=qwen2.5:3b`. `MODEL_BASE_URL` defaults to `http://localhost:11434`; change it only if
+your Ollama listens elsewhere. Neither variable is a secret, and local Ollama needs no credential,
+so there is no API key variable.
+
+Which processes receive them:
+
+| Mode                        | Gateway                                                                                                                                                                          | API                                                                         | Web  |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---- |
+| Host (`pnpm dev`)           | Both, from `.env` through the dev runner                                                                                                                                         | Removed from the child environment, but re-read from `.env` (see section 3) | None |
+| Full container (`stack:up`) | `MODEL_BASE_URL` is set by Compose to `http://host.docker.internal:11434` (a value in `.env` does not apply); `MODEL_NAME` from `.env`. Unverified: this mode has never been run | None                                                                        | None |
+
+Container mode on Linux (unverified): `host.docker.internal` resolves through `extra_hosts`, but
+Ollama listens on `127.0.0.1` by default, so the container cannot reach it. Do not fix that with
+`OLLAMA_HOST=0.0.0.0`: Ollama has no authentication, and that setting exposes it on every interface,
+the local network included. Docker Desktop on macOS reaches a loopback-bound Ollama without any change.
+
+### Hardware
+
+The presentation machine is the lead's MacBook Pro (M1 Pro, 16 GB); the Go implementer develops on
+an M2 with 8 GB. Pick a model that runs on both, and record on each machine which model and
+version it ran (SH-45):
+
+| Machine                     | Hardware      | Model tag                                      | Ollama version   | Result                         |
+| --------------------------- | ------------- | ---------------------------------------------- | ---------------- | ------------------------------ |
+| Lead (presentation machine) | M1 Pro, 16 GB | `qwen3.5:4b` (ID `2a654d98e6fb`, 4.7B, Q4_K_M) | 0.35.1           | Probe on 2026-10-03, see below |
+| Go implementer              | M2, 8 GB      | not yet recorded                               | not yet recorded | not yet recorded               |
+
+`ollama list` shows the pulled tags and their IDs; `ollama --version` shows the version.
+
+**Probe on the lead's machine, 2026-10-03** (Ollama 0.35.1, `POST /api/chat`, `stream: false`,
+`think: false`, temperature 0; a quick check, not the benchmark GO-81 builds or a detection-quality
+claim). The agent request offered one `read_invoice` tool; the security request sent one delimited
+note with a JSON schema for `risk_category`, `score` (0 to 1) and `reason_code`.
+
+| Model        | Runs | Agent tool call                       | Hostile note ("ignore previous instructions ...") | Clean note                                 | Latency after the first call              |
+| ------------ | ---- | ------------------------------------- | ------------------------------------------------- | ------------------------------------------ | ----------------------------------------- |
+| `qwen2.5:3b` | 1    | Correct (`read_invoice`, invoice_A01) | `prompt_injection`, score 90 (outside the range)  | `data_exfiltration`, score 3 (wrong label) | 3.3 s agent (first call), 0.6-0.8 s guard |
+| `qwen3.5:4b` | 3    | Correct in all three runs             | `prompt_injection`, score 0.95, every run         | `none`, score 0.0, every run               | about 0.9 s agent, 0.8 s guard            |
+
+Ollama did not enforce the schema's numeric range for `qwen2.5:3b`, so Go must validate every
+verdict itself (report 1.2: "Go rejects unsupported fields and malformed scores"). `qwen3.5:4b` is the
+provisional model for both purposes; the M2 8 GB machine still has to run it before it is fixed.

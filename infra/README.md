@@ -42,7 +42,8 @@ pnpm stack:down                # stops everything, keeps the data volume
 
 Inside the Compose network the services use container wiring instead of the `.env` host values:
 `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432`, `GATEWAY_URL=http://gateway:8080`,
-`API_UPSTREAM_URL=http://api:3001`. The api and gateway images themselves set `API_HOST` /
+`API_UPSTREAM_URL=http://api:3001`, and for the gateway only
+`MODEL_BASE_URL=http://host.docker.internal:11434` (the host's Ollama; unverified). The api and gateway images themselves set `API_HOST` /
 `GATEWAY_HOST` to `0.0.0.0`, so they are reachable inside any container network; on the host the
 default stays `127.0.0.1`.
 
@@ -71,7 +72,7 @@ pnpm stack:down --debug
 `POSTGRES_PASSWORD` and `GATEWAY_SERVICE_TOKEN` are read from the root `.env` (or the real
 environment) at start time. They are never written into these files or baked into an image, and
 Compose stops with a clear message when one is missing. The `web` container receives neither the
-service token nor any `POSTGRES_*` variable, and `pnpm dev` / `pnpm dev:web` strip the same
+service token nor any `POSTGRES_*` or `MODEL_*` variable, and `pnpm dev` / `pnpm dev:web` strip the same
 variables from the environment of the web process on the host. Nested `.env` files (for example
 `apps/web/.env.local`) are excluded from the build context as well.
 

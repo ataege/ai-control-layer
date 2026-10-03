@@ -427,7 +427,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: none (a decision).
   - Status: option (1), a labelled Go runtime scenario test, was chosen with the user on 2026-10-03
     and recorded under "GO-05: replay entry and labels" in `docs/product/README.md`. The user is
-    the replay owner and sole Go implementer; SH-07 remains open for shared contract ownership.
+    the replay owner and sole Go implementer; SH-07 remains open for shared-track staffing.
     No replay runtime code is implemented.
   - Report: "Live demonstration storyboard and proof checks" (Reliable demonstrations without
     invented behavior); "Illustrative invoice scenario and future domain adaptations" (Scene 2 a
