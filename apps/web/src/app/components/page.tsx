@@ -50,6 +50,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/componen
 import { Textarea } from "@workspace/ui/components/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 
+import {
+  DevelopmentDemonstrationLabel,
+  EstimatedCostLabel,
+  OutboxEffectLabel,
+  RecordingLabel,
+  ReplayLabel,
+  SimulatedOutboxLabel,
+  SyntheticDataLabel,
+  TestDoubleLabel,
+  TestEvidenceLabel,
+  VerdictSourceLabel,
+} from "@/components/labels";
+
 import { ConfirmDialogDemo } from "./confirm-dialog-demo";
 import { ShowcaseSection } from "./showcase-section";
 import { StateComponentsDemo } from "./state-components-demo";
@@ -290,6 +303,78 @@ export default function ComponentsPage() {
         description="Placeholders for a region without content, with pending content, or with a failure."
       >
         <StateComponentsDemo />
+      </ShowcaseSection>
+
+      <ShowcaseSection
+        title="Truthful labels"
+        description="The labels every view uses for a simulation, a replay, a fixture and an estimate. The marks below are samples of what the server sends; a label renders only when its data carries the mark, so an unmarked value shows nothing."
+      >
+        <div className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">
+              Outbox effect (sample event effect: outbox_message_queued)
+            </span>
+            <OutboxEffectLabel effect="outbox_message_queued" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">
+              Same view with no outbox effect (sample: none), which shows nothing
+            </span>
+            <OutboxEffectLabel effect="none" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">
+              Replayed proposal (sample replaySource: labelled_replay:example_fixture)
+            </span>
+            <ReplayLabel replaySource="labelled_replay:example_fixture" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">Semantic verdict source (sample: live)</span>
+            <VerdictSourceLabel verdictSource="live" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">Semantic verdict source (sample: fixture)</span>
+            <VerdictSourceLabel verdictSource="fixture" detail />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">
+              Seeded operator (sample email of the seeded identity)
+            </span>
+            <DevelopmentDemonstrationLabel email="demo-operator@example.com" detail />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">
+              Cost with a pricing rule (sample rule: example-rule-v1)
+            </span>
+            <EstimatedCostLabel pricingRule="example-rule-v1" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">Cost of an unresolved reservation</span>
+            <EstimatedCostLabel unresolved />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">Scripted provider or provider double</span>
+            <TestDoubleLabel />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">Test evidence in place of a live action</span>
+            <TestEvidenceLabel />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">Data</span>
+            <SyntheticDataLabel detail />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-muted-foreground">
+              Recording or screenshot (sample build id: example-build)
+            </span>
+            <RecordingLabel buildId="example-build" />
+          </div>
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <span className="text-muted-foreground">The outbox, shown without any event</span>
+            <SimulatedOutboxLabel />
+          </div>
+        </div>
       </ShowcaseSection>
 
       <ShowcaseSection title="PageHeader and AppShell" description="Page-level layout components.">
