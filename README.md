@@ -575,6 +575,10 @@ describes.
   network (HTTP 200).
 - Fallback: `pnpm stack:down`, `pnpm infra:up`, `pnpm dev` and `pnpm smoke`: 26 passed, 0 failed,
   4 skipped; then `pnpm infra:down`.
+- Exposure found afterwards: `pnpm dev:web` listened on `*:3000`, and the page answered HTTP 200 on
+  the machine's Wi-Fi address; the API (3001) and the gateway (8080) bind to `127.0.0.1` on the host.
+  Recorded in docs/setup.md section 8, "Network and exposure"; the bind fix belongs to the frontend
+  role.
 - Not covered, because the commands do not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
   control suite (SH-47) and the policy reload in a container (API-32). SH-30 is done only when a
   teammate who did not write the procedure has followed it.

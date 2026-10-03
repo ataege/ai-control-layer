@@ -370,17 +370,16 @@ not exist and the demonstration cannot include what it provides.
 
 ### Which mode
 
-- **Full-container mode** (`pnpm stack:up`) is the recommended mode: it runs the production builds
-  of the web app and the API, needs no Go toolchain and matches the four deployed components of the
-  architecture. Its smoke run also scans the service logs for secrets.
-- **Host mode** (`pnpm infra:up` and `pnpm dev`) is the fallback: development servers, logs in
-  one terminal, and the gateway rebuilt from source on every start.
+The live demonstration runs in **host mode** (decided by the lead on 2026-10-03): PostgreSQL in
+Docker through `pnpm infra:up`, and web, API and gateway on the host through `pnpm dev`. It keeps
+editing `config/policy.yaml`, the reload and the local model simple for the judges: the file is
+edited in the checkout, and the gateway reaches Ollama on `localhost`.
 
-Both modes passed their smoke checks on this machine (README, "Verification status"). One
-dependency is still open: judges edit `config/policy.yaml` and reload it, and how the API reads
-that file in container mode (a bind mount of `config/`, or another path) is decided when the import
-lands (API-32, not on `main` yet). Until that path is verified in a container, run the
-policy-reload part of the demonstration in host mode.
+**Full-container mode** (`pnpm stack:up`) stays the documented and verified alternative ("Alternative:
+full-container mode" below). How the API would read `config/policy.yaml` there (a bind mount of
+`config/`, or another path) is unverified; the import itself (API-32) is not on `main` yet.
+
+Both modes passed their smoke checks on this machine (README, "Verification status").
 
 ### Once per machine
 
@@ -390,7 +389,7 @@ policy-reload part of the demonstration in host mode.
 | pnpm           | 11.10.0                                     | `pnpm --version`                           |
 | Docker Desktop | Docker 29.8.1, Compose v5.5.1 (running)     | `docker compose version`                   |
 | Ollama         | 0.35.1                                      | `ollama --version`                         |
-| Go             | 1.27.1 (host-mode fallback only)            | `go version`                               |
+| Go             | 1.27.1 (builds and runs the gateway)        | `go version`                               |
 | Model          | `qwen3.5:4b`, ID `2a654d98e6fb`, Apache 2.0 | `ollama list`, `ollama show --license ...` |
 
 Install the tools as in sections 1 and 7, then pull the model and confirm its license and ID:
@@ -427,20 +426,26 @@ checkout's web, API and gateway so ports 3000, 3001 and 8080 are free.
 
 ### Start
 
+Use two terminals in the checkout.
+
 ```sh
+# terminal 1
 ollama run qwen3.5:4b --think=false "Say hello in one word."   # loads the model
-pnpm stack:up                      # builds the images on the first run, waits for the health checks
-pnpm db:migration:run              # from the host: the API image has no migration tooling
-pnpm smoke --mode=container
+pnpm infra:up                      # PostgreSQL in Docker, waits for its health check
+pnpm db:migration:run              # applies pending migrations
+pnpm dev                           # web, API and gateway; leave it running
+
+# terminal 2, once the three services are up
+pnpm smoke
 ```
 
-- Migrations run from the host against the published PostgreSQL port, because the API image's
-  runtime stage contains only the compiled API and its production dependencies.
 - Seed (not on `main` yet: SH-18 for the policy fixture and synthetic records, SH-19 for the
-  demonstration operator): runs from the host after the migrations, through its documented command.
+  demonstration operator): runs after the migrations, through its documented command.
 - The warm-up loads the model into memory (about 30 seconds on the first load in the rehearsal,
   then well under a second). Ollama unloads a model after five idle minutes by default; `ollama ps`
   shows whether it is loaded, so repeat the warm-up shortly before the presentation.
+- `pnpm dev` prints every service's log in terminal 1. `pnpm smoke` in host mode reports its log
+  leak checks as skipped, because it cannot read that terminal.
 
 Open <http://localhost:3000>.
 
@@ -454,39 +459,55 @@ Open <http://localhost:3000>.
 
 ### Stop
 
+Ctrl+C in terminal 1 stops web, API and gateway (a process that ignores the signal is killed after
+8 seconds), then:
+
 ```sh
+pnpm infra:down                    # stops PostgreSQL, keeps the volume
+```
+
+### Alternative: full-container mode
+
+```sh
+pnpm infra:down                    # if host mode ran; Ctrl+C pnpm dev first
+pnpm stack:up                      # builds the images on the first run, waits for the health checks
+pnpm db:migration:run              # from the host: the API image has no migration tooling
+pnpm smoke --mode=container
 pnpm stack:down                    # removes the containers and the network, keeps the volume
 ```
 
-`docker compose stop` waits 10 seconds per container by default, which covers the gateway's own
-8 second shutdown budget.
-
-### Fallback: host mode
-
-```sh
-pnpm stack:down
-pnpm infra:up
-pnpm dev                           # in a second terminal: pnpm smoke
-```
-
-The gateway then reaches Ollama at `MODEL_BASE_URL=http://localhost:11434` (the `.env` default).
-Stop with Ctrl+C and `pnpm infra:down`.
+- Migrations and seeds run from the host against the published PostgreSQL port, because the API
+  image's runtime stage contains only the compiled API and its production dependencies.
+- The gateway container reaches the host's Ollama at `http://host.docker.internal:11434`.
+- `docker compose stop` waits 10 seconds per container by default, which covers the gateway's own
+  8 second shutdown budget.
+- Reading `config/policy.yaml` from a container is unverified (see "Which mode").
 
 ### Network and exposure
 
-- Every published port is bound to `127.0.0.1`: web 3000, API 3001 and PostgreSQL 5432 (for the
-  host-side migrations, seeds and tools). The gateway is not published (only `pnpm stack:up --debug`
-  publishes 8080). Judges therefore work on the presentation machine itself; access from another
-  machine is not set up (open item `judge access`).
-- All four containers share Compose's default network. The architecture's "NestJS and Go use a
-  private service network" is open item `deployment network`.
+- Host mode: the API (3001) and the gateway (8080) listen on `127.0.0.1`, and PostgreSQL is
+  published on `127.0.0.1:5432`. **The web development server does not:** `next dev` listens on
+  every interface (`*:3000`), and on 2026-10-03 this machine answered on its Wi-Fi address as well.
+  Through the web app's `/api` proxy, the API is then reachable from the local network too. Until
+  the web dev launcher binds to `127.0.0.1` (a change in `apps/web/scripts/dev.mjs`, owned by the
+  frontend role, reported), keep the macOS firewall on and block incoming connections for Node.js,
+  or use a network you trust.
+- Full-container mode: every published port is bound to `127.0.0.1` (web 3000, API 3001,
+  PostgreSQL 5432); the gateway is not published (only `pnpm stack:up --debug` publishes 8080). All
+  four containers share Compose's default network; the architecture's "NestJS and Go use a private
+  service network" is open item `deployment network`.
+- Judges work on the presentation machine itself; access from another machine is not set up (open
+  item `judge access`).
 - Secrets stay in the untracked `.env` of the checkout; the images contain no `.env` file.
+- Ollama stays bound to `127.0.0.1`.
 
 ### Checklist before the presentation
 
 - [ ] The checkout is at the submission commit; `git status` is clean.
 - [ ] `ollama list` shows `qwen3.5:4b` with the recorded ID; the warm-up answered.
-- [ ] `pnpm stack:up` finished with every container healthy; `pnpm smoke --mode=container` passed.
+- [ ] `pnpm infra:up` and `pnpm dev` are running; `pnpm smoke` passed.
+- [ ] Incoming connections to Node.js are blocked, or the network is trusted (see "Network and
+      exposure").
 - [ ] Migrations and seeds ran; the demonstration data was reset.
 - [ ] The control suite ran on this build and its result is saved.
 - [ ] The laptop is on power and does not sleep (for example `caffeinate -dims` in a spare
