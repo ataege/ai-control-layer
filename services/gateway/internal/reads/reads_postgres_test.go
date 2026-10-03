@@ -471,6 +471,65 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 	}
 }
 
+// TestPostgresSecuritySummaryCountsErroredJudgeSecurityCalls: a judge's security call that errored
+// (unknown usage after a timeout or transport failure, or a failed call) is still a judge security
+// call, and the run's own errored call is not one.
+func TestPostgresSecuritySummaryCountsErroredJudgeSecurityCalls(t *testing.T) {
+	pool := testdb.Open(t)
+	ctx := context.Background()
+	organizationID := testdb.ID(t)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	runID := newRun(t, tx, organizationID)
+
+	// Each errored check: a security call with its outcome, an error assessment naming the call and
+	// the control.evaluated event (judge or the run's own) carrying the evaluation id.
+	recordErroredCheck := func(callOutcome string, fromJudge bool) {
+		callID, evaluationID := testdb.ID(t), testdb.ID(t)
+		insert(t, tx, `INSERT INTO runtime.model_calls (id, organization_id, run_id, purpose, model, outcome)
+		               VALUES ($1, $2, $3, 'security', 'local-model', $4)`, callID, organizationID, runID, callOutcome)
+		insert(t, tx, `INSERT INTO runtime.control_assessments (organization_id, run_id, evaluation_id, security_model_call_id,
+		                 boundary, control_class, control_id, outcome, reason_code, admission_catalog_revision_id,
+		                 evaluated_catalog_revision_id, verdict_source)
+		               VALUES ($1, $2, $3, $4, 'model_input', 'semantic', 'semantic_injection', 'error', 'security_evaluator_unavailable', 1, 1, 'live')`,
+			organizationID, runID, evaluationID, callID)
+		summary := contracts.MaskedSummary{EvaluationID: &evaluationID}
+		if fromJudge {
+			summary.InputSource, summary.ActorID = pointer("judge"), pointer(testdb.ID(t))
+		}
+		if _, err := repository.Join(tx).AppendEvent(ctx, repository.NewEvent{OrganizationID: organizationID, RunID: &runID,
+			EventType: contracts.EventControlEvaluated, Decision: pointer(contracts.DecisionDeny),
+			ReasonCode: pointer(contracts.ReasonSecurityEvaluatorUnavailable), MaskedSummary: summary}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recordErroredCheck("usage_unknown", true)
+	recordErroredCheck("failed", true)
+	recordErroredCheck("usage_unknown", false)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var last string
+	var summary SecuritySummary
+	eventually(t, "the errored judge calls in the summary", func() bool {
+		recorder := serve(t, SecuritySummaryRoutePattern, SecuritySummaryHandler(pool), "/internal/security/summary", operatorOf(organizationID))
+		last = recorder.Body.String()
+		summary = SecuritySummary{}
+		return recorder.Code == http.StatusOK && contracts.DecodeStrict(recorder.Body.Bytes(), &summary) == nil && summary.JudgeSecurityCalls > 0
+	})
+	securityUsage := summary.ModelUsage[1]
+	if summary.JudgeSecurityCalls != 2 || securityUsage.Purpose != "security" || securityUsage.Dispatched != 3 ||
+		securityUsage.Failed != 1 || securityUsage.UsageUnknown != 2 {
+		t.Fatalf("judge security calls %d, security usage %+v\nsummary %s", summary.JudgeSecurityCalls, securityUsage, last)
+	}
+	t.Logf("evidence: three errored security calls (two from judge probes: one usage_unknown, one failed; one the run's own): "+
+		"judgeSecurityCalls %d of %d security calls dispatched", summary.JudgeSecurityCalls, securityUsage.Dispatched)
+}
+
 func TestPostgresAVerdictWithAnExtraKeyIsNeverServed(t *testing.T) {
 	pool := testdb.Open(t)
 	ctx := context.Background()
