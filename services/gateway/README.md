@@ -1043,6 +1043,9 @@ database (`pnpm reset:demo` runs it after its reseed). Because the policy import
 revision (it never activates), nothing in those flows is enforceable until this has run.
 
 - It retries a busy activation lock 10 times at 300 ms, then fails; busy is never success.
+- A revision whose rejection the gateway recorded is reported as rejected (with its code); a
+  request an import committed between the activation and the pointer read is reported as "not
+  active yet: requested meanwhile or not checked yet", and the operator reruns the command.
 - Exit 0: a revision was activated, or nothing was requested and a revision is active. Exit 1:
   nothing is active (no pointer, or the first request was rejected), the requested revision was
   rejected (the safe code is printed: `revision_missing`, `signature_feed_missing` or
@@ -1063,7 +1066,9 @@ revision (it never activates), nothing in those flows is enforceable until this 
 committed bytes). The import (API-34) stores these bytes as `source_text` with
 this digest as `file_digest`; any other bytes fail `ParseFeed`. GO-73's activation accepts only the
 trusted issuer `task-passport-security` and finds the feed by that issuer and `signatures.revision`,
-so the import refuses a feed from any other issuer and stores each revision once. There is no
+so the import refuses a feed from any other issuer; it reuses a stored row only of that issuer and
+revision (another issuer's row with the same revision is a different feed and is ignored), and
+refuses other bytes under a stored revision. There is no
 signing key: the trust decision is the digest pin plus the authenticated import, so the roadmap's
 "broken signature" acceptance case is a copy whose bytes differ from the pinned digest.
 

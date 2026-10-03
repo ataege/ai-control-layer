@@ -70,8 +70,16 @@ func activate(ctx context.Context, db activationDatabase, stdout, stderr io.Writ
 		fmt.Fprintf(stderr, "catalog activation: FAIL (no active catalog%s; import a policy with pnpm policy:import)\n", rejectionNote(lastError))
 		return 1
 	case requested != nil && *requested != *active:
-		fmt.Fprintf(stderr, "catalog activation: FAIL (the requested revision %d was rejected%s; revision %d stays active)\n",
-			*requested, rejectionNote(lastError), *active)
+		// Race: an import may commit a new request between the activation above and this read. Only a
+		// gateway rejection recorded for this exact revision is reported as a rejection; anything else
+		// is a request the gateway has not checked yet.
+		if gatewayRejected(lastError, *requested) {
+			fmt.Fprintf(stderr, "catalog activation: FAIL (the requested revision %d was rejected%s; revision %d stays active; import a corrected policy)\n",
+				*requested, rejectionNote(lastError), *active)
+		} else {
+			fmt.Fprintf(stderr, "catalog activation: FAIL (the requested revision %d is not active yet: it was requested meanwhile or the gateway has not checked it; revision %d stays active; rerun)\n",
+				*requested, *active)
+		}
 		return 1
 	case validated == nil || *validated != *active:
 		// An active revision the gateway never validated, for example one an old import bootstrapped
@@ -98,6 +106,17 @@ func feedNote(feed *int64) string {
 		return " (no signature feed)"
 	}
 	return fmt.Sprintf(" with signature feed revision %d", *feed)
+}
+
+// gatewayRejected reports whether last_error is the gateway's own rejection (stage gateway_validation) of
+// this revision, the same test the gateway uses to avoid re-validating a request it already rejected.
+func gatewayRejected(lastError []byte, revisionID int64) bool {
+	var record struct {
+		Stage      string `json:"stage"`
+		RevisionID int64  `json:"revision_id"`
+	}
+	return len(lastError) > 0 && json.Unmarshal(lastError, &record) == nil &&
+		record.Stage == "gateway_validation" && record.RevisionID == revisionID
 }
 
 // rejectionNote returns " (code: <code>)" for the recorded last error when it carries a safe code
