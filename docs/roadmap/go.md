@@ -1995,13 +1995,37 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     "Delivery scope and six person ownership" (Proposed team ownership)
   - Blocked by: nothing
 
-- [ ] **GO-73 · Validate and acknowledge a candidate catalog revision**
+- [x] **GO-73 · Validate and acknowledge a candidate catalog revision**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-72 · Needs: X-79 · Provides: X-83 (part: Go validation and acknowledgement)
   - Paths: the enforcement package from GO-12; the internal API package from GO-21
   - Work: "Go fetches and validates the candidate, acknowledges readiness, and the activation flow publishes its active-version pointer." An invalid candidate is never activated; the last-known-good revision stays in use.
   - Done when: a valid candidate is acknowledged and becomes active, and an invalid one is rejected with a reason while the old revision keeps deciding.
   - Tests: database-backed tests through the X-24 command for a valid and an invalid candidate.
+  - Completed (2026-10-03): the `catalog activation protocol` as the lead decided it.
+    `catalog.ActivateRequested` runs under a transaction-scoped advisory lock (one gateway instance
+    at a time), reads the pointer, and validates a requested revision that is not active and has not
+    already failed with the gateway's own parsers (limits plus `security.SettingsFromCatalog`, with
+    the feed found by the policy's `signatures.revision` and its pinned digest). Success sets
+    `validated_revision_id = active_revision_id = requested` and `active_feed_revision_id`, and
+    clears `last_error` in one transaction (Go's acknowledgement); failure writes a safe
+    `last_error` (`reason`, `code`, `message`, `revision_id`, `stage`; never file content) and keeps
+    the last good revision. `catalog.WatchRequested` runs it every second in `cmd/gateway` and
+    stops before the pool closes. Migration `1791120000000-GrantGatewayCatalogActivation` grants
+    the gateway role UPDATE on exactly those pointer columns. Tests (PostgreSQL, rolled-back
+    transaction): a valid request becomes active with its feed and the loader serves it; invalid
+    limits, an unknown disabled rule and a feed that was not imported are each rejected with their
+    code while the last good revision keeps deciding, and are not retried; a first revision with
+    signatures disabled needs no feed; a held lock gives `busy`; as `task_passport_gateway` the
+    activation works while requesting or importing a revision is `permission denied`. Checks:
+    gateway five checks PASS; `go test -race ./internal/catalog/...` ok; api `lint`, `typecheck`,
+    `test`, `build` PASS; `pnpm db:migration:run` applied the migration; `pnpm verify` 6 passed.
+    Live on the 55510 database with the gateway binary: `pnpm policy:import` of policy.yaml with
+    threshold 0.8 was accepted as revision 230, and within 2.5 s the pointer showed requested,
+    validated and active 230 with feed 134 and no error; a start-run command then admitted a
+    passport with admission revision 230; a second import naming feed_v9 (revision 231) was
+    rejected with `signature_feed_missing` while 230 stayed active. The feed row was inserted by
+    hand for that run, because the feed half of the import (c1) has not landed yet.
   - Report: "Central policy configuration and safe reload"
   - Blocked by: `catalog activation protocol`
 

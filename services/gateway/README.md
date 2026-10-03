@@ -143,7 +143,7 @@ internal/repository/  runtime passports, runs, jobs and X-12 events (gap-free pe
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
 internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)
-internal/catalog/     trusted active snapshot loader: pointer, limits, security settings, effective limits (GO-72)
+internal/catalog/     trusted active snapshot loader (GO-72) and catalog activation: validate, acknowledge or reject a requested revision (GO-73)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 

@@ -31,6 +31,8 @@ const (
 	// Kept below the default 10 s container stop grace period.
 	shutdownTimeout    = 8 * time.Second
 	healthcheckTimeout = 2 * time.Second
+	// A requested catalog revision is validated within about this long after its import.
+	catalogActivationInterval = time.Second
 )
 
 func main() {
@@ -75,6 +77,18 @@ func run() error {
 	}
 	// Runs after Run returns: HTTP drains first, then the pool closes.
 	defer pool.Close()
+
+	// Validates and activates each newly requested catalog revision (catalog activation
+	// protocol). Stopped before the pool closes: the deferred calls run in reverse order.
+	activationStopped := make(chan struct{})
+	go func() {
+		defer close(activationStopped)
+		catalog.WatchRequested(signalContext, pool, catalogActivationInterval, logger)
+	}()
+	defer func() {
+		stopSignals()
+		<-activationStopped
+	}()
 
 	operatorContextVerifier, err := operatorcontext.NewVerifier(loadedConfig.OperatorContextSigningKey)
 	if err != nil {

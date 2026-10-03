@@ -89,3 +89,21 @@ func uniqueSuffix(t *testing.T) string {
 	_, _ = rand.Read(randomBytes[:])
 	return hex.EncodeToString(randomBytes[:])
 }
+
+// Request stores content as a new catalog revision and sets only requested_revision_id, as the
+// import does under the catalog activation protocol; the active revision is unchanged.
+func Request(t *testing.T, transaction pgx.Tx, content string) int64 {
+	t.Helper()
+	var revisionID int64
+	err := transaction.QueryRow(context.Background(), `INSERT INTO app.control_catalog_revisions
+		(schema_version, source_file_name, source_text, file_digest, content, import_source)
+		VALUES (1, 'policy.yaml', 'catalogtest', repeat('d', 64), $1, 'command') RETURNING id`, content).Scan(&revisionID)
+	if err != nil {
+		t.Fatalf("insert the requested revision: %v", err)
+	}
+	if _, err := transaction.Exec(context.Background(), `INSERT INTO app.control_catalog_pointer (id, requested_revision_id)
+		VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET requested_revision_id = EXCLUDED.requested_revision_id`, revisionID); err != nil {
+		t.Fatalf("request the revision: %v", err)
+	}
+	return revisionID
+}
