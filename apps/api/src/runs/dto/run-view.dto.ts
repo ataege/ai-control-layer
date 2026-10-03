@@ -12,6 +12,20 @@ export const RunViewSchema = z.object({
   passport: z.object({
     id: z.string().uuid(),
     template: z.string(),
+    vendorId: z.string().optional(),
+    invoiceIds: z.array(z.string()),
+    destination: z.string(),
+    approvalRequirement: z.string().optional(),
+    limits: z.object({
+      modelCalls: z.number().int().min(0),
+      timeoutSeconds: z.number().int().min(0),
+    }),
+    versions: z.object({
+      task: z.string(),
+      policy: z.string(),
+    }),
+    rules: z.array(z.string()),
+    expiresAt: z.string().datetime(),
   }),
 }) satisfies z.ZodType<RunView>;
 

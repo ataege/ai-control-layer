@@ -148,6 +148,20 @@ export interface RunView {
   passport: {
     id: string;
     template: string;
+    vendorId?: string;
+    invoiceIds: string[];
+    destination: string;
+    approvalRequirement?: string;
+    limits: {
+      modelCalls: number;
+      timeoutSeconds: number;
+    };
+    versions: {
+      task: string;
+      policy: string;
+    };
+    rules: string[];
+    expiresAt: string;
   };
 }
 

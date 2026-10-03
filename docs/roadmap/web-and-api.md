@@ -1064,7 +1064,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-08 · Show the passport summary beside the timeline**
+- [x] **WEB-08 · Show the passport summary beside the timeline**
   - **Report 1.2 change:** The passport summary shows the active policy version and the allowed models.
   - **Report 1.1 change:** Shows the allowed report templates. No policy editor is planned (open item `policy editor`).
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1.5-4 h)

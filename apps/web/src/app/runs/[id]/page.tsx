@@ -127,20 +127,72 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Details</CardTitle>
+              <CardTitle>Passport Summary</CardTitle>
+              <div className="text-sm text-muted-foreground">
+                Records and recipients outside the passport are excluded.
+              </div>
             </CardHeader>
             <CardContent>
-              <dl className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Template</dt>
-                  <dd>{run?.passport?.template}</dd>
+              <dl className="space-y-3 text-sm">
+                <div className="flex flex-col gap-1 border-b pb-2">
+                  <dt className="text-muted-foreground text-xs uppercase font-semibold">Goal</dt>
+                  <dd>{run?.passport?.template || "N/A"}</dd>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Passport ID</dt>
-                  <dd>{run?.passport?.id}</dd>
+                
+                <div className="flex flex-col gap-1 border-b pb-2">
+                  <dt className="text-muted-foreground text-xs uppercase font-semibold">Allowed Scope</dt>
+                  <dd>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <span className="text-muted-foreground">Invoices:</span>
+                      <span>{run?.passport?.invoiceIds?.length ? run.passport.invoiceIds.join(', ') : 'None'}</span>
+                      <span className="text-muted-foreground">Vendor:</span>
+                      <span>{run?.passport?.vendorId || 'None'}</span>
+                      <span className="text-muted-foreground">Recipient:</span>
+                      <span>{run?.passport?.destination || 'None'}</span>
+                    </div>
+                  </dd>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Status</dt>
+
+                <div className="flex flex-col gap-1 border-b pb-2">
+                  <dt className="text-muted-foreground text-xs uppercase font-semibold">Rules & Approvals</dt>
+                  <dd>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <span className="text-muted-foreground">Approval:</span>
+                      <span>{run?.passport?.approvalRequirement || 'None'}</span>
+                      <span className="text-muted-foreground">Rules:</span>
+                      <span>{run?.passport?.rules?.length ? run.passport.rules.join(', ') : 'None'}</span>
+                    </div>
+                  </dd>
+                </div>
+
+                <div className="flex flex-col gap-1 border-b pb-2">
+                  <dt className="text-muted-foreground text-xs uppercase font-semibold">Allowance & Expiry</dt>
+                  <dd>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <span className="text-muted-foreground">Used calls:</span>
+                      <span>{run?.usage?.modelCalls} / {run?.passport?.limits?.modelCalls || '∞'}</span>
+                      <span className="text-muted-foreground">Timeout:</span>
+                      <span>{run?.passport?.limits?.timeoutSeconds ? `${run.passport.limits.timeoutSeconds}s` : 'None'}</span>
+                      <span className="text-muted-foreground">Expires at:</span>
+                      <span>{run?.passport?.expiresAt ? new Date(run.passport.expiresAt).toLocaleString() : 'None'}</span>
+                    </div>
+                  </dd>
+                </div>
+
+                <div className="flex flex-col gap-1 border-b pb-2">
+                  <dt className="text-muted-foreground text-xs uppercase font-semibold">Versions</dt>
+                  <dd>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <span className="text-muted-foreground">Task:</span>
+                      <span>{run?.passport?.versions?.task || 'N/A'}</span>
+                      <span className="text-muted-foreground">Policy:</span>
+                      <span>{run?.passport?.versions?.policy || 'N/A'}</span>
+                    </div>
+                  </dd>
+                </div>
+                
+                <div className="flex justify-between pt-2">
+                  <dt className="text-muted-foreground text-xs uppercase font-semibold">Status</dt>
                   <dd className="font-medium capitalize">{run?.status}</dd>
                 </div>
               </dl>
