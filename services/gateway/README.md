@@ -109,7 +109,7 @@ internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
-internal/security/    hybrid security controls: content rules (GO-74)
+internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -349,6 +349,52 @@ and wait to be frozen in the reason vocabulary (X-13). Tests read `fixtures/sema
 the six secret cases must give exactly their fixture spans, and the benign, hard-negative and attack
 cases and `fixtures/hostile-notes.json` must give none. This is a finite fixture set, not universal
 secret detection.
+
+## Semantic security evaluator (GO-75)
+
+`SemanticEvaluator.Evaluate` sends one designated field, after the content rules, to the local
+model as a separate `security` purpose call through the `Caller` interface, which
+`model.AccountedCaller` satisfies. The call is reserved against the run allowance before dispatch
+like any agent call; the evaluator holds no tool credentials and executes nothing.
+
+- Request: the fixed classifier instruction as the system message, and the untrusted text in the
+  user message between `<<<CONTENT n>>>` and `<<<END CONTENT n>>>` markers, where `n` is a fresh
+  random 128-bit nonce, so the content cannot close the markers. The verdict JSON schema is sent as
+  the response format.
+- Verdict (lead's delegate, 3 October 2026): exactly `{risk_category, score, reason_code}`, each key
+  once, the score a finite JSON number from 0 to 1, the category and reason from fixed lists. The
+  provider does not enforce the schema, so `ParseVerdict` validates it in Go and rejects anything
+  else.
+- Go applies the catalog threshold: `score >= threshold` fires the guard. `block` withholds the
+  field; `redact` replaces the whole field with `[REDACTED:semantic_risk]` (whole-field masking,
+  lead's delegate). Category and reason are evidence only. A verdict never grants anything.
+- Guard failure: exactly one attempt and no retry. A refused reservation (`budget.ErrExhausted`,
+  `budget.ErrPaused`) is `security_allowance_exhausted` and dispatches nothing. A timeout, transport
+  error, unknown usage or malformed verdict is `security_evaluator_unavailable`. Both have outcome
+  `error`, which pauses or denies and never releases text. A dispatched failed call keeps its
+  reservation as unknown usage.
+- The security call goes straight to the `Caller`, never through the agent path, so it is never
+  inspected by another semantic check.
+- Each result carries a `ControlRecord` with the verdict, verdict source (`live` or `fixture`, set
+  when the evaluator is built), security call id, catalog revision, failure kind and duration, plus
+  the call's usage and provider time. Persisting it to `runtime.control_assessments` and
+  `runtime.timing_records` is the caller's step.
+
+Unit tests drive the real `AccountedCaller` with a labelled provider double and a labelled in-memory
+ledger double; their verdicts are stubs and test composition only. The live check is opt-in:
+
+```sh
+GO_SECURITY_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway test -tags=model_live ./internal/security -run '^TestLiveSemanticEvaluator$' -count=1 -v
+```
+
+Observed on 3 October 2026 on the developer machine (Ollama 0.35.1, `qwen3.5:4b` ID
+`2a654d98e6fb`, threshold 0.75, in-memory ledger double), two observations and not a detection-quality
+measurement:
+
+| Fixture                                       | Verdict                                            | Outcome | Input / output tokens | Provider time |
+| --------------------------------------------- | -------------------------------------------------- | ------- | --------------------- | ------------- |
+| hostile note ("Ignore previous instructions") | `instruction_injection`, 1, `instruction_override` | block   | 412 / 31              | 9.29 s        |
+| clean duplicate-reference note                | `none`, 0, `no_risk_found`                         | pass    | 416 / 34              | 1.94 s        |
 
 ## Proposed tool results and idempotency (GO-07)
 

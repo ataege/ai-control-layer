@@ -8,6 +8,7 @@ package security
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"time"
 )
@@ -121,10 +122,17 @@ func (guard GuardSettings) appliesAt(boundary Boundary) bool {
 	return guard.Enabled && slices.Contains(guard.Boundaries, boundary)
 }
 
+// SemanticSettings is the semantic_injection guard: a score at or above Threshold fires it.
+type SemanticSettings struct {
+	GuardSettings
+	Threshold float64
+}
+
 // Settings is the part of the active catalog revision the security controls read.
 type Settings struct {
 	EvaluatedCatalogRevisionID int64
 	SecretPattern              GuardSettings
+	SemanticInjection          SemanticSettings
 }
 
 // validate rejects settings the controls cannot enforce; a bad catalog is never an allow.
@@ -132,7 +140,13 @@ func (settings Settings) validate() error {
 	if settings.EvaluatedCatalogRevisionID <= 0 {
 		return ErrSettings
 	}
-	if settings.SecretPattern.Enabled && settings.SecretPattern.Mode != ModeBlock && settings.SecretPattern.Mode != ModeRedact {
+	for _, guard := range []GuardSettings{settings.SecretPattern, settings.SemanticInjection.GuardSettings} {
+		if guard.Enabled && guard.Mode != ModeBlock && guard.Mode != ModeRedact {
+			return ErrSettings
+		}
+	}
+	threshold := settings.SemanticInjection.Threshold
+	if settings.SemanticInjection.Enabled && (math.IsNaN(threshold) || threshold < 0 || threshold > 1) {
 		return ErrSettings
 	}
 	return nil
@@ -149,4 +163,10 @@ type ControlRecord struct {
 	MatchedRuleID              string
 	EvaluatedCatalogRevisionID int64
 	Duration                   time.Duration
+	// Semantic records only: the validated verdict, whether it came from the live model or a
+	// labelled fixture, the metered security call and the failure kind when the guard failed.
+	Verdict             *Verdict
+	VerdictSource       VerdictSource
+	SecurityModelCallID string
+	Failure             string
 }
