@@ -7,7 +7,7 @@ export class AddControlCatalog1791038985994 implements MigrationInterface {
   name = "AddControlCatalog1791038985994";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // First migration of the `app` schema; a later app migration must not create it again.
+    // InitApp1791021755877 creates the `app` schema; IF NOT EXISTS keeps this harmless.
     await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS "app"`);
     await queryRunner.query(
       `CREATE TABLE "app"."control_catalog_revisions" ("id" bigint GENERATED ALWAYS AS IDENTITY NOT NULL, "schema_version" integer NOT NULL, "source_file_name" text NOT NULL, "source_text" text NOT NULL, "file_digest" text NOT NULL, "content" jsonb NOT NULL, "import_source" text NOT NULL, "imported_by" text, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "control_catalog_revisions_import_actor" CHECK (("import_source" = 'command' AND "imported_by" IS NULL) OR ("import_source" = 'reload' AND "imported_by" IS NOT NULL)), CONSTRAINT "control_catalog_revisions_file_digest_format" CHECK ("file_digest" ~ '^[0-9a-f]{64}$'), CONSTRAINT "PK_1c49045dc6262df94895b3c6682" PRIMARY KEY ("id"))`,
@@ -63,7 +63,6 @@ export class AddControlCatalog1791038985994 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "app"."signature_feed_revisions"`);
     await queryRunner.query(`DROP TABLE "app"."control_catalog_revisions"`);
     await queryRunner.query(`DROP FUNCTION "app"."reject_revision_change"()`);
-    // Without CASCADE: this fails rather than dropping objects a later migration added to `app`.
-    await queryRunner.query(`DROP SCHEMA "app"`);
+    // The `app` schema belongs to InitApp1791021755877, the first app migration; it is dropped there.
   }
 }

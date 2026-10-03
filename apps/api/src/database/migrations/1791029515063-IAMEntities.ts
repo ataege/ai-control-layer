@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class IAMEntities1791029515063 implements MigrationInterface {
   name = "IAMEntities1791029515063";

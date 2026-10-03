@@ -49,7 +49,6 @@ const GATEWAY_GRANTS: Array<[string, string, string]> = [
   ["runtime", "passports", "SELECT, INSERT"],
   ["runtime", "audit_events", "SELECT, INSERT"],
   ["runtime", "control_assessments", "SELECT, INSERT"],
-  ["runtime", "model_usage", "SELECT, INSERT"],
   ["runtime", "timing_records", "SELECT, INSERT"],
   // State that Go advances: run and job state, leases, settlement, the single approval consumption.
   ["runtime", "runs", "SELECT, INSERT, UPDATE"],
@@ -59,6 +58,10 @@ const GATEWAY_GRANTS: Array<[string, string, string]> = [
   ["runtime", "execution_attempts", "SELECT, INSERT, UPDATE"],
   ["runtime", "approvals", "SELECT, INSERT, UPDATE"],
   ["runtime", "budget_reservations", "SELECT, INSERT, UPDATE"],
+  // The GO-06 token ledger (AddModelTokenBudgets1791043000000), the one model-token authority:
+  // Go reserves, settles and pauses balances. runtime.model_usage was removed in the alignment.
+  ["runtime", "model_token_budgets", "SELECT, INSERT, UPDATE"],
+  ["runtime", "model_token_reservations", "SELECT, INSERT, UPDATE"],
   // The tool adapters: read_invoice and read_vendor read; create_report and queue_report insert
   // immutable rows.
   ["demo", "vendors", "SELECT"],

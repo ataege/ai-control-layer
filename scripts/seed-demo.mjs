@@ -7,7 +7,8 @@
 //    Idempotent: missing rows are inserted, present rows are left alone; a present row with other
 //    values stops the seed and changes nothing.
 // 3. The control catalog through `pnpm policy:import` (API-32, Worker 1), only when that script
-//    exists on this branch; otherwise the step is reported as skipped.
+//    exists and the catalog is still empty; otherwise the step is reported as skipped, so a second
+//    run adds no duplicate revision and never replaces a judge's later policy edits.
 //
 // TODO: the app records (organizations, users, memberships) are not seeded here. They belong to
 // the identity tables (API-05 to API-08), and the demonstration operator (SH-19) needs their
@@ -37,6 +38,11 @@ if (!fileFound) {
 if (!(await requireLocalReachableDatabase(environment, printStatus, "seed"))) process.exit(1);
 
 const client = await connectToDatabase(environment);
+// The catalog state before the import step: the seed imports policy.yaml only into an empty
+// catalog, so a second run adds no duplicate revision and never replaces a judge's later edits.
+let catalogTablesPresent = false;
+let existingCatalogRevisionCount = 0;
+let activeCatalogRevisionId = null;
 try {
   await requireDemoTables(client);
   const demoTables = await listTables(client, ["demo"]);
@@ -57,6 +63,20 @@ try {
     throw seedError;
   }
   printStatus("info", `after: ${JSON.stringify(await countRows(client, demoTables))}`);
+
+  const catalogPresence = await client.query(
+    `SELECT to_regclass('app.control_catalog_revisions') IS NOT NULL
+        AND to_regclass('app.control_catalog_pointer') IS NOT NULL AS present`,
+  );
+  catalogTablesPresent = catalogPresence.rows[0].present;
+  if (catalogTablesPresent) {
+    const catalogState = await client.query(
+      `SELECT (SELECT count(*)::int FROM app.control_catalog_revisions) AS revision_count,
+              (SELECT active_revision_id::text FROM app.control_catalog_pointer WHERE id = 1) AS active_revision_id`,
+    );
+    existingCatalogRevisionCount = catalogState.rows[0].revision_count;
+    activeCatalogRevisionId = catalogState.rows[0].active_revision_id;
+  }
 } catch (seedError) {
   printStatus("fail", `seed failed: ${seedError.message}`);
   process.exit(1);
@@ -75,6 +95,17 @@ if (!(POLICY_IMPORT_SCRIPT in rootScripts)) {
   printStatus(
     "warn",
     `control catalog skipped: no \`${POLICY_IMPORT_SCRIPT}\` script on this branch (API-32)`,
+  );
+  process.exit(0);
+}
+if (!catalogTablesPresent) {
+  printStatus("warn", "control catalog skipped: the app catalog tables are not migrated");
+  process.exit(0);
+}
+if (existingCatalogRevisionCount > 0) {
+  printStatus(
+    "ok",
+    `control catalog already seeded (${existingCatalogRevisionCount} revisions, active ${activeCatalogRevisionId ?? "none"}); not re-imported`,
   );
   process.exit(0);
 }
