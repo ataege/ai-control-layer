@@ -93,6 +93,7 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | `internal/model`      | User (sole Go implementer) |
 | `internal/budget`     | User (sole Go implementer) |
 | `internal/testdb`     | User (sole Go implementer) |
+| `internal/policy`     | User (sole Go implementer) |
 
 New packages get their ownership row when their first real code lands.
 
@@ -108,6 +109,7 @@ internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
+internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
