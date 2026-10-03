@@ -2459,7 +2459,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Enforcement (report role: Implementer 4)
 
-- [ ] **GO-59 · Optional: rehearse an unknown outcome**
+- [x] **GO-59 · Optional: rehearse an unknown outcome**
   - **Report 1.1 change:** Report: "Supporting rehearsals hostile instructions limits and uncertainty".
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: C · Size: S (estimate 1-2 h)
   - Depends on: GO-53 · Needs: X-34 · Provides: X-61
@@ -2473,6 +2473,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Illustrative invoice scenario and future domain adaptations" (Scene 4 cost limits and
     uncertain execution)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestFailedCommitRecordsAnUnknownOutcome`, labelled as a simulation in its evidence line (X-61): the request is cancelled right before the effect's commit, so the outcome cannot be established; the action is placed in the attention state `unknown` with an `action.unknown` event (`outcome_unknown`) and one open attempt, the result is `paused`, and a second dispatch is refused instead of repeating the effect. The executor half of GO-53 implements it (5a6b211). `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped; `pnpm verify` 6/6. The simulated failure is a local commit failure, not a remote provider; no external system exists in the prototype.
 
 ## M6: hours 21-24
 

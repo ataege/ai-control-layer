@@ -102,4 +102,6 @@ func TestFailedCommitRecordsAnUnknownOutcome(t *testing.T) {
 	if again.Status != ExecutionRefused {
 		t.Fatalf("second execution = %s, want refused", again.Status)
 	}
+	t.Logf("evidence X-61 (SIMULATION, labelled rehearsal): an unknown commit outcome -> action %s with action.unknown and one open attempt; a second dispatch refused (%s)",
+		contracts.ActionUnknown, again.ReasonCode)
 }
