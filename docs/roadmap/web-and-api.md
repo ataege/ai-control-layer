@@ -1578,7 +1578,8 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Validation plan and evidence matrix" (Audit export and security summary)
   - Blocked by: nothing
 
-- [ ] **API-38 · Serve the live test entry for judge input**
+- [x] **API-38 · Serve the live test entry for judge input**
+  - Done (2026-10-04): POST /api/control/evaluate validates all three X-91 boundary inputs and forwards with service identity and verified session context only. It returns Go's validated ControlEvaluationResponse unchanged; deny is a real 200 decision, never an issued grant. Unknown fields, malformed boundary combinations and mismatched run responses are refused. Checks: API lint, typecheck and build exited 0; API unit tests: "319 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". A real run admitted through the same session was evaluated by Go: out-of-scope invoice proposal denied, actionId null, control.evaluated event labelled judge. The draft scripts/judge-client.mjs still needs its owner's X-91 update; this API route is complete independently. Live semantic detection quality was not measured.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: API-11, API-16 · Needs: X-91 · Provides: X-106
   - Paths: `apps/api/src` (the runtime facade module from API-11)
