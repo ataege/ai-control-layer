@@ -329,18 +329,23 @@ so a missing Go toolchain is reported as a failure and never replayed as a pass.
 Runtime check with real HTTP calls against services that are already running (`pnpm dev` or
 `pnpm stack:up`). It needs `.env`. It checks:
 
-- API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200.
+- API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200;
+  the OpenAPI document `/api/docs-json` loads.
 - The three web pages load.
-- None of the service token, the database password, `AUTH_JWT_SECRET` and
-  `OPERATOR_CONTEXT_SIGNING_KEY` appears in the pages or in any JavaScript or CSS asset they
-  reference.
 - The three web proxy routes return the same status as the API.
 - `x-request-id` is echoed by the API, the web proxy and the gateway.
 - Gateway liveness and readiness; `/internal/ping` returns 401 without a token and with a wrong
   token, and 200 with the service token.
+- Leak checks for every secret `pnpm run setup` generates (the list in
+  `scripts/lib/generated-secrets.mjs`, so a new generated secret is covered automatically): none
+  appears in the web pages or the JavaScript and CSS assets they reference, in any API or gateway
+  response of the run (bodies and headers, direct and through the web proxy) or, in container mode,
+  in the logs of the Compose services.
 
 With `--mode=container` the direct gateway checks are reported as skipped because the port is not
-published. Exit code 1 means at least one check failed; a stopped database makes it fail.
+published. In host mode the log checks are reported as skipped: the services log to the
+`pnpm dev` terminal, which smoke cannot read. Exit code 1 means at least one check failed; a stopped
+database makes it fail.
 
 ### `pnpm test:db`
 
