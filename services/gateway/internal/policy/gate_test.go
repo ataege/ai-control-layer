@@ -73,7 +73,7 @@ func (evaluator *fakeEvaluator) EvaluateAction(context.Context, RunIdentity, Sto
 // test run. err makes every lookup fail.
 type fakeRelationships struct {
 	vendorInvoices map[string][]string
-	runReports     map[string]bool
+	runReports     map[string]ExportVerdict
 	err            error
 }
 
@@ -92,19 +92,35 @@ func (relationships *fakeRelationships) VendorLinkedToInvoices(_ context.Context
 	return false, nil
 }
 
-func (relationships *fakeRelationships) ReportOfRun(_ context.Context, organizationID, runID, reportID string) (bool, error) {
+func (relationships *fakeRelationships) ReportExport(_ context.Context, organizationID, runID, reportID string) (ExportVerdict, error) {
 	if relationships.err != nil {
-		return false, relationships.err
+		return ExportVerdict{}, relationships.err
 	}
-	return organizationID == testOrganizationID && runID == testRunID && relationships.runReports[reportID], nil
+	if organizationID != testOrganizationID || runID != testRunID {
+		return ExportVerdict{}, nil
+	}
+	verdict, found := relationships.runReports[reportID]
+	if !found {
+		return ExportVerdict{}, nil
+	}
+	verdict.Found = true
+	return verdict, nil
 }
 
-const testReportID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+const (
+	testReportID     = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+	internalReportID = "12121212-1212-4121-8121-121212121212"
+	brokenReportID   = "34343434-3434-4343-8343-343434343434"
+)
 
 func atlasRelationships() *fakeRelationships {
 	return &fakeRelationships{
 		vendorInvoices: map[string][]string{"vendor_atlas": {"invoice_A01", "invoice_A02"}, "vendor_borealis": {"invoice_C01"}},
-		runReports:     map[string]bool{testReportID: true},
+		runReports: map[string]ExportVerdict{
+			testReportID:     {Allowed: true},
+			internalReportID: {ReasonCode: ReasonReportExportRestricted, AlternativeTemplate: TemplateVendorReconciliation},
+			brokenReportID:   {ReasonCode: ReasonReportLineageMissing},
+		},
 	}
 }
 
@@ -308,6 +324,37 @@ func TestGateChecksArgumentRelationships(t *testing.T) {
 			decision := gate.Evaluate(context.Background(), testRun(), proposal(testCase.tool, testCase.arguments))
 			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason {
 				t.Fatalf("decision = %s/%s, want %s/%s", decision.Outcome, decision.ReasonCode, testCase.wantOutcome, testCase.wantReason)
+			}
+		})
+	}
+}
+
+func TestRestrictedExportIsDeniedBeforeReview(t *testing.T) {
+	cases := []struct {
+		name            string
+		reportID        string
+		wantOutcome     Outcome
+		wantReason      ReasonCode
+		wantAlternative string
+	}{
+		{"vendor shareable report goes to review", testReportID, OutcomeApprovalRequired, ReasonApprovalRequired, ""},
+		{"internal only report is denied, not reviewed", internalReportID, OutcomeDeny, ReasonReportExportRestricted, TemplateVendorReconciliation},
+		{"report without trusted lineage is denied", brokenReportID, OutcomeDeny, ReasonReportLineageMissing, ""},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			evaluator := &fakeEvaluator{outcome: OutcomeAllow}
+			recorder := &fakeRecorder{}
+			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, recorder, atlasRelationships(), evaluator)
+			decision := gate.Evaluate(context.Background(), testRun(),
+				proposal("queue_report", `{"report_id":"`+testCase.reportID+`","recipient_reference":"`+testRecipient+`"}`))
+			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason ||
+				decision.AlternativeTemplate != testCase.wantAlternative {
+				t.Fatalf("decision = %s/%s/%q, want %s/%s/%q", decision.Outcome, decision.ReasonCode, decision.AlternativeTemplate,
+					testCase.wantOutcome, testCase.wantReason, testCase.wantAlternative)
+			}
+			if testCase.wantOutcome == OutcomeDeny && evaluator.calls != 0 {
+				t.Fatal("a restricted export reached the semantic check")
 			}
 		})
 	}

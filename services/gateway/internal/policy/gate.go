@@ -96,6 +96,9 @@ type Decision struct {
 	ActionStored        bool
 	ActionDigest        [sha256.Size]byte
 	EvaluatedRevisionID int64
+	// AlternativeTemplate names the permitted continuation after an export denial (GO-29 offers
+	// it only when the passport permits it).
+	AlternativeTemplate string
 }
 
 // ScopeReader loads the passport scope and the active catalog revision for a verified run.
@@ -117,8 +120,18 @@ type RelationshipReader interface {
 	// VendorLinkedToInvoices reports whether the vendor belongs to the organization and is the
 	// vendor of at least one of the given (passport-scoped) invoices.
 	VendorLinkedToInvoices(ctx context.Context, organizationID, vendorID string, invoiceIDs []string) (bool, error)
-	// ReportOfRun reports whether the report exists in the organization and was created in the run.
-	ReportOfRun(ctx context.Context, organizationID, runID, reportID string) (bool, error)
+	// ReportExport decides, from the stored report and its stored lineage, whether the report of
+	// this organization and run may be sent to the registered vendor recipient (GO-64).
+	ReportExport(ctx context.Context, organizationID, runID, reportID string) (ExportVerdict, error)
+}
+
+// ExportVerdict is the provenance answer for queue_report. Found is false when no report with
+// that id exists in this organization and run.
+type ExportVerdict struct {
+	Found               bool
+	Allowed             bool
+	ReasonCode          ReasonCode
+	AlternativeTemplate string // a permitted continuation, never extra authority
 }
 
 // ActionEvaluator is the semantic action check of GO-77, called only for a proposal the
@@ -233,6 +246,24 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 	if reason, permitted := gate.checkResources(ctx, run, scope, arguments); !permitted {
 		return stored(OutcomeDeny, reason)
 	}
+	// The export restriction is decided before the approval rule, so a forbidden export is a
+	// denial and never an approval request (GO-64).
+	if queueArguments, isQueue := arguments.(QueueReportArguments); isQueue {
+		verdict, err := gate.relationships.ReportExport(ctx, run.OrganizationID, run.RunID, queueArguments.ReportID)
+		switch {
+		case err != nil:
+			return stored(OutcomeDeny, ReasonDecisionUnavailable)
+		case !verdict.Found:
+			return stored(OutcomeDeny, ReasonResourceOutOfScope)
+		case !verdict.Allowed:
+			denial := stored(OutcomeDeny, verdict.ReasonCode)
+			if denial.ReasonCode == "" {
+				denial.ReasonCode = ReasonReportExportRestricted
+			}
+			denial.AlternativeTemplate = verdict.AlternativeTemplate
+			return denial
+		}
+	}
 
 	outcome, reason := OutcomeAllow, ReasonCode("")
 	if containsTool(scope.ApprovalRequiredTools, arguments.Tool()) {
@@ -303,13 +334,6 @@ func (gate *Gate) checkResources(ctx context.Context, run RunIdentity, scope Pas
 			return ReasonDestinationNotAllowed, false
 		}
 		if gate.relationships == nil {
-			return ReasonResourceOutOfScope, false
-		}
-		ofRun, err := gate.relationships.ReportOfRun(ctx, run.OrganizationID, run.RunID, typedArguments.ReportID)
-		if err != nil {
-			return ReasonDecisionUnavailable, false
-		}
-		if !ofRun {
 			return ReasonResourceOutOfScope, false
 		}
 	default:

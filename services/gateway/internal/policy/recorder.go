@@ -119,6 +119,9 @@ func decisionSummary(decision Decision) map[string]any {
 	if decision.ReasonCode != "" {
 		summary["reason_code"] = string(decision.ReasonCode)
 	}
+	if decision.AlternativeTemplate != "" {
+		summary["alternative_template"] = decision.AlternativeTemplate
+	}
 	return summary
 }
 

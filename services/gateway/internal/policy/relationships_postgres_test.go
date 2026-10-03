@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"starter/services/gateway/internal/provenance"
 	"starter/services/gateway/internal/testdb"
 )
 
@@ -49,33 +50,78 @@ func TestPostgresRelationships(t *testing.T) {
 		})
 	}
 
-	// A report created by an action of this run.
-	creatingAction := world.allowRead(t, world.invoiceA01)
-	reportID := testdb.ID(t)
+	// Reports stored through provenance.StoreReport, so their lineage is the real thing.
+	internalReport := storeTestReport(t, world, provenance.InternalInvestigationV1, provenance.InternalOnly,
+		[]string{provenance.FieldInvoiceID, provenance.FieldInternalNote})
+	vendorReport := storeTestReport(t, world, provenance.VendorReconciliationV1, provenance.VendorShareable,
+		provenance.VendorInvoiceFieldsV1.Fields)
+	// A report row without lineage, inserted directly.
+	unlinedReport := testdb.ID(t)
 	mustExec(t, world.pool, `INSERT INTO demo.reports (id, organization_id, run_id, created_by_action_id, template,
 	                           classification, destination_class, title, content, content_hash)
-	                         VALUES ($1, $2, $3, $4, 'internal_investigation_v1', 'internal_only', 'internal',
-	                                 'Investigation', 'INV104 appears twice.', sha256(convert_to('INV104 appears twice.', 'UTF8')))`,
-		reportID, world.run.OrganizationID, world.run.RunID, creatingAction)
+	                         VALUES ($1, $2, $3, $4, 'internal_investigation_v1', 'internal_only', 'internal_reviewers',
+	                                 'No lineage', 'x', sha256(convert_to('x', 'UTF8')))`,
+		unlinedReport, world.run.OrganizationID, world.run.RunID, world.allowRead(t, world.invoiceA01))
 
-	reportCases := []struct {
-		name           string
-		organizationID string
-		runID          string
-		reportID       string
-		want           bool
+	exportCases := []struct {
+		name            string
+		organizationID  string
+		runID           string
+		reportID        string
+		wantFound       bool
+		wantAllowed     bool
+		wantReason      ReasonCode
+		wantAlternative string
 	}{
-		{"report of this run", world.run.OrganizationID, world.run.RunID, reportID, true},
-		{"report of another run", world.run.OrganizationID, testdb.ID(t), reportID, false},
-		{"report of another organization", foreignOrganization, world.run.RunID, reportID, false},
-		{"unknown report", world.run.OrganizationID, world.run.RunID, testdb.ID(t), false},
+		{"vendor report may leave", world.run.OrganizationID, world.run.RunID, vendorReport, true, true, "", ""},
+		{"internal report is restricted", world.run.OrganizationID, world.run.RunID, internalReport, true, false, ReasonReportExportRestricted, TemplateVendorReconciliation},
+		{"report without lineage", world.run.OrganizationID, world.run.RunID, unlinedReport, true, false, ReasonReportLineageMissing, ""},
+		{"report of another run", world.run.OrganizationID, testdb.ID(t), vendorReport, false, false, "", ""},
+		{"report of another organization", foreignOrganization, world.run.RunID, vendorReport, false, false, "", ""},
+		{"unknown report", world.run.OrganizationID, world.run.RunID, testdb.ID(t), false, false, "", ""},
 	}
-	for _, testCase := range reportCases {
+	for _, testCase := range exportCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			ofRun, err := relationships.ReportOfRun(ctx, testCase.organizationID, testCase.runID, testCase.reportID)
-			if err != nil || ofRun != testCase.want {
-				t.Fatalf("ofRun = %v, err %v; want %v", ofRun, err, testCase.want)
+			verdict, err := relationships.ReportExport(ctx, testCase.organizationID, testCase.runID, testCase.reportID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if verdict.Found != testCase.wantFound || verdict.Allowed != testCase.wantAllowed ||
+				verdict.ReasonCode != testCase.wantReason || verdict.AlternativeTemplate != testCase.wantAlternative {
+				t.Fatalf("verdict = %+v", verdict)
 			}
 		})
 	}
+
+	// A changed source version makes the stored vendor report stale.
+	mustExec(t, world.pool, `UPDATE demo.invoices SET version = version + 1 WHERE id = $1`, world.invoiceA01)
+	verdict, err := relationships.ReportExport(ctx, world.run.OrganizationID, world.run.RunID, vendorReport)
+	if err != nil || verdict.Allowed || verdict.ReasonCode != ReasonCode(provenance.ReasonResourceVersionChanged) {
+		t.Fatalf("after a source change: verdict %+v, err %v; want resource_version_changed", verdict, err)
+	}
+}
+
+// storeTestReport stores a report of this run with one invoice source and returns its id.
+func storeTestReport(t *testing.T, world *executorWorld, template provenance.Template, classification string, fields []string) string {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := world.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	stored, err := provenance.StoreReport(ctx, tx, provenance.NewReport{
+		OrganizationID: world.run.OrganizationID, RunID: world.run.RunID,
+		CreatedByActionID: world.allowRead(t, world.invoiceA01), Template: template,
+		Sources: []provenance.Source{{Kind: provenance.SourceInvoice, ID: world.invoiceA01, Version: 1,
+			Classification: classification, ConsumedFields: fields}},
+		Title: "Test report", Content: "INV104 appears twice.",
+	})
+	if err != nil {
+		t.Fatalf("store report: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	return stored.ID
 }

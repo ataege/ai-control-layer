@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"starter/services/gateway/internal/provenance"
 )
 
 // ErrRelationshipsUnavailable means a relationship could not be read; the gate then denies.
@@ -39,17 +42,41 @@ func (relationships *PostgresRelationships) VendorLinkedToInvoices(ctx context.C
 	return linked, nil
 }
 
-// ReportOfRun is true when the report belongs to the organization and was created in the run.
-func (relationships *PostgresRelationships) ReportOfRun(ctx context.Context, organizationID, runID, reportID string) (bool, error) {
+// ReportExport loads the report and its lineage in one read-only transaction and asks
+// provenance.AuthorizeExport, which decides from the stored lineage only (the stored
+// classification column and the title carry no authority), for the registered vendor recipient.
+func (relationships *PostgresRelationships) ReportExport(ctx context.Context, organizationID, runID, reportID string) (ExportVerdict, error) {
 	if relationships.pool == nil {
-		return false, ErrRelationshipsUnavailable
+		return ExportVerdict{}, ErrRelationshipsUnavailable
 	}
-	var ofRun bool
-	err := relationships.pool.QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM demo.reports WHERE id = $1 AND organization_id = $2 AND run_id = $3)`,
-		reportID, organizationID, runID).Scan(&ofRun)
+	var verdict ExportVerdict
+	err := pgx.BeginTxFunc(ctx, relationships.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		report, err := provenance.LoadReport(ctx, tx, organizationID, runID, reportID)
+		if errors.Is(err, provenance.ErrReportNotFound) {
+			return nil // verdict.Found stays false
+		}
+		if err != nil {
+			return err
+		}
+		var invoiceIDs []string
+		for _, entry := range report.Lineage {
+			if entry.Kind == provenance.SourceInvoice {
+				invoiceIDs = append(invoiceIDs, entry.ID)
+			}
+		}
+		currentVersions, err := provenance.CurrentInvoiceVersions(ctx, tx, organizationID, invoiceIDs)
+		if err != nil {
+			return err
+		}
+		decision := provenance.AuthorizeExport(report, provenance.DestinationRegisteredVendor, currentVersions)
+		verdict = ExportVerdict{
+			Found: true, Allowed: decision.Allowed, ReasonCode: ReasonCode(decision.ReasonCode),
+			AlternativeTemplate: decision.AlternativeTemplate,
+		}
+		return nil
+	})
 	if err != nil {
-		return false, ErrRelationshipsUnavailable
+		return ExportVerdict{}, ErrRelationshipsUnavailable
 	}
-	return ofRun, nil
+	return verdict, nil
 }

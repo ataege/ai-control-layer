@@ -91,14 +91,33 @@ atomic tool reservation, attempt claim and approval consumption.
 The gate checks every argument relationship of "Proposed tool argument boundaries" before an
 adapter is reached; the adapters check again themselves.
 
-| Tool            | Gate check                                                                                                                                                        |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read_invoice`  | The invoice is in the passport.                                                                                                                                   |
-| `read_vendor`   | The vendor belongs to the organization and is the vendor of a passport invoice (`RelationshipReader.VendorLinkedToInvoices`), not any vendor id.                  |
-| `create_report` | The template is one of the two registered templates and in the passport; every source invoice is in the passport.                                                 |
-| `queue_report`  | The report was created in this run of this organization (`ReportOfRun`); the recipient is a passport recipient reference that names this run, never content text. |
+| Tool            | Gate check                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read_invoice`  | The invoice is in the passport.                                                                                                                         |
+| `read_vendor`   | The vendor belongs to the organization and is the vendor of a passport invoice (`RelationshipReader.VendorLinkedToInvoices`), not any vendor id.        |
+| `create_report` | The template is one of the two registered templates and in the passport; every source invoice is in the passport.                                       |
+| `queue_report`  | The recipient is a passport recipient reference that names this run, never content text; the report itself is checked by the export rule below (GO-64). |
 
 A relationship that cannot be read denies (`decision_unavailable`), and a gate without a
 relationship reader denies every action that needs one. `PostgresRelationships` reads the demo
 records, always scoped by the verified organization. Whether a readable field may leave in
 outbound content is the report's own restriction (GO-64), checked separately from read access.
+
+## Export denial before review (GO-64)
+
+For `queue_report`, after the resource checks and before the approval rule, the gate asks
+`RelationshipReader.ReportExport`. `PostgresRelationships` implements it with Worker 2's
+provenance package in one read-only transaction: `provenance.LoadReport` (report and lineage of
+this organization and run), `provenance.CurrentInvoiceVersions`, then
+`provenance.AuthorizeExport` for the registered vendor recipient. That decision uses the stored
+lineage only, never the stored classification column, the title or a model label.
+
+- No report of this organization and run: `resource_out_of_scope`.
+- Content hash mismatch or missing lineage: `report_lineage_missing`.
+- An Internal only lineage: `report_export_restricted`, a denial and never an approval request,
+  with `vendor_reconciliation_v1` as the permitted alternative (recorded in the decision and its
+  event summary; GO-29 offers it only when the passport permits it).
+- A changed source version: `resource_version_changed`.
+
+The semantic check is never reached for a restricted export. The `queue_report` adapter decides
+provenance again at effect time, so an approval can never override the restriction.
