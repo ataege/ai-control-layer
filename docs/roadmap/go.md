@@ -742,8 +742,7 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     security call's provider time and one `runtime.control_assessments` row per control decision
     (semantic rows with verdict source and the security call id), committed with the step's context
     entries. No inspected text is stored. Test
-    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: see
-    the GO-80 commit. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
     depth is read from `runtime.jobs` by the summary.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
