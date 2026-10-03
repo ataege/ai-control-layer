@@ -335,3 +335,63 @@ func TestCountAgentCallsReadsTheLedger(t *testing.T) {
 		t.Fatalf("another organization read the ledger: %v", err)
 	}
 }
+
+// GO-86: a lowered catalog limit narrows a running passport's ledger at the next reservation; a
+// raised one widens nothing, and past usage is never refunded or rewritten.
+func TestPostgresReserveWithinNarrowsButNeverWidens(t *testing.T) {
+	pool := testdb.Open(t)
+	store := budget.NewPostgresStore(pool)
+	ctx := context.Background()
+	run := budgettest.OpenRun(t, pool, budgettest.Limits(2000))
+	reserveAndSettle := func(purpose string, tokens int64, ceiling budget.Ceiling) (budget.Reservation, error) {
+		callID := testdb.ID(t)
+		budgettest.RecordDispatch(t, pool, run, callID, purpose)
+		reservation, err := store.ReserveWithin(ctx, run.RunID, callID, purpose, tokens, ceiling)
+		if err == nil {
+			if _, settleErr := store.Settle(ctx, run.RunID, callID, tokens, 0); settleErr != nil {
+				t.Fatal(settleErr)
+			}
+		}
+		return reservation, err
+	}
+	for range 3 {
+		if _, err := reserveAndSettle(budget.PurposeSecurity, 10, budget.Ceiling{CallsSecurity: 12}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Lowered to one security call while three are used: refused, the agent purpose unaffected.
+	lowered := budget.Ceiling{CallsSecurity: 1}
+	if _, err := reserveAndSettle(budget.PurposeSecurity, 10, lowered); !errors.Is(err, budget.ErrExhausted) {
+		t.Fatalf("security call after the limit was lowered below usage: %v", err)
+	}
+	if _, err := reserveAndSettle(budget.PurposeAgent, 10, lowered); err != nil {
+		t.Fatalf("agent call under a security-only ceiling: %v", err)
+	}
+	// A lowered total call count and token total refuse too.
+	if _, err := reserveAndSettle(budget.PurposeAgent, 10, budget.Ceiling{CallsTotal: 4}); !errors.Is(err, budget.ErrExhausted) {
+		t.Fatalf("call after the total call limit was lowered: %v", err)
+	}
+	if _, err := reserveAndSettle(budget.PurposeAgent, 10, budget.Ceiling{TokensTotal: 45}); !errors.Is(err, budget.ErrExhausted) {
+		t.Fatalf("call after the token total was lowered below usage: %v", err)
+	}
+	// A raised ceiling never widens the passport: 2000 shared tokens with 40 used.
+	if _, err := reserveAndSettle(budget.PurposeAgent, 1961, budget.Ceiling{TokensTotal: 1 << 40}); !errors.Is(err, budget.ErrExhausted) {
+		t.Fatalf("a raised token ceiling widened the passport: %v", err)
+	}
+	// The shorter request timeout applies; a longer one does not.
+	if reservation, err := reserveAndSettle(budget.PurposeAgent, 10, budget.Ceiling{RequestTimeout: 5 * time.Second}); err != nil ||
+		reservation.RequestTimeout != 5*time.Second {
+		t.Fatalf("shorter timeout: %+v %v", reservation, err)
+	}
+	if reservation, err := reserveAndSettle(budget.PurposeAgent, 10, budget.Ceiling{RequestTimeout: time.Hour}); err != nil ||
+		reservation.RequestTimeout != 20*time.Second {
+		t.Fatalf("longer timeout: %+v %v", reservation, err)
+	}
+	snapshot, err := store.Snapshot(ctx, run.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Security.Calls != 3 || snapshot.Agent.Calls != 3 || snapshot.Used != 60 || snapshot.Reserved != 0 || snapshot.CallLimit != 24 {
+		t.Fatalf("usage was rewritten or the stored limits changed: %+v", snapshot)
+	}
+}
