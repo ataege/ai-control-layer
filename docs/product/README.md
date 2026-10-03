@@ -130,11 +130,7 @@ writes each outcome down here when it is settled.
    to commit the report or outbox effect, trusted lineage, runtime completion and associated events",
    which matches the report's recommendation. The starter still has one database user. Owner: the lead
    (database roles, by default).
-3. **Browser to API path. Open.** The Next.js proxy forwards no cookies or authorization headers and
-   buffers a JSON response with a ten second timeout. The report allows authenticated polling before
-   server-sent events. Proposed, not decided: one same-origin route handler that forwards an allowlist
-   of top-level API prefixes, the session cookie and a fixed set of headers, and streams the response.
-   Owner: the web + API implementer.
+3. **Browser to API path. Settled: same-origin forwarder.** One same-origin route handler in Next.js forwards an allowlist of top-level API prefixes, the session cookie and a fixed set of headers, and streams the response. Owner: the web + API implementer.
 4. **Operator context to Go. Requirement settled; the two sources differ on the mechanism.** The
    report requires Go to verify service identity and the authenticated operator context and lists the
    mechanism as unresolved ("The service token in the starter requires replacement or extension for

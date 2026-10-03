@@ -568,7 +568,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     (Journey 1 create and delegate a task)
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
+- [x] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: API-06, SH-02 · Needs: nothing · Provides: X-31 (part)
   - Paths: `apps/api/src/app.setup.ts`, `apps/api/src/config/environment.ts`,
@@ -585,6 +585,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Tests: specs: forged `x-forwarded-for` and `x-forwarded-host` headers change nothing (forwarder
     option), or a credentialed preflight from an allowed origin passes while another origin gets no
     CORS headers (direct option): `pnpm --filter api run test`; `pnpm smoke`.
+    - Results (2026-10-03): Decision 3 settled as "same-origin forwarder". Tests implemented in app.setup.spec.ts to ensure forged x-forwarded-* headers are ignored by default.
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
