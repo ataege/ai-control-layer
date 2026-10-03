@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// JobKindAgentStep is the runtime.jobs kind admission inserts and the worker claims. It is a
+// Go-internal constant (a lead decision), shared here so admission and the worker cannot drift.
+const JobKindAgentStep = "agent_step"
+
 // ReasonCode is a stable decision reason (X-13).
 type ReasonCode string
 

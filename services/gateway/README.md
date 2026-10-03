@@ -120,6 +120,7 @@ internal/policy/      action gate: canonical arguments and digest (GO-12), decis
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
+internal/repository/ runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
