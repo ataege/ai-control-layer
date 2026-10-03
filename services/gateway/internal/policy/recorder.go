@@ -134,11 +134,7 @@ func decisionEvent(run RunIdentity, decision Decision) repository.NewEvent {
 		event.EventType, eventDecision = contracts.EventActionDenied, contracts.DecisionDeny
 		if isExportDenial(decision.ReasonCode) {
 			event.EventType = contracts.EventReportExportDenied
-			lineageCheck := "failed"
-			if decision.ReasonCode == ReasonReportLineageMissing {
-				lineageCheck = "missing"
-			}
-			event.MaskedSummary.LineageCheck = &lineageCheck
+			event.MaskedSummary.LineageCheck = lineageCheckFor(decision.ReasonCode)
 		}
 	}
 	event.Decision = &eventDecision
@@ -240,4 +236,18 @@ func newUUID() (string, error) {
 	identifier[6] = (identifier[6] & 0x0f) | 0x40
 	identifier[8] = (identifier[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", identifier[0:4], identifier[4:6], identifier[6:8], identifier[8:10], identifier[10:16]), nil
+}
+
+// lineageCheckFor names the lineage result of an export denial the same way the tools package and
+// the safe-event fixture do: a verified lineage whose restriction forbids the export "passed" (the
+// restriction is the decision), unverifiable lineage is "missing", a stale source "failed".
+func lineageCheckFor(reason ReasonCode) *string {
+	check := "failed"
+	switch reason {
+	case ReasonReportExportRestricted:
+		check = "passed"
+	case ReasonReportLineageMissing:
+		check = "missing"
+	}
+	return &check
 }

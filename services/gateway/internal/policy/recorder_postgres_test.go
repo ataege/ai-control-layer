@@ -172,8 +172,8 @@ func TestRecorderWritesAnExportDenialEvent(t *testing.T) {
 	if err := json.Unmarshal([]byte(summary), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if eventType != "report.export_denied" || decoded.LineageCheck != "failed" || decoded.AlternativeTemplate != TemplateVendorReconciliation {
-		t.Fatalf("event %q with summary %s; want report.export_denied, lineage failed and the alternative", eventType, summary)
+	if eventType != "report.export_denied" || decoded.LineageCheck != "passed" || decoded.AlternativeTemplate != TemplateVendorReconciliation {
+		t.Fatalf("event %q with summary %s; want report.export_denied, lineage passed and the alternative", eventType, summary)
 	}
 }
 

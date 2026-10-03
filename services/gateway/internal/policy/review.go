@@ -133,9 +133,9 @@ func (freezer *PostgresReviewFreezer) Freeze(ctx context.Context, run RunIdentit
 	var frozen FrozenReview
 	err = freezer.repository.InTransaction(ctx, func(tx repository.Tx) error {
 		if queueArguments, isQueue := arguments.(QueueReportArguments); isQueue {
-			// Worker 2's rule, the same one queue_report applies, on the stored passport's scope.
+			// Worker 2's rule, the same one queue_report applies; it loads the stored passport itself.
 			vendorID, address, reason, err := tools.ResolveRecipientForReview(ctx, tx.Raw(), run.OrganizationID, run.RunID,
-				passport.Scope, queueArguments.RecipientReference)
+				queueArguments.RecipientReference)
 			if err != nil || reason != "" {
 				return ErrReviewUnavailable
 			}
