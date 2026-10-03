@@ -343,6 +343,12 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 		EventType: contracts.EventControlEvaluated, Decision: pointer(contracts.DecisionDeny), ReasonCode: pointer(contracts.ReasonSignatureMatch)}); err != nil {
 		t.Fatal(err)
 	}
+	// The same decision from a judge's probe (GO-82) is counted apart from the run's own.
+	if _, err := repository.Join(tx).AppendEvent(ctx, repository.NewEvent{OrganizationID: organizationID, RunID: &runID,
+		EventType: contracts.EventControlEvaluated, Decision: pointer(contracts.DecisionDeny), ReasonCode: pointer(contracts.ReasonSignatureMatch),
+		MaskedSummary: contracts.MaskedSummary{InputSource: pointer("judge"), ActorID: pointer(testdb.ID(t))}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +403,8 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 	wantTiming := PhaseTiming{Phase: "deterministic", Count: 5, Failed: 1, MedianMicroseconds: 300, P95Microseconds: 5000, MaxMicroseconds: 5000}
 	if len(summary.Timings) != 1 || summary.Timings[0] != wantTiming ||
 		len(summary.Runs) != 1 || summary.Runs[0] != (StatusCount{Status: contracts.RunRunning, Count: 1}) ||
-		len(summary.Decisions) != 1 || summary.Decisions[0].Count != 1 || *summary.Decisions[0].ReasonCode != contracts.ReasonSignatureMatch ||
+		len(summary.Decisions) != 2 || summary.Decisions[0].Count != 1 || *summary.Decisions[0].ReasonCode != contracts.ReasonSignatureMatch ||
+		summary.Decisions[0].InputSource != nil || summary.Decisions[1].InputSource == nil || *summary.Decisions[1].InputSource != "judge" ||
 		summary.ModelUsage[1].Completed != 1 || summary.OrganizationID != organizationID {
 		t.Fatalf("summary %s", recorder.Body.String())
 	}

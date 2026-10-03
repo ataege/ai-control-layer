@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "control-evaluation-request.schema.json",
   "title": "ControlEvaluationRequest",
-  "description": "X-91: one interaction of an admitted run evaluated at one boundary through the same gates as the agent path. The caller cannot issue a grant; identity comes from the verified operator context, never from this body. The evaluate call never dispatches the agent model.",
+  "description": "X-91: one interaction of an admitted run evaluated at one boundary through the same gates as the agent path. The caller cannot issue a grant; identity comes from the verified operator context, never from this body. Any verified operator of the organization may evaluate any active run of it; an inactive (cancelled, expired or finished) run is denied before any model call, and an evaluation spends that run's security allowance (bounded by calls_security). The evaluate call never dispatches the agent model.",
   "type": "object",
   "additionalProperties": false,
   "required": ["runId", "kind", "text", "tool", "arguments"],

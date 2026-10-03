@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "control-evaluation-response.schema.json",
   "title": "ControlEvaluationResponse",
-  "description": "X-91: the decision for one evaluated interaction. A denial is a decision (HTTP 200), not an error. Evaluated actions are decisions only: nothing is stored as an action or executed, so actionId is always null. A semantic verdict restricts, never grants.",
+  "description": "X-91: the decision for one evaluated interaction. A denial is a decision (HTTP 200), not an error. Evaluated actions are decisions only: nothing is stored as an action or executed, so actionId is always null. A semantic verdict restricts, never grants. Known limitation: the verdict's category and score are returned to the caller, so a caller can probe the semantic check; probing is bounded per run by calls_security.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -65,7 +65,9 @@
             "decision_unavailable",
             "content_blocked",
             "content_too_large",
-            "limit_not_allowed"
+            "limit_not_allowed",
+            "run_not_active",
+            "approval_rejected"
           ]
         },
         {

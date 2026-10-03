@@ -607,6 +607,8 @@ func eventFor(status contracts.RunStatus) contracts.EventType {
 // Safe operator messages of the model failures, so a run-end event records which failure it was
 // (GO-58: "On provider failure, show the actual failure state").
 const (
+	messageModelUnreachable  = "The local model could not be reached; whether the request used tokens is unknown, so its allowance stays held and the run is paused."
+	messageModelBadResponse  = "The local model's response could not be read; whether it used tokens is unknown, so its allowance stays held and the run is paused."
 	messageModelUsageUnknown = "The local model call failed or returned no usage counts; whether it used tokens is unknown, so its allowance stays held and the run is paused."
 	messageModelTimeout      = "The local model did not answer in time; whether it used tokens is unknown, so its allowance stays held and the run is paused."
 	messageModelUnusable     = "The local model answered with neither one action nor a final answer, so the run failed."
@@ -623,8 +625,12 @@ func stepErrorEnd(err error) runEnd {
 	case errors.Is(err, model.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
 		// Alignment decision 7: unresolved usage pauses the run.
 		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonOutcomeUnknown, message: messageModelTimeout, purpose: agentPurpose}
+	case errors.Is(err, model.ErrTransport):
+		// The accounted call joins the cause to ErrUsageUnknown and keeps the reservation.
+		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonOutcomeUnknown, message: messageModelUnreachable, purpose: agentPurpose}
+	case errors.Is(err, model.ErrResponse):
+		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonOutcomeUnknown, message: messageModelBadResponse, purpose: agentPurpose}
 	case errors.Is(err, model.ErrUsageUnknown):
-		// An unreachable provider lands here: the accounted call keeps the reservation as unknown.
 		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonOutcomeUnknown, message: messageModelUsageUnknown, purpose: agentPurpose}
 	case errors.Is(err, ErrModelNotAllowed):
 		return runEnd{status: contracts.RunStopped, reason: contracts.ReasonModelNotAllowed}

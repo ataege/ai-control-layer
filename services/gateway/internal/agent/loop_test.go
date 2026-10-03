@@ -37,8 +37,10 @@ func TestStepErrorsNeverContinueTheRun(t *testing.T) {
 // GO-58: a model failure names which failure it was, in fixed text the event may store.
 func TestModelFailuresNameTheActualFailure(t *testing.T) {
 	for err, want := range map[error]string{
-		errors.Join(ErrModelCallFailed, model.ErrUsageUnknown): messageModelUsageUnknown,
-		errors.Join(ErrModelCallFailed, model.ErrTimeout):      messageModelTimeout,
+		errors.Join(ErrModelCallFailed, model.ErrUsageUnknown):                     messageModelUsageUnknown,
+		errors.Join(ErrModelCallFailed, model.ErrUsageUnknown, model.ErrTransport): messageModelUnreachable,
+		errors.Join(ErrModelCallFailed, model.ErrUsageUnknown, model.ErrResponse):  messageModelBadResponse,
+		errors.Join(ErrModelCallFailed, model.ErrTimeout):                          messageModelTimeout,
 		ErrUnusableResponse: messageModelUnusable,
 		ErrRecording:        messageModelNotRecorded,
 		errors.Join(ErrModelCallFailed, budget.ErrNotFound): messageModelCallFailed,

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 	"unicode/utf8"
 
 	"starter/services/gateway/internal/catalog"
@@ -67,11 +68,12 @@ type Dependencies struct {
 // Evaluator runs evaluations.
 type Evaluator struct {
 	dependencies Dependencies
+	now          func() time.Time
 }
 
 // New returns an evaluator over the agent path's components.
 func New(dependencies Dependencies) *Evaluator {
-	return &Evaluator{dependencies: dependencies}
+	return &Evaluator{dependencies: dependencies, now: time.Now}
 }
 
 // outcome is one boundary's result before it is recorded.
@@ -103,29 +105,58 @@ func (evaluator *Evaluator) Evaluate(ctx context.Context, operator contracts.Ope
 	if err != nil {
 		return contracts.ControlEvaluationResponse{}, ErrUnavailable
 	}
+	runState, err := dependencies.Repository.RunState(ctx, operator.OrganizationID, request.RunID)
+	if err != nil {
+		return contracts.ControlEvaluationResponse{}, ErrUnavailable
+	}
 	snapshot, err := dependencies.Catalog.Active(ctx, dependencies.Database)
 	if err != nil {
 		return contracts.ControlEvaluationResponse{}, ErrUnavailable
 	}
 
+	// An inactive run spends nothing: it is denied before any metered model call, for every kind.
 	var result outcome
-	switch request.Kind {
-	case contracts.BoundaryModelInput:
-		result = evaluator.modelInput(ctx, request.RunID, *request.Text, snapshot.Security)
-	case contracts.BoundaryToolResult:
-		result = evaluator.toolResult(ctx, request.RunID, string(*request.Tool), *request.Text, snapshot.Security)
-	case contracts.BoundaryActionProposal:
-		result = evaluator.actionProposal(ctx, operator.OrganizationID, request)
+	if reason, inactive := inactiveRunReason(runState, passport, evaluator.now()); inactive {
+		result = deny(reason, nil)
+	} else {
+		result = evaluator.evaluateKind(ctx, operator.OrganizationID, request, snapshot.Security)
 	}
 
 	evaluationID := newUUID()
 	response := buildResponse(evaluationID, request.RunID, passport.AdmissionCatalogRevisionID, snapshot, result)
-	if err := evaluator.recordEvidence(ctx, operator.OrganizationID, request.RunID, evaluationID,
+	if err := evaluator.recordEvidence(ctx, operator, request.RunID, evaluationID,
 		passport.AdmissionCatalogRevisionID, snapshot.RevisionID, result, response.SafeMessage); err != nil {
 		// The judge's input must appear in evidence; without it there is no decision to report.
 		return contracts.ControlEvaluationResponse{}, ErrUnavailable
 	}
 	return response, nil
+}
+
+// inactiveRunReason denies an evaluation of a cancelled, expired or finished run.
+func inactiveRunReason(state contracts.RunState, passport contracts.Passport, now time.Time) (contracts.ReasonCode, bool) {
+	switch {
+	case state.CancelRequestedAt != nil || (state.TerminalReason != nil && *state.TerminalReason == contracts.ReasonRunCancelled):
+		return contracts.ReasonRunCancelled, true
+	case state.Status == contracts.RunCompleted || state.Status == contracts.RunFailed || state.Status == contracts.RunStopped:
+		return contracts.ReasonRunNotActive, true
+	case !now.Before(passport.ExpiresAt):
+		return contracts.ReasonRunExpired, true
+	}
+	return "", false
+}
+
+// evaluateKind runs the boundary the request names.
+func (evaluator *Evaluator) evaluateKind(ctx context.Context, organizationID string, request contracts.ControlEvaluationRequest, settings security.Settings) outcome {
+	var result outcome
+	switch request.Kind {
+	case contracts.BoundaryModelInput:
+		result = evaluator.modelInput(ctx, request.RunID, *request.Text, settings)
+	case contracts.BoundaryToolResult:
+		result = evaluator.toolResult(ctx, request.RunID, string(*request.Tool), *request.Text, settings)
+	case contracts.BoundaryActionProposal:
+		result = evaluator.actionProposal(ctx, organizationID, request)
+	}
+	return result
 }
 
 // validateRequest enforces X-91's combinations: text for model_input and tool_result, a registered
@@ -289,8 +320,9 @@ func (decisionOnlyFreezer) Freeze(context.Context, policy.RunIdentity, policy.St
 }
 
 // recordEvidence writes the control.evaluated event and the control records in one transaction.
-func (evaluator *Evaluator) recordEvidence(ctx context.Context, organizationID, runID, evaluationID string,
+func (evaluator *Evaluator) recordEvidence(ctx context.Context, operator contracts.OperatorContext, runID, evaluationID string,
 	admissionRevisionID, activeRevisionID int64, result outcome, safeMessage string) error {
+	organizationID := operator.OrganizationID
 	var reason *contracts.ReasonCode
 	if result.reason != "" {
 		reasonCode := result.reason
@@ -302,6 +334,9 @@ func (evaluator *Evaluator) recordEvidence(ctx context.Context, organizationID, 
 		Effect:                     pointer("none"),
 		AlternativeTemplate:        result.alternativeTemplate,
 		SafeMessage:                &safeMessage,
+		// Judge evidence is labelled and attributed, so summaries count it apart from agent decisions.
+		ActorID:     pointer(operator.UserID),
+		InputSource: pointer("judge"),
 	}
 	for _, record := range result.records {
 		if record.MatchedRuleID != "" && record.ControlID == security.ControlSignatureMatch {
@@ -370,31 +405,10 @@ func buildResponse(evaluationID, runID string, admissionRevisionID int64, snapsh
 	return response
 }
 
-// safeMessages are fixed operator messages; they never contain the inspected text.
-var safeMessages = map[contracts.ReasonCode]string{
-	contracts.ReasonSignatureMatch:               "The input matched a known attack signature and was withheld.",
-	contracts.ReasonSemanticInjectionDetected:    "The semantic check judged the input a likely injection and withheld it.",
-	contracts.ReasonContentBlocked:               "A configured secret pattern blocked the input.",
-	contracts.ReasonContentRedacted:              "Configured content was masked before the text could reach the model.",
-	contracts.ReasonContentTooLarge:              "The input exceeds the inspected size limit or is not valid UTF-8 and was withheld.",
-	contracts.ReasonSecurityEvaluatorUnavailable: "The required security check could not run, so the input was not let through.",
-	contracts.ReasonSecurityAllowanceExhausted:   "The run's security allowance is exhausted, so the input was not let through.",
-	contracts.ReasonDecisionUnavailable:          "No decision could be made, so nothing was allowed.",
-	contracts.ReasonResourceOutOfScope:           "The proposed action names a record outside the run's passport.",
-	contracts.ReasonDestinationNotAllowed:        "The proposed destination is not allowed for this run.",
-	contracts.ReasonReportExportRestricted:       "The report inherits an Internal only restriction and cannot be sent to a vendor.",
-	contracts.ReasonToolNotRegistered:            "The proposed tool is not registered.",
-	contracts.ReasonInvalidArguments:             "The proposed arguments do not fit the tool's contract.",
-	contracts.ReasonToolNotAllowed:               "The proposed tool is not in the run's passport.",
-	contracts.ReasonTemplateNotAllowed:           "The proposed report template is not allowed for this run.",
-	contracts.ReasonReportLineageMissing:         "The report's trusted lineage is missing, so it cannot be exported.",
-	contracts.ReasonRunCancelled:                 "The run is cancelled.",
-	contracts.ReasonRunExpired:                   "The run's passport has expired.",
-}
-
 func safeMessageFor(decision contracts.EvaluationDecision, reason contracts.ReasonCode) string {
-	if message, known := safeMessages[reason]; known {
-		return message
+	// One message table for every reason code: contracts.ReasonCode.SafeMessage (GO-58).
+	if reason != "" {
+		return reason.SafeMessage()
 	}
 	switch decision {
 	case contracts.EvaluationAllow:
@@ -402,7 +416,7 @@ func safeMessageFor(decision contracts.EvaluationDecision, reason contracts.Reas
 	case contracts.EvaluationApprovalRequired:
 		return "The action is permitted only after exact review; the evaluation stored and executed nothing."
 	default:
-		return fmt.Sprintf("The interaction was denied (%s).", reason)
+		return "The interaction was denied."
 	}
 }
 
