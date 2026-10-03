@@ -128,7 +128,7 @@ Proposed reason vocabulary (reports 1.1 and 1.2): `resource_out_of_scope`, `dest
 `security_evaluator_unavailable`, `security_allowance_exhausted`, `content_redacted`, `signature_match`,
 `policy_reload_rejected` and `model_not_allowed`. Decided by the lead's delegate (X-13): 28 codes, these
 20 plus `tool_not_registered`, `invalid_arguments`, `tool_not_allowed`, `decision_unavailable`,
-`content_blocked`, `content_too_large`, `multiple_actions_not_supported` and `run_expired`, on `main` in `packages/contracts/schemas/reason-code.schema.json` (29 with `limit_not_allowed`; 30 with `run_not_active`, item 26). "Scores and model explanations are evidence, not
+`content_blocked`, `content_too_large`, `multiple_actions_not_supported` and `run_expired`, on `main` in `packages/contracts/schemas/reason-code.schema.json` (31 on `main` at 1dad371: with `limit_not_allowed`, `run_not_active` and `approval_rejected`). "Scores and model explanations are evidence, not
 authorization." "Denial may identify an authorized
 alternative template without granting extra scope." "The UI, runtime, tests, and evidence should use
 the same vocabulary." The architecture's event names (`report.export_denied`,
@@ -173,10 +173,18 @@ writes each outcome down here when it is settled.
    criteria provide no paid subscriptions. The user selected Ollama on a separate MacBook with an M1 Pro
    and 16 GB RAM. `qwen3.5:4b` is licensed Apache 2.0 (model card and the license text bundled with the
    model; [source-register.md](source-register.md)). `qwen2.5:3b` is excluded: its Qwen Research
-   License grants use "FOR NON-COMMERCIAL PURPOSES ONLY". On `main` (44e925f), the Go model client sends
-   `think: false` (`services/gateway/internal/model/accounting.go`). Measured fit on the presentation
-   machine and its network endpoint remain to be recorded (SH-45, SH-50). Owner: the Go implementer with
-   the lead (infrastructure).
+   License grants use "FOR NON-COMMERCIAL PURPOSES ONLY". On `main`, the Go model client sends `think: false` (`services/gateway/internal/model/accounting.go`).
+   **Frozen for the demonstration on 2026-10-03 (GO-03; commit `452a358` on branch `go/f3`, not on `main`
+   yet; adopted by the lead's delegate):** `qwen3.5:4b`, Ollama digest
+   `2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd` (4.7B, Q4_K_M), on Ollama 0.35.1
+   with `think: false` and a context of 8192 tokens for agent and security requests. Measured on an
+   Apple M1 Pro with 16 GB (MacBookPro18,1, macOS 27.0) with Ollama on the gateway's machine: the model
+   is resident in 3.33 GB on the GPU; live agent calls take p50 3.9 s and p95 5.4 s (30 calls, GO-27
+   live runs, load about 12 on 10 CPUs); the live semantic check p50 3.2 s (4 calls, same runs) and
+   1.93 s in the quiet-machine benchmark (GO-81) (`services/gateway/README.md`, "Model and hardware
+   freeze (GO-03)"). **Measured on the team's M1 Pro; whether it is the presentation machine is to be
+   confirmed by the user** (SH-45, SH-50). The live latencies were taken under load and are not slide
+   numbers (decision 22). Owner: the Go implementer with the lead (infrastructure).
 7. **Authentication mechanism. Settled by the lead on 2026-10-03: an HttpOnly cookie carrying a
    signed JWT.** NestJS (`AuthModule`) checks the operator's credential, then issues a JWT signed with a
    symmetric key and sets it in an HttpOnly cookie that browser JavaScript cannot read; NestJS also
@@ -198,7 +206,7 @@ writes each outcome down here when it is settled.
 ## Decisions recorded by the lead's delegate (3 October 2026)
 
 Each item below was **decided by the lead's delegate** on 3 October 2026 and recorded by the
-researcher. "On `main`" names what was merged when the researcher last checked each item: c968034 (3 October 2026, re-checked for every item after items 24 to 27 arrived);
+researcher. "On `main`" names what was merged when the researcher last checked each item: c968034 (3 October 2026, every item re-checked after items 24 to 27 arrived), and again at 1dad371 for items 10, 21 and 25 to 28;
 anything else is a decision, not an implemented behaviour.
 
 1. **Read path (`read path`).** Operator reads go through private Go `/internal` endpoints, mounted
@@ -235,7 +243,7 @@ anything else is a decision, not an implemented behaviour.
    is `config/attack-signatures.json`, revision `feed_v1`, with four rules (SH-46). On `main`: yes, `config/attack-signatures.json`, revision `feed_v1`, four rules (`prompt_ignore_previous_v1`, `code_exec_python_import_v1`, `unsafe_deserialization_pickle_v1`, `model_repo_trust_remote_code_v1`); its own scope text says it protects no model-loading infrastructure. Importing it into a catalog revision is item 16.
 10. **Reason codes (X-13).** 28 codes: the report's 20 plus `tool_not_registered`, `invalid_arguments`,
     `tool_not_allowed`, `decision_unavailable`, `content_blocked`, `content_too_large`,
-    `multiple_actions_not_supported` and `run_expired`. On `main`: yes, 29 values in `packages/contracts/schemas/reason-code.schema.json`: these 28 plus `limit_not_allowed` (admission rejects requested limits above the catalog, GO-13). Item 26 adds `run_not_active`, making 30 once merged.
+    `multiple_actions_not_supported` and `run_expired`. On `main`: yes, 31 values in `packages/contracts/schemas/reason-code.schema.json` at 1dad371: these 28 plus `limit_not_allowed` (admission rejects requested limits above the catalog, GO-13), `run_not_active` (item 26) and `approval_rejected`.
 11. **Worker readiness (decision 5, X-32).** While the worker loop is not running, `/health/ready`
     answers 503 with the real database check; no schema change. On `main`: yes
     (`services/gateway/internal/health/health.go`).
@@ -275,7 +283,7 @@ anything else is a decision, not an implemented behaviour.
     identifier must be a report of this run and organization; otherwise the answer is rejected, never
     trimmed, and the rejection counts as a correction under GO-29. Go stores
     `runs.result_reference = {"report_ids": [...]}` with no prose, in the same transaction as the
-    completion. On `main`: the format check `internal/runresult` (`Parse` rejects anything but the exact shape) and the `result_reference` write in `internal/repository/runs.go`. Its hook into the agent loop is item 27, not on `main`.
+    completion. On `main`: the format check `internal/runresult` (`Parse` rejects anything but the exact shape) and the `result_reference` write in `internal/repository/runs.go`. Its hook into the agent loop is item 27, also on `main`.
 22. **Measurement method (`measurement method`).** Decided by Worker 2 as the Go implementer for
     GO-81 and accepted by the lead's delegate: concurrency 1; warmup excluded; the configurations
     without a model interleaved sample by sample; GO-80's phase names (`policy_lookup`,
@@ -288,8 +296,25 @@ anything else is a decision, not an implemented behaviour.
     `classifier_v2` (lane c1, commit `b9f94c2` on branch `go/c1`) was measured at 0 wrong of 84 cases
     on `qwen3.5:4b`, against 4 of 84 for v1. Limits: v2 was written with the case it now catches in
     view, the benign probes are few, and variance between runs remains. A claim says "on this fixture
-    set", never universal detection. On `main`: not yet (no `classifier_v` on `main` at c968034). The measurement is the lane's, not
-    final-build evidence (X-59).
+    set", never universal detection. On `main`: not yet (no `classifier_v` on `main` at 1dad371). The
+    measurement is the lane's, not final-build evidence (X-59).
+
+    Later evidence from lane c1 (branch `go/c1`, head `ec7c815`, root `README.md` lines 404 to 411, in the
+    `pnpm verify:controls` section; not on `main`): three runs on `classifier_v2`, fixture version 3,
+    with the same model and prompt, all reported. Run 1 (`78d386c`) and run 2 (`45308f8`) **failed**:
+    run 1 on two Go story tests ("no active control catalog": the request-only feed import activates
+    nothing and a test database has no gateway), run 2 on a live label mismatch the test treated more
+    strictly than the rule (fixed: a mismatch is now recorded, `--strict-live` fails on it). Run 3
+    (`6bbaac1`) passed, exit 0, 1100 cases (Go 897, API unit 125, API database 27, fixtures 18, none
+    failed or skipped); live model 27 of 29 matched labels, 0 false positives, 2 false negatives
+    (`direct_relabel_report_v1` at 0.5, and `signature_code_exec_import_v1` at 0.69, which its signature
+    rule blocks deterministically), 0 guard failures; load average 9.0 before and 12.5 after. The lane's
+    own sentence: "The live label counts moved between runs of identical code (a different false
+    positive in runs 1 and 2, two false negatives in run 3): that is the model's variance near the 0.75
+    threshold, which is why a label mismatch is recorded and does not fail the suite (`--strict-live`
+    does)." The earlier "0 wrong of 84" above does not repeat in run 3, so claims quote run 3 and the
+    variance, not the best result. The results JSON is gitignored and exists only on the lead's machine
+    (`.verify-controls/results-2026-10-03T21-16-48Z.json`); copy it if a slide cites it.
 
 24. **Model call retries (`model call retries`).** There are no automatic model-call retries in the
     MVP. A failed, timed-out or unknown agent or security call is never re-sent; its reservation settles
@@ -305,21 +330,19 @@ anything else is a decision, not an implemented behaviour.
     provenance) plus signature matching. Reason: the live smoke of run `da88594f` showed
     `qwen3.5:4b` scoring benign `read_invoice` and `create_report` proposals at 0.85 to 1.0, so no
     report could be created. This narrows the report's Figure 6, which shows a semantic action check
-    after the deterministic checks; it is recorded as a limitation, not hidden. On `main`: not yet
-    (lane c1).
+    after the deterministic checks; it is recorded as a limitation, not hidden. On `main`: yes, the `not_applicable` outcome with reason `no_free_text_arguments` (`services/gateway/internal/security/action.go`, documented in `services/gateway/README.md`).
 26. **Judge evaluations (X-91, GO-82).** Organization-wide for any verified operator of the
     organization; the evaluating `actorId` is recorded; `maskedSummary.inputSource` is `"judge"`; an
     evaluation is refused before any model call on a cancelled, expired or finished run, with the new
     X-13 code `run_not_active` (30 codes). The judge client should admit its own dedicated run. Score
-    and category are returned, bounded per run by `calls_security`. On `main`: the route is mounted;
-    `run_not_active` and these rules were not found on `main` (no `run_not_active` at c968034).
+    and category are returned, bounded per run by `calls_security`. On `main`: the route is mounted and `run_not_active` is in the reason-code schema; the refusal rules and the recorded actor were not traced.
 27. **Final result in the loop.** The final-result format of item 21 is hooked into the agent loop by
-    lane f3 (commit `e03ab44` on branch `go/f3`). On `main`: not yet.
+    lane f3 (commit `e03ab44`). On `main`: yes.
 
 28. **Beat 5 is shown with the labelled replay.** The internal report's export to the correct vendor
     (demo beat 5) is shown with the labelled replay (`services/gateway/cmd/replay`), not as a
     spontaneous live-model action. Live sample, recorded in the GO-27 block of `docs/roadmap/go.md` by
-    lane f3 (commit `a9f8004` on branch `go/f3`, reaching `main` with the lead's merge), with the task
+    lane f3 (commit `a9f8004`, on `main`), with the task
     instruction of the storyboard: run set 1 (before the fixes) created the internal report in 3 of 3
     runs, attempted the export in 0 of 3, mangled the recipient reference in 2 of 3 and had clean
     proposals denied by the semantic check in 2 of 3; run set 2 (after the fixes, build `87f22f0` plus
@@ -345,12 +368,11 @@ none is final-build evidence (X-59):
   approval; the reviewer approved; one simulated outbox message was queued to the registered address
   and the run completed (6 agent calls, 1 security call, outbox rows 1). That record says: "The model
   did not create the internal report in this run; the scripted run covers that beat."
-- Lane 3c's run `66cbb01a` (GO-26 tick, commit `711ece3` on `go/3c`): completed after the vendor
+- Lane 3c's run `66cbb01a` (GO-26 tick, commit `711ece3`, on `main`): completed after the vendor
   report was approved and queued, with `result_reference` `{"report_ids": [...]}` naming its own
-  vendor report. The clean-checkout rehearsal run `e350fea7` (GO-27 progress note, commit `7ccacbb`
-  on `go/3c`) was set up from a fresh `git clone` of `main` at `87f22f0` by the README and
+  vendor report. The clean-checkout rehearsal run `e350fea7` (GO-27 progress note, commit `7ccacbb`, on `main`) was set up from a fresh `git clone` of `main` at `87f22f0` by the README and
   `docs/setup.md` only, and completed the same way (5 agent calls, 1 security call each).
-- Lane f3's GO-27 runs (commit `a9f8004` on `go/f3`): runs `8b812e16`, `cfbd598b` and `b4a7a4c8` (run
+- Lane f3's GO-27 runs (commit `a9f8004`, on `main`): runs `8b812e16`, `cfbd598b` and `b4a7a4c8` (run
   set 2 above; the last two completed with outbox 1) and the GO-27 live run `7c1bc441`, which reached
   `awaiting_approval` with the internal report labelled `internal_only`, source trail A01@1
   `internal_only` and A02@1 `vendor_shareable`, and the finding "INV104: A01, A02".
