@@ -227,6 +227,24 @@ only then counts the run's attempts under `FOR NO KEY UPDATE` on the run row, th
 writer also takes; the earlier order (run lock first) deadlocked with a running effect. A losing
 concurrent execution is refused (`action_changed`).
 
+## Expiry and the continuation read (for GO-40)
+
+Lane f3's worker resumes a run after a review wait (GO-40) through two calls on `Approvals`:
+
+- `ExpireOverdue(ctx) (closed int, err error)` closes every action still `awaiting_approval` whose
+  frozen review has expired (`runtime.review_payloads.expires_at`, the passport's expiry). Each
+  closes in its own transaction: the action becomes `expired`, an `approval.decided` event with no
+  decision and reason `approval_expired` is appended, and a continuation job is enqueued unless the
+  run is finished. No `runtime.approvals` row is written, because an expiry is not a reviewer's
+  decision. Rows a deciding reviewer holds are skipped (`FOR UPDATE SKIP LOCKED`), so a decision
+  and an expiry never both land. It closes at most 100 per call and is idempotent.
+- `DecidedActionFor(ctx, organizationID, runID) (DecidedAction, found bool, err error)` returns
+  the run's latest action when it is `approved`, `rejected` or `expired`: its id, step, tool,
+  canonical arguments, status, replay label and, for an approved action, whether the grant is
+  open and when it expires. An executed or superseded action, or a run of another organization,
+  is not found. The loop then executes the approved stored action by id through `Executor.Execute`
+  (which rechecks the grant) or feeds the rejection or expiry back as a correction.
+
 ## Retries and unknown outcomes (GO-53, executor half)
 
 GO-53 belongs to Worker 2, who owns the effect transaction; the executor half lives here, built on
