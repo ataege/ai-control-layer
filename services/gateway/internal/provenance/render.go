@@ -102,3 +102,33 @@ func RenderInternalInvestigation(invoices []InvoiceSnapshot) string {
 	text.WriteString("\nNo fraud is determined and no payment is authorized by this report.\n")
 	return text.String()
 }
+
+// RenderVendorReconciliation renders vendor_reconciliation_v1 directly from the approved
+// projection (vendor_invoice_fields_v1): invoice reference, external reference, the
+// duplicate-reference flag, currency and total, due date. It has no parameter for the note, the
+// internal report or model prose, and identical inputs give identical bytes.
+func RenderVendorReconciliation(invoices []InvoiceSnapshot) string {
+	var text strings.Builder
+	sorted := sortedByID(invoices)
+	repeated := RepeatedReferences(sorted)
+	text.WriteString("Vendor reconciliation (vendor_reconciliation_v1, projection vendor_invoice_fields_v1)\n\n")
+	for _, invoice := range sorted {
+		duplicate := "no"
+		if _, isRepeated := repeated[invoice.ExternalReference]; isRepeated {
+			duplicate = "yes"
+		}
+		fmt.Fprintf(&text, "- %s: external reference %s, total %s, due %s, duplicate reference: %s\n",
+			invoice.ID, invoice.ExternalReference, FormatAmount(invoice.Currency, invoice.TotalMinorUnits),
+			invoice.DueOn, duplicate)
+	}
+	if len(repeated) > 0 {
+		references := make([]string, 0, len(repeated))
+		for reference := range repeated {
+			references = append(references, reference)
+		}
+		sort.Strings(references)
+		fmt.Fprintf(&text, "\nPlease confirm whether these external references were submitted more than once: %s.\n",
+			strings.Join(references, ", "))
+	}
+	return text.String()
+}

@@ -35,3 +35,25 @@ func TestInternalRenderingIsDeterministic(t *testing.T) {
 		t.Fatalf("rendered:\n%s", rendered)
 	}
 }
+
+func TestVendorRenderingGoldenBytes(t *testing.T) {
+	note, classification := "Investigation note: INV104 appears twice.", InternalOnly
+	invoices := []InvoiceSnapshot{
+		{ID: "invoice_A02", Version: 1, ExternalReference: "INV104", Currency: "EUR", TotalMinorUnits: 125000, IssuedOn: "2026-09-08", DueOn: "2026-10-31"},
+		{ID: "invoice_A01", Version: 1, ExternalReference: "INV104", Currency: "EUR", TotalMinorUnits: 125000, IssuedOn: "2026-09-01", DueOn: "2026-10-31", Note: &note, NoteClassification: &classification},
+	}
+	want := "Vendor reconciliation (vendor_reconciliation_v1, projection vendor_invoice_fields_v1)\n\n" +
+		"- invoice_A01: external reference INV104, total EUR 1250.00, due 2026-10-31, duplicate reference: yes\n" +
+		"- invoice_A02: external reference INV104, total EUR 1250.00, due 2026-10-31, duplicate reference: yes\n" +
+		"\nPlease confirm whether these external references were submitted more than once: INV104.\n"
+	if got := RenderVendorReconciliation(invoices); got != want {
+		t.Fatalf("rendered:\n%q\nwant:\n%q", got, want)
+	}
+	if got := RenderVendorReconciliation([]InvoiceSnapshot{invoices[1], invoices[0]}); got != want {
+		t.Fatal("input order changed the rendered bytes")
+	}
+	rendered := RenderVendorReconciliation(invoices)
+	if strings.Contains(rendered, "Investigation note") || strings.Contains(rendered, "2026-09-01") {
+		t.Fatal("the vendor report holds the note or a field outside the projection")
+	}
+}

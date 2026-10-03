@@ -30,9 +30,6 @@ type ReportResult struct {
 	SourceInvoiceIDs []string `json:"source_invoice_ids"`
 }
 
-// errVendorRenderingPending marks the vendor template until its renderer lands (GO-65).
-var errVendorRenderingPending = errors.New("tools: vendor_reconciliation_v1 rendering is not built yet")
-
 // createReport resolves the trusted source invoices, renders the registered template on the
 // server and stores the report with its derived classification and lineage (GO-63), all in the
 // executor's transaction. One report per action: a repeat fails at demo.reports' uniqueness.
@@ -68,8 +65,14 @@ func createReport(ctx context.Context, tx pgx.Tx, current scope, request EffectR
 	switch template.Name {
 	case provenance.InternalInvestigationV1.Name:
 		content, sources = renderInternal(invoices, current.passport.InternalNoteReadable)
+	case provenance.VendorReconciliationV1.Name:
+		var vendorID string
+		content, sources, vendorID = renderVendor(invoices)
+		if vendorID == "" || !current.allowsVendor(vendorID) {
+			return failed(ReasonResourceOutOfScope, "action.failed", arguments.Template), nil
+		}
 	default:
-		return adapterOutcome{}, errVendorRenderingPending
+		return failed(ReasonTemplateNotAllowed, "action.failed", arguments.Template), nil
 	}
 
 	stored, err := provenance.StoreReport(ctx, tx, provenance.NewReport{
@@ -121,6 +124,27 @@ func renderInternal(invoices []provenance.InvoiceSnapshot, noteReadable bool) (s
 			Version: invoice.Version, Classification: classification, ConsumedFields: fields})
 	}
 	return provenance.RenderInternalInvestigation(rendered), sources
+}
+
+// renderVendor renders vendor_reconciliation_v1 from the approved projection (GO-65). Every
+// source must have the same vendor, which it returns ("" when they differ). The note is dropped
+// before rendering and never consumed, so each source contributes exactly the projection fields
+// of Vendor shareable data.
+func renderVendor(invoices []provenance.InvoiceSnapshot) (string, []provenance.Source, string) {
+	vendorID := invoices[0].VendorID
+	projected := make([]provenance.InvoiceSnapshot, 0, len(invoices))
+	sources := make([]provenance.Source, 0, len(invoices))
+	for _, invoice := range invoices {
+		if invoice.VendorID != vendorID {
+			return "", nil, ""
+		}
+		invoice.Note, invoice.NoteClassification = nil, nil
+		projected = append(projected, invoice)
+		sources = append(sources, provenance.Source{Kind: provenance.SourceInvoice, ID: invoice.ID,
+			Version: invoice.Version, Classification: provenance.VendorShareable,
+			ConsumedFields: slices.Clone(provenance.VendorInvoiceFieldsV1.Fields)})
+	}
+	return provenance.RenderVendorReconciliation(projected), sources, vendorID
 }
 
 // loadInvoiceSnapshots reads the organization's invoices with these ids.

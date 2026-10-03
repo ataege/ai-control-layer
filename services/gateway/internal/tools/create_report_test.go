@@ -106,3 +106,41 @@ func TestCreateReportTwiceUnderOneActionCreatesOneReport(t *testing.T) {
 		t.Fatalf("err = %v, want the reports_one_per_action uniqueness to refuse a second report", err)
 	}
 }
+
+func TestCreateVendorReportFromTheApprovedProjection(t *testing.T) {
+	world := openWorld(t, func(world *testWorld) passportScope { return scenarioScope(world, true) })
+	request := world.proposeAction(t, world.nextStep(), ToolCreateReport, map[string]any{
+		"template": provenance.VendorReconciliationV1.Name, "source_invoice_ids": []string{world.invoiceA01, world.invoiceA02},
+	})
+	result, err := Runner{}.RunEffect(context.Background(), world.tx, request)
+	if err != nil {
+		t.Fatalf("RunEffect: %v", err)
+	}
+	report := result.ModelFacing.(ReportResult)
+	if result.Outcome != OutcomeSucceeded || report.Classification != provenance.VendorShareable {
+		t.Fatalf("result = %+v", result)
+	}
+	stored, err := provenance.LoadReport(context.Background(), world.tx, world.organizationID, world.runID, report.ReportID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stored.Content, "Investigation note") || strings.Contains(stored.Content, "2026-09-01") {
+		t.Fatalf("vendor content holds the note or an unapproved field:\n%s", stored.Content)
+	}
+	if !strings.Contains(stored.Content, "external reference INV104, total EUR 1250.00, due 2026-10-31, duplicate reference: yes") {
+		t.Fatalf("vendor content:\n%s", stored.Content)
+	}
+	for _, entry := range stored.Lineage {
+		if entry.Classification != provenance.VendorShareable || entry.ProjectionRule == nil ||
+			*entry.ProjectionRule != provenance.VendorInvoiceFieldsV1.Name || *entry.ProjectionRuleVersion != 1 {
+			t.Fatalf("lineage entry = %+v", entry)
+		}
+	}
+	versions, err := provenance.CurrentInvoiceVersions(context.Background(), world.tx, world.organizationID, []string{world.invoiceA01, world.invoiceA02})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision := provenance.AuthorizeExport(stored, provenance.DestinationRegisteredVendor, versions); !decision.Allowed {
+		t.Fatalf("vendor report export = %+v, want allowed", decision)
+	}
+}
