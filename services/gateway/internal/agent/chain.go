@@ -65,6 +65,8 @@ type ProductionChain struct {
 	Executor       *policy.Executor
 	Loop           *Loop
 	Worker         *worker.Service
+	// Expiry closes overdue approvals (GO-40); the gateway runs it next to the worker.
+	Expiry *ApprovalExpiry
 }
 
 // NewProductionChain builds the chain on the gateway pool and the process's catalog loader. It
@@ -110,6 +112,11 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	gate := policy.NewGate(scopes, policy.NewPostgresRecorder(pool), policy.NewPostgresRelationships(pool),
 		policy.NewSecurityActionEvaluator(inspector, settings)).WithReviewFreezer(policy.NewPostgresReviewFreezer(pool))
 	executor := policy.NewExecutor(pool, scopes, tools.Runner{})
+	approvals := policy.NewApprovals(pool)
+	expiry, err := NewApprovalExpiry(approvals, chainConfig.Logger)
+	if err != nil {
+		return nil, err
+	}
 	stepper, err := NewStepper(modelCaller, callLog, modelName)
 	if err != nil {
 		return nil, err
@@ -122,7 +129,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 		Runs: repository.New(pool), Stepper: stepper, Gate: gate, Executor: executor, Inspector: resultInspector,
 		Catalog: catalogSource, Scopes: scopes, Corrections: policy.NewCorrectionCounter(pool), Steps: budget.NewPostgresStore(pool),
 		Contexts: NewContextStore(pool), Telemetry: NewTelemetry(pool), Recovery: NewRecovery(pool, budget.NewPostgresStore(pool)),
-		Results: PoolFinalResults{Pool: pool}, Logger: chainConfig.Logger,
+		Results: PoolFinalResults{Pool: pool}, Continuations: approvals, Logger: chainConfig.Logger,
 	})
 	if err != nil {
 		return nil, err
@@ -144,6 +151,7 @@ func NewProductionChain(pool *pgxpool.Pool, loader *catalog.Loader, chainConfig 
 	return &ProductionChain{
 		ModelCaller: modelCaller, SecurityCaller: securityCaller, Evaluator: evaluator, Inspector: inspector,
 		Catalog: catalogSource, Settings: settings, Scopes: scopes, Gate: gate, Executor: executor, Loop: loop, Worker: service,
+		Expiry: expiry,
 	}, nil
 }
 

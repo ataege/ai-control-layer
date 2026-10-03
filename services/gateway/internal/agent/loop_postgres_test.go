@@ -374,20 +374,22 @@ func newTestLoopWithCatalog(t *testing.T, world *loopWorld, stepper ModelStepper
 		t.Fatal(err)
 	}
 	loop, err := NewLoop(LoopDependencies{
-		Runs:        world.repository,
-		Stepper:     stepper,
-		Gate:        policy.NewGate(scopes, policy.NewPostgresRecorder(world.pool), policy.NewPostgresRelationships(world.pool), nil),
-		Executor:    policy.NewExecutor(world.pool, scopes, tools.Runner{}),
-		Inspector:   inspector,
-		Catalog:     catalogSource,
-		Scopes:      scopes,
-		Corrections: policy.NewCorrectionCounter(world.pool),
-		Steps:       budget.NewPostgresStore(world.pool),
-		Contexts:    NewContextStore(world.pool),
-		Telemetry:   NewTelemetry(world.pool),
-		Recovery:    NewRecovery(world.pool, budget.NewPostgresStore(world.pool)),
-		Results:     results,
-		Logger:      slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
+		Runs:    world.repository,
+		Stepper: stepper,
+		Gate: policy.NewGate(scopes, policy.NewPostgresRecorder(world.pool), policy.NewPostgresRelationships(world.pool), nil).
+			WithReviewFreezer(policy.NewPostgresReviewFreezer(world.pool)),
+		Executor:      policy.NewExecutor(world.pool, scopes, tools.Runner{}),
+		Inspector:     inspector,
+		Catalog:       catalogSource,
+		Scopes:        scopes,
+		Corrections:   policy.NewCorrectionCounter(world.pool),
+		Steps:         budget.NewPostgresStore(world.pool),
+		Contexts:      NewContextStore(world.pool),
+		Telemetry:     NewTelemetry(world.pool),
+		Recovery:      NewRecovery(world.pool, budget.NewPostgresStore(world.pool)),
+		Results:       results,
+		Continuations: policy.NewApprovals(world.pool),
+		Logger:        slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
 	})
 	if err != nil {
 		t.Fatal(err)
