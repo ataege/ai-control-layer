@@ -1253,7 +1253,8 @@ this side starts and reviews.
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-19 · Serve the exact review payload to authorized reviewers only**
+- [x] **API-19 · Serve the exact review payload to authorized reviewers only**
+  - Done (2026-10-04): GET /api/actions/{id}/review refuses a non-reviewer with 403 before Go, using roles only from verified membership. It relays the Go-owned ReviewView (commit 32b4a76) unchanged, including snake_case keys, frozen recipient, report and source manifest. Shared-schema validation restores queue_report conditionals; unknown fields, incomplete frozen material and mismatched action references are refused. Cache-Control: no-store. Checks: API lint, typecheck and build exited 0; API unit tests: "280 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". Tests use the shared fixture generated from real Go output; a new live model review was not exercised.
   - **Report 1.1 change:** The payload adds the report identifier, content hash, source manifest and digest, classification, template and projection versions; "Review payloads and source manifests need their own access rules". ActivityModule is the architecture's proposal.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-16 · Needs: X-09, X-41 · Provides: nothing
