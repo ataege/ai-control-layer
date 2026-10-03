@@ -153,7 +153,7 @@ Every failure that is not a health or diagnostics report uses `ErrorResponse` fr
   "error": { "code": "not_found", "message": "Resource not found" },
   "statusCode": 404,
   "requestId": "3f0c9c2e-...",
-  "timestamp": "2026-10-02T12:00:00.000Z",
+  "timestamp": "2026-10-03T12:00:00.000Z",
   "path": "/api/unknown"
 }
 ```

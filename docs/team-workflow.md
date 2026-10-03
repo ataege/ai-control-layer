@@ -243,7 +243,7 @@ pnpm check:instructions
 
 ## Adding the first entity and migration
 
-The 2026-10-02 baseline has no entities, no migrations and no tables. When the team needs its first
+When the team needs its first
 table:
 
 1. **Agree on it.** The owner of the feature and the migration owner (integration) agree that a

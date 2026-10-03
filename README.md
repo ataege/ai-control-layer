@@ -4,7 +4,7 @@ A monorepo with a Next.js web app, a NestJS API, a Go service and one PostgreSQL
 together with health checks, diagnostics, shared contracts and development tooling. The team is
 building Task Passport on top of it at HackYeah.
 
-**Status: implementation phase.** The starter baseline of 2026-10-02 contains infrastructure and
+**Status: implementation phase.** The baseline contains infrastructure and
 reusable components only: no entities, no tables, no authentication implementation and no product
 features. Product work is added on top of it, each feature in the service that owns its
 responsibility. The product definition is the project report in [docs/product](docs/product/README.md), and the
@@ -416,12 +416,12 @@ No script removes the volume for you: `infra:down` and `stack:down` always keep 
 
 ## Verification status
 
-Verified on the preparation machine on 2026-10-02 (macOS arm64, Node.js 24.18.0, pnpm 11.10.0).
+Verified on the preparation machine on 2026-10-03 (macOS arm64, Node.js 24.18.0, pnpm 11.10.0).
 Go and Docker were not installed there. A Go 1.27.1 toolchain was unpacked into a temporary
 directory (not installed) for the Go checks, and PostgreSQL 18.4 was provided by the
 `embedded-postgres` npm package from a temporary directory; neither is part of the repository.
 
-This section describes the starter baseline of 2026-10-02. Everything added during the
+This section describes the starter baseline of 2026-10-03. Everything added during the
 implementation phase needs its own verification: `pnpm verify` and `pnpm smoke` are the gates, and
 results are quoted, not assumed.
 

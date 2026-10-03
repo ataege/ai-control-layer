@@ -5,7 +5,7 @@ These instructions apply to every contributor and coding agent working in this r
 
 ## Current phase
 
-**Implementation.** The team is building Task Passport, an entry for the Goldman Sachs AI Control Layer challenge at HackYeah 2026, on top of the starter baseline. This section was switched from "reusable scaffold preparation" on 2026-10-02.
+**Implementation.** The team is building Task Passport, an entry for the Goldman Sachs AI Control Layer challenge at HackYeah 2026, on top of the starter baseline. 
 
 The product definition is the project report, `docs/product/task-passport-project-report.docx` (version 1.2, "Official requirements and hybrid security controls", 3 October 2026), together with the architecture specification `docs/product/project-architecture.md`, which holds three Mermaid diagrams (system architecture, task execution flow, report information flow). The report's twelve figures, embedded in the docx as images, are the current diagrams, including the version 1.2 hybrid security design (Figures 1 to 3, 6, 8, 10 and 12). The architecture specification holds the Mermaid source of the version 1.1 diagrams and none of the report 1.2 additions, so where it differs from a figure or the report text, the open item `architecture specification version` records it. Both are a proposed design, not a record of implemented behaviour. Where they disagree, the open items in `docs/roadmap/README.md` and `docs/product/README.md` record it for the document owner; do not pick a side. `docs/product/README.md` lists the decisions they settle and the ones still open. If the feature you are about to build is not covered there, ask the document owner and the owning implementer before inventing architecture. Whether this pre-event starter may be used, and how it must be disclosed, is still open (decision 8 in `docs/product/README.md`): the report says not to presume it is eligible, so the document owner confirms it with the organizers.
 
@@ -51,7 +51,7 @@ Then read `docs/product/project-architecture.md`, which holds the Mermaid source
 
 ## Scope
 
-Product features, entities, migrations, authentication and screens are now in scope. The baseline of 2026-10-02 still contains generic infrastructure only: health, diagnostics, configuration, error handling, HTTP clients, database connections (no tables), UI primitives and development tooling.
+Product features, entities, migrations, authentication and screens are now in scope. The baseline still contains generic infrastructure only: health, diagnostics, configuration, error handling, HTTP clients, database connections (no tables), UI primitives and development tooling.
 
 What was excluded during preparation, and where it stands now:
 
@@ -124,7 +124,7 @@ Each asset that every service depends on has exactly one owner:
 
 ## Commands
 
-**Starter baseline verification status (2026-10-02, macOS arm64).** Work added during implementation is not covered by it. `pnpm install`, `pnpm run setup`, `pnpm dev`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm verify`, `pnpm smoke` (host mode), `pnpm check:instructions` and the `db:migration:*` commands were run and behaved as documented. `pnpm infra:*`, `pnpm stack:*` (with and without `--debug`) and `pnpm smoke --mode=container` were not run then (no Docker); they ran on 2026-10-03 on macOS with Docker Desktop (SH-09), see `README.md`, "Verification status". Linux and WSL remain unverified. Details are in `README.md`, section "Verification status".
+`pnpm install`, `pnpm run setup`, `pnpm dev`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm verify`, `pnpm smoke` (host mode), `pnpm check:instructions` and the `db:migration:*` commands were run and behaved as documented. `pnpm infra:*`, `pnpm stack:*` (with and without `--debug`) and `pnpm smoke --mode=container` were not run then (no Docker); they ran on 2026-10-03 on macOS with Docker Desktop (SH-09), see `README.md`, "Verification status". Linux and WSL remain unverified. Details are in `README.md`, section "Verification status".
 
 Run everything from the repository root. The commands below are the scripts in the root `package.json`.
 

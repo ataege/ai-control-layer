@@ -335,7 +335,7 @@ owners to the lead in SH-07, joins SH-05 (the read path) and prepares their mach
   - Depends on: SH-08 · Needs: nothing · Provides: nothing
   - Paths: `apps/api/scripts/typeorm-cli.mjs`, `apps/api/src/database/typeorm-options.ts`,
     `apps/api/src/database/data-source.ts`, `db/migrations/README.md`
-  - Work: The five migration commands were verified on 2026-10-02 against an embedded PostgreSQL,
+  - Work: The five migration commands were verified on 2026-10-03 against an embedded PostgreSQL,
     not the `postgres:18-alpine` image that Compose uses (`README.md`, "Verification status"). On a
     machine with Docker, run the zero-entity sequence of `db/migrations/README.md` against that
     image; this runs commands only and changes no file. Supply the results to integration for
