@@ -42,8 +42,10 @@ Argument shapes (proposed for X-09; renamed here if X-09 freezes different names
 1. The proposal envelope (action id, step number, idempotency key, all from the worker) and the
    registered tool with strict arguments (GO-12). Malformed arguments cannot be canonicalized, so
    they get no `runtime.actions` row, only the denial event (`invalid_arguments`).
-2. The passport scope of the verified run (`ScopeReader`, implemented with 3c's passport) and the
-   active catalog revision; a lookup failure or a scope of another organization or run denies.
+2. The passport scope of the verified run and the active catalog revision (`ScopeReader`;
+   `PassportScopeReader` reads the stored passport through 3c's `repository.Passport`, decoded
+   strictly against X-08, and the active revision through `config.ReadActiveAccountingCatalog`).
+   A lookup failure, an invalid stored passport or a scope of another organization or run denies.
 3. The action is stored (`proposed`) and committed before any further check.
 4. Passport expiry, the passport's tools, then its resources: the invoice of `read_invoice`, the
    template and sources of `create_report`, the recipient reference of `queue_report`. Deeper
@@ -54,13 +56,14 @@ Argument shapes (proposed for X-09; renamed here if X-09 freezes different names
    never skips review.
 
 `PostgresRecorder` writes the records: `StoreAction` inserts the action (the same action stored
-twice is accepted, any other conflict refused), and `RecordDecision` sets its status and inserts
-the `action.decided` safe event (references only) in one transaction. Without a recorded decision
-the outcome is a deny (`decision_unavailable`).
+twice is accepted, any other conflict refused), and `RecordDecision` sets its status and appends
+the decision's X-12 safe event through `repository.Tx.AppendEvent` in one transaction:
+`action.allowed`, `approval.requested`, `action.denied`, or `report.export_denied` for a refused
+export (with `lineageCheck` and the alternative template). Summaries hold references only. Without
+a recorded decision the outcome is a deny (`decision_unavailable`).
 
-Reason codes: the report's vocabulary plus `tool_not_registered`, `invalid_arguments`,
-`tool_not_allowed` and `decision_unavailable` (approved for X-13; renamed if X-13 differs). An
-expired passport is reported as `run_cancelled` until X-13 has a dedicated code.
+Reason codes and tool names are the X-13 and X-09 constants of `internal/contracts`; an expired
+passport is `run_expired`.
 
 ## The executor (GO-16)
 

@@ -13,26 +13,28 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 // CanonicalizationVersion is part of every hashed action, so a change to the encoding rules
 // can never collide with digests computed under the old rules (GO-04).
 const CanonicalizationVersion = 1
 
-// ToolName is the name of one of the four registered tools.
-type ToolName string
+// ToolName is the name of one of the four registered tools (X-09).
+type ToolName = contracts.ToolName
 
 const (
-	ToolReadInvoice  ToolName = "read_invoice"
-	ToolReadVendor   ToolName = "read_vendor"
-	ToolCreateReport ToolName = "create_report"
-	ToolQueueReport  ToolName = "queue_report"
+	ToolReadInvoice  = contracts.ToolReadInvoice
+	ToolReadVendor   = contracts.ToolReadVendor
+	ToolCreateReport = contracts.ToolCreateReport
+	ToolQueueReport  = contracts.ToolQueueReport
 )
 
 // The two fixed report templates of the prototype.
 const (
-	TemplateInternalInvestigation = "internal_investigation_v1"
-	TemplateVendorReconciliation  = "vendor_reconciliation_v1"
+	TemplateInternalInvestigation = string(contracts.TemplateInternalInvestigation)
+	TemplateVendorReconciliation  = string(contracts.TemplateVendorReconciliation)
 )
 
 // maximumIdentifierBytes bounds every identifier argument; longer values are rejected, not cut.

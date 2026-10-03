@@ -172,7 +172,7 @@ func TestGateDecisions(t *testing.T) {
 		{"report source outside the passport", "create_report", `{"template":"internal_investigation_v1","source_invoice_ids":["invoice_A01","invoice_B01"]}`, nil, OutcomeDeny, ReasonResourceOutOfScope, true},
 		{"template not in passport", "create_report", `{"template":"vendor_reconciliation_v1","source_invoice_ids":["invoice_A01"]}`, func(scope *PassportScope) { scope.AllowedTemplates = []string{TemplateInternalInvestigation} }, OutcomeDeny, ReasonTemplateNotAllowed, true},
 		{"recipient not in passport", "queue_report", `{"report_id":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","recipient_reference":"recipient:other"}`, nil, OutcomeDeny, ReasonDestinationNotAllowed, true},
-		{"expired passport", "read_invoice", `{"invoice_id":"invoice_A01"}`, func(scope *PassportScope) { scope.ExpiresAt = time.Now().Add(-time.Second) }, OutcomeDeny, ReasonRunCancelled, true},
+		{"expired passport", "read_invoice", `{"invoice_id":"invoice_A01"}`, func(scope *PassportScope) { scope.ExpiresAt = time.Now().Add(-time.Second) }, OutcomeDeny, ReasonRunExpired, true},
 		{"scope of another organization", "read_invoice", `{"invoice_id":"invoice_A01"}`, func(scope *PassportScope) { scope.OrganizationID = "ffffffff-ffff-4fff-8fff-ffffffffffff" }, OutcomeDeny, ReasonDecisionUnavailable, false},
 	}
 	for _, testCase := range cases {

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 // Outcome is one of the gate's three decisions. Anything that is not a clean allow or approval
@@ -19,27 +21,26 @@ const (
 	OutcomeApprovalRequired Outcome = "approval_required"
 )
 
-// ReasonCode is a stable reason from the X-13 vocabulary.
-type ReasonCode string
+// ReasonCode is a stable reason from the X-13 vocabulary (contracts).
+type ReasonCode = contracts.ReasonCode
 
-// Reason codes from the report's proposed vocabulary.
+// The X-13 reason codes the gate and the executor emit.
 const (
-	ReasonResourceOutOfScope     ReasonCode = "resource_out_of_scope"
-	ReasonDestinationNotAllowed  ReasonCode = "destination_not_allowed"
-	ReasonReportExportRestricted ReasonCode = "report_export_restricted"
-	ReasonReportLineageMissing   ReasonCode = "report_lineage_missing"
-	ReasonTemplateNotAllowed     ReasonCode = "template_not_allowed"
-	ReasonApprovalRequired       ReasonCode = "approval_required"
-	ReasonRunCancelled           ReasonCode = "run_cancelled"
-)
-
-// Provisional reason codes, proposed for X-13 because the report's vocabulary has none for these
-// cases; renamed here if X-13 freezes other names.
-const (
-	ReasonToolNotRegistered   ReasonCode = "tool_not_registered"
-	ReasonInvalidArguments    ReasonCode = "invalid_arguments"
-	ReasonToolNotAllowed      ReasonCode = "tool_not_allowed"
-	ReasonDecisionUnavailable ReasonCode = "decision_unavailable"
+	ReasonResourceOutOfScope     = contracts.ReasonResourceOutOfScope
+	ReasonDestinationNotAllowed  = contracts.ReasonDestinationNotAllowed
+	ReasonReportExportRestricted = contracts.ReasonReportExportRestricted
+	ReasonReportLineageMissing   = contracts.ReasonReportLineageMissing
+	ReasonTemplateNotAllowed     = contracts.ReasonTemplateNotAllowed
+	ReasonApprovalRequired       = contracts.ReasonApprovalRequired
+	ReasonRunCancelled           = contracts.ReasonRunCancelled
+	ReasonRunExpired             = contracts.ReasonRunExpired
+	ReasonToolNotRegistered      = contracts.ReasonToolNotRegistered
+	ReasonInvalidArguments       = contracts.ReasonInvalidArguments
+	ReasonToolNotAllowed         = contracts.ReasonToolNotAllowed
+	ReasonDecisionUnavailable    = contracts.ReasonDecisionUnavailable
+	ReasonActionChanged          = contracts.ReasonActionChanged
+	ReasonAllowanceExhausted     = contracts.ReasonAllowanceExhausted
+	ReasonOutcomeUnknown         = contracts.ReasonOutcomeUnknown
 )
 
 // RunIdentity is the verified context of the run the proposal belongs to. It comes from the
@@ -238,7 +239,7 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 	}
 
 	if !gate.now().Before(scope.ExpiresAt) {
-		return stored(OutcomeDeny, ReasonRunCancelled)
+		return stored(OutcomeDeny, ReasonRunExpired)
 	}
 	if !containsTool(scope.AllowedTools, arguments.Tool()) {
 		return stored(OutcomeDeny, ReasonToolNotAllowed)
