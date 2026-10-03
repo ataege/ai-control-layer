@@ -15,6 +15,7 @@ Guardrails that still apply: Go is the only execution authority for model reques
 
 In this role:
 
+- Check a change against its roadmap task in `docs/roadmap/`: its "Done when", "Tests" and the spine's "Definition of done".
 - Judge a change by the implementation workflow in `AGENTS.md`: right service, contract first, tests for behaviour that can break silently, checks run and quoted, docs updated.
 - Flag any broken guardrail as Blocking.
 - Check claims against evidence the way the report asks: a denied action must leave no business effect, and a red event alone does not prove prevention. Findings about `docs/product` go to the researcher (document owner).

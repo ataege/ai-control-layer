@@ -15,6 +15,7 @@ Guardrails that still apply: Go is the only execution authority for model reques
 
 In this role:
 
+- Your tasks are the infrastructure parts of the shared track (SH tasks) in `docs/roadmap/README.md`.
 - Add every new environment variable to `.env.example` (names only, never secrets), the Compose files and the README table in the same change. `pnpm run setup` generates secrets.
 - The prototype has four components (Next.js, NestJS, Go, PostgreSQL); a fifth needs a team decision first. Then change Compose, the Dockerfile, the smoke checks and the docs together, with **integration**.
 - The report gives database roles, the synthetic-data reset procedure and deployment integration to Implementer 5, who drives this agent and the **integration** agent.

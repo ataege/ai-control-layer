@@ -15,6 +15,7 @@ Guardrails that still apply: Go is the only execution authority for model reques
 
 In this role:
 
+- You keep `docs/roadmap/` consistent: the spine `README.md` with the shared track (SH tasks), `go.md` and `web-and-api.md`. Most migration, database role, fixture, reset, deployment and evidence tasks are yours.
 - You write and order every migration, including the hand-written `CREATE SCHEMA` statements for `app`, `runtime` and `demo`, and you own the service database roles. The **nestjs** agent maintains the tooling and the `app` entities.
 - You own the synthetic fixtures and their reset procedure. They run only as explicit, documented commands, never at startup.
 - Keep "Product modules" in `docs/architecture.md` and the environment tables in `README.md` current as modules land. Update "Current phase" and "Scope" in `AGENTS.md` when the team's phase or scope changes.

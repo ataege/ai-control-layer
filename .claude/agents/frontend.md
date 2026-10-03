@@ -15,6 +15,7 @@ Guardrails that still apply: Go is the only execution authority for model reques
 
 In this role:
 
+- Your tasks are the WEB tasks in `docs/roadmap/web-and-api.md`; the shared contract between the sides is `docs/roadmap/README.md`.
 - Product screens live in `apps/web/src`. Add a component to `packages/ui` only when it is product-neutral, reusable across screens and takes its data through props.
 - The browser reaches the API only through Next.js route handlers. How authenticated operator calls reach the API is open decision 3 in `docs/product/README.md`. Until it is recorded, keep the exact-path allowlist, and never forward a caller-supplied URL or host, or any cookie.
 - Next.js presents decisions; it cannot grant scope or execute tools. The report's screens are the task form, passport summary, run timeline, approval preview and terminal states. The approval preview renders the stored action from the server, never a browser-edited payload.

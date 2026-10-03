@@ -481,6 +481,7 @@ The full record is in [docs/preparation-record.md](docs/preparation-record.md).
 | [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service                                  |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                         |
 | [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                     |
+| [docs/roadmap/README.md](docs/roadmap/README.md)         | Implementation roadmap: shared spine, then the Go side (`go.md`) and the Next.js and NestJS side (`web-and-api.md`) |
 | [docs/product/README.md](docs/product/README.md)         | Project report, design diagrams, contracts to freeze and the decisions between design and starter                   |
 | [docs/preparation-record.md](docs/preparation-record.md) | Baseline record: what was prepared, third-party resources and licenses, decisions, deferred areas                   |
 | [AGENTS.md](AGENTS.md)                                   | Binding team instructions (identical to `CLAUDE.md`)                                                                |

@@ -15,7 +15,7 @@ The report's MVP is one workflow: invoice reconciliation on synthetic records, o
 
 The project report, `docs/product/task-passport-project-report.docx`, is the reference for what the team is building. Every contributor and coding agent follows these three rules:
 
-1. **At the start of every session, before your first task,** read the full report from beginning to end, including the appendices. A skim, a search or a single section is not enough. Then read `docs/product/README.md` for the decisions recorded since.
+1. **At the start of every session, before your first task,** read the full report from beginning to end, including the appendices. A skim, a search or a single section is not enough. Then read `docs/product/README.md` for the decisions recorded since. The tasks are in the roadmap, `docs/roadmap/`, which is too long to read whole every session: before task work, read "How to use this roadmap" in `docs/roadmap/README.md`, the task overview of your side (`go.md` for the Go side, `web-and-api.md` for the Next.js and NestJS side, `README.md` for the shared and researcher tracks) and the task blocks you pick up, with the sync points and open decisions they cite.
 2. **When a question comes up** about the product, scope, users, ownership, contracts, data, limits, the demonstration or what to build next, go back to the report and answer from it. Name the report section you relied on.
 3. **When the report does not answer the question,** or disagrees with this file or `docs/product/README.md`, do not guess and do not silently pick one. Ask the document owner and, for code, the owning implementer. The working rules in this file still govern how you change the repository.
 
@@ -148,7 +148,7 @@ Every feature follows the same loop. `docs/team-workflow.md` has the details.
 3. **Build inside your paths.** Hand off anything outside them to the owner.
 4. **Test what can break silently:** failure mapping, rejection of bad input or credentials, persistence. Do not write tests that restate a constant.
 5. **Verify and quote.** Run your area's checks, then `pnpm verify`. Run `pnpm smoke` against the running stack before a merge that touches service wiring.
-6. **Record it.** Add the module to "Product modules" in `docs/architecture.md`. Add new environment variables to `.env.example` (names only), the Compose files and the README table through the infrastructure owner. When a design decision changes, tell the document owner so the report's decision record, contracts, demonstration and claim-to-proof list change together.
+6. **Record it.** Tick the task in `docs/roadmap/` with the quoted check results, as its "Definition of done" says. Add the module to "Product modules" in `docs/architecture.md`. Add new environment variables to `.env.example` (names only), the Compose files and the README table through the infrastructure owner. When a design decision changes, tell the document owner so the report's decision record, contracts, demonstration and claim-to-proof list change together.
 
 ## Working rules
 

@@ -1,0 +1,1984 @@
+# Go side roadmap
+
+**Status.** This file plans the Go side of Task Passport: the GO tasks. It is derived from the
+project report, `docs/product/task-passport-project-report.docx` (version 1.0, design baseline,
+3 October 2026), and from the repository at commit `5c38d8b`. Nothing in it is implemented: every
+task is open and every sync point it provides is unreached. Sizes are estimates, not a schedule. The
+spine, `docs/roadmap/README.md`, is the contract for this file: its milestones, tiers, sync points
+(X), shared tasks (SH), open decisions, task format and definition of done apply here unchanged.
+
+## Who is on this side
+
+From the spine, "Sides and people", and the report's table "Proposed team ownership":
+
+- **Implementer 3 (agent runtime):** "Go worker, provider integration, bounded agent loop, model
+  reservations, usage accounting, and cancellation checks."
+- **Implementer 4 (enforcement):** "Go admission, immutable passport, argument checks, exact-action
+  approvals, execution claims, and denial feedback."
+- **Implementer 5 (data and integration),** for the four tool adapters (`read_invoice`,
+  `read_vendor`, `create_report`, `queue_report`). Implementer 5's migrations, database roles,
+  fixtures, reset and deployment work is on the shared track in the spine. The report also gives
+  Implementer 5 the "transactional effects"; the team records their placement in SH-07.
+- **Modules the report's team table does not name:** the internal API that verifies service
+  identity and operator context, the runtime repository and events, data minimization, the
+  labelled action replay, the Go DTO mirrors, and the Go endpoints for X-25 and X-64 if
+  `form options` and `stored report read` choose Go. SH-07 records their owners and those of the
+  starter's existing packages (`cmd/gateway`, `internal/config`, `internal/logging`,
+  `internal/database`, `internal/health`, `internal/httpserver`); until then this file says "Owner
+  recorded in SH-07".
+
+All of them share the go role and `services/gateway`, with one owner per Go package recorded in
+`services/gateway/README.md` (AGENTS.md, "Repository map and ownership").
+
+## How to read this file
+
+- **Read the full report first**, then `docs/product/README.md`, then the spine (AGENTS.md, "Read
+  the project report first").
+- **Milestones** are the spine's: P before the coding window, then M0 to M6 for the report's
+  relative windows. Each section quotes the report's team focus and exit condition for its window;
+  the organizers' confirmed rules and deadline take precedence.
+- **Owner groups.** Inside a milestone the tasks are grouped by owner: Implementer 3, Implementer
+  4, Implementer 5, then "Owner recorded in SH-07 (modules the report's team table does not
+  name)". IDs follow milestone order and, inside a milestone, the owner groups, not build order, so
+  a task may depend on a higher number in the same milestone. A late addition takes the next free
+  number and sits where its milestone and owner group put it, as GO-62 does after GO-18 (spine,
+  "IDs"). A moved task keeps its number too: GO-60 moved from M5 to M4 to sit with its consumer,
+  WEB-21.
+- **Task format** is the spine's. "Depends on" lists GO tasks and SH tasks; "Needs" and "Provides"
+  list the spine's X IDs. The Next.js + NestJS side is referred to only through X and SH IDs.
+  "Blocked by" cites the strings of the spine's "Open decisions and blockers" verbatim.
+  `Provides: X-15 (part: ...)` marks a task that delivers part of a sync point; this side has
+  delivered it when every task marked "(part)" for it is done (spine, "Sync points").
+- **Paths** are existing repository paths. New Go code is "a new package, named at M0 by its
+  owner". The owner records the package in `services/gateway/README.md` when it is created and
+  supplies its "Product modules" row in `docs/architecture.md` to integration (AGENTS.md,
+  "Implementation workflow", step 6).
+- **Tests.** `pnpm --filter gateway run test` runs the unit tests. Database-backed tests run
+  through the command SH-21 provides (X-24), written here as "the X-24 command" because it has no
+  name yet; concurrency tests also run with `go test -race ./...` from `services/gateway`. Every
+  task also runs the go checks of the spine's "Definition of done" (`format:check`, `lint`,
+  `typecheck`, `test`, `build`) and `pnpm verify`, and quotes the results. A provider test double
+  used in a test is labelled as one.
+- **Conditional tasks.** A task that delivers one outcome of an open item (the read path,
+  `form options`, `stored report read`, `review payload read`) says so in Work and becomes
+  "Dropped: reason" when the other outcome is chosen. The records the other outcome would read are
+  written by unconditional tasks.
+- **The authentication hold.** Decision 7 is on hold, and decisions 3 and 4 wait on it (spine,
+  "Milestones"). On this side it blocks GO-13 (its "Done when" needs the operator's verified
+  authority), GO-14, GO-21, GO-41, GO-44, GO-57, GO-60 and GO-62 (the X-14 mirror), and through
+  X-27 every internal route. Through "Depends on", GO-11, GO-15, GO-16, GO-24 to GO-30, GO-32 to
+  GO-34, GO-36, GO-37, GO-40, GO-42, GO-43, GO-45 to GO-56, GO-58, GO-59 and GO-61 cannot be ticked
+  while the hold stands either, and through "Needs" (X-21 and X-35 wait on the hold, spine
+  "Milestones") neither can GO-17 and GO-38, nor GO-31 and GO-35, which depend on GO-17. The hold
+  stops none of GO-01 to GO-10, GO-12, GO-18 to GO-20, GO-22, GO-23 and GO-39. The blocked tasks
+  can still be built and tested at the package level: tests pass the verified context as an
+  explicit input, no production code path creates one, and no route accepts a command without
+  GO-21's verification.
+- **Open items this file settles.** The spine's open-items table assigns
+  `multiple-action responses`, `dispatched attempts`, `canonical arguments` and `replay entry` to
+  the Go side; GO-01, GO-02, GO-04 and GO-05 decide them. GO-03 is the other Go-side decide task.
+- **Sizes** start from the Go rows of the four estimates of 2026-10-03 that the spine describes
+  ("Sides and people", "Effort split"; the estimates are not in the repository), split where this
+  file splits a row and adjusted for the decide, conditional and evidence tasks the estimates have
+  no row for. The class follows the midpoint: S up to 4 h, M above 4 h up to 10 h, L above 10 h up
+  to 20 h. Estimates, not a schedule; "Coverage" gives the totals.
+
+## Task overview
+
+Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 15 Tier B, 2 Tier C. 6 name decision 7 (the authentication hold) under "Blocked by". Generated from the task blocks below on 2026-10-03. The task blocks are the source of truth: when you add, drop or rename a task, update its row in the same change.
+
+| ID    | When | Tier | Owner                                                                                                     | Size         | Task                                                                           | Blocked by                                                                            |
+| ----- | ---- | ---- | --------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| GO-01 | P    | A    | Implementer 3 (agent runtime)                                                                             | S, 0.5-1 h   | Decide: handling of model responses that propose several actions               | nothing                                                                               |
+| GO-02 | P    | A    | Implementer 3 (agent runtime)                                                                             | S, 0.5-1.5 h | Decide: how dispatched attempts are identified for worker recovery             | nothing                                                                               |
+| GO-03 | P    | A    | Implementer 3 (agent runtime) with Implementer 5 (infrastructure role)                                    | S, 0.5-1.5 h | Decide: Go input to decision 6 (provider client, reservation sizing, usage)    | nothing                                                                               |
+| GO-04 | P    | A    | Implementer 4 (enforcement)                                                                               | S, 1-2 h     | Decide: canonical argument representation and action digest                    | nothing                                                                               |
+| GO-05 | P    | A    | the replay owner recorded in SH-07 (not named in the report's team table)                                 | S, 0.5-1 h   | Decide: how the labelled action replay enters a run and is marked              | Go package owners                                                                     |
+| GO-06 | M0   | A    | Implementer 3 (agent runtime)                                                                             | S, 2-4 h     | Bring up the model provider connection from Go                                 | decision 6                                                                            |
+| GO-07 | M0   | A    | Implementer 5 (data and integration) with Implementer 3 and the data-minimization owner recorded in SH-07 | S, 1-2 h     | Record the tool-result contract and each tool's idempotency rule               | Go package owners, canonical arguments                                                |
+| GO-08 | M1   | A    | Implementer 3 (agent runtime)                                                                             | M, 3-6 h     | Claim durable jobs with a lease in one worker                                  | nothing                                                                               |
+| GO-09 | M1   | B    | Implementer 3 (agent runtime)                                                                             | S, 1-3 h     | Cover the worker in graceful shutdown and readiness                            | worker readiness                                                                      |
+| GO-10 | M1   | A    | Implementer 3 (agent runtime)                                                                             | M, 4-8 h     | Run a live model step through the model gateway                                | decision 6, multiple-action responses, model call retries (the failure handling only) |
+| GO-11 | M1   | A    | Implementer 3 (agent runtime)                                                                             | M, 3-6 h     | Run the bounded agent loop for permitted actions                               | nothing                                                                               |
+| GO-12 | M1   | A    | Implementer 4 (enforcement)                                                                               | S, 2-4 h     | Canonicalize tool arguments and compute the action digest                      | canonical arguments                                                                   |
+| GO-13 | M1   | A    | Implementer 4 (enforcement)                                                                               | M, 4-8 h     | Admit a start-run request and issue the passport, run and job together         | decision 4, decision 7 (which app records carry the operator's authority)             |
+| GO-14 | M1   | A    | Implementer 4 (enforcement)                                                                               | S, 1-2 h     | Serve `POST /internal/runs`                                                    | command timeout budget, decision 4, decision 7                                        |
+| GO-15 | M1   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Store each proposed action and decide allow, deny or approval required         | nothing                                                                               |
+| GO-16 | M1   | A    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 2-4 h     | Execute an allowed action through its registered adapter                       | nothing                                                                               |
+| GO-17 | M1   | A    | Implementer 5 (data and integration)                                                                      | S, 2-4 h     | Build `read_invoice`                                                           | nothing                                                                               |
+| GO-18 | M1   | A    | the DTO owner recorded in SH-07                                                                           | S, 1.5-3 h   | Mirror the frozen contracts in Go DTOs                                         | Go package owners                                                                     |
+| GO-62 | M1   | A    | the DTO owner recorded in SH-07                                                                           | S, 0.5-1 h   | Mirror the operator context contract in Go                                     | Go package owners, decision 4, decision 7                                             |
+| GO-19 | M1   | A    | the runtime repository owner recorded in SH-07                                                            | M, 4-8 h     | Build the runtime repository with guarded state transitions                    | Go package owners                                                                     |
+| GO-20 | M1   | A    | the runtime repository owner recorded in SH-07                                                            | S, 2-4 h     | Build the Go PostgreSQL test harness on the X-24 command                       | Go package owners                                                                     |
+| GO-21 | M1   | A    | the internal API owner recorded in SH-07                                                                  | M, 3-6 h     | Verify service identity and operator context on every internal command         | decision 4, decision 7, Go package owners                                             |
+| GO-22 | M1   | A    | the events owner recorded in SH-07                                                                        | S, 2-4 h     | Write safe decision events with every state change                             | Go package owners                                                                     |
+| GO-23 | M1   | A    | the data-minimization owner recorded in SH-07, with Implementer 5                                         | S, 2-3 h     | Enforce tool-result field allowlists and minimize the model context            | Go package owners                                                                     |
+| GO-24 | M1   | A    | the events owner recorded in SH-07, with the internal API owner                                           | S, 2-3 h     | Serve the run, usage and event reads, if the read path chooses Go endpoints    | read path, passport in the run view, Go package owners                                |
+| GO-25 | M1   | A    | the Go owner recorded in SH-07 for this endpoint                                                          | S, 1-2 h     | Serve the task form options, if `form options` chooses a Go endpoint           | form options, Go package owners                                                       |
+| GO-26 | M2   | A    | Implementer 3 (agent runtime)                                                                             | S, 2-3 h     | Validate the narrow final result and complete the run                          | final result format                                                                   |
+| GO-27 | M2   | A    | Implementer 3 (agent runtime) with Implementers 4 and 5                                                   | S, 1-2 h     | Prove a permitted reconciliation on the Go side                                | nothing                                                                               |
+| GO-28 | M2   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Check resource relationships and destinations at the gate                      | nothing                                                                               |
+| GO-29 | M2   | B    | Implementer 4 (enforcement) with Implementer 3                                                            | S, 2-4 h     | Return structured denial feedback and stop at the correction limit             | nothing                                                                               |
+| GO-30 | M2   | A    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 1-3 h     | Prove the resource and destination boundaries                                  | nothing                                                                               |
+| GO-31 | M2   | A    | Implementer 5 (data and integration)                                                                      | S, 1-3 h     | Build `read_vendor`                                                            | nothing                                                                               |
+| GO-32 | M2   | A    | Implementer 5 (data and integration)                                                                      | S, 2-4 h     | Build `create_report`                                                          | record versions                                                                       |
+| GO-33 | M2   | A    | Implementer 5 (data and integration)                                                                      | S, 3-5 h     | Build `queue_report`                                                           | record versions                                                                       |
+| GO-34 | M2   | A    | Implementer 5 (data and integration) with Implementer 4 and the runtime repository owner                  | S, 2-4 h     | Commit each demo effect with its execution record and event in one transaction | decision 2                                                                            |
+| GO-35 | M2   | A    | Implementer 5 (data and integration) with the data-minimization owner                                     | S, 1-3 h     | Replace protected values with opaque references resolved inside adapters       | nothing                                                                               |
+| GO-36 | M2   | A    | the replay owner recorded in SH-07                                                                        | S, 2-3 h     | Replay a prohibited proposal through the real gate, labelled                   | Go package owners, replay entry                                                       |
+| GO-37 | M2   | A    | the Go owner recorded in SH-07 for this endpoint, with Implementer 5                                      | S, 1-2 h     | Serve the stored report, if `stored report read` chooses a Go endpoint         | stored report read, final result format, Go package owners                            |
+| GO-38 | M2   | B    | the owner recorded in SH-07 for `internal/config` and `internal/database`                                 | S, 1-2 h     | Connect with the Go database roles from X-35                                   | decision 2, Go package owners                                                         |
+| GO-39 | M3   | A    | Implementer 3 (agent runtime)                                                                             | M, 5-8 h     | Reserve model allowance before every dispatch and settle it afterwards         | decision 6, dispatched attempts                                                       |
+| GO-40 | M3   | A    | Implementer 3 (agent runtime) with Implementer 4                                                          | S, 2-4 h     | Release the lease during a review wait and resume the original action          | nothing                                                                               |
+| GO-41 | M3   | B    | Implementer 3 (agent runtime)                                                                             | S, 2-3 h     | Persist cancellation through the internal cancel command                       | decision 4, decision 7                                                                |
+| GO-42 | M3   | A    | Implementer 3 (agent runtime)                                                                             | S, 1-2 h     | Prove the limit-triggered stop                                                 | model call retries (the retry part only)                                              |
+| GO-43 | M3   | A    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 3-5 h     | Freeze the exact action for review                                             | nothing                                                                               |
+| GO-44 | M3   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Accept the approval decision through the internal command                      | decision 4, decision 7                                                                |
+| GO-45 | M3   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Recheck before execution and claim the attempt in one transaction              | record versions                                                                       |
+| GO-46 | M3   | A    | Implementer 4 (enforcement)                                                                               | S, 1-2 h     | Prove approval integrity                                                       | nothing                                                                               |
+| GO-47 | M3   | A    | Implementer 5 (data and integration) with Implementers 3 and 4                                            | S, 1-2 h     | Prove the legitimate task on the Go side                                       | nothing                                                                               |
+| GO-48 | M3   | A    | the internal API owner recorded in SH-07, with Implementer 4                                              | S, 1-2 h     | Serve the exact review payload, if the read path chooses Go endpoints          | read path, review payload read, Go package owners                                     |
+| GO-49 | M4   | B    | Implementer 3 (agent runtime)                                                                             | M, 3-6 h     | Recover expired leases without replaying dispatched work                       | dispatched attempts                                                                   |
+| GO-50 | M4   | B    | Implementer 3 (agent runtime) with Implementer 4                                                          | S, 1-3 h     | Prove budget concurrency                                                       | nothing                                                                               |
+| GO-51 | M4   | B    | Implementer 3 (agent runtime)                                                                             | S, 1-2 h     | Prove that cancellation and expiry stop dispatch, also after a review wait     | nothing                                                                               |
+| GO-52 | M4   | B    | Implementer 4 (enforcement) with Implementer 3                                                            | S, 2-3 h     | Check current revocations before dispatch and before execution                 | revocation reads, decision 2                                                          |
+| GO-53 | M4   | B    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 2-4 h     | Handle known failures, safe retries and unknown outcomes                       | nothing                                                                               |
+| GO-54 | M4   | B    | Implementer 4 (enforcement)                                                                               | S, 1-3 h     | Prove approval replay under concurrent requests                                | nothing                                                                               |
+| GO-55 | M4   | B    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 1-3 h     | Prove the database execution transaction with fault injection                  | decision 2                                                                            |
+| GO-56 | M4   | B    | Implementer 5 (data and integration) with the data-minimization owner recorded in SH-07                   | S, 1-3 h     | Inspect model context, events and output channels for protected fields         | Go package owners                                                                     |
+| GO-57 | M4   | B    | the internal API owner recorded in SH-07                                                                  | S, 1-3 h     | Prove organization access at the internal boundary                             | decision 4, decision 7, Go package owners                                             |
+| GO-60 | M4   | C    | the events owner recorded in SH-07                                                                        | S, 1-3 h     | Optional: stream events from Go, if the read path chooses Go endpoints         | read path, decision 3, Go package owners                                              |
+| GO-58 | M5   | B    | Implementer 3 (agent runtime) with Implementer 4                                                          | S, 1-3 h     | Make every Go stop, failure and denial state readable                          | nothing                                                                               |
+| GO-59 | M5   | C    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 1-2 h     | Optional: rehearse an unknown outcome                                          | nothing                                                                               |
+| GO-61 | M6   | B    | Implementers 3, 4 and 5 with the owners recorded in SH-07                                                 | S, 1-2 h     | Supply the Go technical handoff text                                           | nothing                                                                               |
+
+## Constraints for the Go side
+
+1. **Go is the only execution authority and holds the model provider and tool credentials.** Every
+   governed model request and tool effect goes through Go; NestJS forwards commands and never
+   performs agent effects. Source: AGENTS.md guardrail 4; report "Technical architecture and service
+   ownership" ("it must not possess independent model or tool credentials that let it bypass the
+   gateway") and "The enforcement loop and data minimization" ("Model and tool credentials remain
+   with Go").
+2. **The Go modules run in one Go service.** They are packages of the gateway, not separate
+   deployments. Source: report "Architecture and chart reading guide" ("The modules inside the Go
+   group run in one Go service") and "Delivery scope and six person ownership".
+3. **`net/http`, `slog` and the pgx pool,** unless the team decides otherwise; a new Go module is a
+   `go.mod` and `go.sum` change coordinated with integration. Source: `.claude/agents/go.md`;
+   AGENTS.md, "Single owner for shared assets".
+4. **No migration framework.** Every `runtime` and `demo` table comes from the shared migration
+   tasks (SH-16, SH-17, SH-24, SH-27) through TypeORM in `apps/api`; Go consumes the schema. Source:
+   AGENTS.md; `.claude/agents/go.md`; report "Design decision record" ("One migration history; Go
+   consumes the resulting schema.").
+5. **Schema-qualified SQL.** Neither TypeORM nor the Go pool sets `search_path`, so every Go query
+   names its schema (`app`, `runtime` or `demo`). Source: spine, "Schema ownership";
+   `services/gateway/internal/database/database.go` sets no runtime parameters.
+6. **Fail closed.** "A missing policy, an unavailable authorization dependency, a transport error or
+   a configuration error is never an allow decision." Source: AGENTS.md guardrail 6; report "The
+   enforcement loop and data minimization" and "Illustrative passport and interface contracts" ("A
+   transport or configuration error is not an allow decision").
+7. **Identity and organization come from verified context,** never from model output, tool results
+   or identifiers the browser supplies: "An invoice ID or action ID is a reference, not
+   authorization." Source: AGENTS.md guardrail 5; report "Trusted authority and passport invariants"
+   and "Data ownership and the transition from starter to product".
+8. **One action per model step.** A response with several actions follows GO-01's outcome and is
+   never handled by silently executing a subset. Source: report "Functional requirements MVP
+   boundary and deferred scope", "The enforcement loop and data minimization" and "Design decision
+   record".
+9. **Durable jobs in PostgreSQL with leases, no broker, one worker process.** Source: decision 5 in
+   `docs/product/README.md`; report "Durable state idempotency audit and uncertain outcomes" and
+   "Relative implementation milestones and critical dependencies".
+10. **Short transactions; no database lock across a model or tool request.** "Commit the
+    reservation first, perform the request, then settle it in a later transaction." Source: report
+    "Atomic allowances hard limits and estimated cost".
+11. **Nothing at startup runs migrations, creates tables or loads seed data;** the gateway keeps
+    starting while PostgreSQL is down. Source: AGENTS.md guardrail 3; `services/gateway/README.md`.
+12. **Truthful labels and illustrative limits.** The simulated outbox, the replay, provider test
+    doubles and estimated cost are labelled. The report's example limits are illustrative values,
+    not requirements; the limit values come from the policy fixture frozen in X-06. Source:
+    AGENTS.md guardrail 7.
+13. **Secrets stay secret.** The provider credential and any operator-context secret are
+    `logging.Secret` values, never logged or returned, and payloads stay out of logs. Source:
+    AGENTS.md working rules 8 and 9; `.claude/agents/go.md`.
+14. **Per-package ownership.** A package is added when its first real code lands, with no empty
+    directories, and its owner is recorded in `services/gateway/README.md`. Source: AGENTS.md
+    guardrail 1 and "Repository map and ownership"; `.claude/agents/go.md`.
+15. **Go 1.27 or newer on each Go developer's machine** (SH-08). On the preparation machine Go
+    1.27.1 is installed at `/usr/local/go`: on 2026-10-03 `/usr/local/go/bin/go version` printed
+    `go version go1.27.1 darwin/arm64`, while `go` was not on the PATH of the shell that ran it,
+    although `/etc/paths.d/go` lists `/usr/local/go/bin`. Source: spine SH-08;
+    `services/gateway/go.mod`; `services/gateway/scripts/go.mjs`.
+
+## Starting point in the repository
+
+- Packages under `services/gateway`: `cmd/gateway` and `internal/config`, `internal/logging`,
+  `internal/database`, `internal/health`, `internal/httpserver`. No product package exists.
+- Three GET routes (`/health/live`, `/health/ready`, `/internal/ping`); no route reads a request
+  body; `RequireServiceToken` in `services/gateway/internal/httpserver/middleware.go` guards the
+  ping only.
+- One pgx pool of at most 10 connections, one database user, lazy connect;
+  `services/gateway/cmd/gateway/main.go` hands it only to readiness.
+- Server write timeout 30 s; on SIGINT or SIGTERM the server drains for up to 8 s
+  (`shutdownTimeout`), then the pool closes.
+- The readiness `checks` object is closed and holds only `database`
+  (`packages/contracts/schemas/readiness.schema.json`).
+- `services/gateway/internal/health/dto_test.go` decodes fixtures by explicit case, so a fixture
+  without a case is never checked on the Go side.
+- No worker, no outbound client, no database-backed test, no migration and no seed data.
+
+## P: before the coding window
+
+- **Team focus.** The report gives no window for this work. Spine: decisions, environment setup,
+  container validation and organizer questions.
+- **Exit condition.** The report gives no exit condition for P. The spine's roadmap condition (not
+  a quote) applies; for this side it means the Go decide tasks below are recorded or carried into
+  M0 as open, and every Go developer has quoted a `pnpm verify` result (SH-08).
+- **Sync points needed by the end (spine):** X-01, which RS-01 provides and GO-06 needs at the start
+  of M0.
+- Decide tasks are decisions, not code. Code written before the coding window waits on decision 8
+  (spine, "Before the coding window (P)").
+
+### Implementer 3 (agent runtime)
+
+- [ ] **GO-01 · Decide: handling of model responses that propose several actions**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 0.5-1 h)
+  - Depends on: nothing · Needs: nothing · Provides: nothing
+  - Paths: `docs/product/README.md`
+  - Work: Options: (1) reject the whole response as a denied proposal with a stable reason code and
+    bounded correction feedback that counts toward the limits; (2) an explicitly defined policy that
+    stores every proposed action and states which one is evaluated and what happens to the others.
+    No proposal is recorded. Either way "the worker should not silently execute an arbitrary
+    subset". What the decision 6 provider can constrain (GO-03) may narrow the options. Owner per
+    the spine's open-items table (`multiple-action responses`): Implementer 3;
+    `docs/product/README.md` records no numbered decision for it.
+  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher (document
+    owner), by M1 at the latest.
+  - Tests: none (a decision).
+  - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
+    should be rejected or handled by an explicitly defined policy"); "Design decision record" (One
+    action per model step)
+  - Blocked by: nothing
+
+- [ ] **GO-02 · Decide: how dispatched attempts are identified for worker recovery**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 0.5-1.5 h)
+  - Depends on: nothing · Needs: nothing · Provides: nothing
+  - Paths: `docs/product/README.md`
+  - Work: Decide what marks a model request and a tool execution as dispatched, so a worker that
+    takes over an expired lease can tell what already happened: "Lease expiry indicates that
+    ownership needs recovery; it does not prove a previously dispatched operation failed." Options:
+    (1) a durable attempt record per dispatch, committed before the request is sent and bound to the
+    stable action identifier for tool executions, with a recovery rule per case (a model attempt
+    without settled usage keeps its reservation; a local demo effect whose completion record is
+    absent did not commit, if effect and completion share one transaction as SH-06 settles; an
+    attempt with no recorded outcome otherwise is an unknown outcome); (2) another mechanism the
+    owner proposes. No proposal is recorded. The constraints the outcome needs reach SH-27 through
+    the shared review in SH-14. Owner per the spine's open-items table (`dispatched attempts`):
+    Implementer 3; `docs/product/README.md` records no numbered decision for it.
+  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher, by M3 at the
+    latest and before SH-27 writes the tables.
+  - Tests: none (a decision).
+  - Report: "Threat model limits and unresolved design choices" ("Durable worker recovery requires
+    identifiable dispatched attempts"); "Durable state idempotency audit and uncertain outcomes"
+  - Blocked by: nothing
+
+- [ ] **GO-03 · Decide: Go input to decision 6 (provider client, reservation sizing, usage)**
+  - Owner: Implementer 3 (agent runtime) with Implementer 5 (infrastructure role) · Tier: A ·
+    Size: S (estimate 0.5-1.5 h)
+  - Depends on: nothing · Needs: nothing · Provides: nothing
+  - Paths: `docs/product/README.md`, `services/gateway/go.mod`,
+    `services/gateway/internal/config/config.go`
+  - Work: Bring to SH-04 the Go facts the provider and model choice needs: (1) whether a
+    hand-written `net/http` client is enough or a provider library is needed, which is a team
+    decision and a `go.mod` and `go.sum` change coordinated with integration; (2) how a reservation
+    is sized before dispatch, "based on the configured model, estimated input and the permitted
+    output ceiling"; (3) which usage the provider reports and what counts as missing usage; (4) how
+    estimated cost is represented, "an explicitly defined decimal or minor-unit representation" and
+    never floating-point equality; (5) whether the provider can be held to one tool call or a final
+    answer per response, which GO-01 relies on. Options for (1): the hand-written client or a
+    library the owner names; no proposal is recorded. Owner in `docs/product/README.md` (decision
+    6): go (Implementer 3) with infrastructure.
+  - Done when: these points are recorded with decision 6 in `docs/product/README.md` by the
+    researcher, as part of SH-04's outcome.
+  - Tests: none (a decision).
+  - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
+    should have a documented accounting rule"); "Report purpose and design status" (one model
+    provider)
+  - Blocked by: nothing
+
+### Implementer 4 (enforcement)
+
+- [ ] **GO-04 · Decide: canonical argument representation and action digest**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: nothing · Needs: nothing · Provides: nothing
+  - Paths: `docs/product/README.md`
+  - Work: Define how Go represents the "supported argument types, rejecting ambiguous or unsupported
+    values", which stored fields the digest covers (the report's review record: "the tool, canonical
+    arguments, recipient, affected resources, relevant versions, exact outbound content, passport
+    reference, policy version and expiry"), and how a change is detected. Options: (1) one
+    canonical encoding for every supported argument type, defined in Go, with a digest over the
+    encoded action; (2) a canonical form per tool's typed arguments, with a digest over each. No
+    proposal is recorded. Either option rejects inputs that have more than one representation, uses
+    no floating-point values and treats the digest as change detection only: "hashing a request
+    does not authenticate its author or make its contents authorized". The outcome feeds X-09 at
+    the M0 freeze (SH-10). Owner per the spine's open-items table (`canonical arguments`):
+    Implementer 4, because the argument checks and exact-action approvals depend on it; Go is "the
+    authority for action canonicalization" (`docs/product/README.md`), which records no numbered
+    decision for it.
+  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher before the M0
+    freeze, so X-09 can carry it.
+  - Tests: none (a decision).
+  - Report: "Exact action approval versioning and execution rechecks" ("Canonicalization must be
+    defined deliberately"); "Technical architecture and service ownership" ("Go remains the
+    authority for action canonicalization and execution"); "Terminology for developers and
+    presenters" (Canonical arguments)
+  - Blocked by: nothing
+
+### Owner recorded in SH-07 (modules the report's team table does not name)
+
+- [ ] **GO-05 · Decide: how the labelled action replay enters a run and is marked**
+  - Owner: the replay owner recorded in SH-07 (not named in the report's team table) · Tier: A ·
+    Size: S (estimate 0.5-1 h)
+  - Depends on: SH-07 · Needs: nothing · Provides: nothing
+  - Paths: `docs/product/README.md`
+  - Work: The report asks for "a clearly labeled adversarial action replay that submits a
+    prohibited proposal to the same validation and execution path" and says "never present a
+    scripted proposal as a model-generated action". Decide how a replayed proposal enters a run, so
+    that beat 6 can complete "within the same run and allowance", and how it is marked in the stored
+    action and its events (the safe event contract X-12 carries "a label for replayed proposals").
+    Options: (1) a Go-side command or labelled runtime test that substitutes one stored prohibited
+    proposal for the next model step of a named run; (2) an operation the interface triggers
+    through NestJS, which needs the conditional sync point X-65 (the replay trigger through NestJS)
+    and a facade operation on the other side. No proposal is recorded. Owner per the spine's
+    open-items table (`replay entry`): the replay owner recorded in SH-07;
+    `docs/product/README.md` records no numbered decision for it.
+  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher before the M0
+    freeze, so X-12 carries the replay label.
+  - Tests: none (a decision).
+  - Report: "Live demonstration storyboard and proof checks" (Reliable demonstrations without
+    invented behavior); "Illustrative invoice scenario and future domain adaptations" (Scene 2 a
+    hostile instruction in a business document)
+  - Blocked by: `Go package owners`
+
+## M0: hours 0-2
+
+- **Team focus (report).** "Confirm rules and sponsor expectations; freeze task, contracts, tool
+  arguments, policy fixture, and schema ownership. Bring up the starter and provider connection."
+- **Exit condition (report).** "A single documented workflow, working service connectivity, and an
+  agreed contract example for each command and event."
+- **Sync points needed by the end (spine):** X-03 to X-06. SH-11 lands X-07 to X-13 after the
+  freeze; they are needed by M1.
+- The Go owners take part in the freeze (SH-10): they bring the canonical form (GO-04), the Go
+  checks behind the four tools' typed arguments and the names of the internal operations they
+  provide. SH-12 brings up the starter on every machine.
+
+### Implementer 3 (agent runtime)
+
+- [ ] **GO-06 · Bring up the model provider connection from Go**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: SH-04, GO-03 · Needs: X-01, X-04 · Provides: nothing
+  - Paths: `services/gateway/internal/config/config.go`,
+    `services/gateway/internal/config/config_test.go`,
+    `services/gateway/internal/logging/logging.go`, `services/gateway/cmd/gateway/main.go`,
+    `services/gateway/README.md`; a new package for the model gateway, named at M0 by its owner
+  - Work: On its owner's machine, once SH-12 has run there, read the credential SH-13 wires as a
+    `logging.Secret` and build the only outbound client to the decision 6 provider, with bounded
+    timeouts. A missing credential never leads to a dispatch; the owner records in
+    `services/gateway/README.md` whether the gateway then refuses to start or starts and fails
+    every dispatch closed with a recorded reason. If the model name or pricing become environment
+    variables, each goes through the infrastructure owner in one change (`.env.example`, the
+    gateway's Compose map, the README tables), as SH-13 does for the credential (SH-37, only if
+    any are added). Outbound HTTPS from the gateway image stays unverified until the container
+    path runs (X-02).
+  - Done when: from a developer machine with the credential in `.env`, one request through the Go
+    client reaches the decision 6 provider and model and returns a response, and the credential
+    appears in no log line or error text (report, hours 0-2: "Bring up the starter and provider
+    connection").
+  - Tests: unit tests against a labelled provider test double: the credential is sent only in the
+    provider's authentication header; a non-success status, a malformed body and a timeout each
+    become a failure, never a model output; neither the credential nor a request body appears in
+    log or error text. `pnpm --filter gateway run test`; the live request run by hand, with its
+    result quoted and the credential not printed.
+  - Report: "Relative implementation milestones and critical dependencies" (Proposed 24-hour
+    implementation sequence, Hours 0-2); "Technical architecture and service ownership";
+    "Architecture and chart reading guide" (Figure 1)
+  - Blocked by: `decision 6 in docs/product/README.md`
+
+### Implementer 5 (tool adapters)
+
+- [ ] **GO-07 · Record the tool-result contract and each tool's idempotency rule**
+  - Owner: Implementer 5 (data and integration) with Implementer 3 and the data-minimization owner
+    recorded in SH-07 · Tier: A · Size: S (estimate 1-2 h, person-hours summed)
+  - Depends on: SH-07, SH-10, GO-04 · Needs: X-06 · Provides: nothing
+  - Paths: `services/gateway/README.md`
+  - Work: Agreed in the M0 freeze session and Go-internal, so it has no sync point (spine,
+    "Contracts to freeze first"): for each of the four tools, with the typed arguments agreed in
+    SH-10, the fields it returns to the worker within the X-06 field rules, the opaque references
+    that stand for protected values, and its idempotency and retry rule (which failures are
+    known-safe to retry under the same action identifier, and which outcomes count as unknown).
+    "The runtime developer depends on the action schema and tool-result contract."
+  - Done when: each of the four tools has a recorded field allowlist, its opaque references and a
+    defined idempotency rule in `services/gateway/README.md`, agreed by Implementers 3 and 5 and the
+    data-minimization owner ("Each tool returns an explicit field allowlist; protected values remain
+    opaque references"; "Each action needs a stable identifier and a defined idempotency rule").
+  - Tests: none at the record; GO-17, GO-23, GO-31 to GO-33 and GO-53 test it.
+  - Report: "Relative implementation milestones and critical dependencies" (Critical path and
+    sensible reductions); "Illustrative passport and interface contracts" (Narrow final result and
+    context boundary); "Durable state idempotency audit and uncertain outcomes"
+  - Blocked by: `Go package owners`; `canonical arguments`
+
+## M1: hours 2-6
+
+- **Team focus (report).** "Build the vertical path in parallel: task form, authenticated facade,
+  admission, worker, live model call, one read tool, and event feed."
+- **Exit condition (report).** "A real operator starts a run; Go executes a permitted tool; the
+  interface displays the actual persisted result."
+- **Sync points needed by the end (spine):** X-07 to X-32. This side provides X-15, X-27, X-28 and
+  X-32, plus X-29 and X-30 if the read path chooses Go endpoints and X-25 if `form options` chooses
+  a Go endpoint.
+- **First integrated deliverable placed here (spine).** Implementer 3: "A live model proposes a
+  typed tool action within a recorded allowance."
+- While decision 7 is on hold the M1 exit, X-27 and X-28 cannot be reached (spine, "Milestones");
+  see "The authentication hold" above for what proceeds.
+
+### Implementer 3 (agent runtime)
+
+- [ ] **GO-08 · Claim durable jobs with a lease in one worker**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: GO-19, GO-20 · Needs: X-19 · Provides: nothing
+  - Paths: `services/gateway/cmd/gateway/main.go`, `services/gateway/internal/database/database.go`,
+    `services/gateway/README.md`; a new package for the worker, named at M0 by its owner
+  - Work: Start one worker inside the gateway process (decision 5: PostgreSQL jobs with leases, no
+    broker, one worker process for the prototype). It claims a job with a lease in a short
+    transaction, renews the lease while it works and persists progress through the runtime
+    repository. The worker shares the pool's 10 connections with the HTTP handlers and holds no
+    connection or lock across a model or tool request. If worker settings become environment
+    variables, they go through the infrastructure owner in one change (SH-37);
+    constants need none.
+  - Done when: a job stored by admission is claimed by exactly one worker and processed under a
+    live lease (Figure 4: "Go worker claims job with lease"; MVP requirement Durable execution:
+    "Persist jobs, continuations, approvals, and execution state").
+  - Tests: database-backed, also with `-race`: two workers racing for one job yield one owner; a
+    job under a live lease cannot be claimed; a lease past expiry can be claimed again; a claimed
+    job and its progress survive closing the pool and opening a new one; no claim transaction stays
+    open while a stubbed model call runs. The X-24 command.
+  - Report: "Durable state idempotency audit and uncertain outcomes"; "Relative implementation
+    milestones and critical dependencies" (Critical path and sensible reductions, one worker
+    process); "Functional requirements MVP boundary and deferred scope" (Durable execution)
+  - Blocked by: nothing
+
+- [ ] **GO-09 · Cover the worker in graceful shutdown and readiness**
+  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-08 · Needs: nothing · Provides: X-32
+  - Paths: `services/gateway/cmd/gateway/main.go`, `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/shutdown_test.go`,
+    `services/gateway/internal/health/health.go`, `services/gateway/internal/health/dto.go`,
+    `services/gateway/internal/health/dto_test.go`,
+    `packages/contracts/schemas/readiness.schema.json` (changed by nestjs through SH-14),
+    `services/gateway/README.md`
+  - Work: On SIGINT or SIGTERM the worker stops claiming, ends its current step at a safe point and
+    stops before `pool.Close()`, inside the 8 s shutdown budget that is kept below the container
+    stop grace period. Readiness reports the worker as the `worker readiness` outcome says. The
+    readiness `checks` object is closed and holds only `database`, so a new field is a shared
+    contract change through SH-14: schema, fixtures, Go DTO, the API's gateway client, smoke and the
+    diagnostics page together. Tier B: the shutdown part serves the MVP requirement Durable
+    execution, as GO-49 does at Tier B, and readiness is decision 5's repository rule, which the
+    report does not tier; the Next.js + NestJS side's part of the same contract change is Tier B as
+    well. The tier sets the order of cuts only: SH-23 still waits for X-32, because the rule binds
+    whatever the tier (spine, "Tiers").
+  - Done when: decision 5's repository rule holds ("the worker must be covered by graceful shutdown
+    and by the readiness check"), and a stop during a step leaves the job recoverable with nothing
+    it committed lost (MVP requirement Durable execution).
+  - Tests: a shutdown test in the pattern of `shutdown_test.go`: a worker mid-step stops within the
+    budget and the pool closes after it; a job interrupted by the shutdown can be claimed again
+    after its lease expires; readiness answers `unavailable` while the worker loop is not running;
+    the readiness fixtures decode strictly. `pnpm --filter gateway run test`.
+  - Report: "Durable state idempotency audit and uncertain outcomes"; "Functional requirements MVP
+    boundary and deferred scope" (Durable execution)
+  - Blocked by: `worker readiness`
+
+- [ ] **GO-10 · Run a live model step through the model gateway**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 4-8 h)
+  - Depends on: GO-01, GO-06, GO-19, GO-22, GO-23 · Needs: X-04, X-06, X-09, X-11 ·
+    Provides: nothing
+  - Paths: `services/gateway/internal/config/config.go`, `services/gateway/README.md`; the model
+    gateway package from GO-06
+  - Work: Each model step sends the context GO-23 builds to the decision 6 provider with the
+    permitted output ceiling, records the dispatch and the reported usage against the passport's
+    call and token limits, and reads the response as either a final result or one proposed action,
+    applying GO-01 to a response with several. The model is offered the four registered tools with
+    their X-09 arguments only, never "unrestricted SQL, shell execution, arbitrary HTTP access". A
+    failed call records the failure and its known usage; what follows is the `model call retries`
+    outcome, and neither option is decided: (a) the run fails, as Figure 5 shows ("Record failure
+    and known usage", then "Run failed"); (b) a bounded number of retries, each a separate dispatch
+    that reserves through GO-39 and counts against the passport's model call limit ("retries
+    consume allowance"), and the run fails when they are used up. Model output gets bounded
+    validation: a malformed proposal is stored and denied at the gate. Atomic reservations come
+    with GO-39; until then every dispatch and its usage is recorded, so none is unaccounted.
+  - Done when: Implementer 3's first integrated deliverable is observed: "A live model proposes a
+    typed tool action within a recorded allowance."
+  - Tests: against a labelled provider test double: one proposed action becomes one proposal handed
+    to the gate; a response with several follows GO-01 and never executes a subset; an unparseable
+    or unsupported response becomes a recorded failure or denial, never an action; a provider error
+    records the failure with its known usage and fails the run at once under outcome (a), or after
+    the bounded retries under outcome (b), each retry recorded as its own dispatch; the request
+    holds nothing outside the GO-23 context; the recorded call and token counts match the
+    dispatches made. `pnpm --filter gateway run test`; one live run with the decision 6 model
+    through the X-24 command, quoted.
+  - Report: "The enforcement loop and data minimization"; "Relative implementation milestones and
+    critical dependencies" (Hours 2-6, live model call); "Delivery scope and six person ownership"
+    (Proposed team ownership); "Risk register and scope controls" (Provider instability or
+    unsuitable output)
+  - Blocked by: `decision 6 in docs/product/README.md`; `multiple-action responses`;
+    `model call retries` (the failure handling only)
+
+- [ ] **GO-11 · Run the bounded agent loop for permitted actions**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: GO-08, GO-10, GO-15, GO-16 · Needs: X-06, X-11 · Provides: nothing
+  - Paths: the worker package from GO-08
+  - Work: Before every model request, including the first after a claim and the one after each tool
+    step, check that the run is active, unexpired and within its step and time limits; otherwise
+    stop the run and record the reason. Hand each proposed action to the gate (GO-15) and an allowed
+    one to the executor (GO-16), and give the minimized result to the next model step. A denied
+    action executes nothing: the loop takes the blocked action and its reason code from the gate
+    and, when no correction is available, which is every case until GO-29 is done, stops the run
+    with its reason ("If no permitted alternative remained, the run would stop with an
+    explanation"). This is the blocked-action path: GO-40, GO-44 and GO-45 send a rejected or
+    expired approval and a failed recheck to it, and GO-29 adds bounded correction feedback while
+    corrections remain. Progress is committed at each step, so a restarted worker continues from
+    the last committed step. Corrections, the final result, approvals and reservations join the
+    loop in GO-29, GO-26, GO-40 and GO-39.
+  - Done when: with a live model, "Go executes a permitted tool" inside a run whose every model
+    request was preceded by the run check ("Before requesting another model response, it checks
+    whether the run remains active, unexpired and within its limits").
+  - Tests: database-backed with a labelled provider test double: a run past its expiry, past its
+    step limit or no longer active sends no model request and records its stop reason; a denied
+    proposal reaches no adapter and, with no correction remaining, stops the run with its recorded
+    reason; a permitted read runs and its minimized result reaches the next model request; the
+    steps and their order can be reconstructed from the stored records. The X-24 command;
+    `pnpm --filter gateway run test`.
+  - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
+    estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
+    (Figure 4); "Users operating model and proposed user journeys" (Journey 3 recover cancel or
+    investigate)
+  - Blocked by: nothing
+
+### Implementer 4 (enforcement)
+
+- [ ] **GO-12 · Canonicalize tool arguments and compute the action digest**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-04, GO-18 · Needs: X-09 · Provides: nothing
+  - Paths: a new package for enforcement, named at M0 by its owner
+  - Work: Implement GO-04's outcome: the canonical form of each tool's typed arguments, the rejection
+    of ambiguous or unsupported values, and the digest that identifies a stored action and detects a
+    change. The digest never stands in for the stored record or the policy checks.
+  - Done when: the same intended arguments always give the same canonical form and digest, and a
+    changed material argument always gives a different digest ("A digest can identify the stored
+    action and detect changes").
+  - Tests: table tests over the four tools: equivalent inputs give identical canonical bytes and
+    digests; each ambiguous or unsupported input GO-04 names is rejected; changing any material
+    field, one at a time, changes the digest. `pnpm --filter gateway run test`.
+  - Report: "Exact action approval versioning and execution rechecks"; "Terminology for developers
+    and presenters" (Canonical arguments)
+  - Blocked by: `canonical arguments`
+
+- [ ] **GO-13 · Admit a start-run request and issue the passport, run and job together**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 4-8 h)
+  - Depends on: GO-18, GO-19, GO-20, GO-22 · Needs: X-06, X-07, X-08, X-13, X-18, X-19, X-21,
+    X-22 · Provides: nothing
+  - Paths: `services/gateway/internal/database/database.go`; a new package for admission, named at
+    M0 by its owner
+  - Work: Derive the passport from the verified operator context, the authoritative task and policy
+    versions read from `app`, and the requested scope, by the report's field groups: identity
+    (organization, initiating actor, run reference) from verified context only; immutable task and
+    policy version references; registered tools and permitted resources, with each invoice's vendor;
+    field rules, the recipient resolved through the trusted directory, and opaque references; limits
+    (calls, steps, attempts, token ceilings, estimated spending allowance) within the X-06 values;
+    issue time and expiry. A request that exceeds authority is rejected with a reason code and the
+    scope or limit that must change, and creates nothing; admission never narrows it silently.
+    Passport, run and job commit in one transaction, and nothing updates a stored passport.
+  - Done when: MVP requirement Trusted admission holds, "Issue a passport only when requested scope
+    fits verified user and organization authority", with its acceptance evidence "Reject an
+    unauthorized task and prevent passport creation."
+  - Tests: database-backed: an invoice outside the organization or the task template, a recipient
+    outside the trusted directory and a limit above the policy are each rejected with their reason
+    and leave no passport, run or job row; a fitting request creates one of each, and a fault
+    injected before commit leaves none; identity fields equal the verified context, and a body that
+    carries an organization or actor field fails strict decoding; a missing policy version or an
+    unreadable `app` record rejects; a narrower request after a rejection is a new admission
+    ("Verify that scope rejection is explicit and the revised request must be resubmitted"); no
+    repository path updates a stored passport. The X-24 command.
+  - Report: "Trusted authority and passport invariants" (Passport fields and their purpose; Task
+    relationships matter); "Functional requirements MVP boundary and deferred scope" (Trusted
+    admission); "Threat model limits and unresolved design choices" (Verification priorities);
+    "Illustrative passport and interface contracts" (Illustrative passport fields)
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+    (which `app` records carry the operator's authority)
+
+- [ ] **GO-14 · Serve `POST /internal/runs`**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-13, GO-21 · Needs: X-07, X-08, X-13 · Provides: X-28
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`, `services/gateway/cmd/gateway/main.go`,
+    `services/gateway/README.md`
+  - Work: Register the route behind GO-21's verification, decode the start-run request strictly,
+    take actor and organization only from the verified context, call admission, and answer with the
+    passport representation (X-08) or the rejection envelope with the X-13 reason fields. The
+    command never waits on a model or tool request: the run proceeds in the worker, and the answer
+    fits the agreed `command timeout budget`.
+  - Done when: X-28 is reached: "passport, run and job stored in one transaction, or a rejection
+    that names the scope or limit that must change and creates no passport" (report:
+    "POST /internal/runs issues the passport and durable job").
+  - Tests: route tests: a valid command returns the X-08 shape; a rejected command returns the
+    shared envelope with its reason code and leaves no passport row; unknown fields, an oversized
+    body and a missing or forged context are rejected before admission runs.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
+    operations; Decision and error semantics); "Technical architecture and service ownership"
+    (Interfaces and repository strategy)
+  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md`;
+    `decision 7 in docs/product/README.md`
+
+- [ ] **GO-15 · Store each proposed action and decide allow, deny or approval required**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: GO-12, GO-13, GO-19, GO-22 · Needs: X-06, X-09, X-13 · Provides: nothing
+  - Paths: the enforcement package from GO-12
+  - Work: Store every proposal as an immutable action (stable identifier, tool, canonical
+    arguments) before evaluation, then check the registered tool name, the argument schema, the
+    organization and the passport's tools and resources, and return to the worker (GO-11) exactly
+    one of allow, deny or approval required with a stable reason code. The passport's approval
+    rule yields approval required (illustrative value: "Review every `queue_report` effect"; the
+    X-06 value governs), so reads and the internal report proceed without review. Malformed or
+    unsupported input is a denial; missing policy data, a repository error or any other failure is
+    a denial. Each decision is recorded as a safe event (GO-22) before any tool effect. Resource
+    relationships and destinations follow in GO-28, current revocations in GO-52.
+  - Done when: the gate's three outcomes exist and fail closed: "A successful policy decision should
+    distinguish allow, deny, and approval required. A transport or configuration error is not an
+    allow decision."
+  - Tests: an unregistered tool, a tool missing from the passport, unknown or missing fields, wrong
+    types and an invoice outside the passport are each denied with their reason code; a forced
+    repository error and a missing policy record are denied; the action row commits before its
+    decision row; the approval rule yields approval required for `queue_report`; the emitted reason
+    codes equal the X-13 fixture values. `pnpm --filter gateway run test`; database-backed cases
+    through the X-24 command.
+  - Report: "The enforcement loop and data minimization"; "Illustrative passport and interface
+    contracts" (Decision and error semantics); "Architecture and chart reading guide" (Figures 5
+    and 6)
+  - Blocked by: nothing
+
+- [ ] **GO-16 · Execute an allowed action through its registered adapter**
+  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-15, GO-17, GO-19, GO-23 · Needs: X-09 · Provides: nothing
+  - Paths: a new package for the tool executor, named at M0 by its owner
+  - Work: Execute only the registered adapter Go selects from the stored action, by its stable action
+    identifier, after a fresh check that the stored action still matches its digest and the run is
+    still active and unexpired. Record the attempt and its outcome through the runtime repository,
+    count it against the passport's tool attempt limit, and pass the result through data
+    minimization (GO-23) to the worker. GO-45 replaces this check with the atomic tool reservation,
+    attempt claim and approval consumption.
+  - Done when: an allowed `read_invoice` action executes once by its action identifier and leaves a
+    matching execution record (Figure 7: "Only a registered adapter can execute the effect, using
+    the stable action identity"), the Go half of the M1 exit's "Go executes a permitted tool".
+  - Tests: an action whose stored arguments no longer match its digest is not executed; an action
+    naming an unregistered tool reaches no adapter; a cancelled or expired run executes nothing;
+    every execution has exactly one attempt record with its outcome.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Architecture and chart reading guide" (Figure 7); "The enforcement loop and data
+    minimization"; "Durable state idempotency audit and uncertain outcomes"
+  - Blocked by: nothing
+
+### Implementer 5 (tool adapters)
+
+- [ ] **GO-17 · Build `read_invoice`**
+  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-07, GO-20 · Needs: X-06, X-09, X-20, X-21 · Provides: nothing
+  - Paths: a new package for the tool adapters, named at M0 by its owner
+  - Work: The adapter takes `invoice_id` only, checks itself that the invoice belongs to the run's
+    organization and to the passport (an upstream check never replaces its own: "Resource-owning
+    services must still enforce their own authorization"), and returns exactly the GO-07 fields, with
+    protected values as opaque references, through schema-qualified SQL on `demo`.
+  - Done when: the tool argument boundary for `read_invoice` holds: "Verify tenant and passport
+    membership; return only authorized fields." (report, hours 2-6: "one read tool").
+  - Tests: database-backed, calling the adapter directly as well as through the executor: an invoice
+    of another organization and an invoice outside the passport return an error and no data; the
+    serialized result holds exactly the allowlisted fields; protected values appear only as
+    references; an unknown argument is rejected. The X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Proposed tool argument boundaries);
+    "Threat model limits and unresolved design choices" ("Verify that every adapter checks
+    arguments and resource relationships, not only the tool name")
+  - Blocked by: nothing
+
+### Owner recorded in SH-07 (modules the report's team table does not name)
+
+- [ ] **GO-18 · Mirror the frozen contracts in Go DTOs**
+  - Owner: the DTO owner recorded in SH-07 · Tier: A · Size: S (estimate 1.5-3 h)
+  - Depends on: SH-07 · Needs: X-07, X-08, X-09, X-10, X-11, X-12, X-13 ·
+    Provides: X-15 (part: the X-07 to X-13 mirrors)
+  - Paths: `services/gateway/internal/health/dto.go`,
+    `services/gateway/internal/health/dto_test.go`, `packages/contracts/fixtures` (read; landed by
+    SH-11), `services/gateway/README.md`; a new DTO file or package, named at M0 by its owner
+  - Work: Mirror each frozen contract and the error envelope's reason fields in Go, following
+    "Changing a shared contract" in `docs/team-workflow.md`. The fixture test lists fixtures by
+    explicit case, so an unlisted fixture is never checked: add a test that fails for any fixture
+    with neither a Go case nor a recorded API-only exemption. The X-14 mirror is GO-62.
+  - Done when: every fixture of X-07 to X-13 decodes strictly into its Go DTO and re-encodes
+    unchanged, and every enum value Go emits (states, reason codes, decision outcomes) matches the
+    fixtures, so the services "describe the same identifiers, enum values, timestamps, error
+    semantics, and action integrity rules"; X-15 is reached when GO-62 is done as well.
+  - Tests: the strict decode and re-encode test per fixture; an emitted-values test in the pattern
+    of `TestEmittedValuesMatchContractFixtures`; the new test that lists
+    `packages/contracts/fixtures` and fails for an unmapped fixture.
+    `pnpm --filter gateway run test`.
+  - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
+    (NestJS/Go contract drift: "validate serialized contracts")
+  - Blocked by: `Go package owners`
+
+- [ ] **GO-62 · Mirror the operator context contract in Go**
+  - Owner: the DTO owner recorded in SH-07 · Tier: A · Size: S (estimate 0.5-1 h, split from GO-18)
+  - Depends on: GO-18 · Needs: X-14 · Provides: X-15 (part: the X-14 mirror)
+  - Paths: `services/gateway/internal/health/dto_test.go`, `services/gateway/README.md`; the DTO
+    file or package from GO-18
+  - Work: Once SH-39 lands X-14, mirror it in Go as GO-18 mirrors the others and give its fixture a
+    case in the strict decode test.
+  - Done when: the X-14 fixture decodes strictly into its Go DTO and re-encodes unchanged, as
+    GO-18's fixtures do, and with GO-18 done X-15 is reached ("validate serialized contracts").
+  - Tests: the strict decode and re-encode test for the X-14 fixture; GO-18's unmapped-fixture test
+    passes. `pnpm --filter gateway run test`.
+  - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
+    (NestJS/Go contract drift: "validate serialized contracts")
+  - Blocked by: `Go package owners`; `decision 4 in docs/product/README.md`;
+    `decision 7 in docs/product/README.md`
+
+- [ ] **GO-19 · Build the runtime repository with guarded state transitions**
+  - Owner: the runtime repository owner recorded in SH-07 · Tier: A · Size: M (estimate 4-8 h)
+  - Depends on: SH-07, GO-20 · Needs: X-19 · Provides: nothing
+  - Paths: `services/gateway/internal/database/database.go`, `services/gateway/cmd/gateway/main.go`,
+    `services/gateway/README.md`; a new package for the runtime repository, named at M0 by its owner
+  - Work: The single writer of the `runtime` schema (Figure 1: "Owns runtime writes"), with short
+    explicit transactions, schema-qualified SQL, row mapping, and run and action state transitions
+    that reject an invalid move such as executing a denied action or resuming a completed run. "A
+    state change and the continuation or event it produces should be committed together." It offers
+    a transaction that the executor and an adapter can share for a local demo effect (GO-34).
+    `main.go` hands it the pool, which today goes only to readiness.
+  - Done when: every runtime write goes through it, an invalid transition leaves the stored state
+    unchanged, and a state change commits with its event or not at all (MVP requirement Durable
+    execution: "Persist jobs, continuations, approvals, and execution state").
+  - Tests: database-backed: each invalid transition the guards name is rejected and changes no row;
+    a failure injected between a state change and its event leaves neither; queries succeed with no
+    `search_path` set. The X-24 command.
+  - Report: "Data ownership and the transition from starter to product" (Proposed database
+    ownership); "Durable state idempotency audit and uncertain outcomes"; "Validation plan and
+    evidence matrix" ("Exercise malformed tool arguments and invalid state transitions as well as
+    valid ones")
+  - Blocked by: `Go package owners`
+
+- [ ] **GO-20 · Build the Go PostgreSQL test harness on the X-24 command**
+  - Owner: the runtime repository owner recorded in SH-07 · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: SH-07 · Needs: X-24 · Provides: nothing
+  - Paths: `services/gateway/internal/database/database.go`,
+    `services/gateway/internal/database/database_test.go`, `services/gateway/scripts/go.mjs`,
+    `services/gateway/README.md`
+  - Work: A shared helper for the Go database-backed tests: it connects to the database the X-24
+    command provides, creates and removes its own synthetic rows, and makes each such test report
+    itself as skipped, never as passed, when no database is configured, so `pnpm verify` stays free
+    of a database and a skipped check is never quoted as a pass. The gateway `test` task in
+    `services/gateway/scripts/go.mjs` runs `go test ./...` with fixed arguments, and without `-v`
+    or `-json` Go prints only `ok` for a package whose tests skipped, so this task also makes that
+    task print each skipped test (for example with `-v`, or with `-json` and a printed list of
+    skips) and updates the command list in `services/gateway/README.md`.
+  - Done when: a Go test that needs PostgreSQL passes through the X-24 command against a real
+    database and is listed as skipped in the output of `pnpm --filter gateway run test` without
+    one, so the team can "choose and verify the appropriate transaction boundaries" against
+    PostgreSQL.
+  - Tests: the harness's own test: a round trip passes with the database up; the X-24 command fails
+    with the database down; without configuration `pnpm --filter gateway run test` lists the test
+    as skipped. The X-24 command; `pnpm --filter gateway run test`.
+  - Report: "Atomic allowances hard limits and estimated cost" ("the application must choose and
+    verify the appropriate transaction boundaries"); "Validation plan and evidence matrix"
+    (Interpreting results honestly)
+  - Blocked by: `Go package owners`
+
+- [ ] **GO-21 · Verify service identity and operator context on every internal command**
+  - Owner: the internal API owner recorded in SH-07 · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: SH-03, SH-07, GO-62 · Needs: X-13, X-14, X-23 · Provides: X-27
+  - Paths: `services/gateway/internal/httpserver/middleware.go`,
+    `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/errors.go`,
+    `services/gateway/internal/httpserver/server_test.go`,
+    `services/gateway/internal/config/config.go`,
+    `services/gateway/internal/config/config_test.go`, `services/gateway/README.md`
+  - Work: Extend or replace the starter's service-token check as decision 4 says, so every internal
+    product route verifies the calling service and the authenticated operator context before any
+    handler runs, and rejects the rest with the shared envelope (401 or 403, with codes aligned with
+    the API's exception filter). Add strict JSON decoding with a body size limit, because no route
+    reads a body today. If a route named at M0 carries an identifier in its path, make
+    `withJSONErrors` in `errors.go` serve matched routes through the mux: it looks the route up with
+    `mux.Handler` and calls the handler directly, and `mux.Handler` "does not populate named path
+    wildcards, so r.PathValue will always return the empty string" (`net/http`). The verified actor
+    and organization reach the handlers as their only identity source; request ids never act as
+    authorization. Each command still authorizes itself against its organization and run (GO-14,
+    GO-41, GO-44). Acceptance of what NestJS actually sends, and rejection of the same command
+    altered, are checked where X-26 is delivered and in SH-22; this task tests against X-14.
+  - Done when: X-27 is reached: "Go verifies service identity and the operator context on every
+    internal command and rejects the rest with the shared envelope" (report: "Go must verify service
+    identity and authenticated operator context, then authorize the command against its
+    organization and run").
+  - Tests: in the pattern of `server_test.go`: the service token alone, a missing context, a forged
+    or altered context, a context issued for another service, and a malformed or oversized body are
+    each rejected before the handler with the shared envelope; no token, secret or context value
+    appears in logs or responses; a well-formed command whose context follows X-14 and the
+    mechanism decision 4 records is accepted; if a route has a path wildcard, its handler receives
+    the value from the path through `NewHandler`. `pnpm --filter gateway run test`.
+  - Report: "Technical architecture and service ownership" (Interfaces and repository strategy);
+    "Threat model limits and unresolved design choices" ("The service token in the starter requires
+    replacement or extension for authenticated operator context"); "Validation plan and evidence
+    matrix" ("a hidden URL is not a protection")
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`;
+    `Go package owners`
+
+- [ ] **GO-22 · Write safe decision events with every state change**
+  - Owner: the events owner recorded in SH-07 · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: SH-07, GO-19 · Needs: X-12, X-13, X-19 · Provides: nothing
+  - Paths: the runtime repository package from GO-19
+  - Work: Admission, each decision, approval, execution, stop and failure writes an event in the
+    same transaction as its state change: ordered per run with a cursor, linking "the run, action,
+    policy version, matched rule, outcome and actual effect", with the X-13 reason code, a masked
+    summary and the replay label, and never confidential arguments or review content. These rows
+    are what the interface displays and what the read path serves, whichever outcome SH-05 records.
+  - Done when: a run's events reconstruct its decisions in order with masked metadata only ("Masked
+    summaries support the timeline without copying confidential arguments into general logs"), the
+    Go half of Implementer 1's "display a real persisted event".
+  - Tests: database-backed: the events of one run are strictly ordered, and a cursor read returns no
+    gap or duplicate under concurrent writes; a decision event carries every link listed; the
+    serialized events of a run that read protected fields contain none of the fixture's protected
+    values; a failed state change leaves no event. The X-24 command.
+  - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
+    second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
+    semantics)
+  - Blocked by: `Go package owners`
+
+- [ ] **GO-23 · Enforce tool-result field allowlists and minimize the model context**
+  - Owner: the data-minimization owner recorded in SH-07, with Implementer 5 · Tier: A ·
+    Size: S (estimate 2-3 h)
+  - Depends on: SH-07, GO-07 · Needs: X-06 · Provides: nothing
+  - Paths: a new package for data minimization, named at M0 by its owner
+  - Work: Apply the GO-07 allowlist to every tool result before the worker sees it, and build every
+    model request only from "the fixed task template and authorized parameters" plus minimized
+    earlier results, so the rule covers "initial task input, retrieved documents, tool results and
+    stored conversation state", not only the filter after tool execution. Protected values stay
+    references; GO-35 adds their resolution inside the adapters.
+  - Done when: returned fields obey the X-06 field rules on every path into the model ("Data rules
+    should determine approved fields before model access"), the minimization half of demo beat 3's
+    "Returned fields obey policy".
+  - Tests: a tool result with an extra field loses it before the worker sees it; the serialized
+    model request of a fixture run holds no protected value and no field outside the template and
+    the allowlists; stored conversation state replays only minimized content.
+    `pnpm --filter gateway run test`.
+  - Report: "The enforcement loop and data minimization" (Minimize information before it enters the
+    model); "Illustrative passport and interface contracts" (Narrow final result and context
+    boundary)
+  - Blocked by: `Go package owners`
+
+- [ ] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
+  - Owner: the events owner recorded in SH-07, with the internal API owner · Tier: A ·
+    Size: S (estimate 2-3 h)
+  - Depends on: SH-05, GO-21, GO-22 · Needs: X-11, X-12 · Provides: X-29, X-30
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
+  - Work: Only if SH-05 chooses private Go endpoints ("NestJS would expose these operations and call
+    corresponding private Go endpoints"): serve the run and usage view (status, usage, terminal
+    reason, and the passport if `passport in the run view` says so) and the sanitized events after a
+    cursor, behind GO-21, checking on every read that the run belongs to the verified organization
+    and that the actor may see it. Each response ends well inside the 30 s write timeout (polling,
+    no long-lived stream). If SH-05 chooses runtime views, this task becomes "Dropped: the read path
+    chose runtime views (SH-16)"; the records the views read come from GO-22, GO-39 and GO-19.
+  - Done when: X-29 and X-30 are reached through Go: MVP requirement Authorized visibility, "Expose
+    organization-scoped run state and sanitized ordered events", with "Organization and object
+    access checked on every read."
+  - Tests: a read of another organization's run returns the rejection envelope and no data; cursor
+    reads return events in order with no gap or duplicate; no raw argument, review content or
+    protected value leaves Go; the responses decode strictly against the X-11 and X-12 fixtures.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
+    operations); "Technical architecture and service ownership" (Interfaces and repository
+    strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
+  - Blocked by: `read path`; `passport in the run view`; `Go package owners`
+
+- [ ] **GO-25 · Serve the task form options, if `form options` chooses a Go endpoint**
+  - Owner: the Go owner recorded in SH-07 for this endpoint · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: SH-07, GO-21 · Needs: X-21 · Provides: X-25
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
+  - Work: Only if the document owner settles `form options` with a Go endpoint: return the options
+    of the fixed task template (vendor, invoice set, allowed destination, approval requirement,
+    available limits) for the verified organization, read from the authoritative records. If
+    another outcome is chosen, this task becomes "Dropped: `form options` chose another provider".
+  - Done when: X-25 is reached through Go, and the options never exceed what admission accepts for
+    that organization, so the task setup screen can "expose these choices in business language".
+  - Tests: options of another organization are never returned; every returned option is admitted by
+    GO-13 for the same context; nothing outside the template's authority appears.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Project definition purpose and intended outcome" (What a passport would contain);
+    "Relative implementation milestones and critical dependencies" (Critical path and sensible
+    reductions: "keep a fixed server-owned task template")
+  - Blocked by: `form options`; `Go package owners`
+
+## M2: hours 6-10
+
+- **Team focus (report).** "Complete four adapters, scoped reads, structured report creation,
+  destination checks, and bounded correction feedback."
+- **Exit condition (report).** "A permitted reconciliation succeeds; an explicit prohibited
+  proposal produces no business effect."
+- **Sync points needed by the end (spine):** X-33 to X-38, X-63 and X-64 (X-65 only if the replay
+  is triggered through NestJS). This side provides X-36, X-37, X-38 and X-63, X-64 if
+  `stored report read` chooses a Go endpoint, X-65 if `replay entry` has the interface trigger the
+  replay (GO-05, option 2), through a task the replay owner adds once that outcome is chosen
+  (spine, X-65), and X-67 early (GO-29), which the spine needs by M3.
+- **First integrated deliverables placed here (spine).** Implementer 4: "An out-of-scope proposal
+  is denied before the tool adapter runs." Implementer 5: "A permitted action produces one
+  inspectable database effect and its matching execution record."
+
+### Implementer 3 (agent runtime)
+
+- [ ] **GO-26 · Validate the narrow final result and complete the run**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 2-3 h)
+  - Depends on: GO-11, GO-32 · Needs: X-11, X-33 · Provides: nothing
+  - Paths: the worker package from GO-08
+  - Work: A final answer passes only the `final result format` outcome. The report recommends "a
+    structured status with authorized report references" (proposed, not decided): every report it
+    names must belong to the run, its organization and its passport, unsupported fields are
+    rejected, and only the validated result is persisted before the run completes. Model prose is
+    never stored as the authoritative deliverable.
+  - Done when: a reconciliation run completes only with a validated result (Figure 5: "A final
+    answer remains subject to the defined output boundary"; "This turns final-output validation
+    into a defined check of identifiers, ownership, and supported fields").
+  - Tests: a final answer that names a report of another run or organization, carries an unknown
+    field or lacks a reference is rejected and the run does not complete; a valid result completes
+    the run with its recorded reason; the persisted result holds no free text the format does not
+    allow. `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Narrow final result and context
+    boundary); "The enforcement loop and data minimization"; "Threat model limits and unresolved
+    design choices" ("Final-output validation requires an output format and a data rule")
+  - Blocked by: `final result format`
+
+- [ ] **GO-27 · Prove a permitted reconciliation on the Go side**
+  - Owner: Implementer 3 (agent runtime) with Implementers 4 and 5 · Tier: A ·
+    Size: S (estimate 1-2 h)
+  - Depends on: GO-11, GO-26, GO-28, GO-31, GO-32 · Needs: X-16, X-33, X-34 · Provides: X-63
+  - Paths: none (a scenario test in the packages above)
+  - Work: Run the reconciliation over the X-34 fixtures through the real gate, executor and adapters,
+    once with the decision 6 model and once with a labelled provider test double for repeatability,
+    and capture the returned fields, the stored report and its references for the storyboard (X-16).
+  - Done when: X-63 is reached: "Returned fields obey policy; the report references authorized
+    records and contains the expected discrepancy." (demo beat 3; M2 exit: "A permitted
+    reconciliation succeeds").
+  - Tests: the scenario test asserts the allowlisted fields, the report's references to permitted
+    invoices only and the seeded discrepancy, and its output can be retrieved as evidence. The X-24
+    command; one live run, quoted.
+  - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 3);
+    "Relative implementation milestones and critical dependencies" (Hours 6-10)
+  - Blocked by: nothing
+
+### Implementer 4 (enforcement)
+
+- [ ] **GO-28 · Check resource relationships and destinations at the gate**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: GO-15 · Needs: X-06, X-09, X-20, X-33 · Provides: nothing
+  - Paths: the enforcement package from GO-12
+  - Work: Go beyond the tool name. `read_vendor` accepts only a vendor of the organization that is
+    associated with a passport-scoped invoice; `create_report` only passport invoice references and
+    the registered template; `queue_report` only a report created in this run from authorized
+    references, and only the trusted recipient reference the passport resolved from the directory,
+    never "a destination found in invoice prose". Read access and outbound access are checked
+    independently, and every action must fit the passport and pass the current checks: "The
+    passport is an upper bound, not an instruction that every allowed operation should occur."
+  - Done when: every argument relationship in "Proposed tool argument boundaries" and "Task
+    relationships matter" is checked at the gate for all four tools, so a denied proposal never
+    reaches an adapter (hours 6-10: "scoped reads ... destination checks").
+  - Tests: a vendor not linked to a passport invoice, a vendor of another organization, a report of
+    another run, an invoice reference outside the passport, a recipient taken from invoice text and
+    an unregistered template are each denied with their reason code; permission to read a field
+    does not make it allowed in outbound content; an unreadable directory record denies.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Trusted authority and passport invariants" (Task relationships matter); "Illustrative
+    passport and interface contracts" (Proposed tool argument boundaries; Concrete synthetic
+    business example); "Relative implementation milestones and critical dependencies" (Hours 6-10)
+  - Blocked by: nothing
+
+- [ ] **GO-29 · Return structured denial feedback and stop at the correction limit**
+  - Owner: Implementer 4 (enforcement) with Implementer 3 · Tier: B · Size: S (estimate 2-4 h)
+  - Depends on: GO-11, GO-15, GO-27, GO-36 · Needs: X-06, X-13, X-16, X-34 · Provides: X-67
+  - Paths: the enforcement package from GO-12; the worker package from GO-08
+  - Work: After a denial, give the model a safe structured reason (reason code, safe message and,
+    where one exists, the permitted alternative such as the registered vendor or the permitted
+    record set), count the correction against the passport's correction limit, and continue at the
+    run check, or stop the run with its reason when no correction remains (Figure 6: "Rejected or
+    stale proposals receive bounded handling"). The feedback never carries protected values or
+    review content. Then prove beat 6 over the X-34 fixtures through the real gate, executor and
+    adapters: a prohibited proposal, from the live model where it proposes one and otherwise from
+    the labelled replay (GO-36), is denied, and the same run continues to the permitted
+    reconciliation and its stored report; capture the correction count and the run's recorded
+    usage against its one passport's limits for the storyboard (X-16).
+  - Done when: MVP requirement Bounded recovery holds, "Return structured denial feedback while
+    limiting correction attempts", with its evidence "A recoverable branch continues; repeated
+    forbidden proposals terminate at the limit.", and X-67 is reached (demo beat 6): "The original
+    useful output is completed within the same run and allowance; correction attempts are counted."
+  - Tests: with a labelled provider test double: a denied proposal followed by a permitted one
+    completes the run with one counted correction; repeated forbidden proposals stop the run exactly
+    at the X-06 correction limit with the recorded reason; no feedback text holds a protected value.
+    The beat 6 scenario asserts one run and one passport from the denied proposal to the stored
+    report, the counted correction, usage within that passport's limits and the replay label on a
+    replayed proposal, and its output can be retrieved as evidence.
+    `pnpm --filter gateway run test`; database-backed cases and the scenario through the X-24
+    command.
+  - Report: "The enforcement loop and data minimization"; "Functional requirements MVP boundary and
+    deferred scope" (Bounded recovery); "Live demonstration storyboard and proof checks" (beat 6)
+  - Blocked by: nothing
+
+- [ ] **GO-30 · Prove the resource and destination boundaries**
+  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: A · Size: S (estimate 1-3 h)
+  - Depends on: GO-28, GO-31, GO-33, GO-36 · Needs: X-16, X-34 · Provides: X-37, X-38
+  - Paths: none (scenario tests in the packages above)
+  - Work: With the X-34 fixtures, submit an out-of-scope invoice, a vendor outside the task and a
+    changed recipient, from the live model where it proposes them and otherwise from the labelled
+    replay (GO-36). Capture the state before and after each: the denial record, the excluded
+    records' versions, the report and outbox counts and the absence of an execution attempt. Also
+    show that the hostile note changed neither the stored passport nor the operator identity (demo
+    beat 4).
+  - Done when: X-37 and X-38 are reached with the evidence the report lists, Resource boundary:
+    "Denial record plus unchanged excluded records and absence of an execution attempt."; Destination
+    boundary: "Stored proposal, rule decision, and outbox comparison."; and Implementer 4's first
+    integrated deliverable is observed: "An out-of-scope proposal is denied before the tool adapter
+    runs."
+  - Tests: scenario tests asserting, for each denied proposal, no adapter call, no execution record,
+    unchanged record versions and unchanged report and outbox counts; replayed proposals carry the
+    replay label. The X-24 command.
+  - Report: "Validation plan and evidence matrix" (critical checks Resource boundary and Destination
+    boundary); "Live demonstration storyboard and proof checks" (beats 4 and 5); "Risk register and
+    scope controls" (Demo proves logs, not prevention)
+  - Blocked by: nothing
+
+### Implementer 5 (tool adapters)
+
+- [ ] **GO-31 · Build `read_vendor`**
+  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 1-3 h)
+  - Depends on: GO-17, GO-35 · Needs: X-20 · Provides: nothing
+  - Paths: the adapter package from GO-17
+  - Work: The adapter takes `vendor_id` only, checks itself that the vendor belongs to the
+    organization and is associated with a passport-scoped invoice, and returns the GO-07 fields
+    with selected values as safe references (GO-35).
+  - Done when: the tool argument boundary for `read_vendor` holds: "Verify the vendor belongs to the
+    task; resolve selected values as safe references."
+  - Tests: database-backed, called directly and through the executor: a vendor of another
+    organization and a vendor not linked to a passport invoice return an error and no data; the
+    result holds exactly the allowlisted fields. The X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Proposed tool argument boundaries);
+    "Trusted authority and passport invariants" (Task relationships matter)
+  - Blocked by: nothing
+
+- [ ] **GO-32 · Build `create_report`**
+  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-17, GO-34 · Needs: X-33 · Provides: nothing
+  - Paths: the adapter package from GO-17
+  - Work: The adapter takes authorized invoice references and a registered template, checks every
+    reference against the passport itself, and stores a structured report with a stable identifier,
+    a version, the organization, the run and its source references, inside GO-34's transaction. The
+    model selects and summarizes permitted information; it never writes free outbound content. If
+    SH-10 records the registered template as Go code, this task defines it in the adapter package,
+    with fields within the X-06 field rules; otherwise the adapter reads the record SH-25 seeds.
+  - Done when: the tool argument boundary for `create_report` holds: "Verify every reference; store a
+    structured report with a stable ID and version." (hours 6-10: "structured report creation").
+  - Tests: database-backed: an unauthorized invoice reference or an unregistered template stores
+    nothing; a stored report carries its references, version and run; the same action identifier
+    executed again creates no second report. The X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Proposed tool argument boundaries);
+    "Functional requirements MVP boundary and deferred scope" (Product decisions that keep the MVP
+    coherent)
+  - Blocked by: `record versions`
+
+- [ ] **GO-33 · Build `queue_report`**
+  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 3-5 h)
+  - Depends on: GO-32, GO-34, GO-35 · Needs: X-33 · Provides: nothing
+  - Paths: the adapter package from GO-17
+  - Work: The adapter takes a stored report reference and a trusted recipient reference. It checks
+    that the report belongs to this run and organization with the expected source references,
+    template and version ("A generated report ID is not permission to queue an unrelated report"),
+    renders the exact content from the stored report and its registered template (GO-43 freezes
+    it), resolves the recipient reference after its own checks, and inserts one simulated outbox
+    row whose uniqueness is tied to the action identifier. Nothing is delivered to a real recipient,
+    and the outbox is labelled simulated. It executes only under the bound approval (GO-45).
+  - Done when: the tool argument boundary for `queue_report` holds: "Render and freeze exact content;
+    require bound review; insert a single simulated outbox effect."
+  - Tests: database-backed, called directly: an unrelated report, a report of another organization,
+    a changed version and an untrusted recipient insert nothing; identical inputs render identical
+    content; a second insert for the same action identifier is rejected by the database and leaves
+    one row. The X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Proposed tool argument boundaries;
+    Concrete synthetic business example); "Illustrative invoice scenario and future domain
+    adaptations" ("No message would be delivered to a real recipient")
+  - Blocked by: `record versions`
+
+- [ ] **GO-34 · Commit each demo effect with its execution record and event in one transaction**
+  - Owner: Implementer 5 (data and integration) with Implementer 4 and the runtime repository owner
+    · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: SH-06, GO-16, GO-19, GO-22 · Needs: X-33 · Provides: nothing
+  - Paths: `services/gateway/internal/database/database.go`; the executor package from GO-16
+  - Work: For `create_report` and `queue_report`, the effect, its completion record and its event
+    commit in one short transaction on the connection SH-06 settles ("one Go executor connection"
+    is the report's recommendation, not adopted), with the uniqueness constraint tied to the action
+    identifier. "Separate connections with different credentials would not provide that atomicity
+    automatically." Until the service roles arrive (X-35, GO-38) the single starter user serves this
+    connection; GO-55 repeats the proof on the final one. The report gives these transactional
+    effects to Implementer 5; SH-07 records their placement.
+  - Done when: Implementer 5's first integrated deliverable is observed: "A permitted action
+    produces one inspectable database effect and its matching execution record."
+  - Tests: database-backed: a successful effect has exactly one completion record and one event; an
+    effect executed twice under one action identifier leaves one row and one completion; the
+    fault-injection proof follows in GO-55. The X-24 command.
+  - Report: "Durable state idempotency audit and uncertain outcomes"; "Delivery scope and six person
+    ownership" (Proposed team ownership)
+  - Blocked by: `decision 2 in docs/product/README.md`
+
+- [ ] **GO-35 · Replace protected values with opaque references resolved inside adapters**
+  - Owner: Implementer 5 (data and integration) with the data-minimization owner · Tier: A ·
+    Size: S (estimate 1-3 h)
+  - Depends on: GO-17, GO-23 · Needs: X-06 · Provides: nothing
+  - Paths: the adapter package from GO-17; the data-minimization package from GO-23
+  - Work: For each value the X-06 field rules protect, the adapter returns an opaque reference that
+    the model can use without receiving the value, and resolves it only inside an adapter after
+    authorization, for example the recipient address in `queue_report`. A reference is scoped to
+    its run, so it means nothing in another run. Tier A because `read_vendor` (GO-31) and
+    `queue_report` (GO-33), both Tier A, depend on it to resolve their safe references and the
+    trusted recipient.
+  - Done when: "Opaque references can identify protected records without exposing their raw
+    contents; adapters resolve those references only after authorization."
+  - Tests: no protected value appears in any tool result or model request of a fixture run; a
+    reference from another run or organization does not resolve; an adapter resolves a reference
+    only after its own checks pass. `pnpm --filter gateway run test`; database-backed cases through
+    the X-24 command.
+  - Report: "The enforcement loop and data minimization" (Minimize information before it enters the
+    model); "Terminology for developers and presenters" (Opaque reference)
+  - Blocked by: nothing
+
+### Owner recorded in SH-07 (modules the report's team table does not name)
+
+- [ ] **GO-36 · Replay a prohibited proposal through the real gate, labelled**
+  - Owner: the replay owner recorded in SH-07 · Tier: A · Size: S (estimate 2-3 h)
+  - Depends on: SH-07, GO-05, GO-15 · Needs: X-12, X-34 · Provides: X-36
+  - Paths: `services/gateway/README.md`; a new package or command for the replay, named at M0 by its
+    owner
+  - Work: Implement GO-05's outcome: submit a stored prohibited proposal taken from the hostile note
+    in X-34 (reading the out-of-scope invoice or changing the recipient) "to the same validation and
+    execution path", marked as a replay in the stored action and in every event it produces, and
+    documented as a deterministic rehearsal.
+  - Done when: X-36 is reached: the replay is denied by the real gate, leaves no business effect,
+    and every record of it carries the replay label ("never present a scripted proposal as a
+    model-generated action").
+  - Tests: the replayed proposal runs through the same gate and executor code as a live one, with no
+    test-only branch, and is denied with the same reason code as its live equivalent; its events
+    carry the replay label. `pnpm --filter gateway run test`; database-backed cases through the
+    X-24 command.
+  - Report: "Live demonstration storyboard and proof checks" (Reliable demonstrations without
+    invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
+    output)
+  - Blocked by: `Go package owners`; `replay entry`
+
+- [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
+  - Owner: the Go owner recorded in SH-07 for this endpoint, with Implementer 5 · Tier: A ·
+    Size: S (estimate 1-2 h)
+  - Depends on: SH-07, GO-21, GO-32 · Needs: X-33 · Provides: X-64
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
+  - Work: Only if the document owner settles `stored report read` with a private Go endpoint: return
+    the stored report (stable identifier, version, source references, structured content) and its
+    registered template for the verified organization and run, so the interface "renders its
+    substantive content from the stored report and registered template". If the view outcome is
+    chosen, this task becomes "Dropped: `stored report read` chose a view and read grant (SH-24,
+    SH-26)".
+  - Done when: X-64 is reached through Go for the completed run's report.
+  - Tests: a report of another organization or run is not returned; the response decodes strictly
+    against its contract fixture; nothing beyond the template's fields is returned.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Illustrative passport and interface contracts" (Narrow final result and context
+    boundary)
+  - Blocked by: `stored report read`; `final result format`; `Go package owners`
+
+- [ ] **GO-38 · Connect with the Go database roles from X-35**
+  - Owner: the owner recorded in SH-07 for `internal/config` and `internal/database` · Tier: B ·
+    Size: S (estimate 1-2 h)
+  - Depends on: SH-06, SH-07 · Needs: X-35 · Provides: nothing
+  - Paths: `services/gateway/internal/config/config.go`,
+    `services/gateway/internal/config/config_test.go`,
+    `services/gateway/internal/database/database.go`,
+    `services/gateway/internal/database/database_test.go`, `services/gateway/cmd/gateway/main.go`,
+    `services/gateway/README.md`
+  - Work: Read the Go credentials SH-26 wires (one executor connection or separate connections, as
+    SH-06 settles) as `logging.Secret` values, build the pool or pools, and give each Go module only
+    the connection its writes need. The bootstrap user that runs the migrations stops being the
+    gateway's user.
+  - Done when: the gateway connects with its own role and a Go write outside its authority fails at
+    the database ("Credentials and database roles must enforce the intended boundary").
+  - Tests: configuration tests for the new variables (problems named, values never printed);
+    database-backed: the Go role cannot write `app` records, and an adapter cannot write outside its
+    `demo` tables. The X-24 command; `pnpm --filter gateway run test`.
+  - Report: "Architecture and chart reading guide"; "Data ownership and the transition from starter
+    to product"; "Technical architecture and service ownership" (Proposed ownership)
+  - Blocked by: `decision 2 in docs/product/README.md`; `Go package owners`
+
+## M3: hours 10-14
+
+- **Team focus (report).** "Add frozen action previews, authorized approval decisions, approval
+  consumption, model/tool reservations, and controlled stopping."
+- **Exit condition (report).** "The reviewed action executes once; changed content and depleted
+  allowance cannot dispatch an operation."
+- **Sync points needed by the end (spine):** X-39 to X-46, X-66 and X-67. This side provides X-40,
+  X-42, X-45 and its halves of X-44 and X-46, X-41 if the read path chooses Go endpoints, and its
+  half of X-53 early; X-67 came with GO-29 at M2. X-66 is the Next.js + NestJS side's.
+
+### Implementer 3 (agent runtime)
+
+- [ ] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 5-8 h)
+  - Depends on: GO-02, GO-03, GO-10 · Needs: X-06, X-11, X-39 · Provides: X-53
+  - Paths: the model gateway package from GO-06; the runtime repository package from GO-19
+  - Work: Before each model request, reserve the call count, the capped tokens and the estimated
+    cost in one short row-locked transaction, "based on the configured model, estimated input and
+    the permitted output ceiling"; with no allowance left, dispatch nothing and stop the run with
+    its reason. Commit, send, then settle the reported usage in a later transaction. When usage is
+    missing or a timeout leaves billing uncertain, the reservation stays unresolved. A model call
+    retry, where `model call retries` adopts them, is a separate dispatch that reserves again. The
+    usage view separates reported usage, reserved allowance and estimated cost; estimated cost is a
+    second rule next to the hard limits, follows the decision 6 accounting rule and is labelled
+    estimated.
+  - Done when: MVP requirement Bounded usage holds for model calls ("Reserve allowance atomically
+    before dispatch and count model calls, tool attempts, and corrections"), and the Go half of X-53
+    is reached: Unknown usage, "Retained reservation and visibly uncertain estimated-cost state."
+  - Tests: database-backed, also with `-race`: an exhausted allowance dispatches nothing and
+    records the stop reason; a response without usage leaves the reservation unresolved and
+    counted, never zero; settlement settles the reservation against the reported usage in its own
+    transaction; no reservation transaction is open while the stubbed provider call runs; a model
+    call retry, where `model call retries` adopts them, reserves again. The X-24 command.
+  - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
+    matrix" (critical check Unknown usage); "Architecture and chart reading guide" (Figures 4 and 5)
+  - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
+
+- [ ] **GO-40 · Release the lease during a review wait and resume the original action**
+  - Owner: Implementer 3 (agent runtime) with Implementer 4 · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-08, GO-11, GO-43, GO-44 · Needs: X-39 · Provides: nothing
+  - Paths: the worker package from GO-08
+  - Work: When the gate requires approval and GO-43 has frozen the action, persist the
+    awaiting-approval state, write the event that tells the interface, and release the lease, all in
+    one transaction. When GO-44 enqueues the continuation, claim it with a lease, load the original
+    stored action (never a new proposal), run the run check (active, unexpired, not cancelled) and
+    pass the action to the recheck in GO-45. On rejection or expiry, continue on the blocked-action
+    path (GO-11; GO-29 adds the correction). No worker holds the job during the wait, so an approval
+    nobody decides needs its own trigger: at its expiry it closes as expired (GO-44) and the run
+    continues on the blocked-action path, by a mechanism the owner chooses within constraint 9; the
+    closure, its event and what resumes the run commit together.
+  - Done when: an approval wait survives the browser closing and the worker stopping, and resumes
+    the original stored action (Figure 6: "Approval pauses the durable job and applies to the
+    original action"; MVP requirement Durable execution).
+  - Tests: database-backed: a waiting run holds no lease; after a worker restart the continuation
+    resumes the stored action with the same identifier and digest; a cancelled or expired run does
+    not resume; a rejection executes nothing and continues on the blocked-action path, counted as a
+    correction once GO-29 is done; an approval nobody decides closes as expired at its expiry with
+    its event while no worker holds the job, and the run then continues on the blocked-action path,
+    its persisted state showing the expiry, not awaiting approval. The X-24 command.
+  - Report: "Durable state idempotency audit and uncertain outcomes"; "Exact action approval
+    versioning and execution rechecks"; "Architecture and chart reading guide" (Figure 6)
+  - Blocked by: nothing
+
+- [ ] **GO-41 · Persist cancellation through the internal cancel command**
+  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: S (estimate 2-3 h)
+  - Depends on: GO-11, GO-21 · Needs: X-11, X-13 · Provides: X-42
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`; the worker
+    package from GO-08
+  - Work: Serve the cancel command named at M0, behind GO-21. It authorizes that the verified actor
+    "may manage this run within this organization", persists the cancellation and its time before
+    any future dispatch, closes a pending approval as cancelled (Figure 6: approve, reject, expire
+    or cancel), and requests interruption of in-flight work where supported, without claiming that
+    a provider stops billing. Cancellation reverses no committed effect, and the command writes no
+    NestJS-owned revocation record; GO-52 reads those.
+  - Done when: X-42 is reached: "Persist cancellation before future dispatches"; the run stops with
+    its reason and its committed effects stay recorded.
+  - Tests: a cancel of another organization's run, or by an actor without the right, is rejected and
+    changes nothing; after a cancel no model request or tool execution starts, including for a run
+    waiting for approval; a repeated cancel is harmless. `pnpm --filter gateway run test`;
+    database-backed cases through the X-24 command.
+  - Report: "Atomic allowances hard limits and estimated cost" (Cancellation and time limits);
+    "Illustrative passport and interface contracts" (Proposed browser and runtime operations);
+    "Exact action approval versioning and execution rechecks" (Versioned policy and current
+    revocation)
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+
+- [ ] **GO-42 · Prove the limit-triggered stop**
+  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-39, GO-45 · Needs: X-16, X-34 · Provides: X-46
+  - Paths: none (a scenario test in the packages above)
+  - Work: In a separate run with the small configured allowance from X-34, or in a clearly labelled
+    runtime test, exhaust a model or tool limit. Show that the next request is rejected before
+    dispatch with a visible terminal reason, and that every dispatch has its reservation and usage.
+    The challenge table's evidence for Unpredictable costs asks to "Run a bounded retry scenario"
+    with "usage and uncertainty recorded": if `model call retries` adopts bounded retries, exhaust
+    the model call limit with retries against a labelled failing provider test double; otherwise
+    the document owner revises that evidence (spine, "Scope changes"). Either way, show the
+    reported usage, the reservations and any unresolved reservation.
+  - Done when: the Go half of X-46 is reached: "The next request is rejected before dispatch; a
+    terminal reason is visible and the ledger does not record an unaccounted call." (demo beat 8;
+    the vertical slice's "one limit-triggered stop").
+  - Tests: the scenario test counts dispatches against reservation and usage rows, checks the stop
+    reason and that no request left Go after the limit; with bounded retries adopted, each retry has
+    its own reservation and usage row. The X-24 command.
+  - Report: "Live demonstration storyboard and proof checks" (beat 8); "Threat model limits and
+    unresolved design choices" (smallest credible vertical slice); "Mapping the proposal to the
+    Goldman Sachs challenge" (Unpredictable costs)
+  - Blocked by: `model call retries` (the retry part only)
+
+### Implementer 4 (enforcement)
+
+- [ ] **GO-43 · Freeze the exact action for review**
+  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: A · Size: S (estimate 3-5 h)
+  - Depends on: GO-12, GO-15, GO-33 · Needs: X-09, X-39 · Provides: nothing
+  - Paths: a new package for the approval manager, named at M0 by its owner
+  - Work: Before requesting review, store "the tool, canonical arguments, recipient, affected
+    resources, relevant versions, exact outbound content, passport reference, policy version and
+    expiry", with the content `queue_report` renders and its digest, as the `exact reviewed
+material` outcome says: "Freeze the payload, or bind its source records to versions and require
+    a new proposal when they change." The exact content goes to restricted review storage, never
+    into general events.
+  - Done when: the stored action holds "the exact material reviewed" and a later change to any
+    material field is detectable (MVP requirement Exact-action approval: "Bind review to immutable
+    arguments, content, record versions, expiry, and a single action").
+  - Tests: database-backed: the frozen record holds every listed field; a change to a source invoice
+    after freezing is detected by the version comparison the outcome defines; the run's general
+    events hold no review content. The X-24 command.
+  - Report: "Exact action approval versioning and execution rechecks"; "Users operating model and
+    proposed user journeys" (Journey 2 review an exact outbound effect)
+  - Blocked by: `exact reviewed material`; `record versions`
+
+- [ ] **GO-44 · Accept the approval decision through the internal command**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: GO-21, GO-43 · Needs: X-10, X-13, X-18, X-39 · Provides: X-40
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`; the approval
+    manager package from GO-43
+  - Work: Serve the approval command named at M0, behind GO-21. It identifies the stored action and
+    carries the decision only. Go checks the reviewer's authority for this action from trusted
+    records ("A signed user identifier alone is insufficient"), the action's integrity and its
+    expiry. Approve stores the grant and enqueues the original action in one transaction; reject
+    closes the approval and continues on the blocked-action path (GO-11); an undecided approval
+    closes as expired at its expiry (GO-40 provides the trigger while no worker holds the job). A
+    replacement is a new bounded proposal, never a reuse of the closed grant, and an approval never
+    turns a denied resource or destination into an allowed one.
+  - Done when: X-40 is reached: "Go checks reviewer authority, action integrity and expiry, and
+    stores the grant and the continuation in one transaction" (report: "When the reviewer approves,
+    Go checks the reviewer's authority and persists the decision with a durable continuation").
+  - Tests: a non-reviewer, a reviewer of another organization, an expired approval, an altered
+    action and a body that carries a payload are each rejected and store no grant; an approval
+    writes the grant and the continuation together or neither; a decision on a closed approval
+    fails. `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Exact action approval versioning and execution rechecks"; "Illustrative passport and
+    interface contracts" (Proposed browser and runtime operations); "Users operating model and
+    proposed user journeys" (Journey 2 review an exact outbound effect)
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+
+- [ ] **GO-45 · Recheck before execution and claim the attempt in one transaction**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: GO-16, GO-40, GO-44 · Needs: X-39 · Provides: nothing
+  - Paths: the executor package from GO-16
+  - Work: Immediately before executing an allowed or approved action, recheck its integrity (the
+    stored action against its digest), resource versions, run cancellation, expiry and
+    preconditions. A failed recheck records a blocked action with its reason (`action_changed`,
+    `resource_version_changed`, `approval_expired` or `run_cancelled` in the proposed vocabulary;
+    X-13 governs), executes nothing and hands the action to the blocked-action path (GO-11), where
+    GO-29 adds the bounded correction feedback. Then, in one short transaction, reserve the tool
+    allowance, claim the attempt and validate the bound grant, consuming a new approval once per
+    action. Current revocations join the recheck in GO-52.
+  - Done when: the M3 exit holds on the Go side, "The reviewed action executes once; changed content
+    and depleted allowance cannot dispatch an operation." ("An atomic execution claim consumes the
+    approval once.")
+  - Tests: database-backed: a changed digest, a changed resource version, an expired grant and a
+    cancelled run each execute nothing; an exhausted tool allowance stops the run before the
+    adapter; a consumed grant cannot be consumed again. The X-24 command, also with `-race`.
+  - Report: "Exact action approval versioning and execution rechecks"; "Architecture and chart
+    reading guide" (Figure 7); "Relative implementation milestones and critical dependencies" (Hours
+    10-14)
+  - Blocked by: `record versions`
+
+- [ ] **GO-46 · Prove approval integrity**
+  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-45 · Needs: X-16, X-34 · Provides: X-45
+  - Paths: none (scenario tests in the packages above)
+  - Work: After an approval, change the content, the recipient or a source record version, and try
+    an expired approval; capture each outcome and the outbox state. Also show that an approval
+    cannot enlarge the passport.
+  - Done when: X-45 is reached, Approval integrity: "Tampered proposal outcome and no matching
+    business effect." (acceptance evidence: "Edited and expired proposals do not execute under the
+    original grant.")
+  - Tests: one scenario test per tampering, asserting the denial reason, no outbox row and the
+    original grant unconsumed or closed. The X-24 command.
+  - Report: "Validation plan and evidence matrix" (critical check Approval integrity); "Threat model
+    limits and unresolved design choices" ("Verify that approval cannot enlarge the passport and
+    changed content requires new review"); "Illustrative invoice scenario and future domain
+    adaptations" (Scene 3 precise human review)
+  - Blocked by: nothing
+
+### Implementer 5 (tool adapters)
+
+- [ ] **GO-47 · Prove the legitimate task on the Go side**
+  - Owner: Implementer 5 (data and integration) with Implementers 3 and 4 · Tier: A ·
+    Size: S (estimate 1-2 h)
+  - Depends on: GO-27, GO-40, GO-45 · Needs: X-16, X-34 · Provides: X-44
+  - Paths: none (a scenario test in the packages above)
+  - Work: Run the full reconciliation through the approval to the queued report, once with the
+    decision 6 model and once with a labelled provider test double, and capture the report
+    references, the discrepancy, the single outbox row and the completed run's events.
+  - Done when: the Go half of X-44 is reached, Legitimate task: "Report references, expected
+    discrepancy, one outbox row, and completed run events."
+  - Tests: the scenario test asserts exactly one outbox row with the frozen content and the trusted
+    recipient, and the completed run's ordered events. The X-24 command; one live run, quoted.
+  - Report: "Validation plan and evidence matrix" (critical check Legitimate task); "Live
+    demonstration storyboard and proof checks" (beat 7)
+  - Blocked by: nothing
+
+### Owner recorded in SH-07 (modules the report's team table does not name)
+
+- [ ] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
+  - Owner: the internal API owner recorded in SH-07, with Implementer 4 · Tier: A ·
+    Size: S (estimate 1-2 h)
+  - Depends on: SH-05, GO-21, GO-43 · Needs: X-09 · Provides: X-41
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
+  - Work: Only if SH-05 and `review payload read` choose a private Go endpoint: return the frozen
+    action's recipient, rendered content, referenced report and version, and reason for review,
+    only to a verified reviewer of the run's organization. If they choose the view, this task
+    becomes "Dropped: the read path chose the review view (SH-27)".
+  - Done when: X-41 is reached through Go, the exact review payload "readable by authorized reviewers
+    only" ("Review payloads need their own access rules").
+  - Tests: a non-reviewer and a reviewer of another organization get the rejection envelope and no
+    content; the returned content equals the frozen content byte for byte.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
+    second disclosure channel); "Users operating model and proposed user journeys" (Journey 2 review
+    an exact outbound effect)
+  - Blocked by: `read path`; `review payload read`; `Go package owners`
+
+## M4: hours 14-18
+
+- **Team focus (report).** "Exercise concurrency and waiting-state recovery; inspect context and
+  safe events; finish reset and deployment procedures."
+- **Exit condition (report).** "Critical checks have recorded outcomes, and the team can reset
+  fixtures and repeat the workflow."
+- **Sync points needed by the end (spine):** X-02 and X-47 to X-57. This side provides X-51, X-52,
+  X-54 and X-57 and its halves of X-50, X-55 and X-56; its half of X-53 came with GO-39. The
+  optional X-60 (Tier C) gets its Go half here (GO-60), only if events stream from Go. SH-31
+  records the outcomes.
+
+### Implementer 3 (agent runtime)
+
+- [ ] **GO-49 · Recover expired leases without replaying dispatched work**
+  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: M (estimate 3-6 h)
+  - Depends on: GO-02, GO-39, GO-40, GO-45 · Needs: X-24, X-39 · Provides: X-54
+  - Paths: the worker package from GO-08
+  - Work: Implement GO-02's outcome. A worker that takes over an expired lease reads the
+    identifiable dispatched attempts and continues without repeating a completed effect:
+    "Successful actions must not be re-executed merely because a response was lost." A waiting run
+    survives the restart and resumes its original stored action.
+  - Done when: X-54 is reached, Waiting-state restart: "State before/after restart and exactly one
+    resulting effect." (acceptance evidence: "A worker restart preserves an approval wait and does
+    not replay a successful operation.")
+  - Tests: database-backed, stopping the worker at each step boundary (after a reservation, after a
+    dispatch, after an effect commits, during an approval wait) and starting a new one: each run
+    ends with exactly one effect per action and no unaccounted dispatch; a run stopped by its limit,
+    a cancelled run, a run with an unresolved reservation and a run in the attention state keep
+    their state and recorded reason across the restart. The X-24 command.
+  - Report: "Durable state idempotency audit and uncertain outcomes"; "Validation plan and evidence
+    matrix" (critical check Waiting-state restart); "Functional requirements MVP boundary and
+    deferred scope" (Durable execution)
+  - Blocked by: `dispatched attempts`
+
+- [ ] **GO-50 · Prove budget concurrency**
+  - Owner: Implementer 3 (agent runtime) with Implementer 4 · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-39, GO-45 · Needs: X-24, X-34, X-39 · Provides: X-52
+  - Paths: none (concurrency tests in the packages above)
+  - Work: Race model reservations and tool reservations against one remaining allowance and capture
+    the reservation and usage rows.
+  - Done when: X-52 is reached, Budget concurrency: "Reservation and usage rows with reconciled
+    totals and denied competing request." (acceptance evidence: "Competing requests cannot each
+    spend the same remaining allowance.")
+  - Tests: concurrent reservation tests with `go test -race ./...` through the X-24 command: of the
+    competing requests only those the allowance covers succeed, the others are denied, and the
+    totals reconcile.
+  - Report: "Validation plan and evidence matrix" (critical check Budget concurrency); "Atomic
+    allowances hard limits and estimated cost"; "Threat model limits and unresolved design choices"
+    ("Verify that two concurrent attempts cannot consume one approval or allowance twice")
+  - Blocked by: nothing
+
+- [ ] **GO-51 · Prove that cancellation and expiry stop dispatch, also after a review wait**
+  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: S (estimate 1-2 h)
+  - Depends on: GO-41, GO-45, GO-52 · Needs: X-24, X-34 · Provides: X-55
+  - Paths: none (scenario tests in the packages above)
+  - Work: Cancel a running run, cancel a run waiting for approval, let a run pass its expiry, and
+    revoke authority during a review wait (GO-52); capture the timestamps, the denials and the
+    dispatch records.
+  - Done when: the Go half of X-55 is reached, Cancellation and expiry: "Cancellation/expiry
+    timestamp, subsequent denial, and dispatch records." (acceptance evidence: "Future dispatches
+    stop while committed effects remain correctly recorded.")
+  - Tests: scenario tests asserting no model request or tool execution after the applicable check,
+    and committed effects unchanged. The X-24 command.
+  - Report: "Validation plan and evidence matrix" (critical check Cancellation and expiry); "Threat
+    model limits and unresolved design choices" ("Verify that cancellation and revocation prevent
+    future dispatch after a review wait"); "Functional requirements MVP boundary and deferred scope"
+    (Cancellation and revocation)
+  - Blocked by: nothing
+
+### Implementer 4 (enforcement)
+
+- [ ] **GO-52 · Check current revocations before dispatch and before execution**
+  - Owner: Implementer 4 (enforcement) with Implementer 3 · Tier: B · Size: S (estimate 2-3 h)
+  - Depends on: GO-11, GO-45 · Needs: X-35, X-47 · Provides: nothing
+  - Paths: the enforcement package from GO-12; the worker package from GO-08
+  - Work: Read the current revocation records NestJS writes in `app`, as the `revocation reads`
+    outcome defines, before every model dispatch and in the execution recheck. An unreadable
+    revocation source stops dispatch. The passport and its policy version stay unchanged and
+    available to explain the run, and revocation stays effective while a run waits for review.
+  - Done when: "Historical versions explain why the run was admitted, while revocation prevents
+    future effects when authority is withdrawn", and MVP requirement Cancellation and revocation
+    holds: "Observe current revocations and cancellation before new execution."
+  - Tests: database-backed: a revocation written during an approval wait blocks the resumed action;
+    a revocation unrelated to the run has no effect on it; a failed revocation read dispatches
+    nothing; the stored passport is unchanged. The X-24 command.
+  - Report: "Exact action approval versioning and execution rechecks" (Versioned policy and current
+    revocation); "Trusted authority and passport invariants"; "Threat model limits and unresolved
+    design choices" ("Current revocation requires a single owner and reliable reads")
+  - Blocked by: `revocation reads`; `decision 2 in docs/product/README.md`
+
+- [ ] **GO-53 · Handle known failures, safe retries and unknown outcomes**
+  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: B · Size: S (estimate 2-4 h)
+  - Depends on: GO-07, GO-45 · Needs: X-11, X-39 · Provides: nothing
+  - Paths: the executor package from GO-16; the adapter package from GO-17
+  - Work: Classify each execution as succeeded, failed with a known outcome, or uncertain (Figure
+    8). A known failure records its outcome and settles the allowance; it is retried only when GO-07
+    marks the operation known-safe and limits remain, with the same frozen action and its consumed
+    grant after fresh checks, never under a new identifier; otherwise the run fails. An uncertain
+    outcome is persisted as unknown and pauses the run for operator attention; it is never returned
+    to the queue, and "the adapter must not invent exactly-once behavior from a local status field".
+    The report names no reconciliation operation beyond this state, which is recorded as a
+    limitation in GO-61.
+  - Done when: MVP requirement Safe outcomes and retries holds, "Use stable action identifiers;
+    retry only known-safe operations; reconcile unknown effects", with "A repeated request does not
+    create a second outbox message; uncertainty pauses the run."
+  - Tests: with adapters forced to fail: a known-safe failure retries under the same action
+    identifier and still yields one outbox row; an unsafe failure fails the run; an uncertain
+    outcome sets the attention state and dispatches nothing further; each retry consumes allowance.
+    `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Report: "Durable state idempotency audit and uncertain outcomes"; "Architecture and chart
+    reading guide" (Figure 8); "Functional requirements MVP boundary and deferred scope" (Safe
+    outcomes and retries)
+  - Blocked by: nothing
+
+- [ ] **GO-54 · Prove approval replay under concurrent requests**
+  - Owner: Implementer 4 (enforcement) · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-44, GO-45 · Needs: X-24, X-34 · Provides: X-51
+  - Paths: none (concurrency tests in the packages above)
+  - Work: Send concurrent approval decisions and concurrent execution attempts for one approved
+    action, and capture the results, the grant and the outbox.
+  - Done when: X-51 is reached, Approval replay: "Concurrent request results, one consumed grant,
+    and one outbox row." ("Verify that blocked operations create no synthetic outbox effect and
+    successful retries do not duplicate it.")
+  - Tests: concurrency tests with `go test -race ./...` through the X-24 command: one grant is
+    consumed and one outbox row exists however many requests race.
+  - Report: "Validation plan and evidence matrix" (critical check Approval replay); "Threat model
+    limits and unresolved design choices" (Verification priorities)
+  - Blocked by: nothing
+
+- [ ] **GO-55 · Prove the database execution transaction with fault injection**
+  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-34, GO-45 · Needs: X-24, X-35 · Provides: X-57
+  - Paths: none (fault-injection tests in the packages above)
+  - Work: Inject failures between the effect, the completion record and the event of
+    `create_report` and `queue_report`, on the connection SH-06 settled, and capture the action and
+    business state after each.
+  - Done when: X-57 is reached, Database execution transaction: "Fault-injection outcome and
+    consistent action/business state." (target: "Prototype business effect and successful execution
+    record commit together or neither commits.")
+  - Tests: fault-injection tests through the X-24 command: after each injected failure either all
+    three rows exist or none does.
+  - Report: "Validation plan and evidence matrix" (critical check Database execution transaction);
+    "Durable state idempotency audit and uncertain outcomes"
+  - Blocked by: `decision 2 in docs/product/README.md`
+
+### Implementer 5 (tool adapters)
+
+- [ ] **GO-56 · Inspect model context, events and output channels for protected fields**
+  - Owner: Implementer 5 (data and integration) with the data-minimization owner recorded in SH-07
+    · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-22, GO-23, GO-35, GO-47 · Needs: X-06, X-12, X-34 · Provides: X-50
+  - Paths: none (inspection tests in the packages above)
+  - Work: For a fixture run that reaches the queued report (the GO-47 scenario), serialize every
+    tool result, the model request fixture, the event payloads, the stored report, the persisted
+    final result and the simulated outbox row, and search them for each protected value the X-06
+    field rules name. The outbox row may hold only the fields the registered template renders, and
+    a protected value only where the X-06 field rules allow it in outbound content (such as the
+    recipient `queue_report` resolves inside the adapter, GO-35). Record what the check covers and
+    what it does not ("without claiming universal detection of personally identifiable information
+    or encoded disclosure"): a search for literal values does not find a value the model transforms
+    or encodes "in an allowed channel".
+  - Done when: the Go half of X-50 is reached, Field minimization: "Inspected serialized tool
+    result, model request fixture, and event payload.", and the Go output channels are inspected
+    for MVP requirement Data minimization ("Inspect model context and output channels for the
+    defined protected fields.") and for Sensitive data exposure ("Inspect what reaches the model,
+    the simulated outbox, and the general activity feed."; the activity feed is the other side's
+    part of X-50).
+  - Tests: the inspection test fails if any protected value appears in a model-facing result, a
+    model request or a safe event; if the stored report or the persisted final result holds a
+    protected value the X-06 field rules do not allow there; or if the outbox row holds a field the
+    registered template does not render or a protected value the field rules do not allow in
+    outbound content. The X-24 command.
+  - Report: "Validation plan and evidence matrix" (critical check Field minimization); "Risk
+    register and scope controls" (Data leakage through secondary views); "The enforcement loop and
+    data minimization"; "Functional requirements MVP boundary and deferred scope" (Data
+    minimization); "Mapping the proposal to the Goldman Sachs challenge" (Sensitive data exposure)
+  - Blocked by: `Go package owners`
+
+### Owner recorded in SH-07 (modules the report's team table does not name)
+
+- [ ] **GO-57 · Prove organization access at the internal boundary**
+  - Owner: the internal API owner recorded in SH-07 · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-14, GO-21, GO-41, GO-44 · Needs: X-22, X-24, X-34 · Provides: X-56
+  - Paths: `services/gateway/internal/httpserver/server_test.go`
+  - Work: Call every internal command, and every Go read if the read path chose Go endpoints,
+    directly with a valid service identity and the second organization's operator context against
+    the first organization's run, action and resources, and capture the rejections and the
+    unchanged runtime state.
+  - Done when: the Go half of X-56 is reached, Organization access: "Rejected read/command requests
+    and absence of runtime mutation." (target: "Another organization cannot inspect the run, approve
+    its action, or claim its resources.")
+  - Tests: internal-boundary tests through the X-24 command: each cross-organization command and
+    read is rejected, and the runtime rows are identical before and after.
+  - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
+    and authorization through the public path and the internal service boundary")
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`;
+    `Go package owners`
+
+- [ ] **GO-60 · Optional: stream events from Go, if the read path chooses Go endpoints**
+  - Owner: the events owner recorded in SH-07 · Tier: C · Size: S (estimate 1-3 h)
+  - Depends on: GO-24 · Needs: X-12 · Provides: X-60
+  - Paths: `services/gateway/internal/httpserver/server.go`,
+    `services/gateway/internal/httpserver/server_test.go`
+  - Work: Only after authenticated polling works, and only if events stream from Go (SH-05): serve
+    the sanitized events as server-sent events. The gateway's 30 s write timeout ends any long-lived
+    response, so the stream needs a bounded lifetime and a reconnect from the cursor. Otherwise this
+    task becomes "Dropped: events do not stream from Go".
+  - Done when: the Go half of X-60 is reached: an "Authorized subscription; no unrestricted raw
+    payload stream" carries the same sanitized events as the cursor read.
+  - Tests: a stream of another organization's run is rejected; the streamed events equal the cursor
+    read; a reconnect from the last cursor loses and repeats nothing.
+    `pnpm --filter gateway run test`.
+  - Report: "Relative implementation milestones and critical dependencies" ("use authenticated
+    polling before adding SSE if necessary"); "Illustrative passport and interface contracts"
+    (Proposed browser and runtime operations)
+  - Blocked by: `read path`; `decision 3 in docs/product/README.md`; `Go package owners`
+
+## M5: hours 18-21
+
+- **Team focus (report).** "Polish comprehension and error states; rehearse the complete story;
+  capture evidence from the final build."
+- **Exit condition (report).** "A reviewer can understand the task boundary, attempted action,
+  decision, actual effect, and limitation without narration filling gaps."
+- **Sync points needed by the end (spine):** X-58 and X-59; X-61 is optional (Tier C).
+  SH-32 recaptures the evidence from the final build and SH-33 runs the rehearsal; the Go owners
+  rerun their scenario tests against that build.
+
+### Implementer 3 (agent runtime)
+
+- [ ] **GO-58 · Make every Go stop, failure and denial state readable**
+  - Owner: Implementer 3 (agent runtime) with Implementer 4 · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-29, GO-42, GO-53 · Needs: X-13, X-16 · Provides: nothing
+  - Paths: `services/gateway/internal/httpserver/errors.go`; the packages above
+  - Work: Check every reason code and terminal state Go emits against the storyboard (X-16): each
+    carries its X-13 safe operator message, a provider failure records the actual failure state
+    rather than a generic error, and nothing sensitive reaches general error text. Fix what the
+    rehearsal (SH-33) shows to be unclear.
+  - Done when: the Go states support the M5 exit, "A reviewer can understand the task boundary,
+    attempted action, decision, actual effect, and limitation without narration filling gaps.", and
+    "On provider failure, show the actual failure state" holds for Go's records.
+  - Tests: a table test that every emitted reason code has a safe message and a fixture value; a
+    provider-failure test that records the actual failure state. `pnpm --filter gateway run test`.
+  - Report: "Relative implementation milestones and critical dependencies" (Hours 18-21); "Live
+    demonstration storyboard and proof checks" (Reliable demonstrations without invented
+    behavior); "Illustrative passport and interface contracts" (Decision and error semantics)
+  - Blocked by: nothing
+
+### Implementer 4 (enforcement)
+
+- [ ] **GO-59 · Optional: rehearse an unknown outcome**
+  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: C · Size: S (estimate 1-2 h)
+  - Depends on: GO-53 · Needs: X-34 · Provides: X-61
+  - Paths: none (a labelled rehearsal in the packages above)
+  - Work: Simulate an unknown external result for one action, labelled as a simulation, and show the
+    action placed in the attention state instead of being repeated.
+  - Done when: X-61 is reached: the rehearsal "would simulate an unknown external result, placing the
+    action into an attention-required state instead of automatically repeating an effect that might
+    already have succeeded."
+  - Tests: the rehearsal test asserts the attention state and no second dispatch. The X-24 command.
+  - Report: "Illustrative invoice scenario and future domain adaptations" (Scene 4 cost limits and
+    uncertain execution)
+  - Blocked by: nothing
+
+## M6: hours 21-24
+
+- **Team focus (report).** "Freeze features, fix critical faults, finalize documentation and
+  artifacts, and submit using the confirmed organizer requirements."
+- **Exit condition (report).** "Submission checklist is complete; the demonstration matches the
+  submitted build and its documented limitations."
+- **Sync points needed by the end (spine):** X-62. The Go owners take part in the feature freeze and
+  the critical-fault fixes (SH-34): "If a critical check fails, either fix it or narrow the
+  supported behavior and the claims."
+
+### All Go owners
+
+- [ ] **GO-61 · Supply the Go technical handoff text**
+  - Owner: Implementers 3, 4 and 5 with the owners recorded in SH-07 · Tier: B ·
+    Size: S (estimate 1-2 h)
+  - Depends on: SH-34 · Needs: X-02, X-48, X-49, X-59 · Provides: X-62
+  - Paths: `services/gateway/README.md`, `docs/architecture.md` (text supplied to integration)
+  - Work: Write the Go part of "setup instructions, architecture and boundaries, synthetic-data
+    reset, tool contracts, policy fixture, known limitations, dependency disclosures where required,
+    and the critical-check outcomes": the packages and their owners, the internal operations, the
+    four tools' arguments and results, the decision and reason vocabulary, the accounting rule, the
+    host and container setup checked against X-02 and X-49, and the known limitations, among them
+    the attention state without a reconciliation operation, the simulated outbox, and that "The
+    proposed audit stream is application evidence" and not tamper-proof.
+  - Done when: X-62 is reached for the Go area and matches the build identified in X-59, so that
+    "the demonstration matches the submitted build and its documented limitations".
+  - Tests: a teammate who did not write the Go code follows the Go setup text on a clean checkout
+    and runs the go checks.
+  - Report: "Research documentation and submission workflow" (From requirements to verified
+    presentation); "Durable state idempotency audit and uncertain outcomes" (Evidence without
+    creating a second disclosure channel)
+  - Blocked by: nothing
+
+## Coverage
+
+### (a) Critical checks, MVP requirements and the Tier A basis
+
+Critical checks ("Validation plan and evidence matrix", "Proposed critical checks"). Every one of
+the twelve involves the Go side. SH-28 and SH-31 record the outcomes.
+
+| Critical check                 | Go tasks that make it pass                                                  | Go evidence    | Recorded by |
+| ------------------------------ | --------------------------------------------------------------------------- | -------------- | ----------- |
+| Legitimate task                | GO-13, GO-26, GO-32, GO-33, GO-34, GO-43, GO-44, GO-45, GO-47               | X-44 (Go half) | SH-28       |
+| Resource boundary              | GO-15, GO-17, GO-28, GO-31, GO-30                                           | X-37           | SH-28       |
+| Destination boundary           | GO-13, GO-28, GO-33, GO-30                                                  | X-38           | SH-28       |
+| Field minimization             | GO-07, GO-22, GO-23, GO-35, GO-56                                           | X-50 (Go half) | SH-31       |
+| Approval integrity             | GO-12, GO-43, GO-45, GO-46                                                  | X-45           | SH-28       |
+| Approval replay                | GO-33, GO-34, GO-44, GO-45, GO-54                                           | X-51           | SH-31       |
+| Budget concurrency             | GO-39, GO-45, GO-50                                                         | X-52           | SH-31       |
+| Unknown usage                  | GO-39                                                                       | X-53 (Go half) | SH-31       |
+| Waiting-state restart          | GO-02, GO-08, GO-40, GO-49                                                  | X-54           | SH-31       |
+| Cancellation and expiry        | GO-11, GO-41, GO-45, GO-51                                                  | X-55 (Go half) | SH-31       |
+| Organization access            | GO-14, GO-21, GO-41, GO-44, GO-57; GO-24 and GO-48 if the read path uses Go | X-56 (Go half) | SH-31       |
+| Database execution transaction | GO-34, GO-55                                                                | X-57           | SH-31       |
+
+The storyboard proofs this side also provides: the permitted reconciliation of beat 3 and the M2
+exit (GO-23, GO-26, GO-27; X-63, observed in SH-36), the continuation of beat 6 in the same run
+(GO-29, GO-36; X-67, recorded in SH-28) and the limit-triggered stop of beat 8 (GO-39, GO-45,
+GO-42; X-46, Go half, recorded in SH-28).
+
+MVP requirements ("Functional requirements MVP boundary and deferred scope", "Proposed MVP
+requirements and acceptance evidence"). Every one of the ten involves the Go side.
+
+| Requirement                 | Go tasks                                               | Acceptance evidence (report)                                                              |
+| --------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Trusted admission           | GO-13, GO-14, GO-21                                    | "Reject an unauthorized task and prevent passport creation."                              |
+| Task-scoped actions         | GO-15, GO-17, GO-28, GO-31, GO-32, GO-33, GO-30        | "A forbidden action leaves no report or outbox effect."                                   |
+| Exact-action approval       | GO-04, GO-12, GO-40, GO-43, GO-44, GO-45, GO-46        | "Edited and expired proposals do not execute under the original grant."                   |
+| Durable execution           | GO-08, GO-09, GO-19, GO-40, GO-49                      | "A worker restart preserves an approval wait and does not replay a successful operation." |
+| Bounded usage               | GO-10, GO-39, GO-45, GO-50                             | "Competing requests cannot each spend the same remaining allowance."                      |
+| Safe outcomes and retries   | GO-07, GO-16, GO-33, GO-34, GO-53, GO-54               | "A repeated request does not create a second outbox message; uncertainty pauses the run." |
+| Data minimization           | GO-23, GO-26, GO-32, GO-33, GO-35, GO-56               | "Inspect model context and output channels for the defined protected fields."             |
+| Authorized visibility       | GO-22, GO-57; GO-24 if the read path uses Go endpoints | "A user outside the organization cannot read another organization's run or approval."     |
+| Bounded recovery            | GO-29                                                  | "A recoverable branch continues; repeated forbidden proposals terminate at the limit."    |
+| Cancellation and revocation | GO-11, GO-41, GO-52, GO-51                             | "Future dispatches stop while committed effects remain correctly recorded."               |
+
+Verification priorities ("Threat model limits and unresolved design choices"):
+
+| Verification priority                                                                                                            | Go tasks                          |
+| -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| "Verify that scope rejection is explicit and the revised request must be resubmitted."                                           | GO-13, GO-14                      |
+| "Verify that every adapter checks arguments and resource relationships, not only the tool name."                                 | GO-17, GO-31, GO-32, GO-33, GO-30 |
+| "Verify that approval cannot enlarge the passport and changed content requires new review."                                      | GO-44, GO-45, GO-46               |
+| "Verify that two concurrent attempts cannot consume one approval or allowance twice."                                            | GO-50, GO-54                      |
+| "Verify that cancellation and revocation prevent future dispatch after a review wait."                                           | GO-51, GO-52                      |
+| "Verify that blocked operations create no synthetic outbox effect and successful retries do not duplicate it."                   | GO-30, GO-53, GO-54               |
+| "Verify that spending uncertainty, simulated effects and unimplemented features remain visible in the report and demonstration." | GO-33, GO-36, GO-39, GO-61        |
+
+The Tier A basis: the smallest credible vertical slice and the four protections kept intact under
+time pressure.
+
+| Element (report)                       | Go tasks                                         |
+| -------------------------------------- | ------------------------------------------------ |
+| One authorized invoice/report workflow | GO-47, through the chain GO-13 to GO-45 it names |
+| One denied out-of-scope operation      | GO-30, GO-36                                     |
+| One exact-action approval              | GO-43, GO-44, GO-45, GO-46                       |
+| One limit-triggered stop               | GO-42                                            |
+| Service-side authorization             | GO-13, GO-21, GO-44                              |
+| Scope enforcement                      | GO-15, GO-17, GO-28, GO-31, GO-32, GO-33         |
+| Pre-dispatch limits                    | GO-11, GO-39, GO-45                              |
+| Exact-action approval                  | GO-43, GO-44, GO-45                              |
+
+Tool argument boundaries ("Proposed tool argument boundaries") and passport field groups ("Passport
+fields and their purpose"):
+
+| Item                                                                  | Go tasks                               |
+| --------------------------------------------------------------------- | -------------------------------------- |
+| `read_invoice` (`invoice_id`)                                         | GO-17; the gate in GO-15               |
+| `read_vendor` (`vendor_id`)                                           | GO-31, GO-35; the gate in GO-28        |
+| `create_report` (authorized invoice references, registered template)  | GO-32; the gate in GO-28               |
+| `queue_report` (stored report reference, trusted recipient reference) | GO-33, GO-43, GO-45; the gate in GO-28 |
+| Identity                                                              | GO-13, GO-21                           |
+| Versions                                                              | GO-13, GO-52                           |
+| Capabilities                                                          | GO-13, GO-15                           |
+| Data and destinations                                                 | GO-13, GO-23, GO-28, GO-35             |
+| Limits                                                                | GO-11, GO-13, GO-29, GO-39, GO-45      |
+| Lifetime                                                              | GO-11, GO-13, GO-40, GO-45, GO-52      |
+
+Internal operations NestJS calls (spine, "Internal runtime operations"):
+
+| Operation                                       | Go task                                                                   | Sync point |
+| ----------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
+| `POST /internal/runs`                           | GO-14                                                                     | X-28       |
+| Cancel command (named at M0)                    | GO-41                                                                     | X-42       |
+| Approval decision command (named at M0)         | GO-44                                                                     | X-40       |
+| Run and usage view; sanitized events by cursor  | GO-24, if the read path uses Go                                           | X-29, X-30 |
+| Exact review payload                            | GO-48, if the read path uses Go                                           | X-41       |
+| Stored report and registered template           | GO-37, if `stored report read` uses Go                                    | X-64       |
+| Task form options                               | GO-25, if `form options` uses Go                                          | X-25       |
+| Events as server-sent events (optional, Tier C) | GO-60, if events stream from Go                                           | X-60       |
+| Replay trigger through NestJS (conditional)     | none until `replay entry` chooses it; the replay owner adds the task then | X-65       |
+
+Sync points this side provides, each in or before the milestone that needs it (spine, "Sync
+points"):
+
+| Needed by       | Sync point and Go task                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------- |
+| M1              | X-15 GO-18 and GO-62; X-25 GO-25 (conditional); X-27 GO-21; X-28 GO-14; X-29 and X-30 GO-24 (conditional); X-32 GO-09 |
+| M2              | X-36 GO-36; X-37 and X-38 GO-30; X-63 GO-27; X-64 GO-37 (conditional)                                                 |
+| M3              | X-40 GO-44; X-41 GO-48 (conditional); X-42 GO-41; X-44 GO-47; X-45 GO-46; X-46 GO-42; X-67 GO-29 (provided at M2)     |
+| M4              | X-50 GO-56; X-51 GO-54; X-52 GO-50; X-53 GO-39 (provided at M3); X-54 GO-49; X-55 GO-51; X-56 GO-57; X-57 GO-55       |
+| M6              | X-62 GO-61                                                                                                            |
+| None (optional) | X-60 GO-60; X-61 GO-59                                                                                                |
+
+**Totals (estimates, not a schedule).** 62 tasks; their ranges add up to 110-222 h, 166 h at the
+midpoints (Tier A 128.5 h, Tier B 34 h, Tier C 3.5 h). That includes 5 h of decide tasks and 7 h of
+conditional endpoint tasks of which only one outcome survives; without them and Tier C it is
+150.5 h. For comparison, the per-row medians of the four estimates' Go midpoints add up to 136.8 h,
+and the four methods' Go midpoints run from 68.25 h to 141.5 h (the estimates are not in the
+repository). Per milestone at the midpoints: P 5 h, M0 4.5 h, M1 64 h, M2 33 h, M3 31 h, M4 23.5 h,
+M5 3.5 h, M6 1.5 h. The spine's capacity observation ("Sides and people", "Effort split") applies
+here too: under one estimate's own assumption of 18 to 20 focused hours per implementer (not a
+report figure), the Go side's 2.3 to 2.5 people have about 41-50 h in the window. Tier A alone is
+87-170 h (128.5 h at the midpoints), all of it in P to M3, and M1 holds 43-85 h, of which 42-82 h
+is Tier A, in a 4-hour window. Removing every Tier B and Tier C task does not close the gap: the
+tiers set the order of cuts but do not make the work fit, and narrowing inside Tier A is the team
+decision described in the spine's "Tiers", recorded through its "Scope changes".
+
+### (b) Diagram components and transitions
+
+Diagram 1 (`docs/product/task-passport-architecture.svg`, Figures 1-3): the ten components of the
+GO group and the provider outside it.
+
+| Component                                                                              | Go tasks                                                                                 |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| INTERNAL: Internal API, "Verify service identity and operator context"                 | GO-21; commands GO-14, GO-41, GO-44; conditional reads GO-24, GO-25, GO-37, GO-48; GO-57 |
+| ADMIT: Admission controller, "Issue immutable task passport"                           | GO-13, GO-14                                                                             |
+| RUNNER: Agent worker, "Claim durable jobs and run bounded loop"                        | GO-08, GO-09, GO-11, GO-26, GO-29, GO-40, GO-49                                          |
+| MODEL: Model gateway, "Call limits, token caps and cost reservations"                  | GO-06, GO-10, GO-39                                                                      |
+| GATE: Action gate, "Schema, task scope, data rules and limits"                         | GO-12, GO-15, GO-28, GO-29, GO-52                                                        |
+| APPROVAL: Approval manager, "Exact action, expiry and single use"                      | GO-43, GO-44, GO-45                                                                      |
+| EXEC: Tool executor, "Recheck, reserve and execute by action ID"                       | GO-16, GO-34, GO-45, GO-53                                                               |
+| ADAPTERS: Typed tool adapters (read invoice, read vendor, create report, queue report) | GO-07, GO-17, GO-31, GO-32, GO-33                                                        |
+| FILTER: Data minimization, "Scoped fields and opaque references"                       | GO-23, GO-35, GO-56                                                                      |
+| STATE: Runtime repository, "Jobs, leases, approvals, usage and audit"                  | GO-19, GO-20, GO-22                                                                      |
+| LLM (outside GO): Approved LLM provider, "Credentials held by Go"                      | GO-06, GO-10; X-04                                                                       |
+
+Not diagram components: the labelled replay (GO-05, GO-36) and the Go DTO mirrors (GO-18, GO-62).
+
+Diagram 1 edges that touch the GO group (24 of 32; the other eight stay inside WEB, NEST and
+POSTGRES):
+
+| Edge (label)                                                   | Go tasks                                 | Sync points      |
+| -------------------------------------------------------------- | ---------------------------------------- | ---------------- |
+| FACADE -> INTERNAL ("Private authenticated API")               | GO-21; GO-14, GO-41, GO-44               | X-26, X-27       |
+| INTERNAL -> ADMIT ("Start run")                                | GO-14                                    | X-28             |
+| INTERNAL -> APPROVAL ("Operator decision")                     | GO-44                                    | X-40             |
+| INTERNAL -> STATE ("Cancel or revoke")                         | GO-41 (cancellation); revoke: note below | X-42             |
+| ADMIT -> RUNNER                                                | GO-13, GO-08                             | none             |
+| RUNNER -> MODEL                                                | GO-10                                    | none             |
+| RUNNER -> GATE ("Proposed action")                             | GO-11, GO-15                             | none             |
+| GATE -> EXEC ("Allowed")                                       | GO-16, GO-45                             | none             |
+| GATE -> APPROVAL ("Approval required")                         | GO-15, GO-43                             | none             |
+| APPROVAL -> GATE ("Approved stored action")                    | GO-40, GO-44, GO-45                      | none             |
+| GATE -> RUNNER ("Blocked action and reason")                   | GO-15, GO-11; GO-29 adds correction      | none             |
+| EXEC -> ADAPTERS                                               | GO-16                                    | none             |
+| ADAPTERS -> FILTER ("Tool result")                             | GO-23, GO-35                             | none             |
+| FILTER -> RUNNER                                               | GO-23                                    | none             |
+| RUNNER -> STATE                                                | GO-08, GO-11, GO-19                      | none             |
+| MODEL -> STATE                                                 | GO-10, GO-39                             | none             |
+| GATE -> STATE                                                  | GO-15, GO-22                             | none             |
+| APPROVAL -> STATE                                              | GO-43, GO-44                             | none             |
+| EXEC -> STATE                                                  | GO-16, GO-34                             | none             |
+| ADMIT -> APPDB ("Read authoritative task and policy versions") | GO-13                                    | X-18, X-21, X-35 |
+| GATE -> APPDB ("Read current revocations")                     | GO-52                                    | X-47, X-35       |
+| STATE -> RUNDB ("Owns runtime writes")                         | GO-19, GO-38                             | X-19, X-39, X-35 |
+| ADAPTERS -> DEMODB ("Narrow database permissions")             | GO-17, GO-31, GO-32, GO-33, GO-38        | X-20, X-33, X-35 |
+| MODEL -> LLM ("Governed model requests and responses")         | GO-06, GO-10                             | X-04             |
+
+FEED -> RUNDB ("Read authorized event view") stays outside GO; if the read path chooses Go
+endpoints instead, GO-24 and GO-48 serve those reads.
+
+On this roadmap the only caller of INTERNAL -> STATE is the cancel command (GO-41, X-42), as the
+spine's "Diagram 1 boundary crossings" says. The report: "The diagram's internal cancel-or-revoke
+path should not imply that Go can directly edit every NestJS-owned policy record." Revocation
+writes stay in NestJS (X-47); GO-52 reads them under GATE -> APPDB.
+
+Diagram 2 (`docs/product/task-passport-run-lifecycle.svg`, Figures 4-8): all 51 transitions, grouped
+by the task that covers them.
+
+| Transitions                                                                                                                                     | Go tasks                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| START -> AUTH                                                                                                                                   | none: Next.js + NestJS side (X-31)                          |
+| AUTH -> ADMIT                                                                                                                                   | GO-21, GO-14 (X-26, X-27, X-28)                             |
+| ADMIT -> VALID; VALID -> REJECT; VALID -> QUEUE                                                                                                 | GO-13; GO-14 answers the rejection                          |
+| QUEUE -> CLAIM                                                                                                                                  | GO-08                                                       |
+| CLAIM -> LIVE; LIVE -> STOP; SUCCESS -> LIVE                                                                                                    | GO-11                                                       |
+| LIVE -> MRESERVE; MRESERVE -> MFITS; MFITS -> STOP; MFITS -> MODEL                                                                              | GO-39 (until M3 GO-10 records each dispatch)                |
+| MODEL -> MOK; MOK -> MFAIL; MFAIL -> FAILED; MOK -> USAGE; USAGE -> OUTPUT                                                                      | GO-10; GO-39 settles usage and keeps uncertain reservations |
+| OUTPUT -> FINAL; FINAL -> COMPLETE                                                                                                              | GO-26                                                       |
+| OUTPUT -> STORE; STORE -> POLICY; POLICY -> DECISION; DECISION -> DENY                                                                          | GO-15; GO-28 adds relationships and destinations            |
+| DENY -> CORRECT; CORRECT -> STOP; CORRECT -> LIVE                                                                                               | GO-29                                                       |
+| DECISION -> FREEZE                                                                                                                              | GO-43                                                       |
+| FREEZE -> WAIT; ENQUEUE -> RESUME                                                                                                               | GO-40                                                       |
+| WAIT -> HUMAN                                                                                                                                   | GO-40 (event); GO-48 if the read path uses Go (X-41)        |
+| HUMAN -> APPROVED; APPROVED -> DENY; APPROVED -> ENQUEUE                                                                                        | GO-44 (X-40); GO-40 for an undecided approval's expiry      |
+| APPROVED -> STOP                                                                                                                                | GO-41 (X-42)                                                |
+| DECISION -> RECHECK; RESUME -> RECHECK; RECHECK -> CURRENT; CURRENT -> DENY; CURRENT -> RESERVE; RESERVE -> TFITS; TFITS -> STOP; TFITS -> EXEC | GO-45 (until M3 GO-16); GO-52 adds revocations              |
+| EXEC -> OUTCOME; OUTCOME -> SUCCESS                                                                                                             | GO-16; GO-34 for the demo effects                           |
+| OUTCOME -> TFAIL; TFAIL -> RETRY; RETRY -> FAILED; RETRY -> RECHECK; OUTCOME -> UNKNOWN; UNKNOWN -> ATTENTION                                   | GO-53; GO-59 rehearses UNKNOWN (optional)                   |
+
+### (c) Report items that need no Go task
+
+Two Go-side obligations in the report are constraints rather than work, so no task implements
+them on its own:
+
+- "The modules inside the Go group run in one Go service" and the database groups are schemas in
+  one PostgreSQL instance: constraint 2 above; the schemas are decision 1.
+- One migration history in the TypeORM tooling, which Go consumes without a migration framework of
+  its own: constraint 4 above; the migrations are SH-15, SH-16, SH-17, SH-24, SH-27 and SH-38 in
+  the spine.
+
+During planning on 2026-10-03 the report's Go-side obligations were listed and mapped to the tasks
+in this file. That working list is not kept in the repository; each task's "Report" field names its
+source in the report, and the tables above map the report's checks, requirements, components and
+transitions to tasks.

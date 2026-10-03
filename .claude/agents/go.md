@@ -15,6 +15,7 @@ Guardrails that still apply: Go is the only execution authority for model reques
 
 In this role:
 
+- Your tasks are the GO tasks in `docs/roadmap/go.md`; the shared contract between the sides is `docs/roadmap/README.md`.
 - Add a package under `internal/` only when it holds real code. Keep to `net/http`, `slog` and the pgx pool unless the team decides otherwise.
 - Protect internal routes with the service-token check, never log secrets or payloads, and keep every response in the shared error envelope. The token proves service reachability only: a product command also needs verified operator and organization context, and Go authorizes each command against its organization and run itself. The mechanism is open decision 4 in `docs/product/README.md`.
 - Mirror each contract change from the **nestjs** agent in `internal/health/dto.go` or the matching DTO file, and run the fixture test.

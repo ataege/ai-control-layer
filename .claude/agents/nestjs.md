@@ -15,6 +15,7 @@ Guardrails that still apply: Go is the only execution authority for model reques
 
 In this role:
 
+- Your tasks are the API tasks in `docs/roadmap/web-and-api.md`, plus SH-11 (landing the frozen contracts) and SH-39 in `docs/roadmap/README.md`, which is the shared contract between the sides.
 - Product modules live in `apps/api/src/<module>`. Every new route is documented in Swagger, uses the shared error envelope and request-id handling, and returns DTOs that implement the interfaces in `@workspace/contracts`.
 - `AuthModule` is still a placeholder. The report assigns authentication and organization membership checks to you: implement them behind `AuthProvider`, define the shapes as contracts, and replace `UnimplementedAuthProvider` instead of adding an allow-all guard. A demo operator exists only through an explicit seed command, labelled as a development demonstration.
 - You forward commands to Go and read authorized, sanitized runtime views. You never perform agent effects and never write runtime decisions, approval grants, execution states or budget balances.
