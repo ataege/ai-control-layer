@@ -1,4 +1,4 @@
-import { fetchJson, postJson, FetchJsonResult } from "./fetch-json";
+import { fetchJson, postJson, FetchJsonResult, FetchJsonOptions } from "./fetch-json";
 import type { 
   StartRunRequest, 
   StartRunResponse, 
@@ -112,14 +112,14 @@ export class ProductClient {
     return enforceGuard(result, isTaskFormOptions);
   }
 
-  static async getRun(id: string): Promise<FetchJsonResult<RunView>> {
-    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
+  static async getRun(id: string, options?: FetchJsonOptions): Promise<FetchJsonResult<RunView>> {
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`, options);
     return enforceGuard(result, isRunView);
   }
 
-  static async getRunEvents(id: string, cursor?: string): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
+  static async getRunEvents(id: string, cursor?: string, options?: FetchJsonOptions): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
     const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`);
+    const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`, options);
     return enforceGuard(result, isSanitizedEventsResponse);
   }
 

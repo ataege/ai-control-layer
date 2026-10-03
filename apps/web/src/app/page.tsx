@@ -18,7 +18,7 @@ export default function HomePage() {
           <TaskForm />
         </div>
         <div>
-          <RunTimeline />
+          <RunTimeline events={[]} />
         </div>
       </div>
     </>

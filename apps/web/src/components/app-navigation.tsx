@@ -28,11 +28,19 @@ export function AppNavigation({ children }: Readonly<{ children: React.ReactNode
   React.useEffect(() => {
     if (currentPathname !== "/login") {
       ProductClient.getMe().then((res) => {
-        if (res.ok) setUser(res.data);
-        else setUser(null);
+        if (res.ok) {
+          setUser(res.data);
+        } else {
+          setUser(null);
+          // Redirect to login if unauthenticated on a protected route
+          const isPublic = currentPathname.startsWith("/diagnostics") || currentPathname.startsWith("/components");
+          if (!isPublic) {
+            router.push("/login");
+          }
+        }
       }).catch(() => setUser(null));
     }
-  }, [currentPathname]);
+  }, [currentPathname, router]);
 
   if (currentPathname === "/login") {
     return <main>{children}</main>;
