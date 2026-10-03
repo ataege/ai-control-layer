@@ -493,6 +493,35 @@ rejects unknown or missing keys, unsupported boundaries, a threshold outside 0 t
 revision differs from `signatures.revision`, and a disabled rule the feed does not have. A feed is
 required while `signature_match` is enabled.
 
+### The sample feed (SH-46)
+
+`config/attack-signatures.json` is the sample feed: issuer `task-passport-security`, revision
+`feed_v1`, SHA-256 `c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244` (of the
+committed, prettier-formatted bytes). The import (API-34) stores these bytes as `source_text` with
+this digest as `file_digest`; any other bytes fail `ParseFeed`. There is no signing key: the trust
+decision is the digest pin plus the authenticated import, so the roadmap's "broken signature"
+acceptance case is a copy whose bytes differ from the pinned digest.
+
+| Rule                               | Attack class                    | Pattern                        | Source                                      |
+| ---------------------------------- | ------------------------------- | ------------------------------ | ------------------------------------------- |
+| `prompt_ignore_previous_v1`        | `instruction_redirection`       | `ignore previous instructions` | report 1.2 sample rule                      |
+| `code_exec_python_import_v1`       | `malicious_code_execution`      | `__import__(`                  | S16 (CVE-2023-44467), S17 (CVE-2023-36258)  |
+| `unsafe_deserialization_pickle_v1` | `unsafe_deserialization`        | `pickle.loads(`                | criteria section 4.4; requirements.md D-5   |
+| `model_repo_trust_remote_code_v1`  | `model_repository_supply_chain` | `trust_remote_code=true`       | S15 (Transformers `trust_remote_code` docs) |
+
+All four run at all three boundaries with response `block`. They match text only: the gateway
+downloads no models, loads no model files and deserializes nothing, so the last three show that the
+managed feed can carry rules for these classes and that a judge can disable or add them; they do not
+protect model-loading infrastructure. A paraphrase or a spacing change inside a pattern (for
+example `trust_remote_code = True`) is not matched. The tests pin the file by its digest, check that
+on the shared fixtures only the two corpus cases holding the sample phrase hit, and use inline
+positive texts for the three data-only rules until `fixtures/` carries cases for them.
+
+To change the feed, edit the file, run `pnpm format`, recompute the digest
+(`shasum -a 256 config/attack-signatures.json`), update `committedFeedDigest` in
+`internal/security/feed_file_test.go` and import the new bytes; a new rule set needs a new
+`revision` and the matching `signatures.revision` in `policy.yaml`.
+
 ## Worker and job lease (GO-08)
 
 `internal/worker` claims `runtime.jobs` rows and runs them one at a time (decision 5: PostgreSQL
