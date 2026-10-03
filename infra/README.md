@@ -69,10 +69,11 @@ pnpm stack:down --debug
 
 ## Secrets
 
-`POSTGRES_PASSWORD` and `GATEWAY_SERVICE_TOKEN` are read from the root `.env` (or the real
+`POSTGRES_PASSWORD`, `GATEWAY_SERVICE_TOKEN`, `AUTH_JWT_SECRET` (api only) and
+`OPERATOR_CONTEXT_SIGNING_KEY` (api and gateway) are read from the root `.env` (or the real
 environment) at start time. They are never written into these files or baked into an image, and
 Compose stops with a clear message when one is missing. The `web` container receives neither the
-service token nor any `POSTGRES_*` or `MODEL_*` variable, and `pnpm dev` / `pnpm dev:web` strip the same
+service token, the two signing secrets nor any `POSTGRES_*` or `MODEL_*` variable, and `pnpm dev` / `pnpm dev:web` strip the same
 variables from the environment of the web process on the host. Nested `.env` files (for example
 `apps/web/.env.local`) are excluded from the build context as well.
 

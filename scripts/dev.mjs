@@ -55,10 +55,12 @@ if (selectedServiceNames.some((serviceName) => serviceName !== "gateway")) {
   }
 }
 
-// Mirrors infra/compose.yaml: only the gateway receives the local model settings,
-// and the web app must also never hold the service token or the database credentials.
+// Mirrors infra/compose.yaml: only the gateway receives the local model settings, only the API
+// holds the session signing secret, and the web app holds no server secret at all.
 const GATEWAY_ONLY_VARIABLE_PATTERN = /^MODEL_/;
-const WEB_FORBIDDEN_VARIABLE_PATTERN = /^(GATEWAY_SERVICE_TOKEN$|POSTGRES_)/;
+const API_ONLY_VARIABLE_PATTERN = /^AUTH_JWT_SECRET$/;
+const WEB_FORBIDDEN_VARIABLE_PATTERN =
+  /^(GATEWAY_SERVICE_TOKEN$|OPERATOR_CONTEXT_SIGNING_KEY$|POSTGRES_)/;
 
 // Copies the environment without the variables that match any of the given patterns.
 function environmentWithout(...forbiddenPatterns) {
@@ -70,9 +72,13 @@ function environmentWithout(...forbiddenPatterns) {
 }
 
 const environmentByService = {
-  web: environmentWithout(GATEWAY_ONLY_VARIABLE_PATTERN, WEB_FORBIDDEN_VARIABLE_PATTERN),
+  web: environmentWithout(
+    GATEWAY_ONLY_VARIABLE_PATTERN,
+    API_ONLY_VARIABLE_PATTERN,
+    WEB_FORBIDDEN_VARIABLE_PATTERN,
+  ),
   api: environmentWithout(GATEWAY_ONLY_VARIABLE_PATTERN),
-  gateway: environment,
+  gateway: environmentWithout(API_ONLY_VARIABLE_PATTERN),
 };
 
 const services = selectedServiceNames.map((serviceName) => ({
