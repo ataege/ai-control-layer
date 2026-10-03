@@ -196,12 +196,13 @@ func MatchSignatures(text string, boundary Boundary, field FieldName, settings S
 	if err := settings.validate(); err != nil {
 		return finish(OutcomeError, "", "", err)
 	}
-	if !settings.SignatureMatch.appliesAt(boundary) {
-		return finish(OutcomeNotApplicable, "", "", nil)
-	}
+	// The field limit runs first, so this entry point is fail-closed even with the guard disabled.
 	if len(text) > MaxFieldBytes || !utf8.ValidString(text) {
 		record.ControlID = ControlFieldLimit
 		return finish(OutcomeBlock, ReasonContentTooLarge, "", nil)
+	}
+	if !settings.SignatureMatch.appliesAt(boundary) {
+		return finish(OutcomeNotApplicable, "", "", nil)
 	}
 	record.FeedRevision, record.FeedDigest = settings.Feed.Revision, settings.Feed.Digest
 	normalized := NormalizeText(text)

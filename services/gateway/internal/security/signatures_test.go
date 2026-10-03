@@ -197,3 +197,15 @@ func TestSampleRuleOnCorpus(t *testing.T) {
 		t.Fatalf("matched = %v", matched)
 	}
 }
+
+// The field limit holds even when the guard is disabled, so the function is fail-closed alone.
+func TestMatchSignaturesFieldLimitBeforeGuardSettings(t *testing.T) {
+	disabled := signatureSettings(7, mustFeed(t, feedJSON("feed_v1", sampleRule)))
+	disabled.SignatureMatch.Enabled = false
+	for name, text := range map[string]string{"oversized": strings.Repeat("a", MaxFieldBytes+1), "invalid utf8": "\xff"} {
+		record, err := MatchSignatures(text, BoundaryToolResult, FieldToolResultText, disabled)
+		if err != nil || record.Outcome != OutcomeBlock || record.ControlID != ControlFieldLimit {
+			t.Fatalf("%s: record = %+v, err = %v", name, record, err)
+		}
+	}
+}

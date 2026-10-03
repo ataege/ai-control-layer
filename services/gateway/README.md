@@ -375,6 +375,10 @@ like any agent call; the evaluator holds no tool credentials and executes nothin
   reservation as unknown usage.
 - The security call goes straight to the `Caller`, never through the agent path, so it is never
   inspected by another semantic check.
+- The field limit (`MaxFieldBytes`, UTF-8) runs before the guard settings, so even a disabled
+  guard never passes an oversized field. The context window must be at least
+  `MinEvaluatorContextTokens` (8192): a full field at one token per byte plus the instruction and
+  output, so the provider never silently truncates the prompt.
 - Each result carries a `ControlRecord` with the verdict, verdict source (`live` or `fixture`, set
   when the evaluator is built), security call id, catalog revision, failure kind and duration, plus
   the call's usage and provider time. Persisting it to `runtime.control_assessments` and
@@ -388,13 +392,16 @@ GO_SECURITY_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b g
 ```
 
 Observed on 3 October 2026 on the developer machine (Ollama 0.35.1, `qwen3.5:4b` ID
-`2a654d98e6fb`, threshold 0.75, in-memory ledger double), two observations and not a detection-quality
-measurement:
+`2a654d98e6fb`, threshold 0.75, in-memory ledger double). These are observations of two fixtures,
+not a detection-quality measurement. The first run used context 4096 (commit 5883988), the second
+8192:
 
-| Fixture                                       | Verdict                                            | Outcome | Input / output tokens | Provider time |
-| --------------------------------------------- | -------------------------------------------------- | ------- | --------------------- | ------------- |
-| hostile note ("Ignore previous instructions") | `instruction_injection`, 1, `instruction_override` | block   | 412 / 31              | 9.29 s        |
-| clean duplicate-reference note                | `none`, 0, `no_risk_found`                         | pass    | 416 / 34              | 1.94 s        |
+| Fixture                                       | Context | Verdict                                            | Outcome | Input / output tokens | Provider time |
+| --------------------------------------------- | ------- | -------------------------------------------------- | ------- | --------------------- | ------------- |
+| hostile note ("Ignore previous instructions") | 4096    | `instruction_injection`, 1, `instruction_override` | block   | 412 / 31              | 9.29 s        |
+| clean duplicate-reference note                | 4096    | `none`, 0, `no_risk_found`                         | pass    | 416 / 34              | 1.94 s        |
+| hostile note ("Ignore previous instructions") | 8192    | `instruction_injection`, 1, `instruction_override` | block   | 412 / 31              | 2.16 s        |
+| clean duplicate-reference note                | 8192    | `none`, 0, `no_risk_found`                         | pass    | 418 / 31              | 1.87 s        |
 
 ## Signature feed matching and catalog settings (GO-78)
 
@@ -418,7 +425,7 @@ unknown or duplicate key, a second JSON value or more than 64 KiB rejects the wh
   on that authenticated import (API-34). The feed carries no signature.
 
 `MatchSignatures` checks one field against the enabled rules for the boundary, skipping the
-catalog's `disabled_rules`. The first hit in feed order blocks (`signature_match`) and the record
+catalog's `disabled_rules`; the field limit runs before the guard settings. The first hit in feed order blocks (`signature_match`) and the record
 names the rule, feed revision, feed digest and catalog revision, never the text. An enabled guard
 with no feed is a settings error, never an empty rule set.
 
