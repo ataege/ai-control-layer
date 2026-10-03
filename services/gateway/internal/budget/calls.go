@@ -86,3 +86,23 @@ func (callLog *CallLog) CountAgentCalls(ctx context.Context, organizationID, run
 	}
 	return count, nil
 }
+
+// RecordDispatchForRun commits the pre-dispatch record under a call id the caller chose (the
+// semantic evaluator picks its own). The organization is taken from the stored run, never from
+// the caller; an unknown run records nothing.
+func (callLog *CallLog) RecordDispatchForRun(ctx context.Context, callID, runID, purpose, model string) (organizationID string, err error) {
+	if callLog == nil || callLog.pool == nil {
+		return "", ErrUnavailable
+	}
+	if callID == "" || runID == "" || model == "" || (purpose != "agent" && purpose != "security") {
+		return "", ErrInvalid
+	}
+	err = callLog.pool.QueryRow(ctx, `
+		INSERT INTO runtime.model_calls(id, organization_id, run_id, purpose, model)
+		SELECT $1, run.organization_id, run.id, $3, $4 FROM runtime.runs AS run WHERE run.id = $2
+		RETURNING organization_id::text`, callID, runID, purpose, model).Scan(&organizationID)
+	if err != nil {
+		return "", storageError(err)
+	}
+	return organizationID, nil
+}

@@ -410,12 +410,16 @@ every model request, rereads the run and passport:
 Each step: `Stepper.Step` (GO-10) with the fixed task message built from the passport's opaque
 references plus the stored steps; then, by result:
 
-- one proposal → `policy.Gate.Evaluate` with a fresh action id and idempotency key. A denial stops
-  the run with the gate's reason (GO-29 adds bounded correction); approval required →
+- one proposal → `policy.Gate.Evaluate` with a fresh action id and idempotency key. A denial gets
+  GO-29's bounded correction: `policy.CorrectionCounter` counts the run's durable denial events,
+  `policy.CheckCorrections` applies the passport's limit (beyond it: `stopped` /
+  `allowance_exhausted`), and otherwise the denied call and `policy.BuildDenialFeedback` (reason
+  code, fixed safe message, permitted alternative only) join the context; approval required →
   `awaiting_approval` (`approval.requested`, GO-40 resumes); allow → `policy.Executor.Execute`,
   then the tool-result inspection, then the step's call and inspected result are appended to
   `runtime.context_entries` and the loop continues;
-- several tool calls → `stopped` / `multiple_actions_not_supported` (GO-01);
+- several tool calls → an `action.denied` event with `multiple_actions_not_supported` (GO-01), then
+  the same correction path: it counts against the correction limit;
 - a final answer → `completed` (GO-26 adds the narrow result validation);
 - a model failure: exhausted or paused allowance and overspend → `paused` / `allowance_exhausted`;
   unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
@@ -431,9 +435,17 @@ canonical arguments) and one `tool_result` holding only the inspected content. A
 rebuilds the same request from these rows and never re-executes a completed action (GO-02, GO-07).
 jsonb re-renders stored JSON; the loop compacts it, and jsonb key order is deterministic.
 
-**Interim inspector.** Until c1's `InspectToolResult` (GO-76) is wired, `InterimUntrustedTextGuard`
-pauses the run (`security_evaluator_unavailable`) for any result carrying untrusted text and passes
-results without any. It is not a protection.
+Corrections are stored as `correction` entries (migration `1791100000000-AllowContextCorrections`),
+so a restarted worker sends the same feedback.
+
+**Tool-result inspection (GO-76 at the worker).** `agent.SecurityInspector` sends every minimized
+result through c1's `security.Inspector.InspectToolResult` with the active settings (a
+`SettingsSource`; production uses the catalog reader). The invoice note is marked as an untrusted
+path with its trusted source (invoice id, version, classification); untrusted text the adapter cannot
+place pauses the run. Only the inspection's `ResultJSON` enters the context; a result withheld whole
+becomes `{"withheld":true,"reason_code":...}`; a paused inspection pauses the run and releases
+nothing. Security calls go through `agent.RecordingCaller`, which commits the `model_calls` row
+under the evaluator's own call id before dispatch, so control assessments can reference it.
 
 Not wired into the gateway process yet: the production scope reader and admission (GO-13) are
 needed for a live run; the wiring commit adds `worker.Service`, this handler and the readiness
