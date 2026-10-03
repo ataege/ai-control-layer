@@ -1999,7 +1999,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: nothing
   - Completed (2026-10-03): `TestApprovalIntegrity` (internal/policy, against Worker 2's real queue_report): after a real approval, each tampering is refused with its reason, no outbox row and the original grant unconsumed: changed recipient address and changed recipient reference and changed content (another report) -> `action_changed`; changed source record version -> `resource_version_changed`; an expired approval stores no grant (`approval_expired`); approving an action the gate denied (`resource_out_of_scope`) is refused with no grant, so an approval cannot enlarge the passport. `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped; `pnpm verify` 6/6. A changed template or projection version is Worker 2's evidence (`policy_change_test.go`, X-76: template_not_allowed, outbox 0); the gate's rebuilt payload also binds the template version.
 
-- [ ] **GO-69 · Prove that approval cannot override the export restriction**
+- [x] **GO-69 · Prove that approval cannot override the export restriction**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: GO-44, GO-64 · Needs: X-34 · Provides: X-77
   - Paths: none (a scenario test in the packages above)
@@ -2014,6 +2014,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (Approval cannot override classification);
     "Delivery scope and six person ownership" (Proposed team ownership)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestApprovalCannotOverrideTheExportRestriction`: a genuinely created Internal only report (provenance.StoreReport, titled "Public summary") proposed to the correct, permitted Atlas recipient is denied at the gate before review (`report_export_restricted`); a submitted approval is refused and stores no grant; a replayed grant inserted directly with the action set to approved still executes nothing (refused `action_changed`: nothing was frozen for review); outbox rows for the report: 0. Worker 2's queue_report re-checks the restriction at effect time as a last line. `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped; `pnpm verify` 6/6.
 
 - [ ] **GO-73 · Validate and acknowledge a candidate catalog revision**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
