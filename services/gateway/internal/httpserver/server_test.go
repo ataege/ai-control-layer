@@ -142,6 +142,64 @@ func TestReadiness(t *testing.T) {
 	}
 }
 
+// fakeWorker stands in for the worker service in readiness.
+type fakeWorker struct{ ready bool }
+
+func (worker fakeWorker) Ready() bool { return worker.ready }
+
+func TestReadinessCoversTheWorker(t *testing.T) {
+	tests := []struct {
+		name       string
+		pingError  error
+		worker     fakeWorker
+		wantStatus int
+		wantBody   health.ReadinessResponse
+	}{
+		{
+			name: "worker running", worker: fakeWorker{ready: true}, wantStatus: http.StatusOK,
+			wantBody: health.ReadinessResponse{Status: "ok", Service: "gateway",
+				Checks: health.ReadinessChecks{Database: health.DependencyCheck{Status: "up"}}},
+		},
+		{
+			// The schema has no worker field: the database check stays truthful, the status drops.
+			name: "worker not running", worker: fakeWorker{ready: false}, wantStatus: http.StatusServiceUnavailable,
+			wantBody: health.ReadinessResponse{Status: "unavailable", Service: "gateway",
+				Checks: health.ReadinessChecks{Database: health.DependencyCheck{Status: "up"}}},
+		},
+		{
+			name: "worker not running and database down", pingError: errors.New("down"), worker: fakeWorker{ready: false},
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody: health.ReadinessResponse{Status: "unavailable", Service: "gateway",
+				Checks: health.ReadinessChecks{Database: health.DependencyCheck{Status: "down", Message: "database unreachable"}}},
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			var logOutput bytes.Buffer
+			logger := logging.New(&logOutput, slog.LevelDebug)
+			handler := NewHandler(Options{
+				Logger: logger,
+				Health: health.Handler{Database: fakePinger{err: testCase.pingError}, DatabaseTimeout: time.Second,
+					Logger: logger, Worker: testCase.worker},
+				ServiceToken: logging.NewSecret(testServiceToken),
+			})
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+			if recorder.Code != testCase.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, testCase.wantStatus)
+			}
+			var body health.ReadinessResponse
+			decodeStrict(t, recorder, &body)
+			if body != testCase.wantBody {
+				t.Errorf("body = %+v, want %+v", body, testCase.wantBody)
+			}
+			if testCase.pingError == nil && !testCase.worker.ready && !strings.Contains(logOutput.String(), "worker loop not running") {
+				t.Errorf("the worker failure is not in the server log: %s", logOutput.String())
+			}
+		})
+	}
+}
+
 // slowPinger blocks until the readiness deadline cancels the context.
 type slowPinger struct{}
 

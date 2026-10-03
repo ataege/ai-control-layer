@@ -1,0 +1,7 @@
+{
+  "tool": "create_report",
+  "arguments": {
+    "template": "internal_investigation_v1",
+    "source_invoice_ids": ["invoice_A01", "invoice_A02"]
+  }
+}

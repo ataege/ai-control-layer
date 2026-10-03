@@ -1,0 +1,8 @@
+{
+  "template": "reconcile_atlas_v1",
+  "vendorId": "vendor_Atlas",
+  "invoiceIds": ["invoice_A01", "invoice_A02"],
+  "destination": "vendor_Atlas",
+  "approvalRequirement": "review_queue_report",
+  "limits": { "modelCalls": 24, "timeoutSeconds": 900 }
+}

@@ -76,25 +76,30 @@ values; the process then exits with code 1.
 
 ### Package ownership
 
-As directed by the user on 3 October 2026, the user is the sole owner and implementer of Go work.
-The report's Implementer 3/4/5 labels group responsibilities; they do not assign separate people
-to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` for planned modules.
+Since the evening of 3 October 2026 the lead's Claude Code sessions build the Go side, one lane per
+package group; the lead routes cross-lane interfaces (see "People" in `AGENTS.md`). The report's
+Implementer 3/4/5 labels group responsibilities; they do not assign separate people.
 
-| Existing package      | Owner                                           |
-| --------------------- | ----------------------------------------------- |
-| `cmd/gateway`         | User (sole Go implementer)                      |
-| `cmd/modelcheck`      | User (sole Go implementer)                      |
-| `cmd/budgetcheck`     | User (sole Go implementer)                      |
-| `internal/config`     | User (sole Go implementer)                      |
-| `internal/logging`    | User (sole Go implementer)                      |
-| `internal/database`   | User (sole Go implementer)                      |
-| `internal/health`     | User (sole Go implementer)                      |
-| `internal/httpserver` | User (sole Go implementer)                      |
-| `internal/model`      | User (sole Go implementer)                      |
-| `internal/budget`     | User (sole Go implementer)                      |
-| `internal/testdb`     | User (sole Go implementer)                      |
-| `internal/provenance` | W2 Go lane (tools and provenance), for the user |
-| `internal/tools`      | W2 Go lane (tools and provenance), for the user |
+| Existing package      | Owner                                                         |
+| --------------------- | ------------------------------------------------------------- |
+| `cmd/gateway`         | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
+| `cmd/modelcheck`      | Go lane f3 (worker, agent, model, budget)                     |
+| `cmd/budgetcheck`     | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/config`     | Shared Go lanes; the lead coordinates edits                   |
+| `internal/logging`    | Shared Go lanes; the lead coordinates edits                   |
+| `internal/database`   | Shared Go lanes; the lead coordinates edits                   |
+| `internal/health`     | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/httpserver` | Go lane 3c (repository, admission, passport, API)             |
+| `internal/model`      | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/budget`     | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/worker`     | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/testdb`     | Shared Go lanes; the lead coordinates edits                   |
+| `internal/contracts`  | Go lane 3c (repository, admission, passport, API)             |
+| `internal/repository` | Go lane 3c (repository, admission, passport, API)             |
+| `internal/tools`      | Go lane w2 (tools and provenance)                             |
+| `internal/policy`     | Go lane w3 (action gate and approvals)                        |
+| `internal/security`   | Go lane c1 (hybrid security controls)                         |
+| `internal/provenance` | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -110,8 +115,13 @@ internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
-internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
+internal/contracts/   Go mirrors of the runtime wire contracts and strict decoding (GO-18)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
+internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
+internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75)
+internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
+internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
+internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -363,6 +373,50 @@ Idempotency and retries follow the stable action identity:
   GO-02 requires, otherwise persist an unknown outcome and pause; never retry blindly.
 
 The simulated outbox creates a database record and sends no email.
+
+## Worker and job lease (GO-08)
+
+`internal/worker` claims `runtime.jobs` rows and runs them one at a time (decision 5: PostgreSQL
+jobs with leases, no broker, one worker process). It keeps its own small job store until the
+runtime repository (`internal/repository`) exists; it moves there if that fits.
+
+- **Claim.** One `UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING`
+  picks the oldest job of the worker's kinds that is `queued`, or `running` with an expired lease,
+  and sets `status = 'running'`, `lease_owner` and `lease_expires_at` together. Each store method is
+  one statement, so no transaction or row lock outlives the call and nothing is held across a model
+  or tool request. Expiry is compared with the database clock only.
+- **Fence.** `lease_owner` is a fresh token per claim (`<worker id>/<random>`), not a worker id.
+  Renew, finish and release succeed only for the current token on a live lease; otherwise they
+  return `ErrLeaseLost` and change nothing. A worker that lost its own lease and claimed the job
+  again cannot write through the old claim.
+- **Renewal.** While the handler runs, the worker renews at a third of the lease (defaults: 30 s
+  lease, 1 s poll; constants, not environment variables). Any renewal failure cancels the handler's
+  context with `ErrLeaseLost`.
+- **Outcomes.** `Completed`, `Failed` or `Requeue(delay)`. A handler error leaves the job untouched,
+  so its lease expires and it is claimed again; the worker cannot tell what the handler committed.
+  Replay safety after such a reclaim is GO-02's rule, implemented in GO-49.
+- **Status values** (Go-internal, not the X-11 run state): `queued`, `running`, `completed`,
+  `failed`. GO-40 adds the review-wait status. Production code only updates jobs; the gateway role
+  has no `DELETE` on them.
+- `attempt_count` counts claims. It is not a dispatch attempt: `model_calls` and
+  `execution_attempts` are the dispatch records (GO-02).
+
+**Shutdown and readiness (GO-09).** `worker.Service` runs the loop in the background. `Stop(drain)`
+stops claiming at once, lets the step in progress finish until the drain deadline, then cancels
+its handler (`ErrDrainTimeout`); an interrupted job keeps its lease and is claimed again after the
+lease expires, so nothing it committed is lost. The outcome write is bounded to 2 s. Call `Stop`
+before `pool.Close()` and inside the 8 s shutdown budget. A handler panic is contained and treated
+like a handler error; a zero `Outcome` is not a decision and records nothing.
+`health.Handler.Worker` takes the service's `Ready()`: while the loop is not running, readiness
+answers `503` with `status: "unavailable"` and the real database check, and logs
+`worker loop not running`. The readiness schema stays unchanged (open item `worker readiness`,
+option chosen with the lead: no contract change). The gateway process does not start the worker
+yet: GO-11 adds the agent-loop handler and wires the service into `cmd/gateway/main.go`.
+
+Tests use a unique job kind per test, so no test claims
+another test's job. Their fixtures need a passport, which rejects `DELETE` by trigger: cleanup
+removes it with `SET LOCAL session_replication_role = replica`, which needs a superuser test
+database, and otherwise leaves the synthetic row and logs it.
 
 ## PostgreSQL test harness (GO-20)
 
