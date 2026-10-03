@@ -126,6 +126,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/security`        | Go lane c1 (hybrid security controls)                         |
 | `internal/provenance`      | Go lane w2 (tools and provenance)                             |
 | `internal/reads`           | Go lane w2 (tools and provenance)                             |
+| `internal/scenario`        | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -148,6 +149,7 @@ internal/policy/      action gate: canonical arguments and digest (GO-12), decis
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
 internal/reads/       operator reads: run state, usage and events; security summary, assessments and events (GO-24, GO-83)
+internal/scenario/    test-only: the core story through the production chain with a labelled fixture or the live model (GO-66, GO-67, GO-47, GO-56)
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76), action check (GO-77 part)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
@@ -443,7 +445,7 @@ stopping.
   approved action with an open grant executes as the original stored action (same id and digest;
   never a new proposal), through the executor's recheck.
 - **Rejection or expiry.** Nothing executes. The run continues on the blocked-action path: a denial
-  with `approval_required` (rejected; `approval_rejected` once 3c's reason reaches main) or
+  with `approval_rejected` (rejected) or
   `approval_expired`, counted as a correction, with fixed feedback to the model.
 - **Undecided approvals.** `agent.ApprovalExpiry`, started by `cmd/gateway`, calls
   `policy.Approvals.ExpireOverdue` every 5 s. Each closure, its event and the continuation job commit
@@ -451,6 +453,24 @@ stopping.
   run.
 - **Corrections exhausted.** When the correction limit stops a run, the stop carries the fixed
   message "The task used up its corrections after repeated denials, so the run is stopped."
+- **Order on resume.** A cancelled or expired run stops straight from the wait (no `run.resumed`).
+  An approved action whose fresh check fails (an expired grant, a changed record, action or catalog
+  revision, an out-of-scope resource or destination) executes nothing and is a counted denial with
+  bounded feedback, like a rejection; only run-level refusals stop, pause or fail the run.
+
+## Cancellation during a step (Worker 3's review)
+
+The loop re-reads the run just before and just after each model request: a cancel stamped since
+the step began dispatches no further request and does not act on the response (a final answer does
+not complete the run). A cancel that lands later in the step is caught by `TransitionRun`'s guard
+(3c): moving a cancel-stamped run to running, awaiting approval, paused or completed returns
+`repository.ErrCancelRequested`, and the loop writes `stopped` / `run_cancelled` instead. Recovery
+matches an executed action under both the executor's `executed` and X-09's `succeeded` status.
+
+**Limitation: one gateway process per database.** Job leases and the executor's claim prevent a
+double effect, and the ledger's row lock a double reservation, but two gateway processes on the same
+database (for example `pnpm dev` next to `pnpm stack:up`) can each claim a job of the same run and
+send two model requests for it. The demonstration runs one gateway.
 
 ## Production chain and gateway wiring (GO-11, GO-09)
 
@@ -506,6 +526,15 @@ A call is refused (`catalog.ErrUnavailable`) when the snapshot and the accountin
 describe different catalog revisions, so one call never mixes two revisions.
 `model.AccountedCaller` now joins the safe failure sentinel (`ErrTransport`, `ErrResponse`) to
 `ErrUsageUnknown`, never the provider's raw error.
+
+**Lowered limits on a running passport (GO-86).** The caller reserves through
+`budget.PostgresStore.ReserveWithin` with the active revision's call counts (total, agent,
+security), token total and request time as a `budget.Ceiling`. Under the ledger row lock each limit
+becomes the lower of the passport's and the revision's (GO-72's `catalog.EffectiveFor` rule), so a
+revision lowered below what a run has used refuses its next reservation with `budget.ErrExhausted`
+(`allowance_exhausted`). A raised revision widens nothing, and past usage is never refunded or
+rewritten; the ledger keeps the passport's stored limits. The catalog has no per-purpose token
+limits, so those stay the passport's.
 
 ## Model allowance ledger alignment (GO-39)
 

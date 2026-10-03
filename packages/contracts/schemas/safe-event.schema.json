@@ -119,7 +119,9 @@
             "decision_unavailable",
             "content_blocked",
             "content_too_large",
-            "limit_not_allowed"
+            "limit_not_allowed",
+            "run_not_active",
+            "approval_rejected"
           ]
         },
         {
@@ -154,7 +156,10 @@
         "effect",
         "replaySource",
         "alternativeTemplate",
-        "safeMessage"
+        "safeMessage",
+        "actorId",
+        "inputSource",
+        "evaluationId"
       ],
       "properties": {
         "purpose": {
@@ -284,6 +289,38 @@
             {
               "type": "string",
               "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actorId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inputSource": {
+          "anyOf": [
+            {
+              "enum": ["judge"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evaluationId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
             },
             {
               "type": "null"

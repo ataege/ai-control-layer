@@ -37,7 +37,19 @@ type Limits struct {
 	ToolAttempts          int64
 	Corrections           int64
 	EnabledTemplates      []contracts.ReportTemplate
+	// Model accounting (GO-06): output ceilings per purpose and the input template allowance.
+	// A revision without them takes the GO-06 defaults, as config.LoadAccountingCatalog does.
+	AgentOutputTokens    int64
+	SecurityOutputTokens int64
+	InputTemplateTokens  int64
 }
+
+// GO-06 accounting defaults for a revision that does not set them.
+const (
+	defaultAgentOutputTokens    = 512
+	defaultSecurityOutputTokens = 256
+	defaultInputTemplateTokens  = 1024
+)
 
 // Snapshot is one coherent active catalog state.
 type Snapshot struct {
@@ -145,6 +157,10 @@ type limitsContent struct {
 		RunExpiryMinutes      *int64 `json:"run_expiry_minutes"`
 		ToolAttempts          *int64 `json:"tool_attempts"`
 		Corrections           *int64 `json:"corrections"`
+		// Optional: absent takes the default; present must be a positive integer (null is invalid).
+		AgentOutputTokens    json.RawMessage `json:"agent_output_tokens"`
+		SecurityOutputTokens json.RawMessage `json:"security_output_tokens"`
+		InputTemplateTokens  json.RawMessage `json:"input_template_tokens"`
 	} `json:"budgets"`
 	Reports *struct {
 		EnabledTemplates []contracts.ReportTemplate `json:"enabled_templates"`
@@ -180,7 +196,16 @@ func ParseLimits(raw []byte) (Limits, error) {
 			return Limits{}, ErrUnavailable
 		}
 	}
+	agentOutput, agentValid := optionalPositive(budgets.AgentOutputTokens, defaultAgentOutputTokens)
+	securityOutput, securityValid := optionalPositive(budgets.SecurityOutputTokens, defaultSecurityOutputTokens)
+	templateTokens, templateValid := optionalPositive(budgets.InputTemplateTokens, defaultInputTemplateTokens)
+	if !agentValid || !securityValid || !templateValid {
+		return Limits{}, ErrUnavailable
+	}
 	return Limits{
+		AgentOutputTokens:     agentOutput,
+		SecurityOutputTokens:  securityOutput,
+		InputTemplateTokens:   templateTokens,
 		AllowedModels:         slices.Clone(content.AllowedModels),
 		CallsTotal:            *budgets.CallsTotal,
 		CallsAgent:            *budgets.CallsAgent,
@@ -242,4 +267,17 @@ func EffectiveFor(passport contracts.Passport, snapshot Snapshot) Effective {
 		}
 	}
 	return effective
+}
+
+// optionalPositive reads an optional positive integer: absent gives the fallback; null, zero,
+// negative, fractional or oversized values are invalid.
+func optionalPositive(raw json.RawMessage, fallback int64) (int64, bool) {
+	if len(raw) == 0 {
+		return fallback, true
+	}
+	var value int64
+	if json.Unmarshal(raw, &value) != nil || string(raw) == "null" || value < 1 || value > maximumCatalogInteger {
+		return 0, false
+	}
+	return value, true
 }

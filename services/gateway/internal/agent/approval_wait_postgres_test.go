@@ -233,3 +233,62 @@ func TestApprovedActionOfACancelledRunDoesNotResume(t *testing.T) {
 		t.Fatal("a cancelled run made a model request")
 	}
 }
+
+// refusingExecutor stands in for an executor whose fresh check fails before dispatch.
+type refusingExecutor struct{ reason policy.ReasonCode }
+
+func (executor refusingExecutor) Execute(context.Context, policy.RunIdentity, string) policy.ExecutionResult {
+	return policy.ExecutionResult{Status: policy.ExecutionRefused, ReasonCode: executor.reason}
+}
+
+func TestApprovedActionWhoseRecheckFailsIsACountedCorrection(t *testing.T) {
+	wait := newReviewWait(t)
+	world := wait.world
+	if _, err := policy.NewApprovals(world.pool).Decide(context.Background(), wait.reviewer, wait.actionID, policy.ApprovalApprove); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	stepper := &scriptedStepper{callLog: budget.NewCallLog(world.pool), ledger: budget.NewPostgresStore(world.pool),
+		script: []func([]model.Message) (StepResult, error){wait.finishNamingTheReport}}
+	loop := newTestLoop(t, world, stepper)
+	// The catalog revision changed between the approval and the resume.
+	loop.dependencies.Executor = refusingExecutor{reason: policy.ReasonCode(contracts.ReasonSourcePolicyChanged)}
+	if _, err := loop.Handle(context.Background(), wait.continuationJob(t)); err != nil {
+		t.Fatal(err)
+	}
+	assertRunEnded(t, world, contracts.RunCompleted, "")
+	var denials int
+	if err := world.pool.QueryRow(context.Background(), `SELECT count(*) FROM runtime.audit_events WHERE organization_id = $1
+		AND event_type = 'action.denied' AND action_id = $2 AND reason_code = 'source_policy_changed'`, world.organizationID, wait.actionID).
+		Scan(&denials); err != nil || denials != 1 {
+		t.Fatalf("%d counted denials for the refused approved action (%v)", denials, err)
+	}
+	if outbox := world.count(t, "SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1"); outbox != 0 {
+		t.Fatalf("a refused action queued %d messages", outbox)
+	}
+	request := stepper.contexts[0]
+	if feedback := request[len(request)-1]; feedback.Role != "tool" || !strings.Contains(feedback.Content, "source_policy_changed") {
+		t.Fatalf("recheck feedback: %+v", feedback)
+	}
+}
+
+func TestExpiredRunStopsFromTheWaitWithoutAResumedEvent(t *testing.T) {
+	wait := newReviewWait(t)
+	world := wait.world
+	if _, err := policy.NewApprovals(world.pool).Decide(context.Background(), wait.reviewer, wait.actionID, policy.ApprovalApprove); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	stepper := &scriptedStepper{callLog: budget.NewCallLog(world.pool), ledger: budget.NewPostgresStore(world.pool)}
+	loop := newTestLoop(t, world, stepper)
+	// The passport expired while the run waited.
+	loop.now = func() time.Time { return time.Now().Add(24 * time.Hour) }
+	if _, err := loop.Handle(context.Background(), wait.continuationJob(t)); err != nil {
+		t.Fatal(err)
+	}
+	assertRunEnded(t, world, contracts.RunStopped, contracts.ReasonRunExpired)
+	if resumed := world.count(t, "SELECT count(*) FROM runtime.audit_events WHERE organization_id = $1 AND event_type = 'run.resumed'"); resumed != 0 {
+		t.Fatalf("%d run.resumed events for a run that never worked again", resumed)
+	}
+	if outbox := world.count(t, "SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1"); outbox != 0 || len(stepper.contexts) != 0 {
+		t.Fatalf("an expired run queued %d messages or made %d model requests", outbox, len(stepper.contexts))
+	}
+}

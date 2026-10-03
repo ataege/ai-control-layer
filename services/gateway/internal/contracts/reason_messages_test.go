@@ -29,6 +29,12 @@ func TestEveryReasonCodeHasASafeMessage(t *testing.T) {
 			strings.ContainsFunc(message, unicode.IsControl) {
 			t.Errorf("%s: message cannot be stored as a safe message: %q", code, message)
 		}
+		// One code can end a run in different states; the event's status says which.
+		for _, status := range []string{"paused", "stopped", "failed", "completed"} {
+			if strings.Contains(strings.ToLower(message), status) {
+				t.Errorf("%s: message names a run status (%s): %q", code, status, message)
+			}
+		}
 		if other, duplicate := seen[message]; duplicate {
 			t.Errorf("%s and %s share a message", code, other)
 		}

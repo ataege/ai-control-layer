@@ -290,3 +290,42 @@ func TestValidStoredEventChecksTheCursorAndTheContract(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresReasonCodedEventsGetTheirSafeMessage(t *testing.T) {
+	repository, _ := isolatedRepository(t)
+	organizationID := testdb.ID(t)
+	passport := samplePassport(t, organizationID)
+	admit(t, repository, passport)
+	defaulted := runEvent(organizationID, passport.RunID, contracts.EventActionDenied)
+	defaulted.ReasonCode = pointer(contracts.ReasonResourceOutOfScope)
+	specific := defaulted
+	specific.MaskedSummary.SafeMessage = pointer("Invoice invoice_B01 is outside this run.")
+	plain := runEvent(organizationID, passport.RunID, contracts.EventRunStarted)
+	var appended []contracts.SafeEvent
+	err := repository.InTransaction(context.Background(), func(tx Tx) error {
+		for _, event := range []NewEvent{defaulted, specific, plain} {
+			stored, err := tx.AppendEvent(context.Background(), event)
+			if err != nil {
+				return err
+			}
+			appended = append(appended, stored)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if message := appended[0].MaskedSummary.SafeMessage; message == nil || *message != contracts.ReasonResourceOutOfScope.SafeMessage() {
+		t.Errorf("default message: %v", message)
+	}
+	if message := appended[1].MaskedSummary.SafeMessage; message == nil || *message != "Invoice invoice_B01 is outside this run." {
+		t.Errorf("the emitter's message did not win: %v", message)
+	}
+	if appended[2].MaskedSummary.SafeMessage != nil {
+		t.Error("an event without a reason got a message")
+	}
+	read, err := repository.RunEvents(context.Background(), organizationID, passport.RunID, 0, 10)
+	if err != nil || len(read) != 3 || !reflect.DeepEqual(read, appended) {
+		t.Errorf("read back differs: %v", err)
+	}
+}

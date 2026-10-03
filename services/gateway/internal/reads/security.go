@@ -77,13 +77,16 @@ type StatusCount struct {
 	Count  int64               `json:"count"`
 }
 
-// DecisionCount counts events per type, decision and reason, so the summary reconciles with
-// the event records (X-104).
+// DecisionCount counts events per type, decision, reason and input source, so the summary
+// reconciles with the event records (X-104) and counts judge probes apart from agent decisions.
 type DecisionCount struct {
 	EventType  contracts.EventType      `json:"eventType"`
 	Decision   *contracts.EventDecision `json:"decision"`
 	ReasonCode *contracts.ReasonCode    `json:"reasonCode"`
-	Count      int64                    `json:"count"`
+	// InputSource is "judge" for a control evaluation of submitted judge input (GO-82), null for
+	// everything the run itself produced.
+	InputSource *string `json:"inputSource"`
+	Count       int64   `json:"count"`
 }
 
 // AssessmentCount counts control assessments per control, outcome and verdict source.
@@ -112,6 +115,7 @@ var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$`
 // Closed value sets of the assessment fields.
 var (
 	verdictSources = []string{"live", "fixture"}
+	inputSources   = []string{"judge"}
 	controlClasses = []string{"deterministic", "semantic"}
 )
 
@@ -334,13 +338,17 @@ func readSecuritySummary(ctx context.Context, tx pgx.Tx, organizationID string) 
 		return SecuritySummary{}, err
 	}
 
-	err = collect(ctx, tx, `SELECT event_type, decision, reason_code, count(*) FROM runtime.audit_events
-		WHERE organization_id = $1 GROUP BY event_type, decision, reason_code
-		ORDER BY event_type, decision NULLS FIRST, reason_code NULLS FIRST`, organizationID, func(rows pgx.Rows) error {
+	err = collect(ctx, tx, `SELECT event_type, decision, reason_code, masked_summary->>'inputSource' AS input_source, count(*)
+		FROM runtime.audit_events WHERE organization_id = $1
+		GROUP BY event_type, decision, reason_code, input_source
+		ORDER BY event_type, decision NULLS FIRST, reason_code NULLS FIRST, input_source NULLS FIRST`, organizationID, func(rows pgx.Rows) error {
 		var count DecisionCount
 		var decision, reason *string
-		if err := rows.Scan(&count.EventType, &decision, &reason, &count.Count); err != nil {
+		if err := rows.Scan(&count.EventType, &decision, &reason, &count.InputSource, &count.Count); err != nil {
 			return err
+		}
+		if !optionalOneOf(count.InputSource, inputSources) {
+			return errMalformedRecord
 		}
 		if decision != nil {
 			value := contracts.EventDecision(*decision)

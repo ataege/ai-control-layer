@@ -34,6 +34,7 @@ var (
 	summaryClassifications = []string{"internal_only", "vendor_shareable"}
 	summaryLineageChecks   = []string{"passed", "failed", "missing"}
 	summaryEffects         = []string{"none", "read", "report_created", "outbox_message_queued"}
+	summaryInputSources    = []string{"judge"}
 )
 
 // AppendEvent validates the event against the X-12 contract and inserts it in this
@@ -41,6 +42,12 @@ var (
 func (tx Tx) AppendEvent(ctx context.Context, event NewEvent) (contracts.SafeEvent, error) {
 	if ctx == nil || !validEvent(event) {
 		return contracts.SafeEvent{}, ErrInvalid
+	}
+	// The single default (lead decision): a reason-coded event without its own message carries
+	// the fixed X-13 message of its code; an emitter's specific message always wins.
+	if event.ReasonCode != nil && event.MaskedSummary.SafeMessage == nil {
+		message := event.ReasonCode.SafeMessage()
+		event.MaskedSummary.SafeMessage = &message
 	}
 	summary, err := json.Marshal(event.MaskedSummary)
 	if err != nil {
@@ -129,7 +136,10 @@ func validSummary(summary contracts.MaskedSummary) bool {
 		(summary.Template == nil || summary.Template.Valid()) &&
 		(summary.AlternativeTemplate == nil || summary.AlternativeTemplate.Valid()) &&
 		(summary.SafeMessage == nil || (utf8.ValidString(*summary.SafeMessage) &&
-			utf8.RuneCountInString(*summary.SafeMessage) <= maximumSafeMessageLength))
+			utf8.RuneCountInString(*summary.SafeMessage) <= maximumSafeMessageLength)) &&
+		(summary.ActorID == nil || validUUID(*summary.ActorID)) &&
+		(summary.EvaluationID == nil || validUUID(*summary.EvaluationID)) &&
+		optionalOneOf(summary.InputSource, summaryInputSources)
 }
 
 func optionalOneOf(value *string, allowed []string) bool {
