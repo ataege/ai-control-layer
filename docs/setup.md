@@ -162,7 +162,7 @@ Rules:
 - **Containers do not read `.env` directly.** Compose interpolates the values it needs and
   overrides the wiring variables with service names (see the README, "Full-container mode"). The
   `web` container receives neither the service token nor any `POSTGRES_*` variable. Only the
-  `gateway` service lists `MODEL_BASE_URL` and `MODEL_NAME` (unverified, see section 6).
+  `gateway` service lists `MODEL_BASE_URL` and `MODEL_NAME` (see section 6).
 - **The web process on the host follows the same rule.** `pnpm dev` and `pnpm dev:web` remove
   `GATEWAY_SERVICE_TOKEN`, `AUTH_JWT_SECRET`, `OPERATOR_CONTEXT_SIGNING_KEY`, every `POSTGRES_*`
   variable and every `MODEL_*` variable from the environment of the web child, including ones set in your shell. `scripts/with-env.mjs` does not
@@ -258,9 +258,9 @@ and waits for all health checks. The image builds need no `.env` values, no data
 service; starting the stack needs `.env` for the two secrets. Details and the `--debug` override:
 [infra/README.md](../infra/README.md).
 
-This mode was not executed on the preparation machine. See "Verification status" in the README.
-The gateway container is set to reach the host's Ollama at `http://host.docker.internal:11434`
-(unverified; see section 7 for the Linux caveat).
+This mode ran on 2026-10-03 on macOS with Docker Desktop; the results are in "Verification status"
+in the README. The gateway container reaches the host's Ollama at
+`http://host.docker.internal:11434` on Docker Desktop for macOS (see section 7 for the Linux caveat).
 
 ## 7. Local model (Ollama)
 
@@ -320,10 +320,10 @@ so there is no API key variable.
 
 Which processes receive them:
 
-| Mode                        | Gateway                                                                                                                                                                          | API                                                                         | Web  |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---- |
-| Host (`pnpm dev`)           | Both, from `.env` through the dev runner                                                                                                                                         | Removed from the child environment, but re-read from `.env` (see section 3) | None |
-| Full container (`stack:up`) | `MODEL_BASE_URL` is set by Compose to `http://host.docker.internal:11434` (a value in `.env` does not apply); `MODEL_NAME` from `.env`. Unverified: this mode has never been run | None                                                                        | None |
+| Mode                        | Gateway                                                                                                                                                                                   | API                                                                         | Web  |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---- |
+| Host (`pnpm dev`)           | Both, from `.env` through the dev runner                                                                                                                                                  | Removed from the child environment, but re-read from `.env` (see section 3) | None |
+| Full container (`stack:up`) | `MODEL_BASE_URL` is set by Compose to `http://host.docker.internal:11434` (a value in `.env` does not apply); `MODEL_NAME` from `.env`. Reachability verified on Docker Desktop for macOS | None                                                                        | None |
 
 Container mode on Linux (unverified): `host.docker.internal` resolves through `extra_hosts`, but
 Ollama listens on `127.0.0.1` by default, so the container cannot reach it. Do not fix that with

@@ -49,7 +49,7 @@ services:
       DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # The local model runs in Ollama on the host, not as a Compose service; only the gateway calls it.
-      # Unverified: container mode has never been run (Docker was unavailable).
+      # Reached from the gateway's network on Docker Desktop for macOS (2026-10-03, README "Verification status").
       MODEL_BASE_URL: http://host.docker.internal:11434
       MODEL_NAME: ${MODEL_NAME:-}
       OPERATOR_CONTEXT_SIGNING_KEY: "${OPERATOR_CONTEXT_SIGNING_KEY:?OPERATOR_CONTEXT_SIGNING_KEY is not set - run pnpm run setup first}"

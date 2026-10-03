@@ -43,7 +43,8 @@ pnpm stack:down                # stops everything, keeps the data volume
 Inside the Compose network the services use container wiring instead of the `.env` host values:
 `POSTGRES_HOST=postgres`, `POSTGRES_PORT=5432`, `GATEWAY_URL=http://gateway:8080`,
 `API_UPSTREAM_URL=http://api:3001`, and for the gateway only
-`MODEL_BASE_URL=http://host.docker.internal:11434` (the host's Ollama; unverified). The api and gateway images themselves set `API_HOST` /
+`MODEL_BASE_URL=http://host.docker.internal:11434` (the host's Ollama; reachable on Docker Desktop for macOS, see
+"Verification status" in the root `README.md`). The api and gateway images themselves set `API_HOST` /
 `GATEWAY_HOST` to `0.0.0.0`, so they are reachable inside any container network; on the host the
 default stays `127.0.0.1`.
 
