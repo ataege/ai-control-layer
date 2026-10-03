@@ -920,6 +920,12 @@ Fixtures: `hostile_note_redirect_record_v1` (reads `invoice_B01`), `hostile_note
   `UNEXPECTED` (for example `decision_unavailable` when the active catalog cannot be loaded). Exit 2:
   not run (usage, unknown run or fixture, live run, or a report the fixture needs is missing).
 
+It needs an enforceable active catalog with its signature feed, like the gateway itself. Until the
+feed import is on `main`, load `config/attack-signatures.json` into `app.signature_feed_revisions`
+and the pointer's `active_feed_revision_id` by hand. Checked on 2026-10-03 on a private test
+database that way: all three fixtures printed the expected denial, exit 0, with every action and
+event labelled and no execution attempt.
+
 ## Performance benchmark (GO-81)
 
 `cmd/benchmark` measures one permitted operation: the policy lookup (active catalog revision and
