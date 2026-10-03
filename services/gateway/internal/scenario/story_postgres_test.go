@@ -244,8 +244,8 @@ func TestStoryThroughTheProductionChain(t *testing.T) {
 		t.Fatalf("run %s/%s, want awaiting_approval (logs: %s)", status, reason, world.logs.String())
 	}
 	wantSteps := []struct{ tool, status string }{
-		{"read_invoice", "executed"}, {"read_invoice", "executed"}, {"read_vendor", "executed"},
-		{"create_report", "executed"}, {"queue_report", "denied"}, {"create_report", "executed"},
+		{"read_invoice", "succeeded"}, {"read_invoice", "succeeded"}, {"read_vendor", "succeeded"},
+		{"create_report", "succeeded"}, {"queue_report", "denied"}, {"create_report", "succeeded"},
 		{"queue_report", "awaiting_approval"},
 	}
 	for index, want := range wantSteps {
@@ -371,7 +371,7 @@ func TestStoryAfterApproval(t *testing.T) {
 		t.Fatalf("approve: %v", err)
 	}
 	world.runQueuedJob(t)
-	if _, _, status := world.actionAt(t, 7); status != "executed" {
+	if _, _, status := world.actionAt(t, 7); status != "succeeded" {
 		// GO-40 (resume the approved action) is not on this branch: nothing may have been sent.
 		// Once it lands, the action executes and the assertions below run instead.
 		if outbox := world.count(t, `SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1`); status != "approved" || outbox != 0 {

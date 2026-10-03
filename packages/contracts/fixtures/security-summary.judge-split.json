@@ -1,0 +1,99 @@
+{
+  "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+  "generatedAt": "2026-10-03T12:30:00.25Z",
+  "runs": [
+    {
+      "status": "awaiting_approval",
+      "count": 1
+    },
+    {
+      "status": "completed",
+      "count": 2
+    }
+  ],
+  "decisions": [
+    {
+      "eventType": "control.evaluated",
+      "decision": "deny",
+      "reasonCode": "semantic_injection_detected",
+      "inputSource": "judge",
+      "count": 1
+    },
+    {
+      "eventType": "report.export_denied",
+      "decision": "deny",
+      "reasonCode": "report_export_restricted",
+      "inputSource": null,
+      "count": 1
+    }
+  ],
+  "assessments": [
+    {
+      "controlClass": "deterministic",
+      "controlId": "signature_match",
+      "outcome": "block",
+      "verdictSource": null,
+      "inputSource": null,
+      "count": 1
+    },
+    {
+      "controlClass": "semantic",
+      "controlId": "semantic_injection",
+      "outcome": "block",
+      "verdictSource": "live",
+      "inputSource": "judge",
+      "count": 1
+    },
+    {
+      "controlClass": "semantic",
+      "controlId": "semantic_injection",
+      "outcome": "pass",
+      "verdictSource": "fixture",
+      "inputSource": null,
+      "count": 4
+    }
+  ],
+  "modelUsage": [
+    {
+      "purpose": "agent",
+      "dispatched": 9,
+      "completed": 9,
+      "failed": 0,
+      "usageUnknown": 0,
+      "inFlight": 0,
+      "settledTokens": 6120,
+      "heldTokens": 0,
+      "usageUnknownReservations": 0
+    },
+    {
+      "purpose": "security",
+      "dispatched": 6,
+      "completed": 6,
+      "failed": 0,
+      "usageUnknown": 0,
+      "inFlight": 0,
+      "settledTokens": 1310,
+      "heldTokens": 0,
+      "usageUnknownReservations": 0
+    }
+  ],
+  "judgeSecurityCalls": 1,
+  "timings": [
+    {
+      "phase": "deterministic",
+      "count": 15,
+      "failed": 0,
+      "medianMicroseconds": 77,
+      "p95Microseconds": 172,
+      "maxMicroseconds": 640
+    },
+    {
+      "phase": "provider",
+      "count": 15,
+      "failed": 1,
+      "medianMicroseconds": 1919761,
+      "p95Microseconds": 1983987,
+      "maxMicroseconds": 2060859
+    }
+  ]
+}

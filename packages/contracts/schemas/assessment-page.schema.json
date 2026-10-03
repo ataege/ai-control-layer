@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "assessment-page.schema.json",
+  "title": "AssessmentPage",
+  "description": "GO-83: one window-cursor page of the organization's control assessments; every committed record is returned once; order is by id within a window.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["records", "nextCursor"],
+  "properties": {
+    "records": {
+      "type": "array",
+      "items": {
+        "$ref": "assessment-record.schema.json"
+      },
+      "maxItems": 500
+    },
+    "nextCursor": {
+      "type": "string",
+      "pattern": "^v1\\.[0-9]{1,20}\\.[0-9]{1,20}\\.[0-9]{1,19}$"
+    }
+  }
+}

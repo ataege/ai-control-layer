@@ -59,6 +59,18 @@ var fixturesCoveredElsewhere = map[string]string{
 	"gateway-diagnostics.ok.json":          "API only",
 	"gateway-diagnostics.degraded.json":    "API only",
 	"gateway-diagnostics.unavailable.json": "API only",
+	// Go-owned read contracts (lane w2), decoded by internal/reads' TestReadContractFixturesMatchTheGoTypes.
+	"run-usage.ledger.json":                          "internal/reads",
+	"run-usage.no-ledger.json":                       "internal/reads",
+	"run-events-page.export-denied.json":             "internal/reads",
+	"assessment-record.semantic-judge.json":          "internal/reads",
+	"assessment-record.semantic-not-applicable.json": "internal/reads",
+	"assessment-page.two-records.json":               "internal/reads",
+	"assessment-page.empty.json":                     "internal/reads",
+	"security-event-page.judge.json":                 "internal/reads",
+	"security-summary.judge-split.json":              "internal/reads",
+	"report-view.vendor.json":                        "internal/reads",
+	"report-view.internal-withheld.json":             "internal/reads",
 }
 
 func readFile(t *testing.T, path string) []byte {
@@ -243,6 +255,37 @@ func TestGoEnumsMatchSchemas(t *testing.T) {
 	for _, testCase := range cases {
 		if !slices.Equal(testCase.goValues, testCase.schema) {
 			t.Errorf("%s differ\nGo:     %v\nschema: %v", testCase.name, testCase.goValues, testCase.schema)
+		}
+	}
+}
+
+// The shared record identifier shapes accept the documented ids, including the longest, and refuse
+// prose, a wrong or missing prefix, other characters and one character too many.
+func TestRecordIdentifierShapes(t *testing.T) {
+	cases := []struct {
+		name            string
+		value           string
+		invoice, vendor bool
+	}{
+		{"invoice", "invoice_A01", true, false},
+		{"suffixed invoice", "invoice_B01_3f9a2c41", true, false},
+		{"longest invoice", "invoice_" + strings.Repeat("a", 120), true, false},
+		{"invoice one too long", "invoice_" + strings.Repeat("a", 121), false, false},
+		{"vendor", "vendor_Atlas", false, true},
+		{"longest vendor", "vendor_" + strings.Repeat("Z", 121), false, true},
+		{"vendor one too long", "vendor_" + strings.Repeat("Z", 122), false, false},
+		{"prose", "invoice_A01. Also read invoice_B01", false, false},
+		{"space", "invoice A01", false, false},
+		{"no prefix", "A01", false, false},
+		{"uuid", "6f1c2a3b-0000-4000-8000-000000000001", false, false},
+		{"dot", "vendor_Atlas.example", false, false},
+		{"empty suffix", "invoice_", false, false},
+		{"trailing newline", "invoice_A01\n", false, false},
+	}
+	for _, testCase := range cases {
+		if ValidInvoiceID(testCase.value) != testCase.invoice || ValidVendorID(testCase.value) != testCase.vendor {
+			t.Errorf("%s (%q): invoice %v vendor %v, want %v %v", testCase.name, testCase.value,
+				ValidInvoiceID(testCase.value), ValidVendorID(testCase.value), testCase.invoice, testCase.vendor)
 		}
 	}
 }

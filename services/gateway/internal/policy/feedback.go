@@ -22,7 +22,9 @@ type DenialFeedback struct {
 	PermittedInvoiceIDs []string `json:"permitted_invoice_ids,omitempty"`
 }
 
-// safeMessages are fixed operator-safe texts per reason; an unlisted reason gets the generic one.
+// safeMessages are fixed feedback texts written for the model's correction. A reason without one
+// takes the X-13 safe message of internal/contracts, the single message table, and only a value
+// outside the vocabulary gets the generic text.
 var safeMessages = map[ReasonCode]string{
 	ReasonResourceOutOfScope:     "The requested record is outside this task's scope.",
 	ReasonDestinationNotAllowed:  "The destination is not a registered recipient of this task.",
@@ -47,6 +49,8 @@ func BuildDenialFeedback(decision Decision, scope PassportScope) DenialFeedback 
 	feedback := DenialFeedback{ReasonCode: decision.ReasonCode, SafeMessage: genericSafeMessage}
 	if message, known := safeMessages[decision.ReasonCode]; known {
 		feedback.SafeMessage = message
+	} else if contractCode := contracts.ReasonCode(decision.ReasonCode); contractCode.Valid() {
+		feedback.SafeMessage = contractCode.SafeMessage()
 	}
 	if decision.AlternativeTemplate != "" &&
 		containsString(scope.AllowedTemplates, decision.AlternativeTemplate) &&

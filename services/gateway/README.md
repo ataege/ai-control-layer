@@ -1,7 +1,9 @@
 # gateway
 
-Internal Go service of the starter: a small HTTP server with health endpoints, one
-authenticated ping route and a PostgreSQL connection pool. It contains infrastructure only.
+The Task Passport gateway: the execution authority. It admits runs, holds the immutable passport,
+runs the bounded agent loop against the local model, gates and executes every tool action, applies
+the hybrid security controls and report provenance, and serves the private operator reads. Start
+with "Technical handoff (GO-61)".
 
 ## Routes
 
@@ -25,6 +27,17 @@ a lifetime of at most five minutes and a `jti` that is accepted once. The verifi
 `operatorcontext.FromContext`; it never authorizes a command by itself. Any failure answers
 `401 unauthorized` before the handler runs. `httpserver.DecodeJSONBody` reads a bounded, strict JSON
 body and answers `400 bad_request` otherwise.
+
+**Limitation: the `jti` replay cache is in memory, per process.** A gateway restart forgets the
+used token ids, so a captured operator-context token could be replayed until its own expiry (at
+most five minutes plus the five-second leeway) after a restart; the internal routes still require
+the service token. Like the job leases, it assumes one gateway process per database.
+
+Admission (`internal/admission`) rejects with fixed text that names the field, scope or limit
+(`invoiceIds`, `destination`, `vendorId`, the catalog limit), never a value the request sent, so
+the `admission.rejected` event's safe message and the events export carry no request text. Invoice
+and vendor ids must have the shared shapes `contracts.InvoiceIDPattern` and
+`contracts.VendorIDPattern` (also the gate decoder's), so every admitted invoice can be read.
 
 Every other routed request returns the shared JSON error envelope (`404 not_found`,
 `405 method_not_allowed`, `401 unauthorized`, `500 internal_error`). Every response produced by the
@@ -50,19 +63,20 @@ exercises (for example a new optional property) is not detected; mirror those by
 
 Read from environment variables (the root scripts pass the root `.env` to the process).
 
-| Variable                       | Default     | Notes                                                                        |
-| ------------------------------ | ----------- | ---------------------------------------------------------------------------- |
-| `GATEWAY_HOST`                 | `127.0.0.1` | Bind address. The image and Compose set `0.0.0.0`.                           |
-| `GATEWAY_PORT`                 | `8080`      |                                                                              |
-| `GATEWAY_SERVICE_TOKEN`        | required    | At least 32 characters, no leading or trailing whitespace.                   |
-| `OPERATOR_CONTEXT_SIGNING_KEY` | required    | At least 32 characters; the HS256 key the API signs X-Operator-Context with. |
-| `POSTGRES_HOST`                | `localhost` |                                                                              |
-| `POSTGRES_PORT`                | `5432`      |                                                                              |
-| `POSTGRES_USER`                | required    | Must not be blank.                                                           |
-| `POSTGRES_PASSWORD`            | required    | Must not be blank. Any characters are safe; the value is escaped.            |
-| `POSTGRES_DB`                  | required    | Must not be blank.                                                           |
-| `DATABASE_TIMEOUT_MS`          | `3000`      | Bounds one connection attempt and one readiness ping (100-20000).            |
-| `LOG_LEVEL`                    | `info`      | `debug`, `info`, `warn` or `error`.                                          |
+| Variable                       | Default                  | Notes                                                                                                                                       |
+| ------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GATEWAY_HOST`                 | `127.0.0.1`              | Bind address. The image and Compose set `0.0.0.0`.                                                                                          |
+| `GATEWAY_PORT`                 | `8080`                   |                                                                                                                                             |
+| `GATEWAY_SERVICE_TOKEN`        | required                 | At least 32 characters, no leading or trailing whitespace.                                                                                  |
+| `OPERATOR_CONTEXT_SIGNING_KEY` | required                 | At least 32 characters; the HS256 key the API signs X-Operator-Context with.                                                                |
+| `POSTGRES_HOST`                | `localhost`              |                                                                                                                                             |
+| `POSTGRES_PORT`                | `5432`                   |                                                                                                                                             |
+| `POSTGRES_GATEWAY_PASSWORD`    | required                 | The gateway connects as its own role `task_passport_gateway` (GO-38); `pnpm db:roles` sets this password on the role. Never the owner role. |
+| `POSTGRES_DB`                  | required                 | Must not be blank.                                                                                                                          |
+| `DATABASE_TIMEOUT_MS`          | `3000`                   | Bounds one connection attempt and one readiness ping (100-20000).                                                                           |
+| `LOG_LEVEL`                    | `info`                   | `debug`, `info`, `warn` or `error`.                                                                                                         |
+| `MODEL_BASE_URL`               | `http://127.0.0.1:11434` | The local Ollama server (`http` or `https`, host only).                                                                                     |
+| `MODEL_NAME`                   | none                     | The exact model tag, which the active catalog must allow. Without it the gateway starts and every model call fails closed.                  |
 
 `DATABASE_TIMEOUT_MS` is capped at 20000 so a readiness response always fits inside the server's
 30 s write timeout. The API accepts the same range for this variable.
@@ -163,6 +177,180 @@ internal/runresult/   the narrow final result: format, report ownership, persist
 internal/catalog/     trusted active snapshot loader (GO-72) and catalog activation: validate, acknowledge or reject a requested revision (GO-73)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
+
+## Technical handoff (GO-61)
+
+This section is the Go part of the handoff, written from the code on `main` (87f22f0 plus go/w2).
+The sections below it hold the detail of each task; this one says how the parts fit, where each
+boundary is, what happens when it fails, how evidence is labelled and what is not covered.
+
+### Setup (Go part)
+
+Follow `docs/setup.md`; the Go-specific steps, from the repository root:
+
+1. Go 1.27 or newer on `PATH`; Ollama with the catalog's allowed model (`ollama pull qwen3.5:4b`,
+   `docs/setup.md` section 7). `MODEL_BASE_URL` and `MODEL_NAME` go in `.env`.
+2. `pnpm run setup` writes `GATEWAY_SERVICE_TOKEN`, `OPERATOR_CONTEXT_SIGNING_KEY` and
+   `POSTGRES_GATEWAY_PASSWORD` into `.env` (a missing secret is added to an existing file).
+3. `pnpm infra:up`, then `pnpm db:migration:run` (19 migrations) and `pnpm db:roles` (the gateway
+   role's password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml`
+   as catalog revision 1. Until the feed import (API-34) is on `main`, bind the signature feed by
+   hand ("Attack-signature feed" in `docs/setup.md`); without it every inspection and the replay
+   fail closed.
+4. `pnpm dev` (or `pnpm dev:gateway`, or `pnpm stack:up` for containers). `GET /health/ready` is
+   `200` only with the database reachable and the worker running.
+5. Checks: `pnpm --filter gateway run lint`, `typecheck`, `test`, `build`, then
+   `pnpm test:db gateway` against a dedicated test database (set `GOFLAGS=-p=3` on a loaded machine).
+
+`pnpm reset:demo` restores the synthetic demo data between rehearsals.
+
+### How a run flows through the packages
+
+1. **Admission** (`POST /internal/runs`; `httpserver`, `operatorcontext`, `api`, `admission`,
+   `catalog`, `budget`). The service token and the signed operator context are checked first. The
+   request must name the registered task template `reconcile_atlas_v1`, one to 100 invoices of one
+   vendor of the operator's organization, and that vendor as destination, with a registered
+   reporting address; requested limits are capped by the active catalog. One transaction writes
+   the immutable passport (scope: the invoices, the vendor, the two templates, the projection rule,
+   the run-scoped recipient reference `recipient:<run>:<vendor>`, the allowed model, the internal
+   note readable), the queued run, its `agent_step` job, its model ledger and `run.queued`.
+2. **Claim** (`worker`, `agent.Recovery`). A worker claims the job with a fenced, renewed lease.
+   Leftovers of a former claim are reconciled first (GO-49): never re-sent, never re-executed.
+3. **Step** (`agent.Loop`). Before every model request the run is reread (cancellation, expiry,
+   agent steps), and the active catalog snapshot narrows the passport (`catalog.EffectiveFor`).
+   `agent.Stepper` records the dispatch, then `agent.CatalogAccountedCaller` checks the model
+   allowlist, waits for a process slot, reserves on the ledger within the catalog's ceiling and
+   calls Ollama under the request deadline (`budget`, `model`).
+4. **Gate** (`policy.Gate`). One proposal: registered tool, strict argument decoding, canonical
+   arguments and digest (the action identity), passport scope, the vendor-invoice relationship, the
+   provenance export decision (`provenance.AuthorizeExport`), signature matching and the semantic
+   check on free-text arguments (`security`), then the approval rule. The decision, the stored
+   action, its events and its control assessments commit together.
+5. **Review** (`policy.Approvals`, GO-40). `queue_report` needs a reviewer: the exact payload is
+   frozen, the run waits in `awaiting_approval` without holding a lease, and a decision enqueues
+   the continuation, which resumes the original stored action.
+6. **Execution** (`policy.Executor`, `tools`, `provenance`). The executor rechecks the action,
+   the grant, the source versions and the catalog revision, claims the attempt under the run lock
+   and the tool-attempt limit, and runs the adapter in the same transaction: the adapter rechecks
+   the passport scope, renders reports on the server, stores report and lineage, and writes the
+   simulated outbox row.
+7. **Inspection** (`agent.SecurityInspector`, `security.InspectToolResult`). The minimized result
+   passes the field limit, secret patterns and signatures; the invoice's internal note also the
+   semantic check. Only the inspected result enters `runtime.context_entries`.
+8. **Finish** (`runresult`). Only the exact final answer `{"status":"completed","report_ids":[...]}`
+   naming reports this run created completes the run; the validated reference is stored with it.
+9. **Reads and probes** (`reads`, `provenance`, `evaluation`). NestJS reads run state, usage,
+   events, the stored report and the security records through private routes; judges probe the
+   controls through `POST /internal/control/evaluate` without running the agent.
+10. **Catalog activation** (`catalog.WatchRequested`, every second). A requested revision is
+    validated with the gateway's own parsers and activated with its feed, or rejected with a safe
+    `last_error` while the last good revision stays active.
+
+### Boundaries and their fail-closed behaviour
+
+| Boundary                      | Check                                                                                 | On failure                                                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Service identity and operator | service token, HS256 operator context (5 min, single use)                             | `401` before any handler                                                                                                                                    |
+| Organization and object       | every route scopes by the verified organization                                       | `404` (or the caller's own empty records); no data, no write (GO-57)                                                                                        |
+| Admission                     | template, invoices, vendor, destination, limits within the catalog                    | `400` with the reason code and an `admission.rejected` event; catalog unreadable: `503 decision_unavailable`; nothing created                               |
+| Active catalog                | coherent snapshot of revision, limits, security settings and feed                     | no dispatch (the job waits) and no admission; a bad requested revision is rejected and the last good one stays                                              |
+| Model gateway                 | allowlist, ledger reservation, process slot, request deadline                         | `stopped/model_not_allowed`, `paused/allowance_exhausted`, requeue for a slot; timeout or unknown usage: `paused/outcome_unknown`, usage held               |
+| Action gate                   | tool, arguments, scope, destination, provenance, signatures, free-text semantics      | denial with feedback, counted as a correction; past the limit `stopped/allowance_exhausted`; any unavailable dependency: `decision_unavailable`             |
+| Review and execution recheck  | exact digest, grant, source versions, catalog revision, run active                    | refused (`resource_version_changed`, `source_policy_changed`, `action_changed`, `approval_expired`, `approval_rejected`, `run_cancelled`); nothing executed |
+| Executor and adapters         | attempt limit under the run lock, passport scope in the effect transaction            | `allowance_exhausted`; a known no-effect failure retries once under the same action; a precondition stops the run; an unknown commit pauses                 |
+| Provenance                    | stored lineage, hash, template and projection versions, re-derived label, destination | `report_export_restricted` (with the vendor template as alternative), `report_lineage_missing`, `template_not_allowed`, `resource_version_changed`          |
+| Tool-result inspection        | field limit, secret patterns, signatures, semantic check on the note                  | a value withheld or masked; a guard failure releases nothing and pauses the run                                                                             |
+| Final result                  | exact JSON naming this run's reports                                                  | denied as a correction; a failed check pauses (`decision_unavailable`)                                                                                      |
+| Reads                         | organization scope, X-12 re-check of every stored row                                 | `503`, never a partial or unchecked answer                                                                                                                  |
+| Database role                 | the gateway connects as `task_passport_gateway` with table grants only (GO-38)        | the gateway refuses to start without its password                                                                                                           |
+
+Every reason code is one of the 31 X-13 codes (`contracts.ReasonCodes`), and
+`contracts.ReasonCode.SafeMessage()` gives each a fixed safe operator message, which every
+reason-coded event carries. Decisions are `allow`, `deny`, `approval_required`, `redact`,
+`approved` and `rejected`; run statuses are X-11's seven.
+
+### Tools (GO-07)
+
+| Tool            | Arguments                          | Model-facing result                                                                                                                      | Effect                                     |
+| --------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `read_invoice`  | `invoice_id`                       | invoice id, version, vendor id, external reference, currency, total, issue and due dates, the note with its classification when readable | read                                       |
+| `read_vendor`   | `vendor_id`                        | vendor id, version, name, the run-scoped recipient reference (never the address)                                                         | read                                       |
+| `create_report` | `template`, `source_invoice_ids`   | report id, version, template, classification, content hash, source ids                                                                   | a stored, immutable report and its lineage |
+| `queue_report`  | `report_id`, `recipient_reference` | `queued_simulated`, report id, outbox message id                                                                                         | one simulated outbox row; nothing is sent  |
+
+### Accounting
+
+Every model call of either purpose reserves on the run's ledger before it is sent: the shared and
+per-purpose call counts and tokens, the request time and a concurrency slot (GO-39, GO-79). Usage
+settles once; unknown usage keeps the whole reservation and the slot. Tool attempts count under
+the run lock against the passport's `tool_attempts` (GO-50), corrections against its correction
+limit. Local inference has no tariff, so no cost is recorded.
+
+### Live, fixture and labelled replay
+
+- **Live**: the production chain against the configured Ollama model; semantic verdicts are stored
+  with `verdict_source` `live`.
+- **Fixture**: test doubles answer in place of the model (the scripted provider of
+  `internal/scenario`, the security package's verdict fixtures, the benchmark's
+  `semantic_on_fixture`). Their verdicts are stored as `fixture` and are never presented as
+  detection quality.
+- **Labelled replay**: `cmd/replay` sends a stored hostile-note proposal through the real gate;
+  the action and every event are labelled `labelled_replay:<fixture>`, and nothing executes.
+- **Simulated outbox**: `demo.outbox_messages` rows labelled `queued_simulated`; no message leaves.
+
+### Known limitations
+
+- **One gateway per database and model host.** The cap of concurrent model requests
+  (`local_max_concurrency`) is enforced per gateway process, so a second gateway doubles it. Leases,
+  catalog activation and the ledger are safe with several gateways; the cap is not.
+- **The signature feed has no signing key.** Trust is the authenticated import plus the SHA-256
+  pin of the file bytes; this proves integrity, not the issuer. The feed is not called "signed".
+- **Recipient references are bounded.** A run can address only `recipient:<run>:<vendor>` of its
+  passport's vendor, resolved inside the adapter to the vendor's registered reporting address; no
+  other address can be named, and a run has one vendor.
+- **The semantic check covers free text only.** On action proposals of the four MVP tools no
+  argument is free text, so no semantic call is made there (a `not_applicable` record); the action
+  control is the deterministic gate plus signatures. In tool results only the invoice note is
+  semantically checked.
+- **No model-call retries.** A failed, timed-out or unknown call is never re-sent; its usage is
+  held and the run pauses.
+- **Judges see the semantic score.** The evaluation route returns the verdict's score and category,
+  bounded per run by `calls_security`; a prober can learn the threshold.
+- **Unknown outcomes have no reconciliation operation.** The run pauses in the attention state and
+  stays there.
+- **The audit stream is application evidence**, not tamper-proof: append-only through the gateway's
+  grants, but the database owner can change it.
+- **Protected-field inspection is literal** (GO-56): a transformed or encoded value is not found.
+- **A long transaction stalls the organization-wide pages.** The security event and assessment
+  pages return only rows of finished transactions; a long-running or idle-in-transaction session
+  anywhere in the database holds them back. Pages come back empty with the same cursor until it
+  ends; nothing is lost.
+- **Two identical start-run requests create two runs** (`command idempotency keys` is open).
+
+### Evidence commands
+
+From the repository root; database tests need the test database settings (`pnpm test:db` sets
+them; for a single package see "PostgreSQL test harness").
+
+| Command                                                                                        | Proves                                                                                     |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `pnpm --filter gateway run test`                                                               | unit tests, contract fixtures, handler and fail-closed mapping without a database          |
+| `GOFLAGS=-p=3 pnpm test:db gateway`                                                            | every database-backed test, among them the ones below                                      |
+| `go test -run TestStory ./internal/scenario`                                                   | the core story through the production chain (GO-66, GO-67, GO-47, GO-56), fixture provider |
+| `go test -run TestPostgresCompeting ./internal/budget ./internal/policy`                       | competing requests cannot spend the same allowance (GO-50)                                 |
+| `go test -run TestPostgresAnotherOrganization ./internal/api`                                  | another organization reaches nothing (GO-57)                                               |
+| `go test -run TestPostgresReadRoutesThroughTheGatewayHandler ./internal/reads`                 | the read routes through the real handler tree (GO-24, GO-83)                               |
+| `go test -run TestUnreachableProviderRecordsTheActualFailureState ./internal/agent`            | a provider failure records the actual state (GO-58)                                        |
+| `go test -tags=model_live -run TestLiveStoryThroughTheProductionChain ./internal/scenario`     | with `GO_STORY_LIVE=1`: the story with the live model, labelled live                       |
+| `go test -tags=model_live -run TestLiveSemanticCorpus ./internal/security`                     | with `GO_SECURITY_LIVE=1`: the labelled corpus through the live evaluator (GO-84)          |
+| `go test -tags=model_live -run TestLiveProductionChainExecutesAPermittedTool ./internal/agent` | with `GO_AGENT_LIVE=1`: one permitted tool through the live chain (GO-11)                  |
+| `pnpm benchmark` (`--live`)                                                                    | latency of the policy lookup and inspection, model-free and live (GO-81)                   |
+| `go -C services/gateway run ./cmd/replay -run <run> -fixture <fixture>`                        | a labelled replay of a hostile-note proposal is denied by the real gate (GO-36)            |
+| `go -C services/gateway run ./cmd/modelcheck`, `./cmd/budgetcheck`                             | the model connection and the ledger accounting against the active catalog                  |
+| `pnpm smoke`                                                                                   | the running services answer end to end                                                     |
+
+Live tests need `MODEL_BASE_URL` and `MODEL_NAME` and run alone. Their results are observations of
+one run on one machine, not reliability measures.
 
 ## Ollama transport (GO-06 progress)
 
@@ -459,6 +647,20 @@ stopping.
   revision, an out-of-scope resource or destination) executes nothing and is a counted denial with
   bounded feedback, like a rejection; only run-level refusals stop, pause or fail the run.
 
+## Agent task instruction
+
+The first model message describes the `reconcile_atlas_v1` business task as the report's
+storyboard does (beats 3 to 8): the finance team suspects a duplicate charge; investigate
+internally, reading each invoice including any authorized internal note, find repeated external
+references and record the findings in an internal investigation report; then send the vendor
+(the passport's recipient reference) what they need to reconcile; use each `recipient_reference`
+exactly as `read_vendor` returns it. It lists the registered templates and names no report to
+send and no control, so a denied export is a natural attempt, not a staged one. Live results with
+`qwen3.5:4b` (run ids and commands in GO-27 in `docs/roadmap/go.md`): the internal report is
+created in 3 of 3 runs per set; the internal export was attempted (and denied) in 0 of 3 and 1 of 3
+runs, so demo beat 5 uses the labelled replay (`cmd/replay`), said openly. The recipient sentence
+took mangled references from 2 of 3 runs to 0 of 3.
+
 ## Cancellation during a step (Worker 3's review)
 
 The loop re-reads the run just before and just after each model request: a cancel stamped since
@@ -536,6 +738,19 @@ revision lowered below what a run has used refuses its next reservation with `bu
 (`allowance_exhausted`). A raised revision widens nothing, and past usage is never refunded or
 rewritten; the ledger keeps the passport's stored limits. The catalog has no per-purpose token
 limits, so those stay the passport's.
+
+**Settlement and slot wait (Worker 3's review).** A completed provider call settles under its own
+5 s cleanup context, so a call that answers at its deadline or under a lost claim never leaves its
+reservation stuck as `reserved`; if the settlement still fails, the call is marked `usage_unknown`
+(reservation and slot held) and returns `model.ErrUsageUnknown`, which pauses the run. The wait for
+a process slot is bounded on its own by one request period, and the provider's request deadline
+starts only once the slot is held.
+
+**Limitation: unknown calls hold their slots.** A `usage_unknown` reservation keeps its ledger slot
+until a trusted late settlement (`Reconcile`). Such calls normally pause the run; a run that kept
+going with all `max_concurrent_calls` slots held by unknown calls would requeue every second
+without progressing. The MVP's action checks no longer call the model (c1's `not_applicable`), so
+this is latent; an operator resolves it by reconciling or cancelling the run.
 
 ## Model allowance ledger alignment (GO-39)
 

@@ -157,10 +157,19 @@ func (caller *AccountedCaller) Call(ctx context.Context, runID, callID string, r
 		}
 		return result, ErrUsageUnknown
 	}
-	settlement, err := caller.store.Settle(ctx, runID, callID, *input, *generated)
+	// The call completed: its measured usage is settled even when the request context ended just
+	// after the provider answered (a deadline or a lost claim), so the reservation never sticks.
+	settleContext, cancelSettle := context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
+	defer cancelSettle()
+	settlement, err := caller.store.Settle(settleContext, runID, callID, *input, *generated)
 	if err != nil {
+		// Unsettled usage is unknown usage: the reservation and its slot stay held for reconciliation.
 		result.Provider.Message = Message{}
-		return result, safeBudgetError(err)
+		result.UsageUnknown = true
+		if caller.store.MarkUnknown(settleContext, runID, callID) != nil {
+			return result, ErrAccounting
+		}
+		return result, ErrUsageUnknown
 	}
 	result.Settlement = &settlement
 	if settlement.Paused || settlement.ActualTokens > reservation {
@@ -185,6 +194,9 @@ func (caller *AccountedCaller) Reconcile(ctx context.Context, runID, callID stri
 	}
 	return settlement, nil
 }
+
+// settleTimeout bounds the settlement and its fallback after a completed provider call.
+const settleTimeout = 5 * time.Second
 
 func safeBudgetError(err error) error {
 	for _, known := range []error{budget.ErrInvalid, budget.ErrNotFound, budget.ErrExhausted, budget.ErrPaused, budget.ErrDuplicate,

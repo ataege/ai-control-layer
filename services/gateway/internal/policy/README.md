@@ -12,7 +12,7 @@ digest").
   Rejected before any canonical form exists: invalid UTF-8, a non-object, unknown keys, keys that
   differ only by case, duplicate keys, missing or null fields, wrong types (numbers included),
   trailing data, empty or over-long identifiers and control characters. Record identifiers must
-  have their documented shape: invoice ids `^invoice_[A-Za-z0-9_-]{1,120}$` (also in
+  have their documented shape (`contracts.InvoiceIDPattern` and `VendorIDPattern`, shared with admission): invoice ids `^invoice_[A-Za-z0-9_-]{1,120}$` (also in
   `source_invoice_ids`), vendor ids `^vendor_[A-Za-z0-9_-]{1,121}$`, `report_id` a lowercase
   uuid, `template` a registered name; prose inside an id is `invalid_arguments`. Recipient
   references stay bounded, not pattern-strict, so a redirected recipient is stored and denied
@@ -85,7 +85,7 @@ passport is `run_expired`.
    limit (`allowance_exhausted`), then the open attempt is inserted, the action set to
    `executing`, and both committed before dispatch.
 3. One transaction: `RunEffect` (effect, attempt completion, audit event), then the action's
-   final status `executed` or `failed`; commit.
+   final status `succeeded` (X-09) or `failed`; commit.
 
 Failure handling: an adapter or status error rolls back, so no effect was committed; the attempt is
 closed as `aborted` and the result is `paused` (the action stays `executing` for reconciliation).
@@ -274,7 +274,7 @@ GO-53 belongs to Worker 2, who owns the effect transaction; the executor half li
   normal checks and a new attempt that counts against the passport's limit. A precondition failure
   (the stored action, attempt or passport no longer matches) fails the action with an
   `action.failed` event and returns `stopped`, so the worker stops the run; no retry.
-- The commit fails: the stored status is read back. `executed` or `failed` means the commit landed
+- The commit fails: the stored status is read back. `succeeded` or `failed` means the commit landed
   and the result is returned; otherwise the attempt stays open (the one-open-attempt index blocks
   any second attempt), the action becomes `unknown` with an `action.unknown` event
   (`outcome_unknown`), and the result is `paused`. Nothing re-runs it.
