@@ -54,7 +54,9 @@ func withJSONErrors(mux *http.ServeMux) http.Handler {
 		routeHandler, matchedPattern := mux.Handler(request)
 		isExactPath := request.URL.Path == path.Clean(request.URL.Path)
 		if matchedPattern != "" && isExactPath {
-			routeHandler.ServeHTTP(responseWriter, request)
+			// Served through the mux, not routeHandler: mux.Handler does not populate path
+			// wildcards, so r.PathValue would be empty in the handler.
+			mux.ServeHTTP(responseWriter, request)
 			return
 		}
 

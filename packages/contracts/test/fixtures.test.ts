@@ -15,6 +15,7 @@ import type {
   GatewayDiagnosticsResponse,
   GatewayPingResponse,
   LivenessResponse,
+  OperatorContext,
   Passport,
   ReadinessResponse,
   ReasonCode,
@@ -251,6 +252,11 @@ export const typedSamples = {
     },
     occurredAt: "2026-10-03T11:59:00Z",
   } satisfies SafeEvent,
+  operatorContext: {
+    userId: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+    organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+    roles: ["operator", "reviewer"],
+  } satisfies OperatorContext,
 };
 
 // Fixture file that each typed literal must equal, one per schema.
@@ -269,6 +275,7 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   storedAction: "stored-action.read-allowed.json",
   runState: "run-state.paused-allowance.json",
   safeEvent: "safe-event.admission-rejected.json",
+  operatorContext: "operator-context.operator.json",
 };
 
 test("typed samples are identical to their fixtures", () => {
