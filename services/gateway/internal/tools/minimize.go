@@ -63,6 +63,17 @@ func MinimizeForModel(tool string, result EffectResult) (MinimizedResult, error)
 		}
 		// The vendor name is trusted demo data, not untrusted free text.
 		return MinimizedResult{JSON: encoded}, nil
+	case ToolCreateReport:
+		var report ReportResult
+		if err := reencode(result.ModelFacing, &report); err != nil {
+			return MinimizedResult{}, err
+		}
+		encoded, err := json.Marshal(report)
+		if err != nil {
+			return MinimizedResult{}, fmt.Errorf("tools: encode report result: %w", err)
+		}
+		// References and Go-derived metadata only; the report content stays in the database.
+		return MinimizedResult{JSON: encoded}, nil
 	default:
 		return MinimizedResult{}, fmt.Errorf("%w: %s", errUnknownTool, tool)
 	}
