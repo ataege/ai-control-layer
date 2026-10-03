@@ -134,3 +134,22 @@ describe("a recording", () => {
     expect(recordingLabel(null)).toBeNull();
   });
 });
+
+describe("the development demonstration label with a server flag", () => {
+  it("lets the server's flag decide, in both directions, over the email", () => {
+    expect(developmentDemonstrationLabel("someone@example.com", true)).toBe(
+      LABELS.developmentDemonstration,
+    );
+    expect(developmentDemonstrationLabel("demo-operator@example.com", false)).toBeNull();
+  });
+
+  it("falls back to the seeded email only when the session carries no flag", () => {
+    expect(developmentDemonstrationLabel("demo-operator@example.com", undefined)).toBe(
+      LABELS.developmentDemonstration,
+    );
+    expect(developmentDemonstrationLabel("demo-operator@example.com", null)).toBe(
+      LABELS.developmentDemonstration,
+    );
+    expect(developmentDemonstrationLabel("someone@example.com", undefined)).toBeNull();
+  });
+});

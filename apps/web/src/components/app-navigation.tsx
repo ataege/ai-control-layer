@@ -7,9 +7,12 @@ import { ActivityIcon, HouseIcon, LayoutGridIcon } from "lucide-react";
 import { AppShell, type AppShellNavigationItem } from "@workspace/ui/components/app-shell";
 
 import * as React from "react";
-import { ProductClient } from "@/lib/product-client";
 import { LogOutIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+import { DevelopmentDemonstrationLabel } from "@/components/labels";
+import { ProductClient } from "@/lib/product-client";
+import { mustSignIn, sessionOutcome, type SessionOutcome } from "@/lib/session-view";
 
 const NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { href: "/", label: "Home", icon: <HouseIcon aria-hidden="true" /> },
@@ -17,31 +20,34 @@ const NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { href: "/components", label: "Components", icon: <LayoutGridIcon aria-hidden="true" /> },
   { href: "/diagnostics", label: "Diagnostics", icon: <ActivityIcon aria-hidden="true" /> },
   { href: "/judge", label: "Judge", icon: <LayoutGridIcon aria-hidden="true" /> },
-  { href: "/security", label: "Security", icon: <ActivityIcon aria-hidden="true" /> },
+  { href: "/security", label: "Security posture", icon: <ActivityIcon aria-hidden="true" /> },
 ];
 
 /** Connects the generic AppShell to the Next.js router. */
 export function AppNavigation({ children }: Readonly<{ children: React.ReactNode }>) {
   const currentPathname = usePathname();
   const router = useRouter();
-  
-  const [user, setUser] = React.useState<{ name: string; email: string; organizationId: string } | null>(null);
+
+  // null until the session has been read; "unavailable" when it could not be read at all.
+  const [session, setSession] = React.useState<SessionOutcome | null>(null);
 
   React.useEffect(() => {
-    if (currentPathname !== "/login") {
-      ProductClient.getMe().then((res) => {
-        if (res.ok) {
-          setUser(res.data);
-        } else {
-          setUser(null);
-          // Redirect to login if unauthenticated on a protected route
-          const isPublic = currentPathname.startsWith("/diagnostics") || currentPathname.startsWith("/components");
-          if (!isPublic) {
-            router.push("/login");
-          }
-        }
-      }).catch(() => setUser(null));
-    }
+    if (currentPathname === "/login") return;
+    let isCurrent = true;
+    ProductClient.getMe()
+      .then((result) => {
+        if (!isCurrent) return;
+        const outcome = sessionOutcome(result);
+        setSession(outcome);
+        // An expired or missing session on a product page leads to sign-in, never to an empty page.
+        if (mustSignIn(outcome, currentPathname)) router.push("/login");
+      })
+      .catch(() => {
+        if (isCurrent) setSession({ status: "unavailable" });
+      });
+    return () => {
+      isCurrent = false;
+    };
   }, [currentPathname, router]);
 
   if (currentPathname === "/login") {
@@ -54,31 +60,47 @@ export function AppNavigation({ children }: Readonly<{ children: React.ReactNode
     router.refresh();
   };
 
+  const operator = session?.status === "signed_in" ? session.operator : null;
+
+  // The label comes from the session (the server's flag, else the seeded operator's email), so a
+  // session that is not the development identity, or an unreadable one, never shows it.
   const brand = (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-1">
       <span className="font-bold">Task Passport</span>
-      <span className="text-[10px] font-medium text-amber-500 uppercase tracking-wider">
-        Development Demonstration
-      </span>
+      <DevelopmentDemonstrationLabel
+        email={operator?.email}
+        developmentDemonstration={operator?.developmentDemonstration}
+      />
     </div>
   );
 
-  const sidebarFooter = user ? (
-    <div className="flex items-center justify-between rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-3">
-      <div className="flex flex-col min-w-0">
-        <span className="text-sm font-semibold truncate">{user.name}</span>
-        <span className="text-xs text-muted-foreground truncate">{user.email}</span>
-        <span className="text-[10px] uppercase text-muted-foreground/80 mt-1 truncate">Org: {user.organizationId}</span>
+  let sidebarFooter: React.ReactNode = null;
+  if (operator !== null) {
+    sidebarFooter = (
+      <div className="flex items-center justify-between rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-3">
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate text-sm font-semibold">{operator.name}</span>
+          <span className="truncate text-xs text-muted-foreground">{operator.email}</span>
+          <span className="mt-1 truncate text-[10px] text-muted-foreground/80 uppercase">
+            Organization: {operator.organizationId}
+          </span>
+        </div>
+        <button
+          onClick={handleSignOut}
+          className="ml-2 shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          aria-label="Sign out"
+        >
+          <LogOutIcon className="size-4" />
+        </button>
       </div>
-      <button 
-        onClick={handleSignOut}
-        className="ml-2 shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
-        aria-label="Sign out"
-      >
-        <LogOutIcon className="size-4" />
-      </button>
-    </div>
-  ) : null;
+    );
+  } else if (session?.status === "unavailable") {
+    sidebarFooter = (
+      <p className="rounded-lg border border-sidebar-border p-3 text-xs text-muted-foreground">
+        The signed-in operator could not be read.
+      </p>
+    );
+  }
 
   return (
     <AppShell

@@ -65,10 +65,15 @@ export function VerdictSourceLabel({
 /** The seeded operator, recognized from the session's email; nothing for any other user. */
 export function DevelopmentDemonstrationLabel({
   email,
+  developmentDemonstration,
   detail = false,
   className,
-}: DetailProps & { email: string | null | undefined }) {
-  const label = developmentDemonstrationLabel(email);
+}: DetailProps & {
+  email: string | null | undefined;
+  /** The server's own flag for the session, when it sends one; it overrides the email. */
+  developmentDemonstration?: boolean | null;
+}) {
+  const label = developmentDemonstrationLabel(email, developmentDemonstration);
   return label === null ? null : <LabelBadge label={label} detail={detail} className={className} />;
 }
 
