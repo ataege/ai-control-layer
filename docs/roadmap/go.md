@@ -688,7 +688,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     and presenters" (Canonical arguments)
   - Blocked by: `canonical arguments`
 
-- [ ] **GO-13 · Admit a start-run request and issue the passport, run and job together**
+- [x] **GO-13 · Admit a start-run request and issue the passport, run and job together**
   - **Report 1.2 change:** The passport adds approved model references, the admission catalog revision, shared limits with agent and security sub-limits, concurrency and run expiry; model selection is constrained by the catalog allowlist.
   - **Report 1.1 change:** The passport adds allowed report templates, source authority and the projection rules or source policy version; both templates are in the grant (shape: `passport report fields`).
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 4-8 h)
@@ -715,6 +715,23 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     unreadable `app` record rejects; a narrower request after a rejection is a new admission
     ("Verify that scope rejection is explicit and the revised request must be resubmitted"); no
     repository path updates a stored passport. The X-24 command.
+  - Completed (2026-10-03, 0931f93 and 276862a): `internal/admission` derives the passport from
+    the verified operator, the registered task template `reconcile_atlas_v1` (lead decision), the
+    active catalog revision read in the admission transaction, and the organization's demo
+    records: invoices of the organization sharing one vendor, the requested vendor and destination
+    equal to it with a registered reporting address, `approvalRequirement` absent or
+    `review_queue_report`, requested limits only below the catalog (`limit_not_allowed` otherwise).
+    Passport, run (queued), job (queued, `agent_step`), token ledger (`budget.OpenRunLedger`, limit
+    from the passport) and a `run.queued` event commit in one transaction; a rejection writes only
+    an `admission.rejected` event and returns the X-13 code with the scope or limit to change; a
+    missing or invalid catalog or a storage error stores nothing. Tests (PostgreSQL, rolled-back
+    outer transaction with its own records and catalog revision): the fitting request stores one
+    of each and an identical passport read-back; twelve over-authority requests are rejected with
+    their code and zero passport, run or job rows; no or invalid catalog is unavailable; a narrowed
+    catalog narrows templates; a fault injected into the last write leaves nothing. Checks: gateway
+    five checks PASS; `pnpm test:db gateway` 461 passed, 0 skipped (at 0931f93); `go test -race
+./internal/admission` ok after the ledger; `pnpm verify` 6 passed. Known limitation recorded by
+    the lead: no idempotency key on X-07, so two identical commands make two runs.
   - Report: "Trusted authority and passport invariants" (Passport fields and their purpose; Task
     relationships matter); "Functional requirements MVP boundary and deferred scope" (Trusted
     admission); "Threat model limits and unresolved design choices" (Verification priorities);
@@ -868,7 +885,7 @@ budget` item stays open (admission is one short transaction).
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-18 · Mirror the frozen contracts in Go DTOs**
+- [x] **GO-18 · Mirror the frozen contracts in Go DTOs**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: nothing · Needs: X-07, X-08, X-09, X-10, X-11, X-12, X-13 · Provides: X-15 (part: the X-07 to X-13 mirrors)
   - Paths: `services/gateway/internal/health/dto.go`,
@@ -886,11 +903,23 @@ budget` item stays open (admission is one short transaction).
     of `TestEmittedValuesMatchContractFixtures`; the new test that lists
     `packages/contracts/fixtures` and fails for an unmapped fixture.
     `pnpm --filter gateway run test`.
+  - Completed (2026-10-03, 7f8904f, with GO-62 080030c): the Go-owned contracts were drafted and
+    approved by the lead as Go owner (X-08 passport, X-09 action proposal and stored action, X-11
+    run state, X-12 safe event, X-13 reason codes, now 29 with `limit_not_allowed`), and X-07 got a
+    schema and fixtures mirroring the API's `StartRunSchema` without changing it. All live in
+    `packages/contracts` (types, JSON Schemas, fixtures, typed samples) and are mirrored in
+    `services/gateway/internal/contracts`. Go tests: every fixture decodes strictly and re-encodes
+    unchanged; every shared fixture has a Go case or a recorded exemption (the unmapped-fixture
+    test); every Go enum equals its schema enum; proposal arguments fit their tool's shape. Checks:
+    `pnpm --filter @workspace/contracts run lint`, `typecheck`, `test` (6/6), `build` PASS; gateway
+    `format:check`, `lint`, `typecheck`, `test`, `build` PASS; `pnpm verify` 6 passed. X-15 is
+    reached with GO-62. RunView and SanitizedEvent (web + API side) still differ from X-11/X-12;
+    the lead asked Batın to align them.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
   - Blocked by: nothing
 
-- [ ] **GO-62 · Mirror the operator context contract in Go**
+- [x] **GO-62 · Mirror the operator context contract in Go**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 0.5-1 h, split from GO-18)
   - Depends on: GO-18 · Needs: X-14 · Provides: X-15 (part: the X-14 mirror)
   - Paths: `services/gateway/internal/health/dto_test.go`, `services/gateway/README.md`; the DTO
@@ -901,11 +930,16 @@ budget` item stays open (admission is one short transaction).
     GO-18's fixtures do, and with GO-18 done X-15 is reached ("validate serialized contracts").
   - Tests: the strict decode and re-encode test for the X-14 fixture; GO-18's unmapped-fixture test
     passes. `pnpm --filter gateway run test`.
+  - Completed (2026-10-03, 080030c): X-14 `OperatorContext` (the API's type, unchanged) got
+    `operator-context.schema.json` (uuid ids, unique bounded roles), a fixture and a typed sample,
+    and is mirrored as `contracts.OperatorContext` with a strict round-trip case. Checks: contracts
+    `lint`, `typecheck`, `test`, `build` PASS; gateway five checks PASS; `pnpm --filter api run
+typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-19 · Build the runtime repository with guarded state transitions**
+- [x] **GO-19 · Build the runtime repository with guarded state transitions**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 4-8 h)
   - Depends on: GO-20 · Needs: X-19 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`, `services/gateway/cmd/gateway/main.go`,
@@ -922,6 +956,20 @@ budget` item stays open (admission is one short transaction).
   - Tests: database-backed: each invalid transition the guards name is rejected and changes no row;
     a failure injected between a state change and its event leaves neither; queries succeed with no
     `search_path` set. The X-24 command.
+  - Completed (2026-10-03, cda6336; EnqueueJob 9654150): `internal/repository` writes runtime
+    passports, runs, jobs and audit events in short transactions over the pool or an enclosing
+    transaction (`InTransaction`, `Tx.Raw` for GO-34): `InsertAdmission`, guarded `TransitionRun`
+    (one status-checked UPDATE plus its X-12 event; terminal statuses accept nothing; a reason
+    exactly for paused, failed and stopped), `AppendEvent` (validated against X-12), `EnqueueJob`,
+    organization-scoped `RunState` and `Passport` reads (stored scope and limits decoded strictly).
+    By lead decision the gate (lane w3) writes `runtime.actions` and `runtime.approvals` and lane
+    f3's budget package writes `runtime.model_calls`, so "every runtime write" holds for the
+    records this repository owns. Tests (PostgreSQL, rolled-back outer transaction): admission rows
+    and read-back, injected failure leaves none, duplicate run fails whole, refused transitions
+    write nothing, a failing event rolls back its state change, another organization reads and
+    changes nothing, schema-qualified queries with no `search_path`. Checks: gateway five checks
+    PASS; `pnpm test:db gateway` 186 passed, 0 skipped (at cda6336); `go test -race ./...` with a
+    required database ok; `pnpm verify` 6 passed.
   - Report: "Data ownership and the transition from starter to product" (Proposed database
     ownership); "Durable state idempotency audit and uncertain outcomes"; "Validation plan and
     evidence matrix" ("Exercise malformed tool arguments and invalid state transitions as well as
@@ -966,7 +1014,7 @@ budget` item stays open (admission is one short transaction).
     (Interpreting results honestly)
   - Blocked by: nothing
 
-- [ ] **GO-21 · Verify service identity and operator context on every internal command**
+- [x] **GO-21 · Verify service identity and operator context on every internal command**
   - **Report 1.1 change:** Both proposed internal command paths (`POST /internal/runs/:id/cancel`, `POST /internal/actions/:id/approval`) carry an identifier, so the `withJSONErrors` change applies; package per `Go package layout`.
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: SH-03, GO-62 · Needs: X-13, X-14, X-23 · Provides: X-27
@@ -998,6 +1046,20 @@ budget` item stays open (admission is one short transaction).
     appears in logs or responses; a well-formed command whose context follows X-14 and the
     mechanism decision 4 records is accepted; if a route has a path wildcard, its handler receives
     the value from the path through `NewHandler`. `pnpm --filter gateway run test`.
+  - Completed (2026-10-03, 7ed32c6): `internal/operatorcontext` verifies the `X-Operator-Context`
+    HS256 JWT the API signs (HMAC first, strict header and claims, issuer `gateway-client`,
+    audience `gateway`, at most five minutes, one-use `jti`, X-14 context); every product route is
+    registered through `httpserver.Options.InternalCommands`, behind the service token and that
+    verification, with the shared envelope (401) before the handler. `DecodeJSONBody` adds strict,
+    bounded bodies (400); matched routes are served through the mux so path wildcards work;
+    `OPERATOR_CONTEXT_SIGNING_KEY` is required in Go config. Tests: a token signed by the API's
+    jose library verifies; replay, wrong key, altered payload, alg none, wrong issuer or audience,
+    expiry and lifetime faults, unknown claims and bad contexts are rejected; route tests reject
+    the service token alone, the context alone, forged or duplicated contexts and a missing
+    verifier before the handler; no credential in responses or logs. Checks: gateway five checks
+    PASS; `go test -race` for httpserver, config, operatorcontext ok; `pnpm verify` 6 passed; the
+    built gateway on 127.0.0.1:18310 served health and ping and refused to start without the key.
+    The check against what NestJS sends end to end stays with X-26/SH-22.
   - Report: "Technical architecture and service ownership" (Interfaces and repository strategy);
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Validation plan and evidence
