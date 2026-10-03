@@ -2252,7 +2252,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `revocation reads`; `decision 2 in docs/product/README.md`
   - Progress (2026-10-03): blocked on SH-38/X-66 (web + API): `revocation reads` is not decided and no revocation table exists, so no reader is built (a reader that fails closed against a missing table would stop every run; lead decision).
 
-- [ ] **GO-53 · Handle known failures, safe retries and unknown outcomes**
+- [x] **GO-53 · Handle known failures, safe retries and unknown outcomes**
   - **Report 1.1 change:** Figure 9.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 2-4 h)
   - Depends on: GO-07, GO-45 · Needs: X-11, X-39 · Provides: nothing
@@ -2277,6 +2277,18 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     of queue_report retried under the same action yields one outbox row and two counted attempts
     (against w2_check). Missing: the executor's retry loop and unknown-outcome attention state in
     internal/policy (Worker 3).
+  - Completed (2026-10-03): both halves are on `main` (abf3c10): the adapter half above (ca42cb6)
+    and Worker 3's executor half (5a6b211). A known no-effect failure of a retry-safe tool is
+    retried once under the same action id and counts as another tool attempt; a precondition
+    failure fails the action and stops the run; a failed commit leaves the attempt open, marks
+    the action unknown with `action.unknown` (`outcome_unknown`), pauses the run and is never
+    re-queued. Rerun on the merged tree 55c851f against a private PostgreSQL (`starter_test`):
+    `TestSafeRetryUnderTheSameActionQueuesOneMessage` (one outbox row, two attempts),
+    `TestPreconditionFailureFailsTheActionWithoutRetry`, `TestFailedCommitRecordsAnUnknownOutcome`
+    (a second execution is refused), `TestAdapterErrorRollsBackAndPauses`,
+    `TestKnownSafeRetryOfQueueReportYieldsOneOutboxRow` and `TestClassifyRunErrorAndRetrySafety`:
+    PASS. `go test ./internal/tools ./internal/provenance ./internal/reads ./internal/policy` with
+    `GOFLAGS=-p=3`: ok. No reconciliation of unknown effects exists beyond this state (GO-61).
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Architecture and chart
     reading guide" (Figure 8); "Functional requirements MVP boundary and deferred scope" (Safe
     outcomes and retries)
