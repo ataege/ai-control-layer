@@ -102,6 +102,8 @@ func writeApprovalError(responseWriter http.ResponseWriter, request *http.Reques
 		httpserver.WriteError(responseWriter, request, http.StatusConflict, string(contracts.ReasonApprovalExpired), "The approval has expired.")
 	case errors.Is(err, ErrApprovalChanged):
 		httpserver.WriteError(responseWriter, request, http.StatusConflict, string(contracts.ReasonActionChanged), "The action changed after it was frozen for review.")
+	case errors.Is(err, ErrApprovalRunStopped):
+		httpserver.WriteError(responseWriter, request, http.StatusConflict, string(contracts.ReasonRunCancelled), "The run is stopped or cancelled.")
 	case errors.Is(err, ErrApprovalClosed):
 		httpserver.WriteError(responseWriter, request, http.StatusConflict, "conflict", "The approval is already decided.")
 	default:

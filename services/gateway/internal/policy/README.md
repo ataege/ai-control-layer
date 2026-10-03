@@ -196,7 +196,8 @@ and `ReviewRoutePattern` (`GET /internal/actions/{actionId}/review`, `ReviewHand
   `reviewer`, migration `1791110000000` grants the gateway read only); a signed claim alone never
   suffices, and a missing row or failed read denies.
 - `Approvals.Decide` locks the action of the operator's organization (another organization's action
-  is answered like a missing one), requires `awaiting_approval`, the frozen expiry still ahead, the
+  is answered like a missing one), refuses a stopped or cancel-stamped run (`409 run_cancelled`,
+  no grant, no continuation), requires `awaiting_approval`, the frozen expiry still ahead, the
   action digest recomputed from its stored arguments and the review payload digest recomputed from
   its stored content. Then one transaction writes the `runtime.approvals` row (bound to the action
   digest, the payload id, the reviewer and the frozen expiry), the action status `approved` or
