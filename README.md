@@ -149,15 +149,15 @@ pnpm stack:down                # stop and remove the containers, keep the databa
 
 Inside the Compose network the services use service names instead of the `.env` host values:
 
-| Setting            | Value inside Compose                                                                      |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| `POSTGRES_HOST`    | `postgres`                                                                                |
-| `POSTGRES_PORT`    | `5432`                                                                                    |
-| `GATEWAY_URL`      | `http://gateway:8080`                                                                     |
-| `API_UPSTREAM_URL` | `http://api:3001`                                                                         |
-| `API_HOST`         | `0.0.0.0`                                                                                 |
-| `GATEWAY_HOST`     | `0.0.0.0`                                                                                 |
-| `MODEL_BASE_URL`   | `http://host.docker.internal:11434` (gateway only; replaces the `.env` value; unverified) |
+| Setting            | Value inside Compose                                                          |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `POSTGRES_HOST`    | `postgres`                                                                    |
+| `POSTGRES_PORT`    | `5432`                                                                        |
+| `GATEWAY_URL`      | `http://gateway:8080`                                                         |
+| `API_UPSTREAM_URL` | `http://api:3001`                                                             |
+| `API_HOST`         | `0.0.0.0`                                                                     |
+| `GATEWAY_HOST`     | `0.0.0.0`                                                                     |
+| `MODEL_BASE_URL`   | `http://host.docker.internal:11434` (gateway only; replaces the `.env` value) |
 
 The API and gateway images also set their bind address to `0.0.0.0` themselves
 (`infra/docker/api.Dockerfile`, `infra/docker/gateway.Dockerfile`), so they do not depend on
@@ -207,7 +207,7 @@ readable by your user only. Real environment variables always win over the file.
 | `GATEWAY_TIMEOUT_MS`           | `3000`                   | API                                 | Upper bound for one API to gateway call. Whole milliseconds, 100-20000.                                                                                           |
 | `DATABASE_TIMEOUT_MS`          | `3000`                   | API, gateway                        | Upper bound for one connection attempt or readiness check. Both accept whole milliseconds, 100-20000.                                                             |
 | `LOG_LEVEL`                    | `info`                   | API, gateway                        | `debug`, `info`, `warn` or `error`.                                                                                                                               |
-| `MODEL_BASE_URL`               | `http://localhost:11434` | gateway                             | Ollama URL (host, not Compose). The gateway container gets `host.docker.internal` (unverified).                                                                   |
+| `MODEL_BASE_URL`               | `http://localhost:11434` | gateway                             | Ollama URL (host, not Compose). The gateway container gets `host.docker.internal`.                                                                                |
 | `MODEL_NAME`                   | empty                    | gateway                             | Ollama model tag for the local model alias; set after `ollama pull`. Model open (decision 6).                                                                     |
 
 Optional variables that are not in `.env.example`:
@@ -478,32 +478,15 @@ Targeted checks by the owner of each change, with temporary ports:
 
 **Not run**
 
-- Docker Compose and the Dockerfiles were never executed: `docker compose config`, the image builds,
+- Docker Compose and the Dockerfiles were never executed on the preparation machine: `docker compose config`, the image builds,
   the container health checks, `pnpm infra:up` / `infra:down`, `pnpm stack:up` / `stack:down`
   (with and without `--debug`) and `pnpm smoke --mode=container`. Host development was verified
-  against a PostgreSQL that did not come from the `postgres:18-alpine` image. The review round's
-  changes to `.dockerignore` and to the API and gateway Dockerfiles are therefore untested as well.
+  against a PostgreSQL that did not come from the `postgres:18-alpine` image. This gap was closed
+  on 2026-10-03 on macOS; see "SH-09: container path" under
+  [Implementation-phase checks](#implementation-phase-checks).
 - Linux and Windows through WSL 2.
 - The label "Diagnostics response status" on the gateway cards of the diagnostics page in the
   degraded state was not seen in a browser; it is covered by the type check only.
-
-To close the gap, run this on a machine with Docker and report the real results:
-
-```sh
-pnpm install
-pnpm run setup
-pnpm stack:up
-pnpm smoke --mode=container
-pnpm stack:down
-```
-
-Then confirm host development against the real image:
-
-```sh
-pnpm infra:up
-pnpm dev          # in a second terminal: pnpm smoke
-pnpm infra:down
-```
 
 The full record is in [docs/preparation-record.md](docs/preparation-record.md).
 
@@ -535,6 +518,36 @@ the same machine was not touched (see [infra/README.md](infra/README.md)).
   not hold needs SH-13's approach.
 - No code reads either secret yet; the readers land with the authentication and operator-context
   work.
+
+**SH-09: container path**
+
+- `docker compose ... config` resolved the project name from `.env` (`starter-9b`) and the
+  published PostgreSQL port.
+- `pnpm stack:up`: built the three images and started all four containers; every health check
+  reported healthy (about 1 minute 40 seconds including the first image builds). Images: web
+  294 MB, API 380 MB, gateway 26 MB; web and API run as `node`, the gateway as `gateway`; no `.env`
+  file exists in any image.
+- `pnpm smoke --mode=container`: 15 passed, 0 failed, 6 skipped (the direct gateway checks, port
+  not published), including the four leak checks (3 pages and 13 assets).
+- The skipped gateway checks, run from inside the Compose network with Node.js in the API
+  container: `gateway:8080/health/live` 200, `/health/ready` 200, `/internal/ping` 401 without a
+  token, 401 with a wrong token, 200 with the service token.
+- Container environments, variable names from `docker inspect`: web has none of the server
+  secrets, `POSTGRES_*` or `MODEL_*`; the API has both signing secrets, the service token and
+  `POSTGRES_*`; the gateway has `OPERATOR_CONTEXT_SIGNING_KEY`, the service token, `POSTGRES_*` and
+  `MODEL_*`, and no `AUTH_JWT_SECRET`. No secret value appears in the container logs.
+- Local model: in the gateway container's network namespace (a throwaway container started with
+  `--network container:<gateway>`, because the gateway image has no HTTP client),
+  `GET http://host.docker.internal:11434/api/tags` returned 200 and listed the host's Ollama models,
+  `qwen3.5:4b` among them. Docker Desktop for macOS reaches the loopback-bound Ollama without any
+  change. The gateway itself does not call the model yet. Linux was not tested.
+- `pnpm stack:down`: removed the containers and the network and kept the volume.
+- `pnpm stack:up --debug` published the gateway on `127.0.0.1:8080`; `pnpm smoke` in host mode
+  against it passed 21 of 21, including the five gateway checks. `pnpm stack:down --debug` removed
+  everything except the volume.
+- Host development against the real image: `pnpm infra:up` (`postgres:18-alpine` healthy),
+  `pnpm dev` and `pnpm smoke` 21 of 21 (see SH-20 above), `pnpm infra:down` removed the container
+  and kept the volume.
 
 ## Documentation
 
