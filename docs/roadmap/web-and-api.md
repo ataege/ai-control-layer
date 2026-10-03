@@ -1544,7 +1544,8 @@ sit here, before the final build's evidence is captured, and are cut first.
     runtime operations)
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`
 
-- [ ] **API-35 · Serve the security summary**
+- [x] **API-35 · Serve the security summary**
+  - Done (2026-10-04): verified organization members read GET /api/security/summary through the private Go route. The shared SecuritySummary is strictly validated and returned unchanged; a mismatched organization is refused with 503, and missing authentication is refused before Go. Live/fixture verdict labels, purpose usage and timings remain Go facts. Checks: API lint, typecheck and build exited 0; API unit tests: "235 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped" (host logs unavailable). Real authenticated API/Go summary returned 200 for the verified organization. Tests use labelled shared fixtures; aggregate reconciliation evidence remains API-37.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: API-16 · Needs: X-85, X-95 · Provides: X-93
   - Paths: `apps/api/src` (the activity module; the architecture proposes ActivityModule)
