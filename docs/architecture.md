@@ -303,9 +303,9 @@ repository structure differs from this repository: migrations stay in
 `deployment network`, and it predates report 1.2's hybrid controls, catalog, feed, reporting and
 telemetry (`architecture specification version`). When the first code of a product module lands, add a row here in the same change.
 
-| Module                            | Owner service | Responsibility                                                                                                                                             | Contracts                                                                 | Tables |
-| --------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
-| `services/gateway/internal/model` | Go            | Bounded Ollama HTTP transport; not wired to startup or runtime dispatch. Passport checks, durable reservations and concurrency enforcement remain pending. | Native Ollama `/api/chat`; internal Go types, no new shared wire contract | None   |
+| Module                            | Owner service | Responsibility                                                                                                                                                                                                                            | Contracts                                                                 | Tables |
+| --------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| `services/gateway/internal/model` | Go            | Bounded Ollama HTTP transport and explicit `cmd/modelcheck` diagnostic using model environment configuration; not wired to startup or runtime dispatch. Passport checks, durable reservations and concurrency enforcement remain pending. | Native Ollama `/api/chat`; internal Go types, no new shared wire contract | None   |
 
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"

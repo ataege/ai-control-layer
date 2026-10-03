@@ -476,11 +476,14 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Progress (2026-10-03): the bounded native Ollama HTTP transport and labelled provider-double
     tests are implemented in `internal/model`. It is not wired to startup or a public/internal route.
     Model authority, durable shared/purpose reservations and concurrency checks remain pending.
-    GO-06 stays open: GO-03/SH-04 adoption, infrastructure integration, the remote endpoint and
-    real agent/security requests on the presentation machine are not yet verified.
+    The standalone `cmd/modelcheck` command and strict model environment loader are ready for
+    the other machine: two synthetic agent/security-purpose requests with schema validation,
+    explicit ceilings and safe diagnostic output. Its command is in the gateway README.
+    GO-06 stays open: GO-03/SH-04 adoption, runtime infrastructure integration and live
+    presentation-machine outcomes remain unverified. These checks do not prove semantic guard quality.
     Verification: `pnpm --filter gateway run test` passed, including the model package;
     `pnpm verify` passed all six steps (6 passed, 0 failed, 0 skipped). No live model or smoke
-    check ran; startup/service wiring is not changed in this transport-only step.
+    check ran; startup/service wiring is not changed in this diagnostic-preparation step.
   - Report: "Relative implementation milestones and critical dependencies" (Proposed 24-hour
     implementation sequence, Hours 0-2); "Technical architecture and service ownership";
     "Architecture and chart reading guide" (Figure 1)

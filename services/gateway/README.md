@@ -83,6 +83,7 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | Existing package      | Owner                      |
 | --------------------- | -------------------------- |
 | `cmd/gateway`         | User (sole Go implementer) |
+| `cmd/modelcheck`      | User (sole Go implementer) |
 | `internal/config`     | User (sole Go implementer) |
 | `internal/logging`    | User (sole Go implementer) |
 | `internal/database`   | User (sole Go implementer) |
@@ -94,6 +95,7 @@ New packages get their ownership row when their first real code lands.
 
 ```
 cmd/gateway/          wiring, signals, -healthcheck
+cmd/modelcheck/       explicit synthetic Ollama connectivity check
 internal/config/      environment validation
 internal/logging/     JSON slog logger, Secret
 internal/database/    pgxpool construction
@@ -121,12 +123,46 @@ time separately from provider time. A timeout does not establish that remote inf
 This is transport code, not a completed governed model gateway. The worker must still check
 identity/passport and active model authority, reserve shared and purpose allowances, persist
 attempts and apply the concurrency cap before using it. The client is not called by startup or
-an HTTP route. Environment loading, authenticated remote access and live agent/security checks
-remain pending GO-03, SH-04 and the infrastructure handoff; existing startup behavior is unchanged.
+an HTTP route. The explicit diagnostic command below loads the infrastructure-agreed model variables. Runtime
+configuration wiring, remote-access setup and live presentation-machine evidence remain pending
+GO-03, SH-04 and the infrastructure handoff; existing startup behavior is unchanged.
 No provider credential mechanism is invented for the selected local Ollama setup.
 
 Unit tests use a labelled local HTTP provider test double; they are not live model evidence.
 API reference: [Ollama chat](https://docs.ollama.com/api/chat).
+
+### Test on the Ollama machine
+
+From the repository root on the M1 Pro machine, with Go and Ollama installed and Ollama running:
+
+```sh
+ollama pull qwen3.5:4b
+MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway run ./cmd/modelcheck
+```
+
+This command does not need PostgreSQL, a running API or a service token. It reads only
+`MODEL_BASE_URL` (default `http://127.0.0.1:11434`) and required `MODEL_NAME` from its environment.
+The command does not load `.env` automatically; explicit shell values above suffice. The model
+tag can change without editing code. Invalid configuration exits unsuccessfully before dispatch.
+
+It makes at most two sequential synthetic provider calls, labelled agent and security, through
+the same Go transport. Each has a 30-second deadline, 1 MiB request/response ceiling, 4096 context
+and 256 output tokens, a tiny fixed JSON schema, and explicit `think: false`. These are diagnostic
+settings, not adopted production limits. They must be supported by the installed Ollama/model.
+Each response must be a completed assistant response with exactly `{"status":"ok"}` and known
+input/output token counts. Only then does the command print a JSON `PASS` record with the purpose,
+usage and measured wall time. Provider timing is included only when reported. An invalid response
+or missing usage stops the command with exit code 1, without printing content or retrying.
+SIGINT/SIGTERM cancel the local request; remote inference termination is not guaranteed.
+
+Two `PASS` records and exit code 0 prove these diagnostic calls completed. They do not prove an
+agent workflow, semantic detection quality, durable task budgets or concurrency enforcement. Save
+the installed Ollama version, model digest, commit and command outcome with the live evidence.
+This machine's provider-double tests do not replace that evidence; GO-06 stays open until it exists.
+
+If Go runs on a different machine, infrastructure must provide the trusted reachable endpoint
+and access arrangement. This task does not expose Ollama on the network or merge another owner's
+feature branch.
 
 ## Proposed tool results and idempotency (GO-07)
 

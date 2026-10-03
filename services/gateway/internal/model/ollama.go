@@ -68,6 +68,7 @@ type Request struct {
 	OutputTokens  int             `json:"output_tokens"`
 	Format        json.RawMessage `json:"format,omitempty"`
 	Tools         []Tool          `json:"tools,omitempty"`
+	Think         *bool           `json:"think,omitempty"`
 }
 
 // Usage keeps absent provider counts unknown through nil pointers.
@@ -78,10 +79,11 @@ type Usage struct {
 
 // Result can retain known usage even when Chat returns a response error.
 type Result struct {
-	Message          Message       `json:"message"`
-	Usage            Usage         `json:"usage"`
-	Duration         time.Duration `json:"duration"`
-	ProviderDuration time.Duration `json:"provider_duration"`
+	Message               Message       `json:"message"`
+	Usage                 Usage         `json:"usage"`
+	Duration              time.Duration `json:"duration"`
+	ProviderDuration      time.Duration `json:"provider_duration"`
+	ProviderDurationKnown bool          `json:"provider_duration_known"`
 }
 
 type Ollama struct {
@@ -171,11 +173,12 @@ func (client *Ollama) Chat(ctx context.Context, request Request) (Result, error)
 		Stream   bool            `json:"stream"`
 		Format   json.RawMessage `json:"format,omitempty"`
 		Tools    []Tool          `json:"tools,omitempty"`
+		Think    *bool           `json:"think,omitempty"`
 		Options  struct {
 			Context int `json:"num_ctx"`
 			Output  int `json:"num_predict"`
 		} `json:"options"`
-	}{Model: client.model, Messages: request.Messages, Format: request.Format, Tools: request.Tools}
+	}{Model: client.model, Messages: request.Messages, Format: request.Format, Tools: request.Tools, Think: request.Think}
 	payload.Options.Context, payload.Options.Output = request.ContextTokens, request.OutputTokens
 	body, err := json.Marshal(payload)
 	if err != nil || int64(len(body)) > client.requestLimit {
@@ -222,6 +225,7 @@ func (client *Ollama) Chat(ctx context.Context, request Request) (Result, error)
 	providerDuration, err := count(fields["total_duration"])
 	if providerDuration != nil {
 		result.ProviderDuration = time.Duration(*providerDuration)
+		result.ProviderDurationKnown = true
 	}
 	if !exactResponseKeys(body) || json.Unmarshal(body, &envelope) != nil || response.StatusCode != http.StatusOK || usageError || err != nil || len(envelope.Error) > 0 || !envelope.Done || envelope.Model != client.model || envelope.Message.Role != "assistant" || !validMessage(envelope.Message) {
 		return result, ErrResponse

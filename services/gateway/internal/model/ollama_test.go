@@ -50,6 +50,9 @@ func TestOllamaRequestAndUsage(t *testing.T) {
 				if body["model"] != "fixture-model:test" || body["stream"] != false {
 					t.Errorf("model/stream: %v", body)
 				}
+				if body["think"] != false {
+					t.Errorf("explicit thinking option was not forwarded: %v", body["think"])
+				}
 				options, ok := body["options"].(map[string]any)
 				if !ok || options["num_ctx"] != float64(1024) || options["num_predict"] != float64(64) {
 					t.Errorf("token bounds: %v", body["options"])
@@ -61,6 +64,8 @@ func TestOllamaRequestAndUsage(t *testing.T) {
 			}, nil)
 			request := fixtureRequest()
 			request.Purpose = purpose
+			thinking := false
+			request.Think = &thinking
 			request.Format = json.RawMessage(`{"type":"object","properties":{"safe":{"type":"boolean"}}}`)
 			result, err := client.Chat(context.Background(), request)
 			if err != nil {
