@@ -921,6 +921,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Report: "Threat model limits and unresolved design choices" (Verification priorities);
     "Research documentation and submission workflow" (From requirements to verified presentation)
   - Blocked by: nothing
+  - Progress (2026-10-04): the home page (`apps/web/src/app/page.tsx`) is rewritten: it no longer mounts `RunTimeline`, whose rows are hardcoded sample events, and says in plain text what admission, the passport and a run are, with the `SyntheticDataLabel` and `SimulatedOutboxLabel` for what is simulated; it shows no run data. `/components` has a "Truthful labels" section with every label. `apps/web/src/app/page.test.ts` checks the page carries no sample row, no starter wording and the label texts. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (62 passed, 5 of them new), `pnpm format:check` exit 0. Not done, so not ticked: `layout.tsx` still has the title "Starter" and the description "A generic full-stack project starter." and `apps/web/README.md` still has "Starter overview" (both outside my paths, for the web + API implementer); `run-timeline.tsx` keeps its mock data for whoever mounts it next (WEB-06 replaces it); `pnpm smoke` and the browser check of the shell have not run.
 
 ## M2 (hours 6-10)
 
@@ -1118,6 +1119,16 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Tests: specs over the safe event fixtures: a denied attempt never renders as an effect; an event
     marked as replay always shows the label; an unknown event kind is shown as unknown, not dropped:
     `pnpm --filter web run test`; a browser check of the labelled replay (X-36), quoted.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3):
+    `RunEventTimeline` in `apps/web/src/components/run/run-event-timeline.tsx` takes the run's
+    `SafeEvent[]` (and optional `AssessmentRecord[]`) and does no fetching; the pure model is
+    `event-model.ts` (`describeEvent`, `summarizeEvents`). An attempt, its decision and a completed
+    effect are different rows (kind from the event type alone: a denied attempt is never an effect,
+    an unknown type is shown as unknown); a denial shows its reason code and sentence, the rule and
+    the permitted alternative; denied proposals and completed effects (reads, reports stored,
+    messages queued in the simulated outbox) are counted apart; a replay always carries its label.
+    Specs (`event-model.test.ts`, `run-event-timeline.test.ts`, contract fixtures) pass. Not done:
+    mounting on the run page (WEB-06, Batın's) and the browser check of the labelled replay.
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beats 5 and 6);
     "Users operating model and proposed user journeys" (Journey 3 recover cancel or investigate);
     "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second
@@ -1164,6 +1175,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     choices" (Verification priorities); "Users operating model and proposed user journeys" (Journey
     1 create and delegate a task)
   - Blocked by: nothing
+  - Progress (2026-10-04): the explanation is built but not mounted. `apps/web/src/lib/admission-rejection.ts` reads an admission rejection from a failed start-run response (`admissionRejectionFromError`: a 4xx whose safe error body carries `resource_out_of_scope`, `destination_not_allowed`, `template_not_allowed`, `limit_not_allowed` or `invalid_arguments`; anything else is not explained as one) and names the form fields to change (`explainAdmissionRejection`). `apps/web/src/components/admission-rejection.tsx` exports `AdmissionRejectionNotice({rejection, onResubmit, isSubmitting})`: it shows the reason code, the server's safe message, what was unavailable and the fields to change, says no passport or run exists and that nothing was narrowed, and resubmits only when the operator presses its button (type "button", never a form submit). For the form's owner to mount in `task-form.tsx`: on a failed `startRun`, call `admissionRejectionFromError(result.error)`, keep every field state as it is, render the notice, and call the existing submit only from `onResubmit`. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (74 passed, 12 of them new: a rejection shows its code, message and the scope to change; a non-admission failure is not explained as one; rendering never calls `onResubmit`; the button is not a form submit; markup in a server message is escaped). Not done, so not ticked: the notice is not mounted in the form, and the browser check with an over-scope request has not run.
 
 - [x] **WEB-12 · Render the report from the stored report and its registered template**
   - **Report 1.1 change:** Renders both reports; beats 4 and 7.
@@ -1202,6 +1214,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Report: "Threat model limits and unresolved design choices"; "Live demonstration storyboard and
     proof checks" (Reliable demonstrations without invented behavior)
   - Blocked by: nothing
+  - Progress (2026-10-04): the label module and components are done. `apps/web/src/lib/labels.ts` holds the wording of the demonstration specification's label table (X-16) and derives each label from server data, returning null when the data carries no mark: `replayLabel(replaySource)`, `verdictSourceLabel(verdictSource)` ("live" or "fixture", nothing else, never live by default), `outboxEffectLabel(effect)`, `developmentDemonstrationLabel(email)` (the session's `/me` has no demo flag, so this derives from the seeded operator's email; a server field is an open request), `estimatedCostLabel({pricingRule, unresolved})` (null without a rule: not shown), `recordingLabel(buildId)` and the fixed `LABELS`. `apps/web/src/components/labels` exports `LabelBadge`, `SimulatedOutboxLabel`, `OutboxEffectLabel`, `ReplayLabel`, `VerdictSourceLabel`, `DevelopmentDemonstrationLabel`, `EstimatedCostLabel`, `TestDoubleLabel`, `TestEvidenceLabel`, `SyntheticDataLabel` and `RecordingLabel`; each renders nothing when the data carries no mark. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (57 passed, 25 of them new: an event with the replay mark, an outbox effect, an estimate and the seeded operator each always carry their label, an unmarked event carries none, a mark in an unexpected form still shows the label, and a server-supplied mark is escaped). Missing half: the pages that show such things must mount them (the run page's timeline and outbox effect, the control views' verdicts, any cost figure, the navigation's operator); the Done-when ("every page") holds only when they have.
 
 - [x] **WEB-27 · Show the report classification and source trail on the run page**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-4 h)
@@ -1238,6 +1251,16 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Work: Show allowed, blocked and redacted decisions with their rule, reason code, revision and model purpose. Blocked text is withheld and never shown as consumed by the agent; a guard failure is a visible pause.
   - Done when: the hostile-note run shows the block before context and the clean run shows its allow.
   - Tests: `pnpm --filter web run test` with the contract fixtures.
+  - Progress (2026-10-04): `DecisionBadges` (`decision-badges.tsx`) is part of the WEB-09 timeline:
+    each event shows the controls that decided it as deterministic, signature or semantic badges
+    with the result, rule and revisions; a semantic verdict says live or fixture ("fixture verdict,
+    not detection quality"), a semantic check with nothing to classify shows not applicable, and a
+    blocked or redacted text is shown as withheld, never as consumed by the agent; a guard failure
+    shows "Nothing was released and the run is paused". Exact controls come from stored
+    `AssessmentRecord`s joined on the evaluation id; without them only a reason code that names
+    one control (signature_match, semantic_injection_detected, ...) produces a badge, never a
+    guessed one (no run-scoped assessment read exists in the API yet). Specs pass. Not done: the
+    hostile-note and clean runs on the page (WEB-06, Batın's).
   - Report: "Live demonstration storyboard and proof checks" (beat 10); "Users operating model and proposed user journeys" (Journey 3)
   - Blocked by: nothing
 

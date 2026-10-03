@@ -1324,7 +1324,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
   - Blocked by: `read path`; `passport in the run view`
 
-- [ ] **GO-25 · Serve the task form options, if `form options` chooses a Go endpoint**
+- [x] **GO-25 · Serve the task form options, if `form options` chooses a Go endpoint**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-21 · Needs: X-21 · Provides: X-25
   - Paths: `services/gateway/internal/httpserver/server.go`,
@@ -1338,10 +1338,28 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Tests: options of another organization are never returned; every returned option is admitted by
     GO-13 for the same context; nothing outside the template's authority appears.
     `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Completed (2026-10-04): the lead chose a Go endpoint for `form options` (the task form calls the
+    NestJS proxy `GET /api/runs/options`). `GET /internal/task-options` behind the service token and the
+    verified operator context returns exactly the API-12 `TaskFormOptions`: the template
+    `reconcile_atlas_v1`, the organization's vendors (sorted by name; each also a destination, as
+    admission resolves the destination to a vendor), its invoices by `external_reference`, `issued_on`
+    and `total_minor_units` only (never the internal note or the reporting address), the approval rule
+    `review_queue_report`, and limits `maxModelCalls` = the active catalog's `calls_total` and
+    `maxTimeoutSeconds` = `run_expiry_minutes` × 60, the highest values admission accepts; ids admission
+    would refuse (w3's id shapes) are not offered; no enforceable catalog is `503 unavailable`. Additive
+    Go-owned contract: `task-form-options.schema.json`, fixture `task-form-options.atlas.json`, the TS
+    typed sample (type unchanged) and the Go DTO. Tests (PostgreSQL):
+    `TestPostgresTaskOptionsOfferOnlyTheOrganizationsRecords` (only the organization's records, display
+    fields, no protected value, limits equal the catalog's, and admission accepts the offered template,
+    approval rule, vendor and destination at the maximum limits),
+    `TestPostgresTaskOptionsFailClosedWithoutAnActiveCatalog`,
+    `TestPostgresTaskOptionsOfAnOrganizationWithoutRecordsAreEmptyLists`; route:
+    `TestTaskOptionsServeTheVerifiedOrganizationAndFailClosed`. Known limit: the contract's invoices
+    carry no vendor id, so the form cannot group invoices by vendor; admission rejects a mixed set.
   - Report: "Project definition purpose and intended outcome" (What a passport would contain);
     "Relative implementation milestones and critical dependencies" (Critical path and sensible
     reductions: "keep a fixed server-owned task template")
-  - Blocked by: `form options`
+  - Blocked by: `form options` (lead: a Go endpoint, 2026-10-04)
 
 ## M2: hours 6-10
 

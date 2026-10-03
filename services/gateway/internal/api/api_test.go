@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -462,4 +463,55 @@ func TestControlEvaluateMapsErrors(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	newHandler(t, Dependencies{Evaluator: refused}).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/internal/control/evaluate", strings.NewReader(evaluateBody)))
 	assertError(t, recorder, http.StatusUnauthorized, "unauthorized")
+}
+
+// fakeOptionsReader stands in for admission.OptionsReader and records the organization it read.
+type fakeOptionsReader struct {
+	options      contracts.TaskFormOptions
+	err          error
+	organization string
+}
+
+func (reader *fakeOptionsReader) TaskOptions(_ context.Context, organizationID string) (contracts.TaskFormOptions, error) {
+	reader.organization = organizationID
+	return reader.options, reader.err
+}
+
+// GO-25: the form options come from the verified operator's organization only; without them the
+// answer is 503, never empty limits, and the route stays behind the service token.
+func TestTaskOptionsServeTheVerifiedOrganizationAndFailClosed(t *testing.T) {
+	get := func(handler http.Handler, tokenID string, signed bool) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/internal/task-options", nil)
+		request.Header.Set("Authorization", "Bearer "+testServiceToken)
+		if signed {
+			request.Header.Set(operatorcontext.HeaderName, signOperatorContext(t, testOperator, tokenID))
+		}
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+	want := contracts.TaskFormOptions{
+		Templates:            []contracts.TaskFormOption{{ID: "reconcile_atlas_v1", Name: "Reconcile Atlas invoices"}},
+		Vendors:              []contracts.TaskFormOption{{ID: "vendor_Atlas", Name: "Atlas"}},
+		Invoices:             []contracts.TaskFormInvoice{{ID: "invoice_A01", Number: "INV104", Date: "2026-09-01", Amount: 125000}},
+		Destinations:         []contracts.TaskFormOption{{ID: "vendor_Atlas", Name: "Atlas"}},
+		ApprovalRequirements: []contracts.TaskFormApprovalRequirement{{ID: "review_queue_report", Description: "Review."}},
+		Limits:               contracts.TaskFormLimits{MaxModelCalls: 24, MaxTimeoutSeconds: 900},
+	}
+	reader := &fakeOptionsReader{options: want}
+	recorder := get(newHandler(t, Dependencies{Options: reader}), "options-1", true)
+	var got contracts.TaskFormOptions
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", recorder.Code, recorder.Body.String())
+	}
+	decodeStrict(t, recorder, &got)
+	if !reflect.DeepEqual(got, want) || reader.organization != testOperator.OrganizationID {
+		t.Errorf("options %+v for organization %q", got, reader.organization)
+	}
+
+	unavailable := &fakeOptionsReader{err: errors.New("no active catalog")}
+	assertError(t, get(newHandler(t, Dependencies{Options: unavailable}), "options-2", true), http.StatusServiceUnavailable, "unavailable")
+	if recorder := get(newHandler(t, Dependencies{Options: reader}), "options-3", false); recorder.Code != http.StatusUnauthorized {
+		t.Errorf("without an operator context: status %d", recorder.Code)
+	}
 }
