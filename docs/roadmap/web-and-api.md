@@ -1385,7 +1385,7 @@ this side starts and reviews.
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-14 · Build the approval preview of the stored action**
+- [x] **WEB-14 · Build the approval preview of the stored action**
   - **Report 1.1 change:** Shows the recipient, rendered content, classification, report version, approved source fields, and source, template and projection versions; route proposal `/approvals` for one action (a list needs `list reads`); beat 8.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: M (estimate 3.5-6.5 h)
   - Depends on: API-19, API-20, WEB-10 · Needs: X-09, X-10, X-41 · Provides: X-43 (part: the
@@ -1406,6 +1406,28 @@ this side starts and reviews.
     content or a recipient; an expired or changed outcome never shows as approved; a browser check
     of approve, reject and an expired action against the real stack, quoted:
     `pnpm --filter web run test`.
+  - Completed (2026-10-04, lane 3c on web/approval): `app/runs/[id]/review/[actionId]/page.tsx` with
+    `components/approval/review-panel.tsx` reads `GET /api/actions/{id}/review` (review-view,
+    snake_case) and the run state on every visit and shows the exact recipient (address, vendor,
+    reference), the stored report content with classification, report and template versions, projection
+    rule and SHA-256 content hash, the source manifest (each source, version, classification, fields
+    used, manifest digest), the policy revision and the expiry. Approve and Reject each confirm, then
+    send exactly `{"decision": …}` to `POST /api/actions/{id}/approval` (new same-origin routes
+    `app/api/actions/[id]/{review,approval}/route.ts`). Every error is named: 403 not a reviewer, 404
+    nothing awaits review, 401 signed out, 409 expired, changed, run stopped or already decided (each
+    "nothing was sent"), 504 or a lost connection "outcome unconfirmed", 503 unavailable; an expired or
+    changed outcome never reads as approved; a closed review (run no longer awaiting approval) disables
+    the decision; the simulated outbox is labelled with c1's `SimulatedOutboxLabel`. Tests:
+    `actions-client.test.ts` (10: the decision body is only the decision; 409 kinds never approved; an
+    answer about another action or decision is unconfirmed; non-id refused before any request;
+    error-status mapping; review and run state of another action or run refused). Browser checks
+    (headless Chromium, real stack, demo operator): approve — run 78fc91be, action 62bdba4e, all
+    sections shown, one request body `{"decision":"approve"}`, "Approved" with the simulated-outbox
+    label, buttons disabled; the run resumed and completed with 1 outbox row; reopening shows "This
+    review is closed: the run is completed" with Approve disabled. Reject — run 87d0ed10, action
+    59ab12ca, body `{"decision":"reject"}`, "Rejected … Nothing will be sent", outbox unchanged; Go
+    recorded `approval_rejected` and the model proposed again. Not verified live: an expired review (the
+    expiry follows the run lifetime, 15 minutes); covered by the client tests.
   - Report: "Users operating model and proposed user journeys" (Journey 2 review an exact outbound
     effect); "Exact action approval versioning and execution rechecks"; "Live demonstration
     storyboard and proof checks" (Proposed demo sequence, beat 7)
