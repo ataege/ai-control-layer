@@ -43,8 +43,9 @@ services:
       GATEWAY_SERVICE_TOKEN: "${GATEWAY_SERVICE_TOKEN:?GATEWAY_SERVICE_TOKEN is not set - run pnpm run setup first}"
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
-      POSTGRES_USER: ${POSTGRES_USER:-starter}
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set - run pnpm run setup first}"
+      # The gateway connects as its own role task_passport_gateway (GO-38), never as the bootstrap
+      # user. The role gets this password from `pnpm db:roles`, run from the host after the migrations.
+      POSTGRES_GATEWAY_PASSWORD: "${POSTGRES_GATEWAY_PASSWORD:?POSTGRES_GATEWAY_PASSWORD is not set - run pnpm run setup first}"
       POSTGRES_DB: ${POSTGRES_DB:-starter}
       DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}

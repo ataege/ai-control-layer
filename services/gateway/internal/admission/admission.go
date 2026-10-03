@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/provenance"
 	"starter/services/gateway/internal/repository"
@@ -53,19 +54,21 @@ func reject(code contracts.ReasonCode, format string, arguments ...any) *Rejecti
 // Admitter issues passports.
 type Admitter struct {
 	repository *repository.Repository
+	catalog    *catalog.Loader
 	now        func() time.Time
 }
 
-// New returns an admitter that stores through the runtime repository.
-func New(runtimeRepository *repository.Repository) *Admitter {
-	return &Admitter{repository: runtimeRepository, now: time.Now}
+// New returns an admitter that stores through the runtime repository and reads the active
+// catalog through the shared snapshot loader.
+func New(runtimeRepository *repository.Repository, catalogLoader *catalog.Loader) *Admitter {
+	return &Admitter{repository: runtimeRepository, catalog: catalogLoader, now: time.Now}
 }
 
 // Admit validates the request against the operator's organization and the active catalog. It
 // returns the stored passport, or a Rejection (after recording an admission.rejected event), or
 // ErrUnavailable. Identity comes only from the verified operator, never from the request.
 func (admitter *Admitter) Admit(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest) (contracts.Passport, error) {
-	if admitter == nil || admitter.repository == nil || ctx == nil {
+	if admitter == nil || admitter.repository == nil || admitter.catalog == nil || ctx == nil {
 		return contracts.Passport{}, ErrUnavailable
 	}
 	if rejection := validateRequest(request); rejection != nil {
@@ -74,11 +77,13 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 	var passport contracts.Passport
 	var catalogRevisionID *int64
 	err := admitter.repository.InTransaction(ctx, func(tx repository.Tx) error {
-		catalog, err := readActiveCatalog(ctx, tx.Raw())
+		// The full enforceable snapshot (limits and security settings) or nothing: a catalog
+		// that cannot be enforced issues no passport.
+		snapshot, err := admitter.catalog.Active(ctx, tx.Raw())
 		if err != nil {
 			return ErrUnavailable
 		}
-		catalogRevisionID = &catalog.RevisionID
+		catalogRevisionID = &snapshot.RevisionID
 		vendorID, rejection, err := resolveVendor(ctx, tx.Raw(), operator.OrganizationID, request)
 		if err != nil {
 			return ErrUnavailable
@@ -86,7 +91,7 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 		if rejection != nil {
 			return rejection
 		}
-		passport, rejection, err = admitter.buildPassport(operator, request, catalog, vendorID)
+		passport, rejection, err = admitter.buildPassport(operator, request, snapshot.RevisionID, snapshot.Limits, vendorID)
 		if err != nil {
 			return ErrUnavailable
 		}
@@ -109,9 +114,9 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 			RunID:             &passport.RunID,
 			EventType:         contracts.EventRunQueued,
 			Decision:          pointer(contracts.DecisionAllow),
-			CatalogRevisionID: &catalog.RevisionID,
+			CatalogRevisionID: &snapshot.RevisionID,
 			MaskedSummary: contracts.MaskedSummary{
-				AdmissionCatalogRevisionID: &catalog.RevisionID,
+				AdmissionCatalogRevisionID: &snapshot.RevisionID,
 				Effect:                     pointer("none"),
 			},
 		})
@@ -241,18 +246,18 @@ func resolveVendor(ctx context.Context, transaction pgx.Tx, organizationID strin
 }
 
 // buildPassport derives the grant: the request's scope, capped by the catalog.
-func (admitter *Admitter) buildPassport(operator contracts.OperatorContext, request contracts.StartRunRequest, catalog CatalogLimits, vendorID string) (contracts.Passport, *Rejection, error) {
-	callsTotal := catalog.CallsTotal
-	runLifetime := time.Duration(catalog.RunExpiryMinutes) * time.Minute
+func (admitter *Admitter) buildPassport(operator contracts.OperatorContext, request contracts.StartRunRequest, revisionID int64, limits catalog.Limits, vendorID string) (contracts.Passport, *Rejection, error) {
+	callsTotal := limits.CallsTotal
+	runLifetime := time.Duration(limits.RunExpiryMinutes) * time.Minute
 	if request.Limits != nil && request.Limits.ModelCalls != nil {
-		if *request.Limits.ModelCalls > catalog.CallsTotal {
-			return contracts.Passport{}, reject(contracts.ReasonLimitNotAllowed, "limits.modelCalls exceeds the catalog limit of %d", catalog.CallsTotal), nil
+		if *request.Limits.ModelCalls > limits.CallsTotal {
+			return contracts.Passport{}, reject(contracts.ReasonLimitNotAllowed, "limits.modelCalls exceeds the catalog limit of %d", limits.CallsTotal), nil
 		}
 		callsTotal = *request.Limits.ModelCalls
 	}
 	if request.Limits != nil && request.Limits.TimeoutSeconds != nil {
-		if *request.Limits.TimeoutSeconds > catalog.RunExpiryMinutes*60 {
-			return contracts.Passport{}, reject(contracts.ReasonLimitNotAllowed, "limits.timeoutSeconds exceeds the catalog run expiry of %d minutes", catalog.RunExpiryMinutes), nil
+		if *request.Limits.TimeoutSeconds > limits.RunExpiryMinutes*60 {
+			return contracts.Passport{}, reject(contracts.ReasonLimitNotAllowed, "limits.timeoutSeconds exceeds the catalog run expiry of %d minutes", limits.RunExpiryMinutes), nil
 		}
 		runLifetime = time.Duration(*request.Limits.TimeoutSeconds) * time.Second
 	}
@@ -260,7 +265,7 @@ func (admitter *Admitter) buildPassport(operator contracts.OperatorContext, requ
 	// the catalog can only narrow that set.
 	var reportTemplates []contracts.ReportTemplate
 	for _, template := range contracts.ReportTemplates {
-		if slices.Contains(catalog.EnabledTemplates, template) {
+		if slices.Contains(limits.EnabledTemplates, template) {
 			reportTemplates = append(reportTemplates, template)
 		}
 	}
@@ -277,7 +282,7 @@ func (admitter *Admitter) buildPassport(operator contracts.OperatorContext, requ
 		OrganizationID:             operator.OrganizationID,
 		ActorID:                    operator.UserID,
 		TaskVersion:                TaskTemplateReconcileAtlas,
-		AdmissionCatalogRevisionID: catalog.RevisionID,
+		AdmissionCatalogRevisionID: revisionID,
 		IssuedAt:                   issuedAt,
 		// ExpiresAt is the authoritative deadline; RunExpiryMinutes records the catalog ceiling.
 		ExpiresAt: issuedAt.Add(runLifetime),
@@ -288,20 +293,20 @@ func (admitter *Admitter) buildPassport(operator contracts.OperatorContext, requ
 			ReportTemplates:       nonNil(reportTemplates),
 			ProjectionRules:       nonNil(projectionRules),
 			RecipientReferences:   []string{"recipient:" + runID + ":" + vendorID},
-			AllowedModels:         slices.Clone(catalog.AllowedModels),
+			AllowedModels:         slices.Clone(limits.AllowedModels),
 			InternalNoteReadable:  true,
 			ApprovalRequiredTools: []contracts.ToolName{contracts.ToolQueueReport},
 		},
 		Limits: contracts.PassportLimits{
 			CallsTotal:            callsTotal,
-			CallsAgent:            min(catalog.CallsAgent, callsTotal),
-			CallsSecurity:         min(catalog.CallsSecurity, callsTotal),
-			TokensTotal:           catalog.TokensTotal,
-			RequestTimeoutSeconds: catalog.RequestTimeoutSeconds,
-			LocalMaxConcurrency:   catalog.LocalMaxConcurrency,
-			ToolAttempts:          catalog.ToolAttempts,
-			Corrections:           catalog.Corrections,
-			RunExpiryMinutes:      catalog.RunExpiryMinutes,
+			CallsAgent:            min(limits.CallsAgent, callsTotal),
+			CallsSecurity:         min(limits.CallsSecurity, callsTotal),
+			TokensTotal:           limits.TokensTotal,
+			RequestTimeoutSeconds: limits.RequestTimeoutSeconds,
+			LocalMaxConcurrency:   limits.LocalMaxConcurrency,
+			ToolAttempts:          limits.ToolAttempts,
+			Corrections:           limits.Corrections,
+			RunExpiryMinutes:      limits.RunExpiryMinutes,
 		},
 	}
 	return passport, nil, nil

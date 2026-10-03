@@ -17,6 +17,7 @@ import (
 
 	"starter/services/gateway/internal/admission"
 	"starter/services/gateway/internal/api"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/config"
 	"starter/services/gateway/internal/database"
 	"starter/services/gateway/internal/health"
@@ -86,7 +87,7 @@ func run() error {
 		ServiceToken:    loadedConfig.ServiceToken,
 		OperatorContext: operatorContextVerifier,
 		InternalCommands: api.Commands(api.Dependencies{
-			Admitter: admission.New(repository.New(pool)),
+			Admitter: admission.New(repository.New(pool), catalog.NewLoader()),
 			Database: pool,
 		}),
 	})

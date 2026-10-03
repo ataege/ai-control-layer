@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"starter/services/gateway/internal/admission"
+	"starter/services/gateway/internal/catalog"
+	"starter/services/gateway/internal/catalog/catalogtest"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
@@ -208,22 +210,8 @@ func TestPostgresStartRunAdmitsThroughTheRealBoundary(t *testing.T) {
 			t.Fatalf("fixture: %v", err)
 		}
 	}
-	var revisionID int64
-	err = outer.QueryRow(context.Background(), `INSERT INTO app.control_catalog_revisions
-		(schema_version, source_file_name, source_text, file_digest, content, import_source)
-		VALUES (1, 'policy.yaml', 'api test', repeat('b', 64), $1, 'command') RETURNING id`,
-		`{"schema_version":1,"allowed_models":["qwen3.5:4b"],"budgets":{"calls_total":24,"calls_agent":12,
-		"calls_security":12,"tokens_total":20000,"request_timeout_seconds":20,"local_max_concurrency":2,
-		"run_expiry_minutes":15,"tool_attempts":12,"corrections":2},
-		"reports":{"enabled_templates":["internal_investigation_v1","vendor_reconciliation_v1"]}}`).Scan(&revisionID)
-	if err != nil {
-		t.Fatalf("catalog: %v", err)
-	}
-	if _, err := outer.Exec(context.Background(), `INSERT INTO app.control_catalog_pointer (id, active_revision_id) VALUES (1, $1)
-		ON CONFLICT (id) DO UPDATE SET active_revision_id = EXCLUDED.active_revision_id`, revisionID); err != nil {
-		t.Fatalf("pointer: %v", err)
-	}
-	handler := newHandler(t, Dependencies{Admitter: admission.New(repository.New(outer)), Database: outer})
+	catalogtest.ActivatePolicy(t, outer)
+	handler := newHandler(t, Dependencies{Admitter: admission.New(repository.New(outer), catalog.NewLoader()), Database: outer})
 
 	body := `{"template":"reconcile_atlas_v1","vendorId":"` + vendorID + `","invoiceIds":["` + invoiceID + `"],"destination":"` + vendorID + `"}`
 	recorder := startRun(t, handler, operator, "e2e-1", body)

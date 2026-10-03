@@ -710,16 +710,19 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     reason; a permitted read runs and its minimized result reaches the next model request; the
     steps and their order can be reconstructed from the stored records. The X-24 command;
     `pnpm --filter gateway run test`.
-  - Progress (2026-10-03): `agent.Loop` and the append-only `runtime.context_entries` (migration
-    `1791070000000-AddAgentContextEntries`, approved by the lead) are on go/f3 (faac792). Every
-    model request is preceded by the run check (cancellation, expiry, agent steps); proposals go
-    through the real gate and executor; inspected results are stored and reach the next request; a
-    restarted loop continues without re-executing. Database tests with the real repository, gate,
-    executor and `tools.Runner` and a labelled scripted stepper pass; `pnpm test:db` gateway "416
-    passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 13 migrations run, the new one
-    reverts and re-runs; `pnpm verify` 6 passed. Missing half: the live run of the done-when, with
-    w3's `PassportScopeReader`, c1's `InspectToolResult` replacing the interim fail-closed guard,
-    GO-29 correction and admission (GO-13), and the wiring into `cmd/gateway/main.go`.
+  - Progress (2026-10-03): `agent.Loop` with the append-only `runtime.context_entries` (faac792) now
+    uses the production pieces on go/f3: c1's `InspectToolResult` through `agent.SecurityInspector`
+    (the interim guard is removed), GO-29's correction counter, limit and denial feedback (stored as
+    `correction` entries, migration `1791100000000-AllowContextCorrections`), and
+    `agent.RecordingCaller` recording each security call in `model_calls` before dispatch. Database
+    tests with the real repository, gate, executor, `tools.Runner` and inspector (labelled scripted
+    stepper and fixture security model) pass, including a clean note passing with its
+    classification, a hostile note withheld by signature or semantic verdict, a guard failure
+    pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
+    gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
+    the new one reverts and re-runs; `pnpm verify` 6 passed. Missing half: wiring into
+    `cmd/gateway/main.go` with w3's `policy.CatalogSecuritySettings` (next merge) and the live run,
+    which also needs the signature-feed import (c1, API-34).
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
     (Figure 4); "Users operating model and proposed user journeys" (Journey 3 recover cancel or
@@ -1149,7 +1152,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     matrix" ("a hidden URL is not a protection")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-22 · Write safe decision events with every state change**
+- [x] **GO-22 · Write safe decision events with every state change**
   - **Report 1.2 change:** Events add the metered purpose, admission and active catalog revisions, matched rule and feed revision; safe summaries omit raw notes, secrets, model requests and classifier reasoning.
   - **Report 1.1 change:** Events link the run, action, policy version, matched rule, report ID, template version, classification, lineage-check outcome and actual effect; event names from SH-10 (the architecture's examples include `report.created`, `report.export_denied`, `report.safe_template_offered`).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h)
@@ -1167,6 +1170,24 @@ typecheck` PASS; `pnpm verify` 6 passed.
     gap or duplicate under concurrent writes; a decision event carries every link listed; the
     serialized events of a run that read protected fields contain none of the fixture's protected
     values; a failed state change leaves no event. The X-24 command.
+  - Completed (2026-10-03): `internal/repository` is the X-12 event writer and reader.
+    `Tx.AppendEvent` validates every event against X-12 (closed types, decisions, reason codes and
+    masked-summary values; an action needs its run) and inserts it in the caller's transaction, so
+    it commits with its state change or not at all; `Join(pgx.Tx)` lets another lane's transaction
+    use it. A run-scoped append first takes a `FOR NO KEY UPDATE` lock on the run row until commit,
+    so a run's events commit in id order and `Repository.RunEvents(org, run, afterEventID, limit)`
+    pages by cursor without gaps or duplicates; a stored row outside X-12 is never served. Admission
+    writes `run.queued` / `admission.rejected`, and every `TransitionRun` requires its event. Tests
+    (PostgreSQL): four concurrent writers commit 60 events while a reader pages by cursor and reads
+    each exactly once in order (the same test failed 10 of 10 runs with the lock removed and passed
+    10 of 10 with it); a decision event round-trips every link (purpose, admission and active
+    catalog revisions, matched rule, feed revision, report, template, classification, lineage
+    check, effect, replay source, alternative template, safe message); another organization reads
+    and writes nothing; a row with an extra summary key fails closed; a failed state change leaves
+    no event (GO-19 test). Checks: gateway five checks PASS; `go test -race -count=3
+./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Waits on other lanes:
+    decision, approval and execution events are written by lanes w3, w2 and f3, which must switch
+    their raw inserts to `repository.Join(tx).AppendEvent` for the ordering guarantee.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
     semantics)
@@ -1416,6 +1437,24 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Work: Read the active-version pointer before new evaluations and dispatches "rather than relying indefinitely on a stale cache", and record both the admission and the evaluated revision in each decision. Optional settings apply at the next evaluation; removed models and lowered budgets apply as current restrictions; raised limits never exceed the passport. "With no valid initial catalog, the gateway is not ready and cannot dispatch work" (a readiness contract change through SH-14).
   - Done when: a changed optional threshold changes the next decision and the decision records the new revision, while the passport ceiling stays unchanged.
   - Tests: database-backed tests through the X-24 command for a threshold change, a lowered budget and a raised budget.
+  - Progress (2026-10-03): `internal/catalog` is the trusted active snapshot loader.
+    `Loader.Active(ctx, querier)` reads the active pointer on every call (in the caller's
+    transaction when given one), joins the active revision and the bound signature-feed revision,
+    and returns one snapshot: revision id, feed revision id, the limits (re-checked) and c1's
+    `security.SettingsFromCatalog` settings; it memoizes parsing only per immutable revision pair.
+    Anything missing or invalid is `ErrUnavailable` (no active revision, signature matching without
+    a feed, a feed revision other than the policy's, invalid limits, unknown disabled rules).
+    `EffectiveFor(passport, snapshot)` narrows the passport by the active catalog (removed models,
+    lowered budgets and disabled templates apply at once; raised values never exceed the passport)
+    and carries the admission and evaluated revision ids for decisions. Tests (PostgreSQL, isolated
+    revisions and feed in a rolled-back transaction): a threshold change is in the next snapshot
+    with the new revision id; five fail-closed cases; a disabled signature control needs no feed;
+    lowered and raised catalogs against a passport. Checks: gateway five checks PASS; `go test -race
+./internal/catalog` ok; `pnpm verify` 6 passed. Missing half: the gate (lane w3), the worker
+    and model path (f3) and the security controls (c1) must call `Loader.Active` before every
+    evaluation and dispatch and record both revisions; the readiness change ("no valid catalog,
+    not ready") waits on a readiness contract change; no path imports the signature feed yet, so
+    the active snapshot is unavailable while the policy enables signature matching.
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
@@ -1695,7 +1734,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     boundary)
   - Blocked by: `stored report read`; `final result format`; `report storage`
 
-- [ ] **GO-38 · Connect with the Go database roles from X-35**
+- [x] **GO-38 · Connect with the Go database roles from X-35**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: SH-06 · Needs: X-35 · Provides: nothing
   - Paths: `services/gateway/internal/config/config.go`,
@@ -1712,6 +1751,19 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Tests: configuration tests for the new variables (problems named, values never printed);
     database-backed: the Go role cannot write `app` records, and an adapter cannot write outside its
     `demo` tables. The X-24 command; `pnpm --filter gateway run test`.
+  - Completed (2026-10-03): W2 lane, branch go/w2, 3c7f880 (grants) and this commit (connection). The
+    gateway connects as `task_passport_gateway` with `POSTGRES_GATEWAY_PASSWORD` (logging.Secret,
+    generated by `pnpm run setup`, gateway-only in dev and Compose) and refuses to start without it,
+    naming the fix; `pnpm db:roles` (explicit, idempotent, owner, also run by `pnpm reset:demo`) sets
+    the role's login password. Grant audit: no grant missing. Checks: config tests (problem named, no
+    value echoed); a SET LOCAL ROLE test runs the Atlas scenario and a GO-55 fault as the role while
+    app writes, invoice updates, DELETE, TRUNCATE and CREATE TABLE fail with permission denied;
+    login from the host with the generated password works and a wrong one is refused; the gateway
+    without the variable exits 1; `pnpm smoke` (host mode, dev stack on 3200/3201/8280, gateway on the
+    role) 26 passed, 0 failed, 7 skipped (owner-password checks: my test container's password is
+    under 16 characters; log checks: host mode); `pnpm verify` 6/6; `pnpm test:db gateway` 551
+    passed, 0 skipped. Not run: `pnpm smoke --mode=container` (the shared Compose project `starter`
+    would disturb the other lanes).
   - Report: "Architecture and chart reading guide"; "Data ownership and the transition from starter
     to product"; "Technical architecture and service ownership" (Proposed ownership)
   - Blocked by: `decision 2 in docs/product/README.md`
@@ -2255,7 +2307,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (Source or template policy changes)
   - Blocked by: nothing
 
-- [ ] **GO-84 · Prove the live semantic cases, the false-negative boundary and guard failure**
+- [x] **GO-84 · Prove the live semantic cases, the false-negative boundary and guard failure**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-75, GO-76, GO-77 · Needs: X-86, X-89 · Provides: X-96, X-97, X-98
   - Paths: none (scenario tests in the packages above, run through the X-89 suite)
@@ -2264,6 +2316,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Tests: the scenario tests in the suite, with the results quoted.
   - Report: "Validation plan and evidence matrix" (Live semantic benign and attack cases, Semantic false negative boundary, Guard failure and security ceiling)
   - Blocked by: nothing
+  - Completed (2026-10-03): evidence tests in `internal/security`. X-96 (opt-in `TestLiveSemanticCorpus`, `model_live` tag, writes a JSON results file): 21 corpus cases plus 3 hostile notes on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb), threshold 0.75, context 8192; run 1: 23 of 24 matched, 0 false positives, 1 false negative, 0 guard failures, one hostile note passed by its second (pipeline) evaluation; run 2: 22 of 24, 0 false positives, 2 false negatives, 0 guard failures; live verdicts labelled `live`, all other tests use labelled fixtures. X-97 (`TestSemanticFalseNegativeStillDeniedDeterministically`, external package): Worker 3's real gate with a fixture verdict of score 0 denies each hostile note's obeyed action with its fixture reason (`resource_out_of_scope`, `destination_not_allowed`, `report_export_restricted`) and makes no security call. X-98 (`TestPostgresGuard*`, real ledger): timeout keeps the reservation as `usage_unknown`, malformed verdict pauses after settled usage, exhausted or paused allowance dispatches nothing. Checks: `pnpm test:db gateway` 556 passed, 0 failed, 0 skipped; gateway checks all exit 0; `pnpm verify` 6 passed. Not done: running these through the one-command X-89 suite (SH-47 has no `verify:controls` yet); the outbox assertions for the X-97 denials are the tools lane's X-72 and X-74 tests.
 
 - [ ] **GO-85 · Prove redaction and the attack feed update**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
