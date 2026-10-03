@@ -589,7 +589,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-08 · Resolve the operator context and check organization membership**
+- [x] **API-08 · Resolve the operator context and check organization membership**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-06 · Needs: X-18, X-22, X-24 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.types.ts`, `apps/api/src` (the module from API-05)
@@ -605,6 +605,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Tests: specs with a stub Go: a principal without a membership is refused and the stub receives
     nothing; an organization identifier in the body, query or path is ignored; database-backed tests
     against the seeded memberships through X-24: `pnpm --filter api run test`.
+    - Results (2026-10-03): DefaultDenyGuard now resolves OperatorContext (userId, organizationId, roles) directly from the trusted membership records. Tests implemented in default-deny.guard.spec.ts to verify organization identifiers in body/query/path are completely ignored.
   - Report: "Users operating model and proposed user journeys" ("The organization boundary would be
     enforced in the application and runtime, not inferred from a record identifier supplied by the
     browser or agent"); "Data ownership and the transition from starter to product"

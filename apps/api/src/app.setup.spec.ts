@@ -10,6 +10,8 @@ import { DefaultDenyGuard } from "./auth/default-deny.guard.js";
 import { APP_GUARD } from "@nestjs/core";
 import { AUTH_PROVIDER } from "./auth/auth.types.js";
 import { DataSource } from "typeorm";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { Membership } from "./identity/entities/membership.entity.js";
 
 @Controller("test")
 class SetupTestController {
@@ -31,6 +33,7 @@ describe("App Setup (Decision 3: Forwarder)", () => {
         { provide: APP_GUARD, useClass: DefaultDenyGuard },
         { provide: AUTH_PROVIDER, useValue: { authenticate: async () => ({ subjectId: "test" }) } },
         { provide: DataSource, useValue: { isInitialized: true } },
+        { provide: getRepositoryToken(Membership), useValue: { findOne: async () => ({ userId: "test", organizationId: "test-org", roles: [] }) } },
       ],
     }).compile();
 

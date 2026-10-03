@@ -99,3 +99,11 @@ export interface ErrorResponse {
   timestamp: string;
   path?: string;
 }
+
+/** Resolved operator context sent to Go with every governed command. */
+export interface OperatorContext {
+  userId: string;
+  organizationId: string;
+  roles: string[];
+}
+
