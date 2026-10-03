@@ -12,6 +12,7 @@ import (
 
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/logging"
+	"starter/services/gateway/internal/operatorcontext"
 )
 
 // Options are the dependencies of the HTTP layer.
@@ -19,6 +20,11 @@ type Options struct {
 	Logger       *slog.Logger
 	Health       health.Handler
 	ServiceToken logging.Secret
+	// OperatorContext verifies the signed operator context of every internal command.
+	OperatorContext *operatorcontext.Verifier
+	// InternalCommands are the product routes; each is guarded by the service token and the
+	// verified operator context.
+	InternalCommands []InternalCommand
 }
 
 // NewHandler builds the full handler tree.
@@ -31,6 +37,11 @@ func NewHandler(options Options) http.Handler {
 
 	requireServiceToken := RequireServiceToken(options.ServiceToken)
 	mux.Handle("GET /internal/ping", requireServiceToken(http.HandlerFunc(options.Health.Ping)))
+
+	requireOperatorContext := RequireOperatorContext(options.OperatorContext)
+	for _, command := range options.InternalCommands {
+		mux.Handle(command.Pattern, requireServiceToken(requireOperatorContext(command.Handler)))
+	}
 
 	// RequestID is outermost so every log line and error body carries the id;
 	// Recover is innermost so the access log records the 500 it writes.

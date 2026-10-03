@@ -11,6 +11,15 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 | `GET /health/ready`  | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.        |
 | `GET /internal/ping` | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database. |
 
+Internal product commands are registered through `httpserver.Options.InternalCommands`, which
+always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
+HS256 JWT signed with `OPERATOR_CONTEXT_SIGNING_KEY`, issuer `gateway-client`, audience `gateway`,
+a lifetime of at most five minutes and a `jti` that is accepted once. The verified operator
+(`internal/contracts.OperatorContext`) is the command's only identity source, read with
+`operatorcontext.FromContext`; it never authorizes a command by itself. Any failure answers
+`401 unauthorized` before the handler runs. `httpserver.DecodeJSONBody` reads a bounded, strict JSON
+body and answers `400 bad_request` otherwise.
+
 Every other routed request returns the shared JSON error envelope (`404 not_found`,
 `405 method_not_allowed`, `401 unauthorized`, `500 internal_error`). Every response produced by the
 handler chain carries `x-request-id`: an inbound value is reused when it is 1-64 characters of
@@ -35,18 +44,19 @@ exercises (for example a new optional property) is not detected; mirror those by
 
 Read from environment variables (the root scripts pass the root `.env` to the process).
 
-| Variable                | Default     | Notes                                                             |
-| ----------------------- | ----------- | ----------------------------------------------------------------- |
-| `GATEWAY_HOST`          | `127.0.0.1` | Bind address. The image and Compose set `0.0.0.0`.                |
-| `GATEWAY_PORT`          | `8080`      |                                                                   |
-| `GATEWAY_SERVICE_TOKEN` | required    | At least 32 characters, no leading or trailing whitespace.        |
-| `POSTGRES_HOST`         | `localhost` |                                                                   |
-| `POSTGRES_PORT`         | `5432`      |                                                                   |
-| `POSTGRES_USER`         | required    | Must not be blank.                                                |
-| `POSTGRES_PASSWORD`     | required    | Must not be blank. Any characters are safe; the value is escaped. |
-| `POSTGRES_DB`           | required    | Must not be blank.                                                |
-| `DATABASE_TIMEOUT_MS`   | `3000`      | Bounds one connection attempt and one readiness ping (100-20000). |
-| `LOG_LEVEL`             | `info`      | `debug`, `info`, `warn` or `error`.                               |
+| Variable                       | Default     | Notes                                                                        |
+| ------------------------------ | ----------- | ---------------------------------------------------------------------------- |
+| `GATEWAY_HOST`                 | `127.0.0.1` | Bind address. The image and Compose set `0.0.0.0`.                           |
+| `GATEWAY_PORT`                 | `8080`      |                                                                              |
+| `GATEWAY_SERVICE_TOKEN`        | required    | At least 32 characters, no leading or trailing whitespace.                   |
+| `OPERATOR_CONTEXT_SIGNING_KEY` | required    | At least 32 characters; the HS256 key the API signs X-Operator-Context with. |
+| `POSTGRES_HOST`                | `localhost` |                                                                              |
+| `POSTGRES_PORT`                | `5432`      |                                                                              |
+| `POSTGRES_USER`                | required    | Must not be blank.                                                           |
+| `POSTGRES_PASSWORD`            | required    | Must not be blank. Any characters are safe; the value is escaped.            |
+| `POSTGRES_DB`                  | required    | Must not be blank.                                                           |
+| `DATABASE_TIMEOUT_MS`          | `3000`      | Bounds one connection attempt and one readiness ping (100-20000).            |
+| `LOG_LEVEL`                    | `info`      | `debug`, `info`, `warn` or `error`.                                          |
 
 `DATABASE_TIMEOUT_MS` is capped at 20000 so a readiness response always fits inside the server's
 30 s write timeout. The API accepts the same range for this variable.
@@ -80,26 +90,28 @@ Since the evening of 3 October 2026 the lead's Claude Code sessions build the Go
 package group; the lead routes cross-lane interfaces (see "People" in `AGENTS.md`). The report's
 Implementer 3/4/5 labels group responsibilities; they do not assign separate people.
 
-| Existing package      | Owner                                                         |
-| --------------------- | ------------------------------------------------------------- |
-| `cmd/gateway`         | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
-| `cmd/modelcheck`      | Go lane f3 (worker, agent, model, budget)                     |
-| `cmd/budgetcheck`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/config`     | Shared Go lanes; the lead coordinates edits                   |
-| `internal/logging`    | Shared Go lanes; the lead coordinates edits                   |
-| `internal/database`   | Shared Go lanes; the lead coordinates edits                   |
-| `internal/health`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/httpserver` | Go lane 3c (repository, admission, passport, API)             |
-| `internal/model`      | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/budget`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/worker`     | Go lane f3 (worker, agent, model, budget)                     |
-| `internal/testdb`     | Shared Go lanes; the lead coordinates edits                   |
-| `internal/contracts`  | Go lane 3c (repository, admission, passport, API)             |
-| `internal/repository` | Go lane 3c (repository, admission, passport, API)             |
-| `internal/tools`      | Go lane w2 (tools and provenance)                             |
-| `internal/policy`     | Go lane w3 (action gate and approvals)                        |
-| `internal/security`   | Go lane c1 (hybrid security controls)                         |
-| `internal/provenance` | Go lane w2 (tools and provenance)                             |
+| Existing package           | Owner                                                         |
+| -------------------------- | ------------------------------------------------------------- |
+| `cmd/gateway`              | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
+| `cmd/modelcheck`           | Go lane f3 (worker, agent, model, budget)                     |
+| `cmd/budgetcheck`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/config`          | Shared Go lanes; the lead coordinates edits                   |
+| `internal/logging`         | Shared Go lanes; the lead coordinates edits                   |
+| `internal/database`        | Shared Go lanes; the lead coordinates edits                   |
+| `internal/health`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/httpserver`      | Go lane 3c (repository, admission, passport, API)             |
+| `internal/model`           | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/budget`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/worker`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/agent`           | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/testdb`          | Shared Go lanes; the lead coordinates edits                   |
+| `internal/contracts`       | Go lane 3c (repository, admission, passport, API)             |
+| `internal/repository`      | Go lane 3c (repository, admission, passport, API)             |
+| `internal/operatorcontext` | Go lane 3c (repository, admission, passport, API)             |
+| `internal/tools`           | Go lane w2 (tools and provenance)                             |
+| `internal/policy`          | Go lane w3 (action gate and approvals)                        |
+| `internal/security`        | Go lane c1 (hybrid security controls)                         |
+| `internal/provenance`      | Go lane w2 (tools and provenance)                             |
 
 New packages get their ownership row when their first real code lands.
 
@@ -119,9 +131,11 @@ internal/contracts/   Go mirrors of the runtime wire contracts and strict decodi
 internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
-internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75)
+internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78), tool-result inspection (GO-76)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
+internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
+internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -373,6 +387,233 @@ Idempotency and retries follow the stable action identity:
   GO-02 requires, otherwise persist an unknown outcome and pause; never retry blindly.
 
 The simulated outbox creates a database record and sends no email.
+
+## Deterministic content controls (GO-74)
+
+`internal/security` applies the `secret_pattern` guard of the active catalog to designated text
+fields. The caller passes the catalog settings and trusted source metadata; the package reads
+neither PostgreSQL nor `policy.yaml`, and it never sets or changes a field's source
+classification, so masking an internal note does not make its report Vendor shareable.
+
+| Boundary      | Designated fields (lead's delegate, 3 October 2026) |
+| ------------- | --------------------------------------------------- |
+| `tool_result` | `tool_result_text`, `internal_note`                 |
+| `model_input` | `model_input_text`                                  |
+
+- Rules: `secret_password_keyword_v1` and `secret_url_credential_v1` (password),
+  `secret_api_token_keyword_v1`, `secret_iban_v1` (mod-97 checked) and `secret_payment_card_v1`
+  (Luhn checked). Keyword rules need a credential-shaped value (letters and digits, minimum length),
+  so "password policy" stays readable. The patterns are fixed Go code (RE2, linear time), not
+  catalog data.
+- Spans are byte offsets; they must lie in the text, be non-empty and fall on UTF-8 rune boundaries,
+  and overlaps merge. An invalid span is an error and withholds the field.
+- `redact` replaces each span with `[REDACTED:<kind>]` (`content_redacted`); `block` withholds the
+  whole field (`content_blocked`). The record names the first matched rule and the evaluated catalog
+  revision, and never holds the inspected text.
+- A field over `MaxFieldBytes` (4096) or with invalid UTF-8 is withheld whole, never truncated
+  (`field_limit`, `content_too_large`), whatever the guard settings. The bound keeps one security
+  call's byte-based token reservation small against the shared run total.
+- Missing catalog revision, an unknown mode or an undesignated field return an error and no text.
+
+`content_blocked` and `content_too_large` were approved by the lead's delegate on 3 October 2026
+and wait to be frozen in the reason vocabulary (X-13). Tests read `fixtures/semantic-corpus.json`:
+the six secret cases must give exactly their fixture spans, and the benign, hard-negative and attack
+cases and `fixtures/hostile-notes.json` must give none. This is a finite fixture set, not universal
+secret detection.
+
+## Semantic security evaluator (GO-75)
+
+`SemanticEvaluator.Evaluate` sends one designated field, after the content rules, to the local
+model as a separate `security` purpose call through the `Caller` interface, which
+`model.AccountedCaller` satisfies. The call is reserved against the run allowance before dispatch
+like any agent call; the evaluator holds no tool credentials and executes nothing.
+
+- Request: the fixed classifier instruction as the system message, and the untrusted text in the
+  user message between `<<<CONTENT n>>>` and `<<<END CONTENT n>>>` markers, where `n` is a fresh
+  random 128-bit nonce, so the content cannot close the markers. The verdict JSON schema is sent as
+  the response format.
+- Verdict (lead's delegate, 3 October 2026): exactly `{risk_category, score, reason_code}`, each key
+  once, the score a finite JSON number from 0 to 1, the category and reason from fixed lists. The
+  provider does not enforce the schema, so `ParseVerdict` validates it in Go and rejects anything
+  else.
+- Go applies the catalog threshold: `score >= threshold` fires the guard. `block` withholds the
+  field; `redact` replaces the whole field with `[REDACTED:semantic_risk]` (whole-field masking,
+  lead's delegate). Category and reason are evidence only. A verdict never grants anything.
+- Guard failure: exactly one attempt and no retry. A refused reservation (`budget.ErrExhausted`,
+  `budget.ErrPaused`) is `security_allowance_exhausted` and dispatches nothing. A timeout, transport
+  error, unknown usage or malformed verdict is `security_evaluator_unavailable`. Both have outcome
+  `error`, which pauses or denies and never releases text. A dispatched failed call keeps its
+  reservation as unknown usage.
+- The security call goes straight to the `Caller`, never through the agent path, so it is never
+  inspected by another semantic check.
+- The field limit (`MaxFieldBytes`, UTF-8) runs before the guard settings, so even a disabled
+  guard never passes an oversized field. The context window must be at least
+  `MinEvaluatorContextTokens` (8192): a full field at one token per byte plus the instruction and
+  output, so the provider never silently truncates the prompt.
+- Each result carries a `ControlRecord` with the verdict, verdict source (`live` or `fixture`, set
+  when the evaluator is built), security call id, catalog revision, failure kind and duration, plus
+  the call's usage and provider time. Persisting it to `runtime.control_assessments` and
+  `runtime.timing_records` is the caller's step.
+
+Unit tests drive the real `AccountedCaller` with a labelled provider double and a labelled in-memory
+ledger double; their verdicts are stubs and test composition only. The live check is opt-in:
+
+```sh
+GO_SECURITY_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway test -tags=model_live ./internal/security -run '^TestLiveSemanticEvaluator$' -count=1 -v
+```
+
+Observed on 3 October 2026 on the developer machine (Ollama 0.35.1, `qwen3.5:4b` ID
+`2a654d98e6fb`, threshold 0.75, in-memory ledger double). These are observations of two fixtures,
+not a detection-quality measurement. The first run used context 4096 (commit 5883988), the second
+8192:
+
+| Fixture                                       | Context | Verdict                                            | Outcome | Input / output tokens | Provider time |
+| --------------------------------------------- | ------- | -------------------------------------------------- | ------- | --------------------- | ------------- |
+| hostile note ("Ignore previous instructions") | 4096    | `instruction_injection`, 1, `instruction_override` | block   | 412 / 31              | 9.29 s        |
+| clean duplicate-reference note                | 4096    | `none`, 0, `no_risk_found`                         | pass    | 416 / 34              | 1.94 s        |
+| hostile note ("Ignore previous instructions") | 8192    | `instruction_injection`, 1, `instruction_override` | block   | 412 / 31              | 2.16 s        |
+| clean duplicate-reference note                | 8192    | `none`, 0, `no_risk_found`                         | pass    | 418 / 31              | 1.87 s        |
+
+## Signature feed matching and catalog settings (GO-78)
+
+Feed grammar (lead's delegate, 3 October 2026; this settles the Go side of `feed grammar and
+trust`). The feed file is one JSON object with `schema_version` 1, `issuer`, `revision`,
+`description`, `scope` and 1 to 100 `rules`; each rule has `id`, `attack_class`, `description`,
+`pattern_type`, `pattern`, `boundaries`, `response` and `sources`. The schema is closed: an
+unknown or duplicate key, a second JSON value or more than 64 KiB rejects the whole feed.
+
+- `pattern_type` must be `normalized_substring`: a plain substring, 3 to 256 bytes, already in
+  normalized form. There is no regular expression, code, URL or loading path.
+- `response` must be `block`; `boundaries` is a non-empty subset of `model_input`, `tool_result`
+  and `action_proposal`.
+- `NormalizeText` lowercases, drops invisible format characters (Unicode `Cf`, for example
+  zero-width spaces) and collapses whitespace runs to one space. It does not counter paraphrase or
+  encoding.
+- Trust: `ParseFeed` takes the file bytes and the SHA-256 digest pinned in the active catalog
+  (`app.signature_feed_revisions.file_digest` of the feed on the active pointer) and rejects any
+  other bytes. The digest proves the bytes are the ones the authenticated import accepted; as the
+  report says, "A content hash alone does not authenticate its publisher", so publisher trust rests
+  on that authenticated import (API-34). The feed carries no signature.
+
+`MatchSignatures` checks one field against the enabled rules for the boundary, skipping the
+catalog's `disabled_rules`; the field limit runs before the guard settings. The first hit in feed order blocks (`signature_match`) and the record
+names the rule, feed revision, feed digest and catalog revision, never the text. An enabled guard
+with no feed is a settings error, never an empty rule set.
+
+`SettingsFromCatalog(revisionID, content, feedContent, feedDigest)` builds the security settings
+from one active catalog revision (the content JSON) and the feed's `source_text` and
+`file_digest`; 3c's GO-72 snapshot loader calls it. It reads only `controls` and `signatures`,
+rejects unknown or missing keys, unsupported boundaries, a threshold outside 0 to 1, a feed whose
+revision differs from `signatures.revision`, and a disabled rule the feed does not have. A feed is
+required while `signature_match` is enabled.
+
+### The sample feed (SH-46)
+
+`config/attack-signatures.json` is the sample feed: issuer `task-passport-security`, revision
+`feed_v1`, SHA-256 `c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244` (of the
+committed bytes). The import (API-34) stores these bytes as `source_text` with
+this digest as `file_digest`; any other bytes fail `ParseFeed`. There is no signing key: the trust
+decision is the digest pin plus the authenticated import, so the roadmap's "broken signature"
+acceptance case is a copy whose bytes differ from the pinned digest.
+
+| Rule                               | Attack class                    | Pattern                        | Source                                      |
+| ---------------------------------- | ------------------------------- | ------------------------------ | ------------------------------------------- |
+| `prompt_ignore_previous_v1`        | `instruction_redirection`       | `ignore previous instructions` | report 1.2 sample rule                      |
+| `code_exec_python_import_v1`       | `malicious_code_execution`      | `__import__(`                  | S16 (CVE-2023-44467), S17 (CVE-2023-36258)  |
+| `unsafe_deserialization_pickle_v1` | `unsafe_deserialization`        | `pickle.loads(`                | criteria section 4.4; requirements.md D-5   |
+| `model_repo_trust_remote_code_v1`  | `model_repository_supply_chain` | `trust_remote_code=true`       | S15 (Transformers `trust_remote_code` docs) |
+
+All four run at all three boundaries with response `block`. They match text only: the gateway
+downloads no models, loads no model files and deserializes nothing, so the last three show that the
+managed feed can carry rules for these classes and that a judge can disable or add them; they do not
+protect model-loading infrastructure. A paraphrase or a spacing change inside a pattern (for
+example `trust_remote_code = True`) is not matched. The tests pin the file by its digest and check that on the shared fixtures exactly the labelled
+cases hit: the two corpus cases holding the sample phrase and the `signature_rule` positive case of
+each data-only rule (`fixtures/semantic-corpus.json`, version 2). The file is listed in
+`.prettierignore`, so a formatter change cannot alter the pinned bytes.
+
+To change the feed, edit the file (byte-stable; prettier skips it), bump `revision`, recompute the digest
+(`shasum -a 256 config/attack-signatures.json`), update `committedFeedDigest` in
+`internal/security/feed_file_test.go` and import the new bytes, together with the matching
+`signatures.revision` in `policy.yaml`.
+
+## Agent model step (GO-10)
+
+`agent.Stepper.Step` performs one agent-purpose model request for a run:
+
+1. The configured model must be in the passport's allowed models, else nothing is dispatched
+   (`ErrModelNotAllowed`; GO-79 adds the active-catalog check).
+2. `budget.CallLog.RecordDispatch` commits the GO-02 pre-dispatch record in `runtime.model_calls`
+   (purpose `agent`). Its id is the ledger's call id (alignment decision 3).
+3. `model.AccountedCaller` reserves, dispatches with `think: false` and `stream: false`, and settles
+   or keeps the reservation as `usage_unknown`. The request is the fixed agent instruction followed
+   by the caller's minimized task context (GO-23 builds it), with only the four registered tools
+   offered as functions. Their parameter schemas mirror X-09; a test fails when they drift from
+   `packages/contracts/schemas/action-proposal.schema.json`.
+4. The response becomes exactly one of: one proposal for the gate (arguments untouched: a malformed
+   proposal is stored and denied at the gate), a final answer for GO-26, or a rejection of the
+   whole response with `multiple_actions_not_supported` when it holds several tool calls (GO-01; no
+   subset ever runs). An empty response is `ErrUnusableResponse`.
+5. The call outcome (`completed`, `usage_unknown`, `failed`) is recorded once.
+
+A failed or usage-unknown call returns `ErrModelCallFailed` and the run fails, with no retry: the
+`model call retries` default of Figure 5. The underlying cause stays matchable (`budget.ErrExhausted`,
+`model.ErrTimeout`) for the run's stop reason. Call-count limits, per-purpose sub-budgets and the
+concurrency slot follow in GO-39 and GO-79.
+
+Live evidence on the developer M2/8 GiB machine, Ollama 0.35.1, `qwen3.5:4b` ID `2a654d98e6fb`,
+PostgreSQL 18 on loopback: three runs of the command below each returned one typed
+`read_invoice` with `invoice_id: "invoice_A01"`, 647 input and 30 output tokens, settled to 677 of a
+20,000-token ledger with nothing left reserved. Wall times were 6.50 s (first, cold), 1.07 s and
+0.91 s. These are observations, not a benchmark. The test is opt-in and makes no model request in
+ordinary verification.
+
+```sh
+GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
+  node scripts/with-env.mjs go -C services/gateway test -tags=model_live ./internal/agent \
+  -run '^TestLiveModelProposesATypedAction$' -count=1 -v
+```
+
+## Tool-result inspection (GO-76)
+
+`Inspector.InspectToolResult(ctx, ToolResultInput, Settings)` is the Figure 10 step the worker
+calls after a tool effect is recorded and before the result becomes agent context. Its input is
+the minimized result (`tools.MinimizeForModel`): the model-facing JSON, the trusted source of its
+structured values, and the untrusted paths that also need the semantic check, with their trusted
+source. For `read_invoice` that is `internal_note.text` with the note's stored classification
+(Worker 2: the internal note is the only untrusted free text; the lead's delegate, 3 October 2026:
+semantic calls go to the internal note only).
+
+Every string value of the JSON (keys in sorted order) passes, in order:
+
+1. the field limit and the secret rules (`ApplyContentRules`): a masked value continues, a blocked
+   one stops;
+2. the signature rules on the original text (`MatchSignatures`);
+3. only on an untrusted path, the semantic check (`SemanticEvaluator.Evaluate`) on the redacted
+   text, so secrets never reach the classifier.
+
+Other string values are `tool_result_value` fields: deterministic rules only, never a model call.
+Numbers and booleans pass unchanged; `create_report` and `queue_report` results need no call.
+
+| Outcome    | Agent context                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| `pass`     | The result JSON, byte-identical.                                                                     |
+| `redacted` | Masked values only (`[REDACTED:<kind>]`, or `[REDACTED:semantic_risk]` for the whole field).         |
+| `blocked`  | Each blocked value replaced by `[WITHHELD:<reason>]`; the permitted values still return (per field). |
+| `paused`   | Nothing. A guard failure, exhausted security allowance or uninspectable result pauses the run.       |
+
+A result over `MaxResultBytes` (16 KiB) is withheld whole (`blocked`, `content_too_large`). Invalid
+or non-object JSON, duplicate keys, a missing run, or an untrusted path holding a non-string pauses.
+The note's `classification` and the `Source` of each value are never changed, so redaction or
+withholding never clears the source restriction. The inspection returns every `ControlRecord`
+(for `runtime.control_assessments`) and every semantic call result (usage and provider time) for
+the worker to persist; this package writes nothing.
+
+The worker test that asserts what the next model request contains, and the pause of the run, are
+f3's wiring (GO-76 in the loop); the tests here cover the function with the labelled provider and
+ledger doubles: clean note passes unchanged, hostile note withheld while the invoice fields
+return, signature hit before any semantic call, secrets masked before the classifier, whole-field
+semantic redaction, and every guard failure pausing with no result.
 
 ## Worker and job lease (GO-08)
 

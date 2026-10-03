@@ -33,7 +33,7 @@ func TestLiveSemanticEvaluator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evaluator, err := NewSemanticEvaluator(caller, EvaluatorOptions{Model: settings.Name, ContextTokens: 4096, Source: VerdictLive})
+	evaluator, err := NewSemanticEvaluator(caller, EvaluatorOptions{Model: settings.Name, ContextTokens: MinEvaluatorContextTokens, Source: VerdictLive})
 	if err != nil {
 		t.Fatal(err)
 	}

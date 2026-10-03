@@ -380,3 +380,12 @@ func contains[Value comparable](values []Value, candidate Value) bool {
 	}
 	return false
 }
+
+// OperatorContext is X-14: the verified operator context NestJS signs into the
+// X-Operator-Context JWT (claim ctx). Go uses it as the only identity source of a command and
+// still authorizes every command against its organization and run.
+type OperatorContext struct {
+	UserID         string   `json:"userId"`
+	OrganizationID string   `json:"organizationId"`
+	Roles          []string `json:"roles"`
+}

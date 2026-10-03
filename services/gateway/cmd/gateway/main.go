@@ -20,6 +20,7 @@ import (
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/logging"
+	"starter/services/gateway/internal/operatorcontext"
 )
 
 const (
@@ -71,10 +72,16 @@ func run() error {
 	// Runs after Run returns: HTTP drains first, then the pool closes.
 	defer pool.Close()
 
+	operatorContextVerifier, err := operatorcontext.NewVerifier(loadedConfig.OperatorContextSigningKey)
+	if err != nil {
+		return err
+	}
+
 	handler := httpserver.NewHandler(httpserver.Options{
-		Logger:       logger,
-		Health:       health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger},
-		ServiceToken: loadedConfig.ServiceToken,
+		Logger:          logger,
+		Health:          health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger},
+		ServiceToken:    loadedConfig.ServiceToken,
+		OperatorContext: operatorContextVerifier,
 	})
 	listenAddress := net.JoinHostPort(loadedConfig.Host, strconv.Itoa(loadedConfig.Port))
 	server := httpserver.NewServer(listenAddress, handler, logger)

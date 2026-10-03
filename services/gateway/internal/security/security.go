@@ -29,11 +29,14 @@ const (
 	FieldToolResultText FieldName = "tool_result_text"
 	FieldInternalNote   FieldName = "internal_note"
 	FieldModelInputText FieldName = "model_input_text"
+	// FieldToolResultValue is any other string value of a minimized tool result, for example a
+	// vendor display name: deterministic rules only, never a semantic call.
+	FieldToolResultValue FieldName = "tool_result_value"
 )
 
 // designatedFields lists which fields each boundary may carry.
 var designatedFields = map[Boundary][]FieldName{
-	BoundaryToolResult: {FieldToolResultText, FieldInternalNote},
+	BoundaryToolResult: {FieldToolResultText, FieldInternalNote, FieldToolResultValue},
 	BoundaryModelInput: {FieldModelInputText},
 }
 
@@ -133,6 +136,12 @@ type Settings struct {
 	EvaluatedCatalogRevisionID int64
 	SecretPattern              GuardSettings
 	SemanticInjection          SemanticSettings
+	// SignatureMatch uses no Mode: each feed rule carries its own response.
+	SignatureMatch GuardSettings
+	DisabledRules  []string
+	// Feed is the validated, digest-pinned feed bound to this revision; nil only when
+	// SignatureMatch is disabled.
+	Feed *Feed
 }
 
 // validate rejects settings the controls cannot enforce; a bad catalog is never an allow.
@@ -149,6 +158,10 @@ func (settings Settings) validate() error {
 	if settings.SemanticInjection.Enabled && (math.IsNaN(threshold) || threshold < 0 || threshold > 1) {
 		return ErrSettings
 	}
+	// An enabled signature guard never runs as an empty rule set.
+	if settings.SignatureMatch.Enabled && settings.Feed == nil {
+		return ErrSettings
+	}
 	return nil
 }
 
@@ -161,6 +174,8 @@ type ControlRecord struct {
 	Outcome                    Outcome
 	ReasonCode                 string
 	MatchedRuleID              string
+	FeedRevision               string
+	FeedDigest                 string
 	EvaluatedCatalogRevisionID int64
 	Duration                   time.Duration
 	// Semantic records only: the validated verdict, whether it came from the live model or a
