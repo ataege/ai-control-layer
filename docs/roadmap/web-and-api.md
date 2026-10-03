@@ -1152,6 +1152,17 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     (Journey 3).
   - Tests: specs: every state value of the contract has a view and an unknown value shows as unknown,
     never as success; a stopped run always shows its terminal reason: `pnpm --filter web run test`.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3): `RunStatePanel`
+    in `apps/web/src/components/run/run-state-panel.tsx` takes the persisted `RunState` (and the
+    recorded explanation from `terminalSafeMessage(events)`) and does no fetching; the model is
+    `describeRunState` in `labels.ts`. Every status of the contract has a business view, and the
+    view tells a justified interruption (paused at its allowance, waiting for a reviewer), an
+    uncertain result needing an operator (paused with `outcome_unknown`), a deliberate stop and a
+    failure apart; a paused, failed or stopped run always shows its terminal reason (or says none
+    was recorded and flags the contract problem); an unknown status shows as unknown, never as
+    success; a completed run lists the reports its final answer named. Specs over the run-state
+    fixtures pass (`pnpm --filter web run test`). Not done: mounting on the run page (WEB-06,
+    Batın's).
   - Report: "Users operating model and proposed user journeys" (Journey 2 review an exact outbound
     effect; Journey 3 recover cancel or investigate); "Mapping the proposal to the Goldman Sachs
     challenge" (Why successful work matters as much as blocked work)
@@ -1447,6 +1458,18 @@ this side starts and reviews.
   - Tests: specs over the usage fixtures: a missing reported amount with a retained reservation
     renders as uncertain, not zero; an estimated amount always carries its label; limits render from
     the passport, never from constants: `pnpm --filter web run test`.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3): `RunUsagePanel`
+    in `apps/web/src/components/run/run-usage-panel.tsx` takes the `RunUsage` of
+    `GET /api/runs/:id/usage` and does no fetching; the model is `usage-model.ts`
+    (`describeUsage`). Per purpose it shows requests sent with their outcomes, reported tokens (the
+    provider's measured usage) and reserved tokens (allowance held, not usage) as separate columns,
+    never added; the allowance and request limits come from the run's own ledger, never from
+    constants; an unknown-usage request shows "+ uncertain" next to the reported figure and the
+    shared label "Uncertain: an unresolved reservation, not a measured amount and not zero". No
+    amount of money is ever shown: the contract carries no cost (a local model, no pricing rule),
+    so the panel says that estimated cost is not shown, which is c1's rule "estimated, with the
+    pricing rule, or not shown". Specs over the usage fixtures pass. Not done: mounting on the run
+    page (WEB-06, Batın's).
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
     matrix" (Interpreting results honestly); "Risk register and scope controls" (Budget display
     implies certainty); "Live demonstration storyboard and proof checks" (Proposed demo sequence,
@@ -1466,6 +1489,17 @@ this side starts and reviews.
     read from the run view.
   - Tests: the beat 9 run by hand against the real stack, with the run view and a screenshot quoted;
     WEB-10's specs for the stopped state.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3):
+    `LimitStopNotice` in `apps/web/src/components/run/limit-stop-notice.tsx` takes the persisted
+    `RunState`, the run's `RunUsage` (or null) and the recorded explanation; `limitStopKind` reads a
+    limit stop from the persisted state alone (paused or stopped with `allowance_exhausted`,
+    `security_allowance_exhausted` or `run_expired`) and the component renders nothing for any other
+    run. It shows the terminal reason with its code, which request limits are at their cap, the
+    token allowances at the stop (reported, reserved, available), whether every dispatched request
+    is accounted for (or which purpose has an unaccounted one), and unknown usage as uncertain;
+    "no further model request is sent" is stated as following from the run being paused or stopped,
+    and the usage as of the latest read. Specs pass (`limit-stop-notice.test.ts`). Not done: the
+    beat 9 run by hand on the real stack with a screenshot (needs WEB-06's page).
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beat 9);
     "Threat model limits and unresolved design choices" (the smallest credible vertical slice: "one
     limit-triggered stop")
@@ -1636,6 +1670,12 @@ sit here, before the final build's evidence is captured, and are cut first.
     spending allowance as though cost were zero") has the interface part of its evidence, the
     "visibly uncertain estimated-cost state", recorded for SH-31.
   - Tests: the run by hand, with the run view and a screenshot quoted; WEB-16's specs.
+  - Progress (2026-10-04): `UnknownUsageNotice` in `run-usage-panel.tsx` (lane f3, on
+    web/run-panels, shown inside `RunUsagePanel`) appears whenever a request has unknown usage: "Usage
+    is uncertain", the shared uncertain label, and the statement that the reserved tokens stay held
+    and are counted neither as used nor as zero. WEB-16's specs cover it (a retained reservation with
+    no reported amount renders as uncertain, not zero). Not done: opening a real run with missing
+    provider usage in the interface and keeping the capture for SH-31 (needs WEB-06's page).
   - Report: "Validation plan and evidence matrix" (Proposed critical checks: Unknown usage); "Atomic
     allowances hard limits and estimated cost"
   - Blocked by: `decision 6 in docs/product/README.md`

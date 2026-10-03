@@ -1,4 +1,10 @@
 import type { AssessmentRecord, SafeEvent, SafeEventType } from "@workspace/contracts";
+import {
+  outboxEffectLabel,
+  replayLabel as sharedReplayLabel,
+  verdictSourceLabel,
+  type LabelText,
+} from "@/lib/labels";
 import { reasonLabel } from "./labels";
 
 // Pure view model of the sanitized X-12 events (WEB-09) and of the hybrid control decisions
@@ -41,7 +47,8 @@ const KNOWN_EVENTS: Record<SafeEventType, { kind: EventKind; title: string }> = 
 const EFFECT_TEXT: Record<string, string> = {
   read: "Data was read and returned to the agent; nothing was changed.",
   report_created: "A report was stored as an internal record; nothing was sent.",
-  outbox_message_queued: "A message was queued in the simulated outbox; nothing was delivered.",
+  // The outbox sentence comes from the shared truthful label, see effectText.
+  outbox_message_queued: "A message was queued.",
 };
 
 const CLASSIFICATION_TEXT: Record<string, string> = {
@@ -80,6 +87,10 @@ export interface DecisionBadge {
   result: ControlResult;
   /** Semantic only: whether the verdict came from the live model or from a labelled fixture. */
   source: "live" | "fixture" | null;
+  /** The shared truthful label of a semantic verdict's source (live model or fixture); null otherwise. */
+  sourceLabel: LabelText | null;
+  /** Where the badge comes from: the stored control assessment, or only the decision's reason code. */
+  basis: "assessment" | "reason_code";
   text: string;
   /** What happened to the text: blocked text is withheld, never shown as consumed by the agent. */
   consequence: string | null;
@@ -107,7 +118,12 @@ export interface EventView {
   rule: string | null;
   /** What changed, for an effect; "No change was made" for an attempt that recorded effect none. */
   effectText: string | null;
-  replayLabel: string | null;
+  /** The shared replay label and the replayed fixture's id; null for a model proposal. */
+  replay: { label: LabelText; fixtureId: string | null } | null;
+  /** A judge probe is not part of the agent's task; null otherwise. */
+  judgeLabel: string | null;
+  /** The shared simulated-outbox label of a queued message; null otherwise. */
+  outboxLabel: LabelText | null;
   /** The bounded way forward the gateway offered, when it offered one. */
   correctionRoute: string | null;
   rejectionText: string | null;
@@ -166,10 +182,11 @@ function ruleText(event: SafeEvent): string | null {
 function effectText(event: SafeEvent, kind: EventKind): string | null {
   const { effect } = event.maskedSummary;
   if (kind === "effect") {
-    return (
+    const text =
       (effect !== null ? EFFECT_TEXT[effect] : undefined) ??
-      "Completed; the kind of effect was not recorded."
-    );
+      "Completed; the kind of effect was not recorded.";
+    const outbox = outboxEffectLabel(effect);
+    return outbox !== null ? `${text} ${outbox.full}.` : text;
   }
   if (effect === "none") {
     return "No change was made.";
@@ -262,16 +279,8 @@ function consequenceOf(result: ControlResult): string | null {
   }
 }
 
-function badgeText(
-  label: string,
-  result: ControlResult,
-  source: "live" | "fixture" | null,
-): string {
-  const base = `${label}: ${RESULT_TEXT[result]}`;
-  if (source === "fixture") {
-    return `${base} (fixture verdict, not detection quality)`;
-  }
-  return source === "live" ? `${base} (live model)` : base;
+function badgeText(label: string, result: ControlResult): string {
+  return `${label}: ${RESULT_TEXT[result]}`;
 }
 
 /** The control that one stored assessment records, as a badge (WEB-32). */
@@ -308,7 +317,9 @@ export function badgeFromAssessment(record: AssessmentRecord): DecisionBadge {
     label,
     result,
     source,
-    text: badgeText(label, result, source),
+    sourceLabel: verdictSourceLabel(source),
+    basis: "assessment",
+    text: badgeText(label, result),
     consequence: consequenceOf(result),
     detail,
   };
@@ -334,7 +345,9 @@ function badgeFromEvent(event: SafeEvent): DecisionBadge | null {
     label,
     result: named.result,
     source: null,
-    text: badgeText(label, named.result, null),
+    sourceLabel: null,
+    basis: "reason_code",
+    text: badgeText(label, named.result),
     consequence: consequenceOf(named.result),
     detail: detail === "" ? null : detail,
   };
@@ -389,12 +402,12 @@ export function describeEvent(
     safeMessage: event.maskedSummary.safeMessage,
     rule: ruleText(event),
     effectText: effectText(event, kind),
-    replayLabel:
-      event.maskedSummary.replaySource !== null
-        ? `Replay (${event.maskedSummary.replaySource}): a recorded proposal, not an action the model generated`
-        : event.maskedSummary.inputSource === "judge"
-          ? "Judge probe: submitted by an operator, not part of the agent's task"
-          : null,
+    replay: sharedReplayLabel(event.maskedSummary.replaySource),
+    judgeLabel:
+      event.maskedSummary.inputSource === "judge"
+        ? "Judge probe: submitted by an operator, not part of the agent's task"
+        : null,
+    outboxLabel: outboxEffectLabel(event.maskedSummary.effect),
     correctionRoute:
       alternative !== null
         ? `Permitted alternative: a ${TEMPLATE_TEXT[alternative] ?? alternative}, rendered from approved fields`
@@ -435,7 +448,7 @@ export function summarizeEvents(events: readonly SafeEvent[]): TimelineSummary {
     if (view.unrecognized) {
       unrecognizedEvents += 1;
     }
-    if (view.replayLabel !== null && event.maskedSummary.replaySource !== null) {
+    if (view.replay !== null) {
       replays += 1;
     }
     if (

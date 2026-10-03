@@ -8,6 +8,8 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card";
 import { DecisionBadges } from "./decision-badges";
+import { LabelBadge } from "@/components/labels";
+import { LABELS } from "@/lib/labels";
 import { describeEvent, summarizeEvents, type EventKind, type EventView } from "./event-model";
 
 const KIND_LABEL: Record<EventKind, string> = {
@@ -84,11 +86,16 @@ function EventRow({ view }: { view: EventView }) {
       ) : null}
       {view.correctionRoute !== null ? <p className="text-sm">{view.correctionRoute}</p> : null}
       {view.rejectionText !== null ? <p className="text-sm">{view.rejectionText}</p> : null}
-      {view.replayLabel !== null ? (
-        <p className="text-sm">
-          <Badge variant="secondary">Labelled replay</Badge> {view.replayLabel}
-        </p>
+      {view.replay !== null ? (
+        <LabelBadge
+          label={view.replay.label}
+          detail
+          suffix={view.replay.fixtureId ?? undefined}
+          className="text-sm"
+        />
       ) : null}
+      {view.judgeLabel !== null ? <p className="text-sm">{view.judgeLabel}</p> : null}
+      {view.outboxLabel !== null ? <LabelBadge label={view.outboxLabel} detail /> : null}
       <DecisionBadges badges={view.badges} />
       {view.facts.length > 0 ? (
         <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -145,7 +152,7 @@ export function RunEventTimeline({ events, assessments = [] }: RunEventTimelineP
             <dt className="text-xs text-muted-foreground">Completed effects</dt>
             <dd data-summary="effects">
               {summary.effects.reads} reads · {summary.effects.reportsStored} reports stored ·{" "}
-              {summary.effects.messagesQueued} messages queued (simulated outbox)
+              {summary.effects.messagesQueued} messages queued ({LABELS.simulatedOutbox.short})
             </dd>
           </div>
           <div>
