@@ -181,8 +181,8 @@ Every contributor and coding agent commits and pushes each task as soon as it is
 2. **Tick the roadmap task in the same commit,** with the check results quoted, as the roadmap's "Definition of done" describes.
 3. **Stage only your task's files.** Use `git add <paths>`. Never use `git add -A` or `git add .` while the tree holds changes you did not make. Before committing, read `git status` and `git diff --staged`: no `.env`, no generated secret, no build output and no teammate's work.
 4. **One commit per task, with a clear message.** Subject: the task ID and an imperative summary, for example `GO-12: Canonicalize tool arguments and compute the action digest`; outside the roadmap, the area instead of the ID, for example `docs: ...`. Body: what changed, the checks that ran with their results, and anything not verified. Do not add AI co-author trailers or "Generated with" lines.
-5. **Integrate, then push.** Run `git pull --rebase --autostash` on your branch. If it brought in changes, rerun the checks of your area. Then run `git push`, or `git push -u origin <branch>` for a new branch. If the push is rejected, pull with rebase again and retry.
-6. **Never force-push or rewrite pushed history.** If the rebase conflicts in files another role owns, or a conflict cannot be resolved without dropping someone's change, run `git rebase --abort`, keep your commit local and tell the person.
+5. **Integrate, then push.** Commit first, so the working tree is clean, then run `git pull --no-rebase` on your branch, which merges the remote changes in. Never use `git stash` or `--autostash`: the stash list is shared by every worktree of the repository, so another session can pop your stash or you theirs. If the pull brought in changes, rerun the checks of your area. Then run `git push`, or `git push -u origin <branch>` for a new branch. If the push is rejected, pull again the same way and retry. To bring `main` into a pushed branch, merge it (`git merge origin/main`); never rebase a pushed branch.
+6. **Never force-push or rewrite pushed history.** If the merge conflicts in files another role owns, or a conflict cannot be resolved without dropping someone's change, run `git merge --abort`, keep your commit local and tell the person.
 7. **Report it.** Name the commit hash and the branch in your final message and say whether the push succeeded; if it did not, say exactly why.
 
 Pushing is the only automatic step. No releases, no package publishing and no deployments.
@@ -191,7 +191,7 @@ Pushing is the only automatic step. No releases, no package publishing and no de
 
 1. **Preserve teammates' changes.** No destructive resets: no `git reset --hard`, no `git checkout -- <path>`, no `git clean -fd`, no force-push. If the working tree contains changes you did not make, leave them and ask.
 2. **Coordinate shared files.** Before changing a file that another role owns, hand the change to that owner or agree on it first. Never edit another owner's paths silently.
-3. **Integrate continuously.** Small merges, pull or rebase often, keep the default branch green. Do not let a long-lived branch drift.
+3. **Integrate continuously.** Small merges, pull often, keep the default branch green. Do not let a long-lived branch drift.
 4. **Features go where the responsibility lives.** Every future feature belongs to the service that owns its responsibility. Do not put logic in a service because it is convenient to reach from there.
 5. **Report only what ran.** Do not claim a check passed unless it ran. Quote the exact command and its result; say plainly what was not verified and why.
 6. **Keep the phase current.** When the team's phase or scope changes, the integration owner updates "Current phase" and "Scope" first, together with the document owner. Do not start work the current phase does not cover.
