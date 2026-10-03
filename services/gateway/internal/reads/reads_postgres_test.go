@@ -102,11 +102,13 @@ func TestPostgresRunUsageCountsRecordedUsageOnly(t *testing.T) {
 		insert(t, tx, `INSERT INTO runtime.model_calls (id, organization_id, run_id, purpose, model, outcome)
 		               VALUES ($1, $2, $3, $4, 'local-model', $5)`, callIDs[index], organizationID, runID, call.purpose, outcome)
 	}
-	insert(t, tx, `INSERT INTO runtime.model_token_budgets (run_id, token_limit, reserved_tokens, used_tokens) VALUES ($1, 4000, 50, 300)`, runID)
-	insert(t, tx, `INSERT INTO runtime.model_token_reservations (run_id, call_id, purpose, token_reservation, status, input_tokens, output_tokens, actual_tokens)
-	               VALUES ($1, $2, 'agent', 400, 'settled', 100, 50, 150), ($1, $3, 'agent', 400, 'settled', 120, 30, 150),
-	                      ($1, $4, 'agent', 40, 'usage_unknown', NULL, NULL, NULL), ($1, $5, 'security', 10, 'reserved', NULL, NULL, NULL)`,
-		runID, callIDs[0], callIDs[1], callIDs[2], callIDs[3])
+	insert(t, tx, `INSERT INTO runtime.model_token_budgets (run_id, organization_id, token_limit, reserved_tokens, used_tokens,
+	                 call_limit, agent_call_limit, security_call_limit, request_timeout_ms, max_concurrent_calls)
+	               VALUES ($1, $2, 4000, 50, 300, 24, 12, 12, 20000, 2)`, runID, organizationID)
+	insert(t, tx, `INSERT INTO runtime.model_token_reservations (run_id, organization_id, call_id, purpose, token_reservation, status, input_tokens, output_tokens, actual_tokens)
+	               VALUES ($1, $6, $2, 'agent', 400, 'settled', 100, 50, 150), ($1, $6, $3, 'agent', 400, 'settled', 120, 30, 150),
+	                      ($1, $6, $4, 'agent', 40, 'usage_unknown', NULL, NULL, NULL), ($1, $6, $5, 'security', 10, 'reserved', NULL, NULL, NULL)`,
+		runID, callIDs[0], callIDs[1], callIDs[2], callIDs[3], organizationID)
 	firstAction := newAction(t, tx, organizationID, runID, 1)
 	secondAction := newAction(t, tx, organizationID, runID, 2)
 	insert(t, tx, `INSERT INTO runtime.execution_attempts (organization_id, action_id, attempt_number, outcome, completed_at)

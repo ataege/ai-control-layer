@@ -596,7 +596,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     process); "Functional requirements MVP boundary and deferred scope" (Durable execution)
   - Blocked by: nothing
 
-- [ ] **GO-09 · Cover the worker in graceful shutdown and readiness**
+- [x] **GO-09 · Cover the worker in graceful shutdown and readiness**
   - **Report 1.2 change:** Readiness also reports a missing valid catalog as not ready (GO-72, X-82), through a shared contract change.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-08 · Needs: nothing · Provides: X-32
@@ -623,17 +623,16 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     budget and the pool closes after it; a job interrupted by the shutdown can be claimed again
     after its lease expires; readiness answers `unavailable` while the worker loop is not running;
     the readiness fixtures decode strictly. `pnpm --filter gateway run test`.
-  - Progress (2026-10-03): `worker.Service` (456d802 on go/f3) stops claiming on `Stop`, lets the
-    current step finish until the drain deadline, then cancels the handler (`ErrDrainTimeout`); an
-    interrupted job keeps its lease and is claimed again after expiry. Readiness (option B of
-    `worker readiness`, agreed with the lead, no contract change): `health.Handler.Worker` makes
-    `/health/ready` answer 503 `unavailable` with the true database check while the loop is not
-    running. Tests pass (`TestStopLetsTheCurrentStepFinishAndStopsClaiming`,
-    `TestStopCancelsAStepThatOverrunsTheDeadline`,
-    `TestInterruptedJobIsClaimedAgainAfterItsLeaseExpires`, `TestReadinessCoversTheWorker`); `pnpm
-test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Missing half: the
-    wiring into `cmd/gateway/main.go` (Stop before `pool.Close()`), which lands with the GO-11
-    wiring.
+  - Completed (2026-10-03): `worker.Service` (456d802) stops claiming on `Stop`, lets the current
+    step finish until the drain deadline and cancels the handler after it; an interrupted job keeps
+    its lease and is claimed again after expiry. `cmd/gateway` now starts it with the production
+    chain, reports it in `/health/ready` (option B of `worker readiness`, no contract change: 503
+    `unavailable` with the true database check while the loop is not running) and stops it in
+    parallel with the HTTP drain before `pool.Close()`. Observed: the built gateway on PostgreSQL 18
+    as `task_passport_gateway` answered `/health/ready` 200 with the worker running and logged
+    `shutdown requested` then `http server stopped` on SIGTERM; with `MODEL_NAME` empty it started,
+    logged `model not configured; every model call fails closed` and answered 200. Checks: see
+    GO-11's completion line, same commit.
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Functional requirements MVP
     boundary and deferred scope" (Durable execution)
   - Blocked by: `worker readiness`
@@ -685,7 +684,7 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     unsuitable output)
   - Blocked by: `decision 6 in docs/product/README.md`; `multiple-action responses`; `model call retries` (the failure handling only)
 
-- [ ] **GO-11 · Run the bounded agent loop for permitted actions**
+- [x] **GO-11 · Run the bounded agent loop for permitted actions**
   - **Report 1.2 change:** Each step also checks the active catalog revision (GO-72, from M2) and the applicable guards.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-08, GO-10, GO-15, GO-16 · Needs: X-06, X-11 · Provides: nothing
@@ -711,18 +710,17 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     reason; a permitted read runs and its minimized result reaches the next model request; the
     steps and their order can be reconstructed from the stored records. The X-24 command;
     `pnpm --filter gateway run test`.
-  - Progress (2026-10-03): `agent.Loop` with the append-only `runtime.context_entries` (faac792) now
-    uses the production pieces on go/f3: c1's `InspectToolResult` through `agent.SecurityInspector`
-    (the interim guard is removed), GO-29's correction counter, limit and denial feedback (stored as
-    `correction` entries, migration `1791100000000-AllowContextCorrections`), and
-    `agent.RecordingCaller` recording each security call in `model_calls` before dispatch. Database
-    tests with the real repository, gate, executor, `tools.Runner` and inspector (labelled scripted
-    stepper and fixture security model) pass, including a clean note passing with its
-    classification, a hostile note withheld by signature or semantic verdict, a guard failure
-    pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
-    gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
-    the new one reverts and re-runs; `pnpm verify` 6 passed. The loop reads the active catalog before every model request and narrows the passport with `catalog.EffectiveFor` (GO-72; `TestTheActiveCatalogNarrowsEveryStep`). Missing half: wiring into `cmd/gateway/main.go` next to `catalog.WatchRequested` and the live run,
-    which also needs the signature-feed import (c1, API-34).
+  - Completed (2026-10-03): `agent.Loop` with `runtime.context_entries`, c1's tool-result
+    inspection, GO-29 corrections, the active-catalog narrowing (GO-72) and GO-80 telemetry, built
+    once by `agent.NewProductionChain` and run by the gateway's worker. Live done-when observed with
+    `TestLiveProductionChainExecutesAPermittedTool` (opt-in, developer M2/8 GiB, Ollama 0.35.1,
+    `qwen3.5:4b`, the repository's policy and feed activated through `catalogtest`): the model read
+    invoice A01 (note passed inspection) and A02, created a `vendor_reconciliation_v1` report and
+    proposed `queue_report`, which stopped at `awaiting_approval`; 4 agent calls each preceded by
+    the run check (4 policy lookups), 5 security calls, 6,954 tokens. Other runs on this memory-
+    constrained machine answered without a tool or paused with `outcome_unknown` after a 20-second
+    request timeout, as designed. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm verify` 6 passed, 0 failed, 0 skipped; `go test -p 1 -count=1 ./...` against the test database with `TEST_DATABASE_REQUIRED=1`: all 21 packages ok. Parallel `pnpm test:db` on the shared, memory-constrained machine failed 6 and then 5 different database tests in other packages at the 3-second connect timeout (api 16 passed); the serial run passes them all.
+    The run used the chain directly; the HTTP admission path is 3c's GO-14.
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
     (Figure 4); "Users operating model and proposed user journeys" (Journey 3 recover cancel or
@@ -1800,7 +1798,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
+- [x] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
   - **Report 1.2 change:** Reserve shared task allowance and the agent or security sub-budget atomically, including maximum output tokens and a concurrency slot; purpose is assigned by trusted runtime code, and security calls count against the shared ceiling. With GO-75 this delivers Implementer 3's report 1.2 first integrated deliverable: "A live agent call and live semantic check both reserve allowance and record independent purpose and latency."
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 5-8 h)
   - Depends on: GO-02, GO-03, GO-10 · Needs: X-06, X-11, X-39 · Provides: X-53
@@ -1822,13 +1820,25 @@ typecheck` PASS; `pnpm verify` 6 passed.
     counted, never zero; settlement settles the reservation against the reported usage in its own
     transaction; no reservation transaction is open while the stubbed provider call runs; a model
     call retry, where `model call retries` adopts them, reserves again. The X-24 command.
-  - Progress (2026-10-03): `budget.OpenRunLedger` (1a470f6 on go/f3) opens the run's ledger inside
-    admission's transaction with the passport's token total (alignment decision 6) and validates the
-    per-purpose sub-limits; without a ledger row nothing can be reserved
-    (`TestOpenRunLedgerCommitsWithTheCallersTransaction`). Missing: the new migration applying
-    alignment decisions 1 to 5 (uuid run id with a foreign key, organization id, call id =
-    `model_calls.id`, per-purpose sub-limits, calls, request time and the concurrency slot on the
-    ledger) and the reservation of calls and sub-budgets before every dispatch.
+  - Completed (2026-10-03): migration `1791130000000-AlignTokenLedger` applies alignment decisions 1
+    to 5 (uuid run id with a foreign key to runs, organization id, call id = `model_calls.id` with
+    the purpose bound, per-purpose token sub-limits and counters, call limits and counters, request
+    timeout and concurrency slot). `budget.OpenRunLedger` copies every passport limit at admission;
+    `Reserve` refuses before dispatch on a paused ledger, an exhausted shared or purpose call count
+    or token allowance, a held slot or a missing dispatch record, and returns the request timeout
+    that `model.AccountedCaller` applies; calls count at reserve and are never refunded; unknown
+    usage keeps the reservation and the slot (`Snapshot` reports unresolved calls per purpose);
+    `Settle` settles once in its own transaction. The loop's step count is the ledger's
+    `agent_calls`; a held slot requeues. Tests: shared and purpose call limits, security token sub-
+    budget, slot held through unknown usage and released by the late settlement, purpose binding,
+    concurrent reservations, overrun and overflow pauses, late settlement once, no ledger lock
+    during the provider call (`TestPostgresNoLedgerLockDuringTheProviderCall`). Migration: run,
+    revert, run on a fresh database (18 migrations) and on a database holding an admitted run whose
+    ledger had a settled and an unknown reservation plus an orphan diagnostic ledger: limits
+    backfilled from the passport, counters rebuilt, dispatch records backfilled, the orphan deleted.
+    Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; api `lint`, `typecheck` exit 0; `pnpm verify` 6 passed, 0 failed, 0 skipped; `GOFLAGS=-p=3 pnpm test:db`: gateway "741 passed, 0 failed, 0 skipped; 185 need the database", api "16 passed". Model call retries are not adopted
+    (`model call retries`), so no retry reserves again; local inference has no tariff, so no
+    estimated cost is recorded.
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
     matrix" (critical check Unknown usage); "Architecture and chart reading guide" (Figures 4 and 5)
   - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
