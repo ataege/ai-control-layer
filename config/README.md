@@ -58,6 +58,18 @@ next to the policy file; the feed half of API-34), and then, in one transaction:
   validated; wait for activation and retry" and exits 1 (without a running gateway, run
   `pnpm catalog:activate`). Otherwise two imports inside one activation tick could replace a good
   edit before it was ever validated. A file's own problems are reported first.
+
+  Two deliberate exceptions to the plain rules "an identical file is a no-op" and "refuse while
+  requested is not validated", both so the recovery path stays open:
+  - An identical file is not a no-op when the current revision is not sound (the gateway rejected
+    it, or an old import bootstrapped it without validation). Treating it as unchanged would make
+    `catalog:activate`'s advice to "import the policy again" loop forever, and would make a rejected
+    request impossible to retry with the same file after its cause (for example a missing feed) is
+    fixed.
+  - The refusal does not apply when the requested revision is the active one (the state an old
+    import's first-revision bootstrap leaves: requested = active, validated empty). The plain rule
+    would be true there too and would block the one import that heals that state.
+
 - **Invalid file or feed:** stores nothing. The issues are always printed (and returned) and the
   command exits 1; it also records the reason (`policy_reload_rejected`), the file digest and up to 20
   issues on the pointer (`app.control_catalog_pointer`), except when the gateway's own rejection of
