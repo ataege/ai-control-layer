@@ -257,6 +257,7 @@ All root scripts, as defined in `package.json`:
 | `pnpm build`                            | Builds contracts, web, API and the gateway binary (`services/gateway/bin/gateway`).                               |
 | `pnpm verify`                           | Runs `check:instructions`, `format:check`, `lint`, `typecheck`, `test`, `build` and prints a summary.             |
 | `pnpm smoke` (`--mode=host\|container`) | HTTP checks against the running services.                                                                         |
+| `pnpm test:db` (`gateway\|api`)         | Database-backed tests against the PostgreSQL in `.env`; see "Testing and verification".                           |
 | `pnpm check:instructions`               | Checks that `AGENTS.md` and `CLAUDE.md` are identical and complete, and that the agent files are valid.           |
 | `pnpm db:migration:create <Name>`       | Writes an empty migration file.                                                                                   |
 | `pnpm db:migration:generate <Name>`     | Generates a migration from the difference between entities and the database.                                      |
@@ -334,6 +335,31 @@ Runtime check with real HTTP calls against services that are already running (`p
 
 With `--mode=container` the direct gateway checks are reported as skipped because the port is not
 published. Exit code 1 means at least one check failed; a stopped database makes it fail.
+
+### `pnpm test:db`
+
+Database-backed tests against a real PostgreSQL, for both sides or one (`pnpm test:db gateway`,
+`pnpm test:db api`). It needs `.env` and a running database (`pnpm infra:up`, or your own
+container); real environment variables override `.env`, so `POSTGRES_PORT=55435 pnpm test:db`
+points it at another instance. `pnpm test` and `pnpm verify` stay free of a database. Every test it
+runs receives the `POSTGRES_*` settings and `TEST_DATABASE_REQUIRED=1`.
+
+Conventions:
+
+- Go (`services/gateway`): a test that needs the database skips visibly when no database is
+  configured, so `pnpm test` lists it as skipped. The command runs `go test -count=1 -json ./...`
+  once without the `POSTGRES_*` settings and `TEST_DATABASE_REQUIRED`; the tests that skip there are
+  the database tests. It then runs the suite again with the database, where every test must pass.
+  How a test detects the database is the Go side's choice.
+- API (`apps/api`): files named `*.db-spec.ts` under `src`. The API's own Vitest config includes
+  only `*.spec.ts`, so `pnpm test` never runs them; this command runs them with
+  `scripts/vitest.db.config.mjs`, one file at a time, after building the API's workspace
+  dependencies.
+
+A skip is never a pass. The summary marks each side PASS, FAIL or SKIPPED, and the command exits
+non-zero unless every selected side passed: an unreachable database or a failing test is FAIL; a
+test skipped while the database is available, or a side with no database-backed tests, is
+SKIPPED. Go runs with `-count=1`, so a cached pass cannot hide a database that is down.
 
 ## Troubleshooting
 
