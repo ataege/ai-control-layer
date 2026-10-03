@@ -124,3 +124,20 @@ lineage only, never the stored classification column, the title or a model label
 
 The semantic check is never reached for a restricted export. The `queue_report` adapter decides
 provenance again at effect time, so an approval can never override the restriction.
+
+## Denial feedback and the correction limit (GO-29, policy side)
+
+- `BuildDenialFeedback(decision, scope)` gives the model the reason code, a fixed safe message
+  per reason and, where one exists, a permitted alternative: the vendor report template after an
+  export denial only when the passport permits that template, `create_report` and invoice
+  sources; the passport's own invoice references after an out-of-scope read. It never carries a
+  protected value, review content or the raw arguments, and the alternative grants nothing: the
+  next proposal goes through the gate again.
+- `CorrectionCounter.CorrectionsUsed` counts the run's denials from its durable decision events
+  (`action.denied` and `report.export_denied`), so the count survives a worker restart and
+  includes malformed proposals, which have no action row.
+- `CheckCorrections(used, limit)` continues while used <= limit (a limit of 2 stops at the third
+  denial) and otherwise returns `allowance_exhausted` as the stop reason.
+
+f3's agent loop calls these after each denial and stops the run through
+`repository.Tx.TransitionRun`; it keeps no counter of its own.

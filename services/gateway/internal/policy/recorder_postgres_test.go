@@ -229,3 +229,49 @@ func TestPassportScopeReaderUsesTheStoredPassport(t *testing.T) {
 		t.Fatal("a passport with an unknown scope key was used")
 	}
 }
+
+func TestCorrectionCounterCountsEveryDenialOfTheRun(t *testing.T) {
+	pool := testdb.Open(t)
+	ctx := context.Background()
+	recorder := NewPostgresRecorder(pool)
+	counter := NewCorrectionCounter(pool)
+	run := seedRun(t, pool)
+	otherRun := seedRun(t, pool)
+
+	// An allowed action, a denial with an action row, a denial without one (malformed arguments)
+	// and an export denial; plus a denial of another run that must not count.
+	allowed := storedReadAction(t, run, 1)
+	denied := storedReadAction(t, run, 2)
+	exported := storedReadAction(t, run, 3)
+	for _, action := range []StoredAction{allowed, denied, exported} {
+		if err := recorder.StoreAction(ctx, action); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decisions := []Decision{
+		{Outcome: OutcomeAllow, ActionID: allowed.ActionID, ActionStored: true, EvaluatedRevisionID: 1},
+		{Outcome: OutcomeDeny, ReasonCode: ReasonResourceOutOfScope, ActionID: denied.ActionID, ActionStored: true, EvaluatedRevisionID: 1},
+		{Outcome: OutcomeDeny, ReasonCode: ReasonInvalidArguments, ActionID: testdb.ID(t)},
+		{Outcome: OutcomeDeny, ReasonCode: ReasonReportExportRestricted, ActionID: exported.ActionID, ActionStored: true, EvaluatedRevisionID: 1},
+	}
+	for _, decision := range decisions {
+		if err := recorder.RecordDecision(ctx, run, decision); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := recorder.RecordDecision(ctx, otherRun, Decision{Outcome: OutcomeDeny, ReasonCode: ReasonInvalidArguments, ActionID: testdb.ID(t)}); err != nil {
+		t.Fatal(err)
+	}
+
+	used, err := counter.CorrectionsUsed(ctx, run)
+	if err != nil || used != 3 {
+		t.Fatalf("corrections used = %d, err %v; want 3", used, err)
+	}
+	if verdict := CheckCorrections(used, 2); verdict.Continue {
+		t.Fatal("a third denial with a limit of 2 did not stop the run")
+	}
+	// A new counter (as after a worker restart) reads the same durable count.
+	if again, _ := NewCorrectionCounter(pool).CorrectionsUsed(ctx, run); again != 3 {
+		t.Fatalf("count after restart = %d, want 3", again)
+	}
+}
