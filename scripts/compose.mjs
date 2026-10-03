@@ -5,8 +5,9 @@
 import { existsSync } from "node:fs";
 
 import { readCommandOutput, runCommand } from "./lib/commands.mjs";
+import { composeProjectArguments } from "./lib/compose-arguments.mjs";
 import { MISSING_ENV_FILE_MESSAGE } from "./lib/env-file.mjs";
-import { fromRepositoryRoot, repositoryRoot, rootEnvFilePath } from "./lib/repo-root.mjs";
+import { repositoryRoot, rootEnvFilePath } from "./lib/repo-root.mjs";
 
 const FULL_STACK_PROFILE = ["--profile", "full"];
 
@@ -47,18 +48,9 @@ if (!existsSync(rootEnvFilePath)) {
   process.exit(1);
 }
 
-const composeFileArguments = ["-f", fromRepositoryRoot("infra", "compose.yaml")];
 // --debug adds the override that publishes the gateway port on localhost.
-if (debugRequested)
-  composeFileArguments.push("-f", fromRepositoryRoot("infra", "compose.debug.yaml"));
-
 const dockerArguments = [
-  "compose",
-  "--project-directory",
-  repositoryRoot,
-  "--env-file",
-  rootEnvFilePath,
-  ...composeFileArguments,
+  ...composeProjectArguments({ debug: debugRequested }),
   ...action.globalArguments,
   ...action.commandArguments,
 ];
