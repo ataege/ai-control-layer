@@ -96,7 +96,14 @@ func TestQueueVendorReportCreatesOneSimulatedOutboxRow(t *testing.T) {
 }
 
 func TestQueueRefusesUnrelatedReportsUntrustedRecipientsAndChangedSources(t *testing.T) {
-	world := openWorld(t, func(world *testWorld) passportScope { return scenarioScope(world, true) })
+	// Borealis is listed in vendorIds and recipientReferences but belongs to the other
+	// organization, so only the database's organization filter can refuse it.
+	world := openWorld(t, func(world *testWorld) passportScope {
+		passport := scenarioScope(world, true)
+		passport.VendorIDs = append(passport.VendorIDs, world.borealisID)
+		passport.RecipientReferences = append(passport.RecipientReferences, recipientReference(world.runID, world.borealisID))
+		return passport
+	})
 	vendorReport := createReportFor(t, world, provenance.VendorReconciliationV1.Name)
 	atlas := recipientReference(world.runID, world.atlasID)
 
@@ -121,5 +128,27 @@ func TestQueueRefusesUnrelatedReportsUntrustedRecipientsAndChangedSources(t *tes
 	}
 	if rows := world.outboxRows(t); rows != 0 {
 		t.Fatalf("outbox rows = %d, want 0", rows)
+	}
+}
+
+func TestDenialEventsClaimOnlyWhatWasChecked(t *testing.T) {
+	// The passport does not permit the vendor template: no alternative may be offered.
+	world := openWorld(t, func(world *testWorld) passportScope {
+		passport := scenarioScope(world, true)
+		passport.ReportTemplates = []string{provenance.InternalInvestigationV1.Name}
+		return passport
+	})
+	internalReport := createReportFor(t, world, provenance.InternalInvestigationV1.Name)
+	restricted, _ := world.queue(t, internalReport, recipientReference(world.runID, world.atlasID))
+	if got := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE action_id = $1
+	                            AND (event_type = 'report.safe_template_offered' OR masked_summary->>'alternativeTemplate' IS NOT NULL)`,
+		restricted.ActionID); got != 0 {
+		t.Fatalf("an alternative the passport does not permit was offered (%d events)", got)
+	}
+	// A refusal before the lineage check claims no lineage result.
+	rawAddress, _ := world.queue(t, internalReport, "reports@atlas.example.com")
+	if got := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE action_id = $1 AND event_type = 'report.export_denied'
+	                            AND masked_summary->>'lineageCheck' IS NULL`, rawAddress.ActionID); got != 1 {
+		t.Fatal("a recipient refusal claims a lineage check that never ran")
 	}
 }

@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-
-	"starter/services/gateway/internal/contracts"
 )
 
 // resolvedRecipient is a recipient reference resolved inside an adapter after its checks. The
@@ -53,17 +51,29 @@ func resolveRecipient(ctx context.Context, tx pgx.Tx, current scope, reference s
 }
 
 // ResolveRecipientForReview resolves a recipient reference for the reviewer's frozen review
-// payload (GO-43), with exactly the checks queue_report applies (resolveRecipient): the reference
-// names this run, is listed in the passport's recipientReferences, and points to a vendor of the
+// payload (GO-43), with exactly the checks queue_report applies (resolveRecipient). It loads the
+// scope of the run's stored passport itself, so a caller cannot widen it: the reference must name
+// this active run, be listed in the passport's recipientReferences, and point to a vendor of the
 // organization in the passport's vendorIds that is linked to a passport-scoped invoice and has a
-// registered address. It only reads. The caller must pass the scope of the run's stored passport,
-// never one built from a request. The address is for the reviewer's payload only and must never
-// reach the model. A refusal returns reasonCode destination_not_allowed and empty values.
-func ResolveRecipientForReview(ctx context.Context, tx pgx.Tx, organizationID, runID string,
-	passport contracts.PassportScope, reference string) (vendorID, address, reasonCode string, err error) {
-	current := scope{organizationID: organizationID, runID: runID, passport: passportScope{
-		InvoiceIDs: passport.InvoiceIDs, VendorIDs: passport.VendorIDs, RecipientReferences: passport.RecipientReferences,
-	}}
+// registered address. It only reads. The address is for the reviewer's payload only and must
+// never reach the model. A refusal returns reasonCode destination_not_allowed and empty values; a
+// run without an active passport of this organization is a precondition error.
+func ResolveRecipientForReview(ctx context.Context, tx pgx.Tx, organizationID, runID, reference string) (vendorID, address, reasonCode string, err error) {
+	var passportID string
+	err = tx.QueryRow(ctx,
+		`SELECT passport_id::text FROM runtime.runs WHERE id = $1 AND organization_id = $2`,
+		runID, organizationID,
+	).Scan(&passportID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", fmt.Errorf("%w: no run of this organization", errPrecondition)
+	}
+	if err != nil {
+		return "", "", "", fmt.Errorf("tools: read run: %w", err)
+	}
+	current, err := loadScope(ctx, tx, EffectRequest{OrganizationID: organizationID, RunID: runID, PassportID: passportID})
+	if err != nil {
+		return "", "", "", err
+	}
 	recipient, reason, err := resolveRecipient(ctx, tx, current, reference)
 	if err != nil || reason != "" {
 		return "", "", reason, err
