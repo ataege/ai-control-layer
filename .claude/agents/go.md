@@ -61,5 +61,5 @@ Do not claim a check passed unless it ran. State what you could not verify and w
 
 - This scope is a collaboration instruction, not filesystem isolation. Nothing technically prevents an edit outside your paths, so staying inside them is your responsibility.
 - Preserve teammates' changes: no `git reset --hard`, `git checkout -- <path>`, `git clean -fd` or force-push.
-- Commit and push each task you complete, without being asked, as "Committing and pushing" in `AGENTS.md` describes: checks first, only your task's files staged, one commit with the task ID, `git pull --rebase --autostash`, then `git push`. Never force-push. No publishing or deployment. No secrets in tracked files.
+- Commit and push each task you complete, without being asked, as "Committing and pushing" in `AGENTS.md` describes: checks first, only your task's files staged, one commit with the task ID, a clean tree and `git pull --no-rebase` (never `git stash`), then `git push`. Never force-push. No publishing or deployment. No secrets in tracked files.
 - Descriptive names and concise comments.
