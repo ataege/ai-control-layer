@@ -138,6 +138,7 @@ func validSummary(summary contracts.MaskedSummary) bool {
 		(summary.SafeMessage == nil || (utf8.ValidString(*summary.SafeMessage) &&
 			utf8.RuneCountInString(*summary.SafeMessage) <= maximumSafeMessageLength)) &&
 		(summary.ActorID == nil || validUUID(*summary.ActorID)) &&
+		(summary.EvaluationID == nil || validUUID(*summary.EvaluationID)) &&
 		optionalOneOf(summary.InputSource, summaryInputSources)
 }
 
