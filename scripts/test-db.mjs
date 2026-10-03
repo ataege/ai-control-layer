@@ -29,74 +29,26 @@
 // toolchain or a failing test is FAIL; a skipped test, or a side with no database-backed tests, is
 // SKIPPED. Anything other than PASS on every selected side exits nonzero, so a skip is never
 // reported as a pass.
-import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { commandExists, runCommand } from "./lib/commands.mjs";
 import { databaseAddress, databaseIsReachable, hostIsLoopback } from "./lib/database-probe.mjs";
-import { connectToDatabase } from "./lib/demo-seed.mjs";
 import { loadRootEnvironment, MISSING_ENV_FILE_MESSAGE } from "./lib/env-file.mjs";
 import { countByStatus, printHeading, printResultTable } from "./lib/output.mjs";
 import { fromRepositoryRoot, repositoryRoot } from "./lib/repo-root.mjs";
+import {
+  FRESH_FLAG,
+  prepareTestDatabase,
+  runWithLineOutput,
+  testEnvironmentFor,
+  withoutDatabaseSettings,
+} from "./lib/test-database.mjs";
 
 const GATEWAY_DIRECTORY = fromRepositoryRoot("services", "gateway");
 const VITEST_CONFIG_PATH = fromRepositoryRoot("scripts", "vitest.db.config.mjs");
-// Set for every test this command runs: a database test can treat a missing database as a failure.
-const DATABASE_REQUIRED_VARIABLE = "TEST_DATABASE_REQUIRED";
 const SIDES = ["gateway", "api"];
-// Legacy connection URLs (GO-06 once read GATEWAY_TEST_DATABASE_URL first; internal/testdb now
-// reads only POSTGRES_*). Removed from every run, so none can bypass the identification run or
-// point a test at another database.
-const DATABASE_URL_VARIABLES = ["GATEWAY_TEST_DATABASE_URL"];
-// `pnpm test:db --fresh` drops and recreates the test database before the tests.
-const FRESH_FLAG = "--fresh";
-const TEST_DATABASE_SUFFIX = "_test";
-// The server's maintenance database, used only to create and drop the test database.
-const MAINTENANCE_DATABASE = "postgres";
-// PostgreSQL silently truncates longer identifiers (NAMEDATALEN - 1).
-const POSTGRES_IDENTIFIER_MAX_BYTES = 63;
-const DUPLICATE_DATABASE_ERROR_CODE = "42P04";
-
-/** Runs a command, echoing its stdout line by line through `onStdoutLine`; resolves the exit code. */
-function runWithLineOutput(command, commandArguments, { env, cwd, onStdoutLine }) {
-  return new Promise((resolveExitCode) => {
-    const child = spawn(command, commandArguments, {
-      env,
-      cwd,
-      stdio: ["ignore", "pipe", "inherit"],
-    });
-    let pendingText = "";
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
-      pendingText += chunk;
-      const completeLines = pendingText.split("\n");
-      pendingText = completeLines.pop();
-      for (const line of completeLines) onStdoutLine(line);
-    });
-    child.on("error", (spawnError) => {
-      console.error(`Cannot run "${command}": ${spawnError.message}`);
-      resolveExitCode(127);
-    });
-    child.on("close", (exitCode) => {
-      if (pendingText) onStdoutLine(pendingText);
-      resolveExitCode(exitCode ?? 1);
-    });
-  });
-}
-
-/** The environment without any database setting, as a plain `pnpm test` without .env sees it. */
-function withoutDatabaseSettings(environment) {
-  return Object.fromEntries(
-    Object.entries(environment).filter(
-      ([name]) =>
-        !name.startsWith("POSTGRES_") &&
-        name !== DATABASE_REQUIRED_VARIABLE &&
-        !DATABASE_URL_VARIABLES.includes(name),
-    ),
-  );
-}
 
 /**
  * Runs `go test -count=1 -json ./...` in the gateway and returns the exit code and the final
@@ -240,103 +192,6 @@ async function runApiTests(environment) {
   }
 }
 
-/**
- * The test database name for a demo database name, or a problem that makes the command refuse.
- * The name is derived, never configured, so it cannot be set to the demo database itself.
- */
-function testDatabaseNameFor(demoDatabaseName) {
-  if (!demoDatabaseName) return { problem: "POSTGRES_DB is not set" };
-  const testDatabaseName = `${demoDatabaseName}${TEST_DATABASE_SUFFIX}`;
-  if (testDatabaseName === demoDatabaseName) {
-    return { problem: "the test database name equals POSTGRES_DB" };
-  }
-  if (Buffer.byteLength(testDatabaseName, "utf8") > POSTGRES_IDENTIFIER_MAX_BYTES) {
-    return {
-      problem: `"${testDatabaseName}" exceeds PostgreSQL's ${POSTGRES_IDENTIFIER_MAX_BYTES}-byte identifier limit and could be truncated onto another database; shorten POSTGRES_DB`,
-    };
-  }
-  return { testDatabaseName };
-}
-
-/** A double-quoted SQL identifier; embedded double quotes are doubled. */
-const quoteIdentifier = (identifier) => `"${identifier.replaceAll('"', '""')}"`;
-
-/**
- * Creates the test database when missing (after dropping it with `fresh`), connected to the
- * maintenance database as the owner. Resolves { ok, created } or { ok: false, detail }.
- */
-async function ensureTestDatabase(environment, testDatabaseName, { fresh }) {
-  let maintenanceClient;
-  try {
-    maintenanceClient = await connectToDatabase({
-      ...environment,
-      POSTGRES_DB: MAINTENANCE_DATABASE,
-    });
-  } catch (connectionError) {
-    return {
-      ok: false,
-      detail: `cannot connect to the ${MAINTENANCE_DATABASE} maintenance database as POSTGRES_USER: ${connectionError.message}`,
-    };
-  }
-  try {
-    const quotedName = quoteIdentifier(testDatabaseName);
-    if (fresh) {
-      // FORCE ends leftover sessions, for example of an interrupted earlier run.
-      await maintenanceClient.query(`DROP DATABASE IF EXISTS ${quotedName} WITH (FORCE)`);
-      console.log(`Dropped the test database ${testDatabaseName} (${FRESH_FLAG}).`);
-    }
-    const existing = await maintenanceClient.query("SELECT 1 FROM pg_database WHERE datname = $1", [
-      testDatabaseName,
-    ]);
-    if (existing.rowCount > 0) {
-      console.log(`The test database ${testDatabaseName} exists.`);
-      return { ok: true, created: false };
-    }
-    try {
-      await maintenanceClient.query(`CREATE DATABASE ${quotedName}`);
-    } catch (createError) {
-      // Created concurrently by another run: it exists, which is all this step needs.
-      if (createError.code !== DUPLICATE_DATABASE_ERROR_CODE) throw createError;
-    }
-    console.log(`Created the test database ${testDatabaseName}.`);
-    return { ok: true, created: true };
-  } catch (queryError) {
-    return {
-      ok: false,
-      detail: `preparing the test database ${testDatabaseName} failed: ${queryError.message}`,
-    };
-  } finally {
-    await maintenanceClient.end();
-  }
-}
-
-/**
- * Brings the test database to the current schema and the demo baseline: create (or recreate),
- * then `pnpm db:migration:run` and `pnpm db:seed` (demo records and control catalog), both with
- * POSTGRES_DB set to the test database. Resolves { status, detail } for the summary.
- */
-async function prepareTestDatabase(testEnvironment, testDatabaseName, { fresh }) {
-  printHeading(`test:db prepare ${testDatabaseName}`);
-  const ensured = await ensureTestDatabase(testEnvironment, testDatabaseName, { fresh });
-  if (!ensured.ok) return { status: "FAIL", detail: ensured.detail };
-
-  for (const scriptName of ["db:migration:run", "db:seed"]) {
-    console.log(`Running pnpm ${scriptName} against ${testDatabaseName} ...`);
-    const exitCode = await runCommand("pnpm", ["run", scriptName], {
-      env: testEnvironment,
-      cwd: repositoryRoot,
-    });
-    if (exitCode !== 0) {
-      return {
-        status: "FAIL",
-        detail: `pnpm ${scriptName} on ${testDatabaseName} failed (exit code ${exitCode})`,
-      };
-    }
-  }
-  const preparation = fresh ? "recreated" : ensured.created ? "created" : "reused";
-  return { status: "PASS", detail: `${testDatabaseName} ${preparation}, migrated and seeded` };
-}
-
 const SIDE_RUNNERS = { gateway: runGatewayTests, api: runApiTests };
 
 const commandArguments = process.argv.slice(2);
@@ -358,21 +213,17 @@ if (!fileFound) {
 }
 
 const demoDatabaseName = rootEnvironment.POSTGRES_DB;
-const { testDatabaseName, problem: testDatabaseNameProblem } =
-  testDatabaseNameFor(demoDatabaseName);
+// Every child process (migrations, seed, both test sides) sees only the test database. The URL
+// variables are removed, so a stale value can never point a test at the demo database.
+const {
+  testEnvironment,
+  testDatabaseName,
+  problem: testDatabaseNameProblem,
+} = testEnvironmentFor(rootEnvironment);
 if (testDatabaseNameProblem) {
   console.error(`Refusing to run the database tests: ${testDatabaseNameProblem}.`);
   process.exit(1);
 }
-
-// Every child process (migrations, seed, both test sides) sees only the test database. The URL
-// variables are removed, so a stale value can never point a test at the demo database.
-const testEnvironment = {
-  ...rootEnvironment,
-  POSTGRES_DB: testDatabaseName,
-  [DATABASE_REQUIRED_VARIABLE]: "1",
-};
-for (const urlVariable of DATABASE_URL_VARIABLES) delete testEnvironment[urlVariable];
 
 const database = databaseAddress(testEnvironment);
 // Names and address only, never the password.
