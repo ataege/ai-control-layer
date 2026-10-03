@@ -401,6 +401,43 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Production chain and gateway wiring (GO-11, GO-09)
+
+`agent.NewProductionChain(pool, loader, agent.ChainConfig{Model, ModelConfigured, Logger})` builds
+the governed chain once, and `cmd/gateway` uses it with the same `catalog.Loader` as admission:
+
+- `ModelCaller` (`agent.CatalogAccountedCaller`): the active catalog's accounting settings and
+  request timeout per call, the run's ledger, `model.AccountedCaller`, the Ollama provider
+  (`MODEL_BASE_URL`, `MODEL_NAME`, 2-minute outer bound, 1 MiB request/response limits);
+- `SecurityCaller` (`agent.RecordingCaller`), `Evaluator` (`security.NewSemanticEvaluator`, context
+  8192, verdicts labelled `live`), `Inspector` (`security.NewInspector`);
+- `Settings` (`agent.CatalogSettings`, policy's `SecuritySettingsSource` over the active snapshot;
+  a revision that is no longer active has no settings), `Catalog` (`agent.PoolCatalog`);
+- `Gate` (`policy.NewGate` with `PassportScopeReader`, `PostgresRecorder`, `PostgresRelationships`
+  and `policy.NewSecurityActionEvaluator`, never nil, plus `PostgresReviewFreezer`), `Executor`
+  (`tools.Runner`), `Loop` and `Worker` (`worker.Service` claiming `contracts.JobKindAgentStep`).
+
+The gateway starts the worker after the pool, reports it in `/health/ready`, and on SIGINT/SIGTERM
+stops it in parallel with the HTTP drain (6 s drain, inside the 8 s budget) before the pool closes.
+Without `MODEL_NAME` the gateway still starts and logs `model not configured; every model call
+fails closed`: the chain uses a model name no catalog allows and a provider that dispatches nothing.
+
+Live evidence (developer M2/8 GiB, Ollama 0.35.1, `qwen3.5:4b`, PostgreSQL 18 on loopback, the
+repository's policy and signature feed activated through `catalogtest`): the opt-in
+`TestLiveProductionChainExecutesAPermittedTool` ran the production chain on an admitted run. In one
+run the model read invoice A01 (the internal note passed inspection), read A02, created a
+`vendor_reconciliation_v1` report and proposed `queue_report`, which stopped at `awaiting_approval`
+(4 agent and 5 security calls, 6,954 tokens). Other runs on this memory-constrained machine (about
+70 MB free) ended differently: one answered without a tool call; four paused with `outcome_unknown`
+when an agent call exceeded the catalog's 20-second request timeout (one of them after one executed
+read). These are observations of a 4B model under memory pressure, not a reliability measure.
+
+```sh
+GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
+  node scripts/with-env.mjs go -C services/gateway test -tags=model_live ./internal/agent \
+  -run '^TestLiveProductionChainExecutesAPermittedTool$' -count=1 -v
+```
+
 ## Performance telemetry (GO-80)
 
 `agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the
@@ -474,9 +511,8 @@ becomes `{"withheld":true,"reason_code":...}`; a paused inspection pauses the ru
 nothing. Security calls go through `agent.RecordingCaller`, which commits the `model_calls` row
 under the evaluator's own call id before dispatch, so control assessments can reference it.
 
-Not wired into the gateway process yet: the production scope reader and admission (GO-13) are
-needed for a live run; the wiring commit adds `worker.Service`, this handler and the readiness
-reporter to `cmd/gateway/main.go`.
+The gateway process runs this handler through `agent.NewProductionChain` (see "Production chain
+and gateway wiring").
 
 ## Deterministic content controls (GO-74)
 
@@ -828,8 +864,8 @@ like a handler error; a zero `Outcome` is not a decision and records nothing.
 `health.Handler.Worker` takes the service's `Ready()`: while the loop is not running, readiness
 answers `503` with `status: "unavailable"` and the real database check, and logs
 `worker loop not running`. The readiness schema stays unchanged (open item `worker readiness`,
-option chosen with the lead: no contract change). The gateway process does not start the worker
-yet: GO-11 adds the agent-loop handler and wires the service into `cmd/gateway/main.go`.
+option chosen with the lead: no contract change). The gateway process starts the worker and reports
+it in readiness (see "Production chain and gateway wiring").
 
 Tests use a unique job kind per test, so no test claims
 another test's job. Their fixtures need a passport, which rejects `DELETE` by trigger: cleanup

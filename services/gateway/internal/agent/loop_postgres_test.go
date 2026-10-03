@@ -49,6 +49,10 @@ type passportOptions struct {
 	noteText string
 	// noCorrections sets the passport's correction limit to zero.
 	noCorrections bool
+	// allowedModel replaces the passport's allowed model "test-fixture".
+	allowedModel string
+	// openLedger opens the run's model ledger with the passport, as admission does.
+	openLedger bool
 }
 
 func newLoopWorld(t *testing.T, options passportOptions) *loopWorld {
@@ -76,6 +80,10 @@ func newLoopWorld(t *testing.T, options passportOptions) *loopWorld {
 		       ($3, $4, $5, 'INV211', 'EUR', 48000, '2026-09-15', '2026-11-15', NULL, NULL)`,
 		world.invoiceWithNote, world.invoiceClean, world.invoiceOutsideTheTask, world.organizationID, world.vendorID, noteText)
 
+	allowedModel := options.allowedModel
+	if allowedModel == "" {
+		allowedModel = "test-fixture"
+	}
 	corrections := int64(2)
 	if options.noCorrections {
 		corrections = 0
@@ -100,7 +108,7 @@ func newLoopWorld(t *testing.T, options passportOptions) *loopWorld {
 			ReportTemplates:       []contracts.ReportTemplate{contracts.TemplateInternalInvestigation, contracts.TemplateVendorReconciliation},
 			ProjectionRules:       []string{"vendor_invoice_fields_v1"},
 			RecipientReferences:   []string{"recipient:" + world.runID + ":" + world.vendorID},
-			AllowedModels:         []string{"test-fixture"},
+			AllowedModels:         []string{allowedModel},
 			InternalNoteReadable:  true,
 			ApprovalRequiredTools: []contracts.ToolName{contracts.ToolQueueReport},
 		},
@@ -108,7 +116,13 @@ func newLoopWorld(t *testing.T, options passportOptions) *loopWorld {
 			RequestTimeoutSeconds: 20, LocalMaxConcurrency: 2, ToolAttempts: 12, Corrections: corrections, RunExpiryMinutes: 15},
 	}
 	if err := world.repository.InTransaction(ctx, func(tx repository.Tx) error {
-		return tx.InsertAdmission(ctx, passport, repository.NewJob{ID: world.jobID, Kind: contracts.JobKindAgentStep})
+		if err := tx.InsertAdmission(ctx, passport, repository.NewJob{ID: world.jobID, Kind: contracts.JobKindAgentStep}); err != nil {
+			return err
+		}
+		if options.openLedger {
+			return budget.OpenRunLedger(ctx, tx.Raw(), passport.OrganizationID, passport.RunID, passport.Limits)
+		}
+		return nil
 	}); err != nil {
 		t.Fatalf("admit fixture run: %v", err)
 	}
@@ -139,8 +153,17 @@ func (world *loopWorld) remove(t *testing.T) {
 		t.Logf("loop fixture of organization %s left in place (cleanup needs a superuser)", world.organizationID)
 		return
 	}
+	// The run's model ledger is keyed by run id.
+	for _, table := range []string{"runtime.model_token_reservations", "runtime.model_token_budgets"} {
+		if _, err = transaction.Exec(ctx, "DELETE FROM "+table+" WHERE run_id::text = $1", world.runID); err != nil {
+			t.Errorf("clean %s: %v", table, err)
+			return
+		}
+	}
 	for _, table := range []string{
-		"runtime.context_entries", "runtime.control_assessments", "runtime.timing_records", "runtime.audit_events", "runtime.execution_attempts", "runtime.actions",
+		"runtime.context_entries", "runtime.control_assessments", "runtime.timing_records", "runtime.audit_events",
+		"runtime.review_payloads", "runtime.approvals", "runtime.report_lineage", "demo.outbox_messages", "demo.reports",
+		"runtime.budget_reservations", "runtime.execution_attempts", "runtime.actions",
 		"runtime.model_calls", "runtime.jobs", "runtime.runs", "runtime.passports", "demo.invoices", "demo.vendors",
 	} {
 		if _, err = transaction.Exec(ctx, "DELETE FROM "+table+" WHERE organization_id = $1", world.organizationID); err != nil {
