@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { PageHeader } from "@workspace/ui/components/page-header";
 
+import { ActiveControls } from "@/components/security/active-controls";
 import { SecurityDashboard } from "@/components/security/security-dashboard";
 
 export const metadata: Metadata = { title: "Security posture" };
@@ -16,7 +17,8 @@ export default function SecurityPage() {
         title="Security posture"
         description="What the controls decided for this organization: allowed, blocked and redacted, which controls fired, what the model consumed and how long each phase took."
       />
-      <div className="mt-6">
+      <div className="mt-6 flex flex-col gap-6">
+        <ActiveControls />
         <SecurityDashboard />
       </div>
     </>
