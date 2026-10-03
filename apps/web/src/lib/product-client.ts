@@ -2,7 +2,6 @@ import { fetchJson, postJson, FetchJsonResult } from "./fetch-json";
 import type {
   StartRunRequest,
   StartRunResponse,
-  TaskFormOptions,
   RunView,
   SanitizedEvent,
 } from "@workspace/contracts";
@@ -48,10 +47,6 @@ function isStartRunResponse(data: unknown): data is StartRunResponse {
     "passportId" in data &&
     typeof (data as Record<string, unknown>).passportId === "string"
   );
-}
-
-function isTaskFormOptions(data: unknown): data is TaskFormOptions {
-  return typeof data === "object" && data !== null && "templates" in data && "vendors" in data;
 }
 
 function isRunView(data: unknown): data is RunView {

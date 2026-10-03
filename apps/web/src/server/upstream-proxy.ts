@@ -36,6 +36,9 @@ interface ProxyOptions {
 
 class UpstreamConfigurationError extends Error {}
 
+// Node's fetch needs `duplex: "half"` to stream a request body; the DOM RequestInit type lacks it.
+type StreamingRequestInit = RequestInit & { duplex?: "half" };
+
 function readUpstreamBaseUrl(): string {
   const configuredValue = process.env.API_UPSTREAM_URL?.trim();
   if (!configuredValue) {
@@ -102,7 +105,7 @@ function isJsonText(bodyText: string): boolean {
 }
 
 function isPathAllowed(path: string): boolean {
-  const pathname = path.split("?")[0];
+  const pathname = path.split("?")[0] ?? "";
   return UPSTREAM_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
   );
@@ -149,9 +152,9 @@ export async function proxyUpstream(
   // Forward session cookie if present
   const cookie = request.headers.get("cookie");
   if (cookie) {
-    const sessionMatch = cookie.match(/(?:^|;\s*)(session=[^;]+)/);
-    if (sessionMatch) {
-      headers.set("cookie", sessionMatch[1]);
+    const sessionCookie = cookie.match(/(?:^|;\s*)(session=[^;]+)/)?.[1];
+    if (sessionCookie) {
+      headers.set("cookie", sessionCookie);
     }
   }
 
@@ -160,7 +163,7 @@ export async function proxyUpstream(
     headers.set("content-type", request.headers.get("content-type")!);
   }
 
-  const fetchOptions: RequestInit = {
+  const fetchOptions: StreamingRequestInit = {
     method: request.method,
     cache: "no-store",
     redirect: "manual",
@@ -170,7 +173,7 @@ export async function proxyUpstream(
   if (request.method !== "GET" && request.method !== "HEAD") {
     fetchOptions.body = request.body;
     // Need to use duplex: "half" for streaming bodies in Node.js fetch
-    (fetchOptions as any).duplex = "half";
+    fetchOptions.duplex = "half";
   }
 
   let timeoutId: NodeJS.Timeout | undefined;

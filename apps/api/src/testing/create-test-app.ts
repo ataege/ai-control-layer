@@ -24,12 +24,13 @@ export async function createTestApp(
     providers.push(
       {
         provide: AUTH_PROVIDER,
-        useValue: { authenticate: async () => ({ subjectId: "test-user" }) },
+        useValue: { authenticate: () => Promise.resolve({ subjectId: "test-user" }) },
       },
       {
         provide: getRepositoryToken(Membership),
         useValue: {
-          findOne: async () => ({ userId: "test-user", organizationId: "test-org", roles: [] }),
+          findOne: () =>
+            Promise.resolve({ userId: "test-user", organizationId: "test-org", roles: [] }),
         },
       },
     );
