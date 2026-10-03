@@ -24,6 +24,8 @@ var readContractFixtures = map[string]func() any{
 	"assessment-page.empty.json":                     func() any { return new(AssessmentPage) },
 	"security-event-page.judge.json":                 func() any { return new(SecurityEventPage) },
 	"security-summary.judge-split.json":              func() any { return new(SecuritySummary) },
+	"catalog-status.active.json":                     func() any { return new(CatalogStatus) },
+	"catalog-status.rejected-request.json":           func() any { return new(CatalogStatus) },
 	"report-view.vendor.json":                        func() any { return new(provenance.ReportView) },
 	"report-view.internal-withheld.json":             func() any { return new(provenance.ReportView) },
 }
