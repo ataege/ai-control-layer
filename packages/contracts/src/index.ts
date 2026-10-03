@@ -313,6 +313,8 @@ export type SafeEventType =
   | "run.failed"
   | "run.stopped"
   | "run.cancel_requested"
+  | "run.awaiting_approval"
+  | "run.resumed"
   | "model.completed"
   | "action.proposed"
   | "action.allowed"

@@ -283,14 +283,19 @@ type RunState struct {
 type EventType string
 
 const (
-	EventAdmissionRejected         EventType = "admission.rejected"
-	EventRunQueued                 EventType = "run.queued"
-	EventRunStarted                EventType = "run.started"
-	EventRunPaused                 EventType = "run.paused"
-	EventRunCompleted              EventType = "run.completed"
-	EventRunFailed                 EventType = "run.failed"
-	EventRunStopped                EventType = "run.stopped"
-	EventRunCancelRequested        EventType = "run.cancel_requested"
+	EventAdmissionRejected  EventType = "admission.rejected"
+	EventRunQueued          EventType = "run.queued"
+	EventRunStarted         EventType = "run.started"
+	EventRunPaused          EventType = "run.paused"
+	EventRunCompleted       EventType = "run.completed"
+	EventRunFailed          EventType = "run.failed"
+	EventRunStopped         EventType = "run.stopped"
+	EventRunCancelRequested EventType = "run.cancel_requested"
+	// EventRunAwaitingApproval is the run's transition to awaiting_approval; approval.requested
+	// stays the gate's event for the action.
+	EventRunAwaitingApproval EventType = "run.awaiting_approval"
+	// EventRunResumed is the run's return to running when its continuation job is claimed.
+	EventRunResumed                EventType = "run.resumed"
 	EventModelCompleted            EventType = "model.completed"
 	EventActionProposed            EventType = "action.proposed"
 	EventActionAllowed             EventType = "action.allowed"
@@ -311,7 +316,7 @@ const (
 // EventTypes lists every event type.
 var EventTypes = []EventType{
 	EventAdmissionRejected, EventRunQueued, EventRunStarted, EventRunPaused, EventRunCompleted,
-	EventRunFailed, EventRunStopped, EventRunCancelRequested, EventModelCompleted, EventActionProposed, EventActionAllowed,
+	EventRunFailed, EventRunStopped, EventRunCancelRequested, EventRunAwaitingApproval, EventRunResumed, EventModelCompleted, EventActionProposed, EventActionAllowed,
 	EventActionDenied, EventApprovalRequested, EventApprovalDecided, EventActionExecuting,
 	EventActionSucceeded, EventActionFailed, EventActionUnknown, EventReportCreated,
 	EventReportExportDenied, EventReportSafeTemplateOffered, EventControlEvaluated,
