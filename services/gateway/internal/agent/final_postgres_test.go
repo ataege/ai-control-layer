@@ -37,7 +37,8 @@ func TestFinalAnswerWithoutACreatedReportIsDeniedAndCounted(t *testing.T) {
 	}
 	second := stepper.contexts[1]
 	if feedback := second[len(second)-1]; feedback.Role != "user" || !strings.Contains(feedback.Content, `"reason_code":"invalid_arguments"`) ||
-		!strings.Contains(feedback.Content, "final answer was not accepted") {
+		!strings.Contains(feedback.Content, "final answer was not accepted") || !strings.Contains(feedback.Content, `\"report_ids\"`) ||
+		!strings.Contains(feedback.Content, "no code fence") {
 		t.Fatalf("first rejection feedback: %+v", feedback)
 	}
 	third := stepper.contexts[2]
