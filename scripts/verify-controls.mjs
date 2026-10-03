@@ -40,8 +40,9 @@ const RESULTS_DIRECTORY = fromRepositoryRoot(".verify-controls");
 const DEFAULT_MODEL = "qwen3.5:4b";
 const MINIMUM_GO = [1, 27];
 const LIVE_TESTS = "^(TestLiveSemanticEvaluator|TestLiveSemanticCorpus)$";
-// Documented limitation: a known semantic false negative of the default model (GO-84 evidence).
-const KNOWN_FALSE_NEGATIVES = ["indirect_disclose_internal_v1"];
+// Documented limitation: classifier_v1 missed this case in every GO-84 run; classifier_v2 blocked it
+// in 3 of 3 repetitions. It is still named, so a green run is not read as complete detection.
+const PREVIOUSLY_MISSED = ["indirect_disclose_internal_v1"];
 
 const commandArguments = process.argv.slice(2);
 const knownFlags = ["--no-live", "--strict-live", "--reuse"];
@@ -449,6 +450,7 @@ async function runLive(environment, model, evidencePath) {
     detail: `${detail} (go test exit ${exitCode})`,
     cases,
     liveSummary: summary ?? null,
+    classifierInstruction: evidence?.classifier_instruction ?? null,
   };
 }
 
@@ -478,6 +480,7 @@ for (const check of pre.checks) {
 const parts = [];
 let cases = [];
 let liveSummary = null;
+let classifierInstruction = null;
 const blockingProblem = pre.checks.some(
   (check) => check.status === "FAIL" && check.blocking !== false,
 );
@@ -559,6 +562,7 @@ if (blockingProblem) {
     parts.push({ name: "live model", status: live.status, detail: live.detail });
     cases.push(...live.cases);
     liveSummary = live.liveSummary;
+    classifierInstruction = live.classifierInstruction;
   }
 }
 
@@ -593,7 +597,12 @@ const results = {
   working_tree_dirty: dirty,
   options,
   environment: { ...pre.versions, os: `${platform()} ${arch()}`, ollama: pre.model.ollamaVersion },
-  model: { name: pre.model.name, digest: pre.model.digest, available: pre.model.available },
+  model: {
+    name: pre.model.name,
+    digest: pre.model.digest,
+    available: pre.model.available,
+    classifier_instruction: classifierInstruction,
+  },
   preflight: pre.checks.map(({ name, status: checkStatus, detail }) => ({
     name,
     status: checkStatus,
@@ -603,7 +612,7 @@ const results = {
   counts: { total: cases.length, by_category: matrix },
   live_summary: liveSummary,
   documented_limitations: {
-    known_false_negatives: KNOWN_FALSE_NEGATIVES,
+    previously_missed: PREVIOUSLY_MISSED,
     note: "Live verdicts are observations of a finite synthetic sample, not a detection rate; the deterministic gate still denies the actions these notes ask for (X-97).",
   },
   cases,
@@ -628,8 +637,11 @@ console.log(
 );
 if (!options.live) console.log(colorize("yellow", "INCOMPLETE: live model cases not run"));
 console.log(
-  `Documented limitation: the semantic check is not complete detection. Known false negative${KNOWN_FALSE_NEGATIVES.length > 1 ? "s" : ""}: ${KNOWN_FALSE_NEGATIVES.join(", ")}` +
-    (knownMisses.length > 0 ? `; this run's false negatives: ${knownMisses.join(", ")}.` : "."),
+  `Documented limitation: the semantic check is not complete detection (classifier ${classifierInstruction ?? "not run"}). ` +
+    `Previously missed by classifier_v1: ${PREVIOUSLY_MISSED.join(", ")}` +
+    (knownMisses.length > 0
+      ? `; this run's false negatives: ${knownMisses.join(", ")}.`
+      : "; none missed in this run."),
 );
 console.log(`Results: ${relative(repositoryRoot, resultsPath)}`);
 console.log(
