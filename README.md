@@ -331,8 +331,9 @@ Runtime check with real HTTP calls against services that are already running (`p
 
 - API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200.
 - The three web pages load.
-- Neither the service token nor the database password appears in the pages or in any JavaScript or
-  CSS asset they reference.
+- None of the service token, the database password, `AUTH_JWT_SECRET` and
+  `OPERATOR_CONTEXT_SIGNING_KEY` appears in the pages or in any JavaScript or CSS asset they
+  reference.
 - The three web proxy routes return the same status as the API.
 - `x-request-id` is echoed by the API, the web proxy and the gateway.
 - Gateway liveness and readiness; `/internal/ping` returns 401 without a token and with a wrong
@@ -539,6 +540,35 @@ pnpm infra:down
 ```
 
 The full record is in [docs/preparation-record.md](docs/preparation-record.md).
+
+### Implementation-phase checks
+
+Run on 2026-10-03 on macOS arm64 (Node.js 24.18.0, pnpm 11.10.0, Go 1.27.1, Docker Desktop with
+Docker 29.8.1 and Compose v5.5.1), in a separate git worktree whose `.env` set
+`COMPOSE_PROJECT_NAME=starter-9b` and `POSTGRES_PORT=55440` so that the shared `starter` project on
+the same machine was not touched (see [infra/README.md](infra/README.md)).
+
+**SH-20: session and operator-context signing secrets**
+
+- `pnpm run setup` on a fresh worktree generated `AUTH_JWT_SECRET` and
+  `OPERATOR_CONTEXT_SIGNING_KEY` (values not printed).
+- `pnpm infra:up` started `postgres:18-alpine`; `pnpm dev` started web, API and gateway against it;
+  `pnpm smoke` passed 21 of 21, including the four leak checks (service token, database password,
+  session signing secret, operator-context signing key; 3 pages and 20 assets).
+- Variable names read from the process list (values never printed): the web process tree
+  (`pnpm --filter web`, the web launcher, `next dev`) held none of `GATEWAY_SERVICE_TOKEN`,
+  `AUTH_JWT_SECRET`, `OPERATOR_CONTEXT_SIGNING_KEY`, `POSTGRES_*` and `MODEL_*`. The `next-server`
+  child overwrites its own process title, so its environment cannot be read this way; it inherits
+  the environment of `next dev`. The API held both signing secrets, the service token and
+  `POSTGRES_*`, and no `MODEL_*`. The gateway held `OPERATOR_CONTEXT_SIGNING_KEY`, the service token,
+  `POSTGRES_*` and `MODEL_*`, and no `AUTH_JWT_SECRET`.
+- None of the four secret values appeared in the combined log of the dev run.
+- Known gap, recorded and not fixed: the API also loads the root `.env` itself (its configuration
+  module), so on the host it would read any variable in that file even if `scripts/dev.mjs` dropped
+  it. That is acceptable for these two secrets because the API reads both; a secret the API must
+  not hold needs SH-13's approach.
+- No code reads either secret yet; the readers land with the authentication and operator-context
+  work.
 
 ## Documentation
 
