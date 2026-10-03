@@ -61,3 +61,27 @@ the outcome is a deny (`decision_unavailable`).
 Reason codes: the report's vocabulary plus `tool_not_registered`, `invalid_arguments`,
 `tool_not_allowed` and `decision_unavailable` (approved for X-13; renamed if X-13 differs). An
 expired passport is reported as `run_cancelled` until X-13 has a dedicated code.
+
+## The executor (GO-16)
+
+`Executor.Execute(ctx, run, actionID)` runs one allowed action through Worker 2's
+`tools.EffectRunner`, selected by the stored action's tool, never by the caller:
+
+1. Fresh checks, before anything is written: the action belongs to this organization and run and
+   is `allowed` (a denied, awaiting, executed or unknown action is refused); the run has no
+   cancellation request and is not terminal; the stored passport is unexpired; the stored
+   arguments still decode and recompute the stored digest (else `action_changed`).
+2. The run's attempts are counted under a lock on the run row against the passport's tool attempt
+   limit (`allowance_exhausted`), then the open attempt is inserted, the action set to
+   `executing`, and both committed before dispatch.
+3. One transaction: `RunEffect` (effect, attempt completion, audit event), then the action's
+   final status `executed` or `failed`; commit.
+
+Failure handling: an adapter or status error rolls back, so no effect was committed; the attempt is
+closed as `aborted` and the result is `paused` (the action stays `executing` for reconciliation).
+A failed commit is `paused` with `outcome_unknown`, and the attempt stays open, which blocks a
+second attempt for the action until it is reconciled. Nothing is retried here.
+
+The worker receives `tools.MinimizeForModel` output only; its untrusted text must still pass the
+tool-result inspection (GO-76) before it becomes model context. GO-45 replaces step 2 with the
+atomic tool reservation, attempt claim and approval consumption.

@@ -68,6 +68,7 @@ type PassportScope struct {
 	AllowedTemplates      []string
 	RecipientReferences   []string
 	ApprovalRequiredTools []ToolName // the passport's approval rule, for example every queue_report
+	ToolAttemptLimit      int        // governed tool attempts per run, safe retries included
 	ExpiresAt             time.Time
 }
 
