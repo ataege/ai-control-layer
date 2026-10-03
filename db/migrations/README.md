@@ -42,15 +42,16 @@ They need the root `.env` (`pnpm run setup`) and, except for `create`, a running
 4. Review the generated SQL, run `pnpm format`, then apply it with `pnpm db:migration:run`.
 5. Commit the entity and the migration together.
 
-## Expected behaviour with zero entities
+## Expected behaviour with no entity change
 
-With no entities, `pnpm db:migration:generate <Name>` prints
+When the entities and the migrated database already agree (also the case with zero entities, as in the
+starter baseline), `pnpm db:migration:generate <Name>` prints
 
 ```
 No changes in database schema were found - cannot generate a migration. To create a new empty migration use "typeorm migration:create" command
 ```
 
-and exits with a non-zero code. That is correct for the starter.
+and exits with a non-zero code. That is correct: it shows the migrations cover every entity.
 
 TypeORM keeps its bookkeeping in a table named `migrations` in the `public` schema.
 `db:migration:show` creates that table, empty, when it is missing (observed on an empty database);

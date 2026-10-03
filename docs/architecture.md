@@ -29,7 +29,7 @@ flowchart LR
         gatewayLive["GET /health/live"]
     end
 
-    postgres[("PostgreSQL 18<br/>one instance, no tables")]
+    postgres[("PostgreSQL 18<br/>one instance; tables only through explicit migrations")]
 
     browser -->|"page requests"| pages
     browser -->|"relative fetch, same origin"| proxy
@@ -302,8 +302,9 @@ repository structure differs from this repository: migrations stay in
 `deployment network`, and it predates report 1.2's hybrid controls, catalog, feed, reporting and
 telemetry (`architecture specification version`). When the first code of a product module lands, add a row here in the same change.
 
-| Module | Owner service | Responsibility | Contracts | Tables |
-| ------ | ------------- | -------------- | --------- | ------ |
+| Module                                              | Owner service | Responsibility                                                                                                                                                                                                                                                                                                                          | Contracts                                                           | Tables                                                                                         |
+| --------------------------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Policies (control catalog), `apps/api/src/policies` | NestJS        | Immutable `policy.yaml` and signature-feed revisions and the single active-version pointer (API-31, SH-43); the explicit import command `pnpm policy:import` validates the file and stores a revision (API-32). The authenticated reload (API-33) and the feed import (API-34) are not built yet. Go reads the active revision (GO-72). | Policy activation and catalog revision, draft in `config/README.md` | `app.control_catalog_revisions`, `app.signature_feed_revisions`, `app.control_catalog_pointer` |
 
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"
