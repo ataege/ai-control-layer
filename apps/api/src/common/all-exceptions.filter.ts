@@ -22,7 +22,14 @@ const ERROR_CODES_BY_STATUS: Record<number, string> = {
   501: "not_implemented",
 };
 
-function resolveErrorCode(statusCode: number): string {
+function resolveErrorCode(statusCode: number, exception: unknown): string {
+  if (exception instanceof HttpException) {
+    const payload = exception.getResponse();
+    if (typeof payload === "object" && payload !== null && "code" in payload && typeof (payload as any).code === "string") {
+      return (payload as any).code;
+    }
+  }
+
   const knownCode = ERROR_CODES_BY_STATUS[statusCode];
   if (knownCode !== undefined) {
     return knownCode;
@@ -96,7 +103,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const body: ErrorResponse = {
       error: {
-        code: resolveErrorCode(statusCode),
+        code: resolveErrorCode(statusCode, exception),
         message: resolveSafeMessage(exception, statusCode),
       },
       statusCode,

@@ -660,7 +660,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     ownership" (Proposed team ownership)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-11 · Start a run through `POST /api/runs`**
+- [x] **API-11 · Start a run through `POST /api/runs`**
   - **Report 1.2 change:** The facade also forwards the catalog validation request of API-33.
   - **Report 1.1 change:** Module proposal RuntimeModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -687,7 +687,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     and deferred scope" (Trusted admission)
   - Blocked by: `decision 7 in docs/product/README.md`; `command timeout budget`
 
-- [ ] **API-12 · Serve the task form's options**
+- [x] **API-12 · Serve the task form's options**
   - **Report 1.2 change:** Model choices come only from the active catalog allowlist.
   - **Report 1.1 change:** The options add which internal evidence may be consulted and which report types may be created.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3.5 h)
@@ -710,7 +710,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     "Architecture and chart reading guide" (Interpreting the full architecture)
   - Blocked by: `form options`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
+- [x] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-08, X-11, X-24, X-29 ·
@@ -736,7 +736,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     interface"); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
   - Blocked by: `read path`; `passport in the run view`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
+- [x] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-12, X-24, X-30 ·
@@ -783,7 +783,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-02 · Build the browser to API path chosen in decision 3**
+- [x] **WEB-02 · Build the browser to API path chosen in decision 3**
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: A · Size: M (estimate 3-7 h)
   - Depends on: SH-02 · Needs: X-03 · Provides: X-31 (part)
   - Paths: `apps/web/src/server/upstream-proxy.ts`, `apps/web/src/server/upstream-proxy.test.ts`,
@@ -810,7 +810,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **WEB-03 · Add a typed client for the product operations**
+- [x] **WEB-03 · Add a typed client for the product operations**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1.5-4 h)
   - Depends on: SH-11 · Needs: X-07, X-11, X-12, X-13 · Provides: nothing
   - Paths: `apps/web/src/lib/fetch-json.ts`, `apps/web/src/lib/fetch-json.test.ts`, `apps/web/src/lib`

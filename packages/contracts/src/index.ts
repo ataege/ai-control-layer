@@ -107,3 +107,54 @@ export interface OperatorContext {
   roles: string[];
 }
 
+/** Form Options for the task setup UI (API-12). */
+export interface TaskFormOptions {
+  templates: { id: string; name: string }[];
+  vendors: { id: string; name: string }[];
+  invoices: { id: string; number: string; date: string; amount: number }[];
+  destinations: { id: string; name: string }[];
+  approvalRequirements: { id: string; description: string }[];
+  limits: { maxModelCalls: number; maxTimeoutSeconds: number };
+}
+
+/** Start Run Request (X-07). */
+export interface StartRunRequest {
+  template: string;
+  vendorId?: string;
+  invoiceIds: string[];
+  destination: string;
+  approvalRequirement?: string;
+  limits?: {
+    modelCalls?: number;
+    timeoutSeconds?: number;
+  };
+}
+
+/** Start Run Response. */
+export interface StartRunResponse {
+  runId: string;
+  passportId: string;
+}
+
+/** Run View (X-11). */
+export interface RunView {
+  id: string;
+  status: 'pending' | 'running' | 'paused' | 'failed' | 'completed';
+  usage: {
+    modelCalls: number;
+    cost: number;
+  };
+  terminalReason?: string;
+  passport: {
+    id: string;
+    template: string;
+  };
+}
+
+/** Sanitized Event (X-12). */
+export interface SanitizedEvent {
+  id: string;
+  type: string;
+  timestamp: string;
+  details: Record<string, unknown>;
+}

@@ -5,10 +5,10 @@ import { GLOBAL_PREFIX } from "./app.setup.js";
 /** Serves Swagger UI at /api/docs and the OpenAPI document at /api/docs-json. */
 export function setupOpenApi(app: INestApplication): void {
   const documentConfig = new DocumentBuilder()
-    .setTitle("Starter API")
-    .setDescription("Health and diagnostics endpoints of the starter.")
-    .setVersion("0.0.0")
-    .addCookieAuth("session")
+    .setTitle("Task Passport API")
+    .setDescription("Internal API for Task Passport operators and automated tests.")
+    .setVersion("1.0")
+    .addCookieAuth("sid")
     .build();
   const document = SwaggerModule.createDocument(app, documentConfig);
   SwaggerModule.setup(`${GLOBAL_PREFIX}/docs`, app, document, {

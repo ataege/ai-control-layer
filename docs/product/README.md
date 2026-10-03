@@ -143,11 +143,10 @@ writes each outcome down here when it is settled.
    ("Choose a local model that runs on the actual machine"), the runtime and the accounting rule
    (tokens where reported, calls, request duration; optional estimated commercial cost) are open. Owner:
    the Go implementer with the lead (infrastructure).
-7. **Authentication mechanism. Open, and on hold by the user's decision of 2026-10-03.** NestJS
+7. **Authentication mechanism. Settled: HttpOnly Cookie + JWT.** NestJS
    authenticates users and checks organization membership ("AuthModule: login/session verification,
-   organization membership and role checks"); one seeded operator may stand in for onboarding in a
-   clearly labelled development demonstration. The credential and session mechanism is not decided; the
-   recorded proposal in the roadmap (SH-01) stays proposed, not decided. Owner: the web + API
+   organization membership and role checks"); one seeded operator stands in for onboarding in a
+   clearly labelled development demonstration. The credential mechanism uses an HttpOnly cookie containing a symmetrically signed JWT, providing a secure, stateless session. Owner: the web + API
    implementer.
 8. **Reuse of pre-event work. Open.** The report says not to presume that pre-event code or prepared
    assets are eligible. The competition rules say work starts no earlier than 11:00 on 3 October 2026
@@ -162,9 +161,7 @@ writes each outcome down here when it is settled.
 Each item is open until the document owner records the outcome here; the roadmap cites them in
 "Blocked by" (`docs/roadmap/README.md`, "Open decisions and blockers").
 
-- `read path`: the architecture reads authorized runtime views ("NestJS has read access only to
-  authorized runtime views needed for the interface"); the report also says NestJS calls "corresponding
-  private Go endpoints".
+- `read path`: Settled: NestJS calls corresponding private Go endpoints using the `GatewayClientService` to fetch run and event data, ensuring Go remains the sole authority for runtime state access.
 - `report storage`: lineage in `runtime` (`report_lineage`) per the architecture, or with the reports in
   `demo` per the report; context manifests appear only in the report.
 - `internal report rendering`: whether the internal report may hold model-written text and so needs a

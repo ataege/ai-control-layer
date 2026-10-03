@@ -16,7 +16,8 @@ export type CommandFailureReason =
   | "bad_request"
   | "server_error"
   | "invalid_response"
-  | "unexpected_status";
+  | "unexpected_status"
+  | "network_error";
 
 export type CommandOutcome<T> =
   | { success: true; data: T }
@@ -169,6 +170,72 @@ export class GatewayClientService {
       });
     }
     return check;
+  }
+
+  /** Performs an authenticated GET request to the gateway, expecting a Zod-validated response. */
+  async fetchQuery<Schema extends z.ZodTypeAny>(
+    path: string,
+    requestId: string,
+    responseSchema: Schema,
+    context?: OperatorContext,
+  ): Promise<CommandOutcome<z.infer<Schema>>> {
+    try {
+      const response = await fetch(new URL(path, this.config.gatewayUrl), {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          [REQUEST_ID_HEADER]: requestId,
+          authorization: `Bearer ${await this.buildToken(context)}`,
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(this.config.gatewayTimeoutMs),
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        const json = await readJsonObject(response);
+        if (!json) {
+          return { success: false, reason: "invalid_response" };
+        }
+        const parsed = responseSchema.safeParse(json);
+        if (parsed.success) {
+          return { success: true, data: parsed.data };
+        }
+        return { success: false, reason: "invalid_response" };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, reason: "unauthorized" };
+      }
+      
+      if (response.status === 404) {
+        return { success: false, reason: "bad_request", code: "not_found" };
+      }
+
+      if (response.status >= 400 && response.status < 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "bad_request", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "bad_request" };
+      }
+
+      if (response.status >= 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "server_error", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "server_error" };
+      }
+
+      return { success: false, reason: "unexpected_status" };
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        return { success: false, reason: "timeout" };
+      }
+      return { success: false, reason: "network_error" };
+    }
   }
 
   /** Posts a JSON command to the gateway, expecting a Zod-validated response. */

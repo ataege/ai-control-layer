@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { fetchJson } from "@/lib/fetch-json";
+import { fetchJson, postJson } from "@/lib/fetch-json";
 
 // Never resolves on its own; rejects the way fetch does when its signal aborts.
 const hangingFetch: typeof fetch = (_input, init) =>
@@ -86,12 +86,42 @@ describe("fetchJson", () => {
     expect(result.requestId).toBeUndefined();
   });
 
-  it("reports invalid JSON in a successful response", async () => {
+  it("reports invalid JSON in a successful response with body", async () => {
     const result = await fetchJson("/api/health/live", {
       fetchImplementation: async () => new Response("not json", { status: 200 }),
     });
 
     expect(result).toMatchObject({ ok: false, error: { kind: "invalid_json", status: 200 } });
+  });
+
+  it("treats an empty 2xx body as success", async () => {
+    const result = await fetchJson("/api/health/live", {
+      fetchImplementation: async () => new Response(null, { status: 204 }),
+    });
+
+    expect(result).toMatchObject({ ok: true, status: 204, data: undefined });
+  });
+
+  it("postJson works and sends the body", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Response.json({ status: "ok" }, { headers: { "x-request-id": "request-post" } }),
+    );
+
+    const result = await postJson<{ status: string }>("/api/actions", { cmd: "do" }, {
+      fetchImplementation: fetchMock,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      status: 200,
+      data: { status: "ok" },
+      requestId: "request-post",
+    });
+    
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ cmd: "do" }),
+    });
   });
 
   it("rejects absolute and protocol-relative URLs", async () => {
