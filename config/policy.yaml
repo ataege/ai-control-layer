@@ -20,7 +20,7 @@ budgets:
   calls_total: 24
   calls_agent: 12
   calls_security: 12
-  tokens_total: 20000
+  tokens_total: 40000
   # GO-06 accounting decision: JSON UTF-8 input bytes plus template allowance and capped output.
   agent_output_tokens: 512
   security_output_tokens: 256
