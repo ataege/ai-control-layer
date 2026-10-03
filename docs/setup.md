@@ -93,6 +93,19 @@ pnpm infra:up
 Starts the `postgres` service of `infra/compose.yaml` (`postgres:18-alpine`, named volume
 `starter_postgres-data`, published on `127.0.0.1:5432`) and returns when the health check passes.
 
+### Apply the migrations and give the gateway its database role
+
+```sh
+pnpm db:migration:run
+pnpm db:roles
+```
+
+The gateway connects as its own role, `task_passport_gateway` (created by the migrations, GO-38),
+never as the bootstrap user. `pnpm db:roles` sets that role's login password from
+`POSTGRES_GATEWAY_PASSWORD` in `.env`; it is explicit, idempotent and runs as the owner. Without the
+variable the gateway refuses to start; without the role password its readiness reports the database
+as down. `pnpm reset:demo` runs the same step.
+
 ### Start the applications
 
 ```sh
@@ -108,8 +121,9 @@ The gateway is compiled to `services/gateway/bin/gateway-dev` and that binary is
 in the runner's process group and is covered by the forced stop. It has no hot reload: restart
 `pnpm dev` (or `pnpm dev:gateway`) after changing Go code. The web process is started without
 `GATEWAY_SERVICE_TOKEN`, `AUTH_JWT_SECRET`, `OPERATOR_CONTEXT_SIGNING_KEY`, any `POSTGRES_*` variable
-and any `MODEL_*` variable; the gateway process without `AUTH_JWT_SECRET`; the API process without
-any `MODEL_*` variable (see section 3 for the API's own `.env`
+and any `MODEL_*` variable; the gateway process without `AUTH_JWT_SECRET`, `POSTGRES_USER` and
+`POSTGRES_PASSWORD` (it uses `POSTGRES_GATEWAY_PASSWORD`); the API process without any `MODEL_*`
+variable and without `POSTGRES_GATEWAY_PASSWORD` (see section 3 for the API's own `.env`
 load). The local model is set up separately, in section 7.
 
 Both backends start even when PostgreSQL is down. They report it through their readiness endpoints
@@ -255,7 +269,10 @@ pnpm stack:down
 
 `stack:up` builds three images (`infra/docker/*.Dockerfile`, build context is the repository root)
 and waits for all health checks. The image builds need no `.env` values, no database and no running
-service; starting the stack needs `.env` for the two secrets. Details and the `--debug` override:
+service; starting the stack needs `.env` for the secrets, including `POSTGRES_GATEWAY_PASSWORD`.
+The containers never run migrations, so after `stack:up` run `pnpm db:migration:run` and then
+`pnpm db:roles` from the host against the published PostgreSQL port; the gateway's readiness stays
+red until the role has its password. Details and the `--debug` override:
 [infra/README.md](../infra/README.md).
 
 This mode ran on 2026-10-03 on macOS with Docker Desktop; the results are in "Verification status"
@@ -433,6 +450,7 @@ Use two terminals in the checkout.
 ollama run qwen3.5:4b --think=false "Say hello in one word."   # loads the model
 pnpm infra:up                      # PostgreSQL in Docker, waits for its health check
 pnpm db:migration:run              # applies pending migrations
+pnpm db:roles                      # gives the gateway's database role its password from .env
 pnpm dev                           # web, API and gateway; leave it running
 
 # terminal 2, once the three services are up
