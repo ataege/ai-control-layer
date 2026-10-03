@@ -1457,7 +1457,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Blocked by: nothing
   - Completed (2026-10-03): for `queue_report`, after the resource checks and before the approval rule, the gate asks `provenance.LoadReport`, `provenance.CurrentInvoiceVersions` and `provenance.AuthorizeExport` for the registered vendor recipient in one read-only transaction (95dcc43). A refused export is a deny (`report_export_restricted`, `report_lineage_missing`, `resource_version_changed`), never an approval request, never reaches the semantic check, and its `report.export_denied` event names the reason with `lineageCheck` and the `vendor_reconciliation_v1` alternative (c07ca60). Checks: `TestRestrictedExportIsDeniedBeforeReview` PASS; `pnpm test:db gateway` 317 passed, 0 failed, 0 skipped at 95dcc43 with reports stored through `provenance.StoreReport` (internal restricted, no lineage, other run or organization, stale source version); `TestRecorderWritesAnExportDenialEvent` PASS at c07ca60; `pnpm verify` 6/6. Not verified here: the whole path with no outbox row, which comes with the approval flow (GO-44, GO-45); Worker 2's adapter re-checks at effect time.
 
-- [ ] **GO-66 · Prove the denied internal export on the Go side**
+- [x] **GO-66 · Prove the denied internal export on the Go side**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-27, GO-36, GO-64 · Needs: X-16, X-34 · Provides: X-72
   - Paths: none (a scenario test in the packages above)
@@ -1470,6 +1470,20 @@ typecheck` PASS; `pnpm verify` 6 passed.
     X-72 evidence captured (label internal_only, the source manifest, rule
     report_export_restricted, outbox rows before 0 after 0). Missing: the rerun with the live model
     or a labelled replay proposing the action.
+  - Completed (2026-10-03): W2 lane, branch go/w2, package `internal/scenario`.
+    `TestStoryThroughTheProductionChain` drives the story through `agent.NewProductionChain` from
+    real admission, with a scripted fixture model provider (labelled: no model; verdicts stored
+    as `fixture`). Its fifth step proposes `queue_report` of the internal report to the registered
+    vendor: the report is labelled `internal_only`; the source manifest is invoice A01 (internal
+    note, `internal_only`) and A02 (`vendor_shareable`), template v1; the action is denied with
+    `report_export_restricted` (one `report.export_denied` event); outbox rows 0 before and 0
+    after; the next model request carries the reason and the vendor template alternative.
+    `TestLiveStoryThroughTheProductionChain` (`-tags=model_live`, `qwen3.5:4b`, labelled live) ran
+    the same chain twice; the model did not propose the internal export either time (run 1: read,
+    vendor report, prose answer; run 2 with GO-26's final-result check: read, vendor report, a
+    queue_report denied by `semantic_injection_detected`, a second one awaiting approval), so the
+    denial on the agent path rests on the labelled scripted provider. Both live runs: outbox 0,
+    no internal note in a vendor report, every verdict labelled live.
   - Report: "Validation plan and evidence matrix" (Inherited restriction); "Live demonstration
     storyboard and proof checks" (beat 5); challenge concern Sensitive data exposure
   - Blocked by: nothing
@@ -1713,7 +1727,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     manifests); "Validation plan and evidence matrix" (Approved external projection)
   - Blocked by: `vendor projection fields`
 
-- [ ] **GO-67 · Prove the approved external projection on the Go side**
+- [x] **GO-67 · Prove the approved external projection on the Go side**
   - Owner: Go implementer (report role: Implementer 5, rendering) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-29, GO-65 · Needs: X-16, X-34 · Provides: X-75
   - Paths: none (a scenario test in the packages above)
@@ -1726,6 +1740,13 @@ typecheck` PASS; `pnpm verify` 6 passed.
     X-75 evidence captured (per-source version, classification and fields; template v1, projection
     vendor_invoice_fields_v1 v1; the serialized content without note text). Missing: the rerun on
     the agent path after the denial.
+  - Completed (2026-10-03): on the agent path (`TestStoryThroughTheProductionChain`, labelled
+    scripted provider), after the denial the model's next step creates the vendor report:
+    `vendor_shareable`, lineage per source (version 1, fields invoice_id, external_reference,
+    duplicate_reference, currency, total_minor_units, due_on), template `vendor_reconciliation_v1`
+    v1, projection `vendor_invoice_fields_v1` v1; the serialized content lists INV104 twice with
+    the duplicate flag and holds no internal free text (the test quotes it). The live run also
+    produced a vendor report without the note.
   - Report: "Validation plan and evidence matrix" (Approved external projection); "Live demonstration
     storyboard and proof checks" (beat 7)
   - Blocked by: nothing
@@ -2156,6 +2177,15 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     X-44 Go-half evidence captured (report references, the INV104 discrepancy, one outbox row to
     reports@atlas.example.com whose hash matches the stored content, the ordered events). Missing:
     the run through the approval with the decision 6 model and with a labelled provider double.
+  - Progress (2026-10-03): `internal/scenario` runs the story through `agent.NewProductionChain`.
+    With the labelled scripted provider it reaches the review wait with the right steps (reads,
+    internal report, denied export, vendor report, queue_report awaiting approval) and outbox 0;
+    `TestStoryAfterApproval` then approves through `policy.Approvals` and, once GO-40 resumes the
+    approved action, asserts one outbox row with the reviewed content hash and the registered
+    recipient, the completed run and its ordered events. Until GO-40 lands it checks that the
+    approved action stays unexecuted with outbox 0 and logs that GO-40 is pending.
+    Live (`qwen3.5:4b`, labelled live): the model reached the review wait for its vendor
+    report with outbox 0. Missing: GO-40, then both runs through the approval.
   - Report: "Validation plan and evidence matrix" (critical check Legitimate task); "Live
     demonstration storyboard and proof checks" (beat 7)
   - Blocked by: nothing
@@ -2494,7 +2524,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
-- [ ] **GO-56 · Inspect model context, events and output channels for protected fields**
+- [x] **GO-56 · Inspect model context, events and output channels for protected fields**
   - **Report 1.2 change:** The inspection also covers broad logs, telemetry and audit exports.
   - **Report 1.1 change:** "Inspect model context separately from outbox content; the model may see an authorized internal note while the vendor report excludes it." The Sensitive data exposure evidence moves to GO-66 and GO-47.
   - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: B · Size: S (estimate 1-3 h)
@@ -2520,6 +2550,17 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     protected value the X-06 field rules do not allow there; or if the outbox row holds a field the
     registered template does not render or a protected value the field rules do not allow in
     outbound content. The X-24 command.
+  - Completed (2026-10-03): two inspections, both literal-value searches for the registered
+    reporting address and the internal note. On the agent path (`TestStoryThroughTheProductionChain`,
+    `internal/scenario`): 7 serialized model requests, 7 security requests, 15 events (row_to_json:
+    the activity feed and audit export source), 71 control assessments, 93 timing records (report
+    1.2 telemetry), 12 agent context entries, the vendor report and the gateway's JSON log: the
+    address appears in none; the note only in what the model may read (read_invoice's result)
+    and in the internal report. On the adapter path (6ef3f0b, `TestProtectedFieldsStayInTheirAllowedChannels`):
+    the outbox row holds the address only as its recipient and the queued vendor report. Not
+    covered: the persisted final result holds report ids only (GO-26's narrow result), and the
+    loop's outbox row after an approval waits for GO-40 (`TestStoryAfterApproval`); a transformed
+    or encoded value is not found by a literal search ("without claiming universal detection").
   - Report: "Validation plan and evidence matrix" (critical check Field minimization); "Risk
     register and scope controls" (Data leakage through secondary views); "The enforcement loop and
     data minimization"; "Functional requirements MVP boundary and deferred scope" (Data
