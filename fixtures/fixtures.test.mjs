@@ -101,14 +101,15 @@ test("the report's sample signature phrase appears in a tool result", () => {
 
 // Demo records (SH-25 data): internal consistency, so the later seed loads a coherent scenario.
 const demoRecords = readFixture("./demo-records.json");
-// Column names of the SH-17 draft migration (demo.vendors, demo.invoices).
-const VENDOR_COLUMNS = ["id", "name", "organization_id", "version"];
+// Column names of demo.vendors and demo.invoices (SH-17 plus 1791060000000's provenance columns).
+const VENDOR_COLUMNS = ["id", "name", "organization_id", "registered_reporting_address", "version"];
 const INVOICE_COLUMNS = [
   "currency",
   "due_on",
   "external_reference",
   "id",
   "internal_note",
+  "internal_note_classification",
   "issued_on",
   "organization_id",
   "total_minor_units",
@@ -116,7 +117,7 @@ const INVOICE_COLUMNS = [
   "version",
 ];
 
-test("demo records: labelled synthetic, fields match the SH-17 columns", () => {
+test("demo records: labelled synthetic, fields match the demo table columns", () => {
   assert.equal(demoRecords.synthetic, true);
   for (const vendor of demoRecords.vendors)
     assert.deepEqual(Object.keys(vendor).sort(), VENDOR_COLUMNS);
@@ -133,25 +134,14 @@ test("demo records: ids are unique and every reference resolves in the same orga
   const invoiceIds = new Set(demoRecords.invoices.map((invoice) => invoice.id));
   assert.equal(invoiceIds.size, demoRecords.invoices.length);
 
-  for (const record of [
-    ...demoRecords.vendors,
-    ...demoRecords.invoices,
-    ...demoRecords.recipients,
-  ]) {
-    assert.ok(
-      organizationIds.has(record.organization_id),
-      `${record.id ?? record.vendor_id}: organization`,
-    );
+  for (const record of [...demoRecords.vendors, ...demoRecords.invoices]) {
+    assert.ok(organizationIds.has(record.organization_id), `${record.id}: organization`);
   }
   // Mirrors the SH-17 composite key: an invoice's vendor belongs to the invoice's organization.
-  for (const reference of [...demoRecords.invoices, ...demoRecords.recipients]) {
-    const vendor = vendorsById.get(reference.vendor_id);
-    assert.ok(vendor, `${reference.id ?? reference.address}: vendor ${reference.vendor_id}`);
-    assert.equal(
-      vendor.organization_id,
-      reference.organization_id,
-      reference.id ?? reference.address,
-    );
+  for (const invoice of demoRecords.invoices) {
+    const vendor = vendorsById.get(invoice.vendor_id);
+    assert.ok(vendor, `${invoice.id}: vendor ${invoice.vendor_id}`);
+    assert.equal(vendor.organization_id, invoice.organization_id, invoice.id);
   }
 });
 
@@ -215,12 +205,25 @@ test("demo records: only invoice_A01 carries the clean internal note", () => {
   );
 });
 
-test("demo records: addresses use the reserved example.com domain; open items stay TODO", () => {
-  for (const recipient of demoRecords.recipients) {
-    assert.match(recipient.address, /@([a-z0-9-]+\.)*example\.com$/, recipient.address);
+test("demo records: the task vendor has a registered example.com reporting address", () => {
+  const vendorsById = new Map(demoRecords.vendors.map((vendor) => [vendor.id, vendor]));
+  const taskVendor = vendorsById.get(demoRecords.task_scope.vendor_id);
+  assert.match(taskVendor.registered_reporting_address, /^[^@\s]+@([a-z0-9-]+\.)*example\.com$/);
+  for (const vendor of demoRecords.vendors) {
+    const address = vendor.registered_reporting_address;
+    if (address !== null) assert.match(address, /@([a-z0-9-]+\.)*example\.com$/, vendor.id);
   }
-  const openItems = demoRecords.todo.map((entry) => entry.open_item).sort();
-  assert.deepEqual(openItems, ["source classification storage", "vendor projection fields"]);
-  const serialized = JSON.stringify(demoRecords);
-  assert.doesNotMatch(serialized, /"classification"\s*:/, "no classification value is invented");
+});
+
+test("demo records: a note carries its classification, and the clean note is internal_only", () => {
+  // Mirrors invoices_note_classification_with_note: set exactly when the note is set.
+  for (const invoice of demoRecords.invoices) {
+    assert.equal(
+      invoice.internal_note === null,
+      invoice.internal_note_classification === null,
+      invoice.id,
+    );
+  }
+  const noted = demoRecords.invoices.find((invoice) => invoice.id === "invoice_A01");
+  assert.equal(noted.internal_note_classification, "internal_only");
 });
