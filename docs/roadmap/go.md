@@ -720,8 +720,7 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     classification, a hostile note withheld by signature or semantic verdict, a guard failure
     pausing with nothing released, bounded correction and the correction limit; `pnpm test:db`
     gateway "611 passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 15 migrations run,
-    the new one reverts and re-runs; `pnpm verify` 6 passed. Missing half: wiring into
-    `cmd/gateway/main.go` with w3's `policy.CatalogSecuritySettings` (next merge) and the live run,
+    the new one reverts and re-runs; `pnpm verify` 6 passed. The loop reads the active catalog before every model request and narrows the passport with `catalog.EffectiveFor` (GO-72; `TestTheActiveCatalogNarrowsEveryStep`). Missing half: wiring into `cmd/gateway/main.go` next to `catalog.WatchRequested` and the live run,
     which also needs the signature-feed import (c1, API-34).
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
@@ -729,13 +728,21 @@ test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Miss
     investigate)
   - Blocked by: nothing
 
-- [ ] **GO-80 · Instrument performance telemetry**
+- [x] **GO-80 · Instrument performance telemetry**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-10, GO-19 · Needs: X-79, X-85 · Provides: X-95 (part: instrumentation)
   - Paths: the model gateway and worker packages
   - Work: Measure monotonic durations separately for policy lookup, deterministic controls, semantic evaluation, provider request, approval waiting and local commit, plus total handling latency, queue depth, concurrency and errors, per model purpose. Keep untrusted confidential input out of the timing records. Observed durations stay distinct from cost estimates.
   - Done when: each agent and security call and each gate decision has its timing record, readable for the summary and export.
   - Tests: unit tests with a fake clock; a database-backed test through the X-24 command.
+  - Completed (2026-10-03): `agent.Telemetry` on go/f3 writes `runtime.timing_records` per step
+    (policy lookup, agent provider call with its `model_calls` id, gate decision, executor commit,
+    step total) and, for each tool-result inspection, the deterministic and semantic controls, each
+    security call's provider time and one `runtime.control_assessments` row per control decision
+    (semantic rows with verdict source and the security call id), committed with the step's context
+    entries. No inspected text is stored. Test
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
+    depth is read from `runtime.jobs` by the summary.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 
@@ -1240,6 +1247,17 @@ typecheck` PASS; `pnpm verify` 6 passed.
     reads return events in order with no gap or duplicate; no raw argument, review content or
     protected value leaves Go; the responses decode strictly against the X-11 and X-12 fixtures.
     `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Progress (2026-10-03): W2 lane, branch go/w2: package `internal/reads` serves
+    `GET /internal/runs/{runId}` (exactly X-11, via `repository.RunState`),
+    `GET /internal/runs/{runId}/events?after=&limit=` (X-12 page and `nextCursor`, via 3c's
+    `repository.RunEvents`) and `GET /internal/runs/{runId}/usage` (a Go-side draft of the X-29
+    usage: model calls per purpose by outcome, settled and held tokens, unknown usage as its own
+    count, the token ledger, tool attempts by outcome; no cost, since the local model has none).
+    Identity from `operatorcontext.FromContext` only; another organization's run is 404 with no
+    data. Tests: handler cases (401, 404, 400, 503, strict decode against the X-11 and X-12
+    fixtures) and PostgreSQL cases (usage values, other organization, gapless event paging,
+    reads as `task_passport_gateway`). Missing: the mount in `internal/api` (3c), the usage view in
+    `packages/contracts`, and `passport in the run view` (no passport is served).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
@@ -1968,7 +1986,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
   - Completed (2026-10-03): `internal/policy/approvals.go` and `approval_handlers.go`, migration `1791110000000-GrantGatewayMembershipRead` (lead decisions: reviewer role `reviewer` in `app.memberships`, routes `POST /internal/actions/{actionId}/approval` and `GET /internal/actions/{actionId}/review`, the run state moved by f3's worker). Reviewer authority, action integrity, frozen payload integrity and expiry are checked; the approvals row, the action status, the `approval.decided` event and the continuation job commit in one transaction or not at all. Checks: fresh database, 15 migrations run, revert and re-run of 1791110000000 succeeded; `pnpm test:db gateway` 642 passed, 0 failed, 0 skipped with `TestReviewerApprovalStoresTheGrantAndTheContinuationTogether` (and a second decision fails), `TestRejectionClosesTheApprovalAndContinues`, `TestApprovalRefusalsStoreNoGrant` (non-reviewer, a reviewer claim without the membership role, reviewer of another organization, expired, altered action, an injected continuation failure: no grant, no job, still awaiting) , `TestFrozenReviewIsReadOnlyByReviewers` and `TestGatewayRoleReadsMembershipsButCannotWriteThem`; `TestApprovalHandlerAcceptsOnlyTheDecision` (a body with a payload or replacement content is 400 and reaches no decision) PASS; `pnpm verify` 6/6. Pending other lanes: 3c mounts the two handlers in `api.Commands` and X-10 `contracts.ApprovalDecision` (1c12eb9 on go/3c) replaces the handler-local type once on main.
 
-- [ ] **GO-45 · Recheck before execution and claim the attempt in one transaction**
+- [x] **GO-45 · Recheck before execution and claim the attempt in one transaction**
   - **Report 1.2 change:** Figure 8: when the required action guard assessment is not current, the action returns to the budgeted semantic action check (GO-77) instead of executing.
   - **Report 1.2 change:** The recheck adds the active catalog revision and the required guard status: "required current semantic checks cannot be satisfied by a failed or stale assessment".
   - **Report 1.1 change:** The recheck adds current source and template policy and revocations, resource and report lineage preconditions and destination restrictions, with the new reason codes; Figure 8.
@@ -1993,6 +2011,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     reading guide" (Figure 7); "Relative implementation milestones and critical dependencies" (Hours
     10-14)
   - Blocked by: `record versions`
+  - Completed (2026-10-03): `internal/policy/executor.go`: approved actions run after rechecks of the active catalog revision (`source_policy_changed`), the open unexpired grant (`approval_expired`), the frozen source versions against the current ones (`resource_version_changed`) and the review material rebuilt from current rows against the frozen digest (recipient address, content, template, arguments: `action_changed`); the grant is consumed once by the attempt in the effect's transaction before `RunEffect`; attempts are counted under `FOR NO KEY UPDATE` on the run row (a `FOR UPDATE` lock deadlocked with a running effect's event insert in the concurrency test). Checks: `pnpm test:db gateway` 653 passed, 0 failed, 0 skipped with `TestApprovedActionExecutesOnceAndConsumesItsGrant` (one outbox row, the grant consumed by the attempt, a second execution refused), `TestApprovedActionRechecksBeforeExecution` (changed source version, changed recipient address, changed arguments, cancelled run, changed catalog revision: refused, no attempt, no outbox row), `TestExpiredOrRejectedGrantExecutesNothing` and `TestConcurrentExecutionsConsumeTheGrantOnce` (4 concurrent executions: one success, one outbox row, one consumption); `go test -race -count=10` on the concurrency and recheck tests against the database PASS; the exhausted attempt allowance is `TestAttemptLimitIsEnforced` (GO-16); `pnpm verify` 6/6. Not here: the guard re-run when the assessment is stale (Report 1.2 change) is covered by refusing a changed catalog revision, which hands the action back for a fresh evaluation; current revocations join in GO-52.
 
 - [ ] **GO-46 · Prove approval integrity**
   - **Report 1.1 change:** Adds a changed template or projection version; Report: Scene 4 precise human review and one simulated delivery.
@@ -2087,7 +2106,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
+- [x] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
   - **Report 1.1 change:** The review payload adds the report fields of GO-43; "Review payloads and source manifests need their own access rules".
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: SH-05, GO-21, GO-43 · Needs: X-09 · Provides: X-41
@@ -2106,6 +2125,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     second disclosure channel); "Users operating model and proposed user journeys" (Journey 2 review
     an exact outbound effect)
   - Blocked by: `read path`; `review payload read`
+  - Completed (2026-10-03): the read path chose private Go endpoints (lead decision); `policy.ReviewHandler` with `Approvals.FrozenReviewFor` serves `GET /internal/actions/{actionId}/review` (c8207de), mounted by 3c behind the service token and operator context (d5c5e8c). Checks: `pnpm test:db gateway` 694 passed, 0 failed, 0 skipped with `TestReviewEndpointServesTheFrozenPayloadToReviewersOnly` (evidence X-41: the reviewer's served report content and recipient address equal the stored frozen payload byte for byte; an operator without the reviewer role gets 403, a reviewer of another organization 404, no operator context 401, none of them with content) and `TestFrozenReviewIsReadOnlyByReviewers`; `pnpm verify` 6/6.
 
 ## M4: hours 14-18
 
@@ -2216,6 +2236,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     revocation); "Trusted authority and passport invariants"; "Threat model limits and unresolved
     design choices" ("Current revocation requires a single owner and reliable reads")
   - Blocked by: `revocation reads`; `decision 2 in docs/product/README.md`
+  - Progress (2026-10-03): blocked on SH-38/X-66 (web + API): `revocation reads` is not decided and no revocation table exists, so no reader is built (a reader that fails closed against a missing table would stop every run; lead decision).
 
 - [ ] **GO-53 · Handle known failures, safe retries and unknown outcomes**
   - **Report 1.1 change:** Figure 9.
@@ -2471,6 +2492,18 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Work: Conditional. Only if `read path` chooses private Go endpoints: return organization-scoped control assessments, usage per purpose and timings for the summary and export, with stable codes and no raw protected content. Otherwise this task becomes "Dropped: `read path` chose runtime views".
   - Done when: NestJS reads the records it needs for X-93 and X-94 through this endpoint only for its own organization.
   - Tests: handler tests for organization scoping.
+  - Progress (2026-10-03): W2 lane, branch go/w2: `internal/reads` serves
+    `GET /internal/security/summary` (runs by status, events by type, decision and reason, control
+    assessments by control, outcome and verdict source, model usage per purpose, observed timings
+    per phase with count, failed, median, p95 and max microseconds),
+    `GET /internal/security/assessments?cursor=&limit=` (stable codes and revisions, the verdict
+    reduced to `risk_category`, `score`, `reason_code`; a stored row with any other verdict key is
+    refused, never passed on) and `GET /internal/security/events?cursor=&limit=` (X-12, including
+    events without a run). The organization-wide cursor windows rows by inserting transaction id
+    below the oldest running transaction, so each committed row is read exactly once without a
+    shared lock; the test commits a lower event id after a higher one and reads both, once each
+    (10 of 10 race runs). Timing rows were inserted by the test, since GO-80's writer is not on
+    main. Missing: the mount in `internal/api` (3c) and the record shapes in `packages/contracts`.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 

@@ -19,7 +19,7 @@ func validSettings() map[string]string {
 }
 func TestReadOptionsPreservesCredentialsAndDefaults(t *testing.T) {
 	options, configured, err := readOptions(mapLookup(validSettings()))
-	if err != nil || !configured || options.Host != "localhost" || options.Port != 5432 || options.ConnectTimeout != 3*time.Second || options.User != " app user " || options.Password.Reveal() != " p@ss:/?#%=✓ " || options.Database != " app db " {
+	if err != nil || !configured || options.Host != "localhost" || options.Port != 5432 || options.ConnectTimeout != connectionTimeout || options.User != " app user " || options.Password.Reveal() != " p@ss:/?#%=✓ " || options.Database != " app db " {
 		t.Fatal("valid test settings were changed")
 	}
 }

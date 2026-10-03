@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/model"
 	"starter/services/gateway/internal/policy"
@@ -139,7 +140,7 @@ func (world *loopWorld) remove(t *testing.T) {
 		return
 	}
 	for _, table := range []string{
-		"runtime.context_entries", "runtime.audit_events", "runtime.execution_attempts", "runtime.actions",
+		"runtime.context_entries", "runtime.control_assessments", "runtime.timing_records", "runtime.audit_events", "runtime.execution_attempts", "runtime.actions",
 		"runtime.model_calls", "runtime.jobs", "runtime.runs", "runtime.passports", "demo.invoices", "demo.vendors",
 	} {
 		if _, err = transaction.Exec(ctx, "DELETE FROM "+table+" WHERE organization_id = $1", world.organizationID); err != nil {
@@ -269,20 +270,42 @@ func (fixture *fixtureSecurityModel) Call(_ context.Context, _, _ string, reques
 
 // committedSecuritySettings builds the security settings the way the active catalog would, from
 // the committed policy controls and the committed, pinned signature feed.
-type committedSecuritySettings struct{ t *testing.T }
-
-func (source committedSecuritySettings) Load(context.Context) (security.Settings, error) {
+func committedSecuritySettings(t *testing.T) security.Settings {
+	t.Helper()
 	feed, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "config", "attack-signatures.json"))
 	if err != nil {
-		source.t.Fatalf("read committed feed: %v", err)
+		t.Fatalf("read committed feed: %v", err)
 	}
 	digest := sha256.Sum256(feed)
-	catalog := []byte(`{"controls":{` +
+	content := []byte(`{"controls":{` +
 		`"secret_pattern":{"enabled":true,"mode":"redact","boundaries":["model_input","tool_result"]},` +
 		`"semantic_injection":{"enabled":true,"mode":"block","threshold":0.75,"boundaries":["model_input","tool_result","action_proposal"]},` +
 		`"signature_match":{"enabled":true,"boundaries":["model_input","tool_result","action_proposal"]}},` +
 		`"signatures":{"path":"attack-signatures.json","revision":"feed_v1","disabled_rules":[]}}`)
-	return security.SettingsFromCatalog(1, catalog, feed, hex.EncodeToString(digest[:]))
+	settings, err := security.SettingsFromCatalog(1, content, feed, hex.EncodeToString(digest[:]))
+	if err != nil {
+		t.Fatalf("committed security settings: %v", err)
+	}
+	return settings
+}
+
+// fixedCatalog is a test stand-in for the active catalog: catalogtest activates inside a
+// transaction the loop's pool connections cannot see, so the loop tests use a fixed snapshot.
+type fixedCatalog struct {
+	snapshot catalog.Snapshot
+	err      error
+}
+
+func (source fixedCatalog) Active(context.Context) (catalog.Snapshot, error) {
+	return source.snapshot, source.err
+}
+
+func testSnapshot(t *testing.T) catalog.Snapshot {
+	return catalog.Snapshot{RevisionID: 1, Security: committedSecuritySettings(t), Limits: catalog.Limits{
+		AllowedModels: []string{"test-fixture"}, CallsTotal: 24, CallsAgent: 12, CallsSecurity: 12, TokensTotal: 20000,
+		RequestTimeoutSeconds: 20, LocalMaxConcurrency: 2, RunExpiryMinutes: 15, ToolAttempts: 12, Corrections: 2,
+		EnabledTemplates: []contracts.ReportTemplate{contracts.TemplateInternalInvestigation, contracts.TemplateVendorReconciliation},
+	}}
 }
 
 func newTestLoop(t *testing.T, world *loopWorld, stepper ModelStepper) *Loop {
@@ -291,6 +314,10 @@ func newTestLoop(t *testing.T, world *loopWorld, stepper ModelStepper) *Loop {
 }
 
 func newTestLoopWithSecurity(t *testing.T, world *loopWorld, stepper ModelStepper, securityModel ModelCaller) *Loop {
+	return newTestLoopWithCatalog(t, world, stepper, securityModel, fixedCatalog{snapshot: testSnapshot(t)})
+}
+
+func newTestLoopWithCatalog(t *testing.T, world *loopWorld, stepper ModelStepper, securityModel ModelCaller, catalogSource CatalogSource) *Loop {
 	t.Helper()
 	scopes := testScopes{repository: world.repository}
 	recordedSecurity, err := NewRecordingCaller(budget.NewCallLog(world.pool), securityModel, "test-fixture")
@@ -303,7 +330,7 @@ func newTestLoopWithSecurity(t *testing.T, world *loopWorld, stepper ModelSteppe
 	if err != nil {
 		t.Fatal(err)
 	}
-	inspector, err := NewSecurityInspector(committedSecuritySettings{t: t}, security.NewInspector(evaluator))
+	inspector, err := NewSecurityInspector(security.NewInspector(evaluator))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,10 +340,12 @@ func newTestLoopWithSecurity(t *testing.T, world *loopWorld, stepper ModelSteppe
 		Gate:        policy.NewGate(scopes, policy.NewPostgresRecorder(world.pool), policy.NewPostgresRelationships(world.pool), nil),
 		Executor:    policy.NewExecutor(world.pool, scopes, tools.Runner{}),
 		Inspector:   inspector,
+		Catalog:     catalogSource,
 		Scopes:      scopes,
 		Corrections: policy.NewCorrectionCounter(world.pool),
 		Steps:       budget.NewCallLog(world.pool),
 		Contexts:    NewContextStore(world.pool),
+		Telemetry:   NewTelemetry(world.pool),
 		Logger:      slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)),
 	})
 	if err != nil {
@@ -633,4 +662,99 @@ func TestModelFailuresEndTheRunClosed(t *testing.T) {
 		}
 		assertRunEnded(t, world, testCase.status, testCase.reason)
 	}
+}
+
+// GO-80: every phase of a step has a timing record, the inspection's decisions become control
+// assessments linked to the metered security call, and no inspected text is stored with them.
+func TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText(t *testing.T) {
+	world := newLoopWorld(t, passportOptions{})
+	stepper := &scriptedStepper{callLog: budget.NewCallLog(world.pool), script: []func([]model.Message) (StepResult, error){
+		readInvoice(world.invoiceWithNote), finalAnswer,
+	}}
+	if _, err := newTestLoop(t, world, stepper).Handle(context.Background(), world.job()); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	rows, err := world.pool.Query(ctx, `SELECT phase, count(*) FROM runtime.timing_records WHERE organization_id = $1 GROUP BY phase`, world.organizationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phases := map[string]int{}
+	for rows.Next() {
+		var phase string
+		var count int
+		_ = rows.Scan(&phase, &count)
+		phases[phase] = count
+	}
+	rows.Close()
+	// Two steps: two lookups, two agent provider calls plus one security call, one gate decision,
+	// one executed read, the controls of one inspection and two step totals.
+	for phase, minimum := range map[string]int{PhasePolicyLookup: 2, PhaseProvider: 3, PhaseDeterministic: 2, PhaseCommit: 1, PhaseSemantic: 1, PhaseTotal: 2} {
+		if phases[phase] < minimum {
+			t.Errorf("phase %s has %d timing records, want at least %d (all: %v)", phase, phases[phase], minimum, phases)
+		}
+	}
+	var semanticRows, linkedCalls, deterministicRows int
+	if err = world.pool.QueryRow(ctx, `SELECT
+			count(*) FILTER (WHERE control_class = 'semantic'),
+			count(*) FILTER (WHERE control_class = 'semantic' AND security_model_call_id IS NOT NULL AND verdict_source = 'fixture'),
+			count(*) FILTER (WHERE control_class = 'deterministic')
+		FROM runtime.control_assessments WHERE organization_id = $1 AND admission_catalog_revision_id = 1`, world.organizationID).
+		Scan(&semanticRows, &linkedCalls, &deterministicRows); err != nil {
+		t.Fatal(err)
+	}
+	if semanticRows != 1 || linkedCalls != 1 || deterministicRows == 0 {
+		t.Fatalf("assessments: semantic %d (linked %d), deterministic %d", semanticRows, linkedCalls, deterministicRows)
+	}
+	var leaked int
+	if err = world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.control_assessments
+		WHERE organization_id = $1 AND (verdict::text ILIKE '%INV104%' OR reason_code ILIKE '%INV104%')`, world.organizationID).Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Fatal("inspected note text reached the control assessments")
+	}
+}
+
+// GO-72 in the loop: no active catalog means no dispatch; a model the catalog removed is no longer
+// allowed even though the immutable passport still names it.
+func TestTheActiveCatalogNarrowsEveryStep(t *testing.T) {
+	t.Run("no active catalog", func(t *testing.T) {
+		world := newLoopWorld(t, passportOptions{})
+		stepper := &scriptedStepper{callLog: budget.NewCallLog(world.pool), script: []func([]model.Message) (StepResult, error){finalAnswer}}
+		loop := newTestLoopWithCatalog(t, world, stepper, &fixtureSecurityModel{}, fixedCatalog{err: catalog.ErrUnavailable})
+		if _, err := loop.Handle(context.Background(), world.job()); !errors.Is(err, catalog.ErrUnavailable) {
+			t.Fatalf("handle without catalog: %v", err)
+		}
+		if len(stepper.contexts) != 0 {
+			t.Fatal("a model request was made without an active catalog")
+		}
+		if state := world.runState(t); state.Status != contracts.RunRunning {
+			t.Fatalf("run status %s; a missing catalog must leave the run for a later claim", state.Status)
+		}
+	})
+	t.Run("model removed by the catalog", func(t *testing.T) {
+		world := newLoopWorld(t, passportOptions{})
+		snapshot := testSnapshot(t)
+		snapshot.Limits.AllowedModels = []string{"another-model"}
+		var seenModels [][]string
+		stepper := &modelRecordingStepper{seen: &seenModels}
+		loop := newTestLoopWithCatalog(t, world, stepper, &fixtureSecurityModel{}, fixedCatalog{snapshot: snapshot})
+		if _, err := loop.Handle(context.Background(), world.job()); err != nil {
+			t.Fatal(err)
+		}
+		if len(seenModels) != 1 || len(seenModels[0]) != 0 {
+			t.Fatalf("allowed models handed to the stepper: %v", seenModels)
+		}
+		assertRunEnded(t, world, contracts.RunStopped, contracts.ReasonModelNotAllowed)
+	})
+}
+
+// modelRecordingStepper records the allowed models it receives and answers like the real stepper
+// does when the configured model is not among them.
+type modelRecordingStepper struct{ seen *[][]string }
+
+func (stepper *modelRecordingStepper) Step(_ context.Context, run Run, _ []model.Message) (StepResult, error) {
+	*stepper.seen = append(*stepper.seen, append([]string{}, run.AllowedModels...))
+	return StepResult{}, ErrModelNotAllowed
 }

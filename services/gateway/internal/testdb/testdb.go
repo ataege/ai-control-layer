@@ -19,7 +19,9 @@ import (
 	"starter/services/gateway/internal/logging"
 )
 
-const connectionTimeout = 3 * time.Second
+// connectionTimeout covers connecting under load: pnpm test:db runs every package in parallel
+// against one database, and a short timeout made unrelated tests fail as "unavailable".
+const connectionTimeout = 15 * time.Second
 
 type lookupFunc func(string) (string, bool)
 
