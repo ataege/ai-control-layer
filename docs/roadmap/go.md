@@ -347,7 +347,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     identifiable dispatched attempts"); "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: nothing
 
-- [ ] **GO-03 · Decide: Go input to decision 6 (provider client, reservation sizing, usage)**
+- [x] **GO-03 · Decide: Go input to decision 6 (provider client, reservation sizing, usage)**
   - **Report 1.2 change:** Decision 6 input now targets a local model ("Choose a local model that runs on the actual machine"), one provider serving agent and security purposes; record the hardware fit, and use reported tokens, call counts and request duration as the accounting basis.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) with the lead (infrastructure) · Tier: A · Size: S (estimate 0.5-1.5 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -381,6 +381,24 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
   - Blocked by: nothing
+  - Completed (2026-10-03): the Go input to decision 6, measured and recorded in the gateway README,
+    "Model and hardware freeze (GO-03)". Model `qwen3.5:4b` (Ollama digest
+    `2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd`; qwen35 family, 4.7B
+    parameters, Q4_K_M, Apache 2.0) on Ollama 0.35.1, `think: false`, `stream: false`, `num_ctx`
+    8192 for agent and security requests (model maximum 262,144). Accounting: the hand-written
+    `net/http` client (no provider library); reservation = JSON UTF-8 input bytes + template
+    allowance 1024 + output ceiling (agent 512, security 256); usage from `prompt_eval_count` and
+    `eval_count`, missing or invalid usage held as `usage_unknown`; no monetary tariff (cost
+    unavailable, not zero); one action or a constrained final answer validated per response
+    (GO-01). Measured on this machine (MacBookPro18,1, Apple M1 Pro, 10 CPUs, 16 GB, macOS 27.0;
+    Ollama on `http://localhost:11434`, the same machine as the gateway): the model is resident in
+    3.33 GB, fully on the GPU, at context 8192; live agent model calls p50 3.9 s, p95 5.4 s, max 7.6
+    s (30 calls) and security calls p50 3.2 s, max 4.5 s (4 calls), from `runtime.timing_records`
+    of the GO-27 live runs `8b812e16`, `cfbd598b`, `b4a7a4c8`, `7c1bc441` (load average about 12 on
+    10 CPUs, not quiet); Worker 2's quiet-machine benchmark (GO-81, 3aeade7) gives the live
+    semantic check p50 1.93 s with about 5 ms of gateway overhead. Not recorded by Go: whether this
+    machine is the presentation machine and its network endpoint (SH-45, SH-50); the decision 6
+    text in `docs/product/README.md` belongs to the document owner, who has the proposed wording.
 
 ### Enforcement (report role: Implementer 4)
 
@@ -1557,7 +1575,7 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     storyboard and proof checks" (beat 5); challenge concern Sensitive data exposure
   - Blocked by: nothing
 
-- [ ] **GO-72 · Check the active catalog revision before every evaluation and dispatch**
+- [x] **GO-72 · Check the active catalog revision before every evaluation and dispatch**
   - **Report 1.2 change:** Figure 3 names this module the "Trusted active snapshot loader"; the external signature feed reaches it.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-15, GO-19 · Needs: X-79, X-80, X-81 · Provides: X-82
@@ -1578,11 +1596,25 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     revisions and feed in a rolled-back transaction): a threshold change is in the next snapshot
     with the new revision id; five fail-closed cases; a disabled signature control needs no feed;
     lowered and raised catalogs against a passport. Checks: gateway five checks PASS; `go test -race
-./internal/catalog` ok; `pnpm verify` 6 passed. Missing half: the gate (lane w3), the worker
-    and model path (f3) and the security controls (c1) must call `Loader.Active` before every
-    evaluation and dispatch and record both revisions; the readiness change ("no valid catalog,
-    not ready") waits on a readiness contract change; no path imports the signature feed yet, so
-    the active snapshot is unavailable while the policy enables signature matching.
+./internal/catalog` ok; `pnpm verify` 6 passed.
+  - Completed (2026-10-03): every decision path now reads the active snapshot before it decides:
+    admission (`admission.go`), each agent step with `catalog.EffectiveFor` (`agent/loop.go`), each
+    model call against the narrowed limits (`agent/chain.go`, lane f3), the gate's scope and security
+    settings (`policy/scope.go`, `policy/security_check.go`, lane w3) and the judge evaluation
+    (`evaluation.go`); actions and control assessments record the admission and evaluated revisions.
+    Readiness: `catalog.Readiness` loads the same snapshot at start and every second and
+    `health.Handler.Catalog` makes `/health/ready` `503` (schema unchanged, like the worker check) while
+    no enforceable catalog is active. Tests: `TestPostgresReadinessFollowsTheEnforceableCatalog` (not
+    ready before a check, with no active revision and with signature matching but no feed; ready with
+    the next good revision), `TestPostgresReadinessWatchLogsOnlyChanges`,
+    `TestReadinessCoversTheCatalog` (503 with the database up, `"check":"catalog"` logged).
+    `GOFLAGS=-p=3 pnpm test:db --fresh` on go/3c (main e50e186): gateway 932 passed, api 27 passed, 0
+    failed, 0 skipped; `pnpm verify` 6 passed. Live: on the 3c private database (revision 291 with feed
+    134 activated by `pnpm catalog:activate`) readiness answered 200 and logged "an enforceable control
+    catalog is active". Done-when evidence is GO-86's live run (a rule change changed the next decision
+    with the new revision recorded, raised budgets left the passport unchanged, a lowered budget refused
+    the next security call); a threshold-only change is shown by
+    `TestPostgresActiveSnapshotFollowsThePointer`, not live (the live score was 1.0).
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
@@ -2660,7 +2692,7 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
   - Blocked by: nothing
   - Completed (2026-10-03): evidence tests in `internal/security`. X-96 (opt-in `TestLiveSemanticCorpus`, `model_live` tag, writes a JSON results file): 21 corpus cases plus 3 hostile notes on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb), threshold 0.75, context 8192; run 1: 23 of 24 matched, 0 false positives, 1 false negative, 0 guard failures, one hostile note passed by its second (pipeline) evaluation; run 2: 22 of 24, 0 false positives, 2 false negatives, 0 guard failures; live verdicts labelled `live`, all other tests use labelled fixtures. X-97 (`TestSemanticFalseNegativeStillDeniedDeterministically`, external package): Worker 3's real gate with a fixture verdict of score 0 denies each hostile note's obeyed action with its fixture reason (`resource_out_of_scope`, `destination_not_allowed`, `report_export_restricted`) and makes no security call. X-98 (`TestPostgresGuard*`, real ledger): timeout keeps the reservation as `usage_unknown`, malformed verdict pauses after settled usage, exhausted or paused allowance dispatches nothing. Checks: `pnpm test:db gateway` 556 passed, 0 failed, 0 skipped; gateway checks all exit 0; `pnpm verify` 6 passed. Not done: running these through the one-command X-89 suite (SH-47 has no `verify:controls` yet); the outbox assertions for the X-97 denials are the tools lane's X-72 and X-74 tests.
 
-- [ ] **GO-85 · Prove redaction and the attack feed update**
+- [x] **GO-85 · Prove redaction and the attack feed update**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: GO-74, GO-78 · Needs: X-83, X-87, X-88, X-89 · Provides: X-99, X-100
   - Paths: none (scenario tests run through the X-89 suite)
@@ -2669,6 +2701,7 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
   - Tests: the scenario tests in the suite, with the results quoted.
   - Report: "Validation plan and evidence matrix" (Redaction control, Attack feed update)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestEvidenceRedactionControl` (X-99): the six corpus secret cases come out with exactly their spans replaced by `[REDACTED:<kind>]`, the rest of the text and the invoice fields kept, `internal_only` and the trusted source unchanged, and records naming `content_redacted`, the rule and the catalog revision. `TestEvidenceAttackFeedUpdate` (X-100): a trusted `feed_v2` adding `code_exec_os_system_v1` blocks a note that `feed_v1` passed, recording rule, feed revision, digest and catalog revision, with the note withheld from the would-be context; a malformed feed (`ErrFeed`) and an untrusted copy (`ErrFeedDigest`) are refused and the accepted rules still block. Checks: `go test ./internal/security -run TestEvidence -v` PASS with the evidence lines; gateway checks all exit 0; `pnpm verify` 6 passed. The import side of the feed update is `signature-feed-import.db-spec.ts` (fadf6c2, `pnpm test:db api` 26 passed), not yet on main; activation in PostgreSQL waits on GO-73 (3c); running through the X-89 suite waits on SH-47.
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 

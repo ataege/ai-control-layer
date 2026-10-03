@@ -146,6 +146,37 @@ func TestStartRunMapsRejectionAndUnavailability(t *testing.T) {
 		http.StatusServiceUnavailable, "decision_unavailable")
 }
 
+// A 503 names its admission stage in the log, and only the stage: the client still sees the fixed
+// decision_unavailable answer, and no error text reaches either.
+func TestStartRunLogsTheUnavailableStageOnly(t *testing.T) {
+	for _, testCase := range []struct {
+		err       error
+		wantStage string
+	}{
+		{&admission.UnavailableError{Stage: "catalog"}, "catalog"},
+		{errors.New("driver said host db.internal user secret"), "unknown"},
+	} {
+		var logged strings.Builder
+		logger := slog.New(slog.NewJSONHandler(&logged, nil))
+		request := httptest.NewRequest(http.MethodPost, "/internal/runs", strings.NewReader(validBody))
+		request = request.WithContext(logging.WithLogger(operatorcontext.WithOperator(request.Context(), testOperator), logger))
+		recorder := httptest.NewRecorder()
+		StartRunHandler(&fakeAdmitter{err: testCase.err}).ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "decision_unavailable") {
+			t.Errorf("%s: answer %d %s", testCase.wantStage, recorder.Code, recorder.Body.String())
+		}
+		if !strings.Contains(logged.String(), `"msg":"admission unavailable"`) ||
+			!strings.Contains(logged.String(), `"stage":"`+testCase.wantStage+`"`) {
+			t.Errorf("%s: log %s", testCase.wantStage, logged.String())
+		}
+		for _, leaked := range []string{"db.internal", "secret", "driver"} {
+			if strings.Contains(logged.String(), leaked) || strings.Contains(recorder.Body.String(), leaked) {
+				t.Errorf("%s: %q leaked", testCase.wantStage, leaked)
+			}
+		}
+	}
+}
+
 func TestStartRunRejectsBadBodiesBeforeAdmission(t *testing.T) {
 	bodies := map[string]string{
 		"identity in the body": `{"template":"reconcile_atlas_v1","invoiceIds":["a"],"destination":"v","organizationId":"x"}`,

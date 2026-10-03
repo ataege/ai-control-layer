@@ -88,8 +88,10 @@ func (results PoolFinalResults) Validate(ctx context.Context, organizationID, ru
 	return runresult.Validate(ctx, results.Pool, organizationID, runID, answer)
 }
 
-// finalAnswerRejectedMessage is the fixed feedback after a rejected final answer.
-const finalAnswerRejectedMessage = "The final answer was not accepted: reply with only the required JSON object naming reports this run created."
+// finalAnswerRejectedMessage is the fixed feedback after a rejected final answer: it restates the
+// exact required format (lead's decision after live run 8b59f19f).
+const finalAnswerRejectedMessage = "The final answer was not accepted. " + runresult.FinalAnswerInstruction +
+	" Send no other text and no code fence."
 
 // ContinuationReader finds the decided action a continuation resumes (policy.Approvals).
 type ContinuationReader interface {

@@ -31,15 +31,27 @@ pnpm policy:import                 # imports config/policy.yaml
 pnpm policy:import path/to/copy.yaml
 ```
 
-The command (API-32) validates the whole file and then, in one transaction:
+The command (API-32) validates the whole file and the signature feed it names (`signatures.path`,
+next to the policy file; the feed half of API-34), and then, in one transaction:
 
-- **Valid file:** stores a new immutable revision (`app.control_catalog_revisions`) and makes it the
-  requested revision. The very first accepted revision also becomes active. A later revision stays
-  requested until the authenticated reload (API-33) activates it after Go acknowledges it
-  (`catalog activation protocol`). Exit code 0.
-- **Invalid file:** stores nothing. It records the reason (`policy_reload_rejected`), the file
-  digest and up to 20 issues on the pointer (`app.control_catalog_pointer`); the active revision
-  stays. Exit code 1.
+- **Valid file and feed:** stores a new immutable revision (`app.control_catalog_revisions`) and the
+  feed's exact bytes with their SHA-256 (`app.signature_feed_revisions`; the same issuer, revision
+  and bytes reuse the stored row), and makes the revision the requested revision. It prints
+  "requested revision N; the gateway validates and activates it" and exits 0. The import never
+  activates: the gateway validates the requested revision and switches the active revision and feed
+  together (GO-73, `catalog activation protocol`). Without a running gateway, `pnpm catalog:activate`
+  runs that activation once (the test database and `pnpm reset:demo` do). Until GO-73's activation is on `main`, nothing
+  activates a requested revision, so a fresh database has no active catalog and the gateway stays
+  not ready.
+- **Invalid file or feed:** stores nothing. The issues are always printed (and returned) and the
+  command exits 1; it also records the reason (`policy_reload_rejected`), the file digest and up to 20
+  issues on the pointer (`app.control_catalog_pointer`), except when the gateway's own rejection of
+  the still-requested revision is pending there: that record stays, because the gateway only
+  recognizes its own and would otherwise validate and reject the same revision again. The active
+  revision stays. A feed is refused when Go would refuse it (`ParseFeed` grammar), when its
+  revision differs from `signatures.revision`, when a `disabled_rules` ID is not in it, when the same
+  feed revision is already stored with different bytes (the message names the usual cause, a feed loaded by hand: recreate the database, or bump the revision if the rules really changed), or when it is missing while
+  `signature_match` is enabled.
 
 Before the schema is checked, the file must be at most 64 KiB of valid UTF-8 without control
 characters (tab, line feed and carriage return are allowed) and hold one plain YAML document: no
@@ -47,7 +59,7 @@ duplicate keys, no aliases and no custom tags. A leading byte order mark is kept
 the stored text always matches the stored digest. A relative path is relative to the repository root.
 Rejection messages are fixed texts per kind of problem; they never repeat a key or value from the
 file. The command never runs at application
-startup, and it does not bind a signature feed: the feed import (API-34) does that.
+startup.
 
 ## Values
 
@@ -104,20 +116,20 @@ list is denied before dispatch (`model_not_allowed`), even on a previously admit
 
 `budgets`, all positive integers written in plain decimal digits (zero, negative or fractional values, and spellings such as `24.0`, `0x18` or `0o30`, reject the file):
 
-| Key                       | Sample | Meaning                                                                                                                        |
-| ------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `calls_total`             | 24     | Model calls per run across both purposes.                                                                                      |
-| `calls_agent`             | 12     | Ceiling for agent-purpose calls. Must not exceed `calls_total`.                                                                |
-| `calls_security`          | 12     | Ceiling for security-purpose (semantic check) calls. Must not exceed `calls_total`.                                            |
-| `tokens_total`            | 20000  | Input and output tokens per run across both purposes.                                                                          |
-| `agent_output_tokens`     | 512    | Maximum agent output, sent as Ollama `options.num_predict`. Optional in older v1 revisions; Go defaults to 512.                |
-| `security_output_tokens`  | 256    | Maximum semantic-guard output. Optional in older v1 revisions; Go defaults to 256.                                             |
-| `input_template_tokens`   | 1024   | Conservative template allowance added to the JSON UTF-8 input byte count. Optional in older v1 revisions; Go defaults to 1024. |
-| `request_timeout_seconds` | 20     | Deadline for one model request. Must be shorter than `run_expiry_minutes` (in seconds).                                        |
-| `local_max_concurrency`   | 2      | Concurrent local model requests.                                                                                               |
-| `run_expiry_minutes`      | 15     | Run lifetime from admission.                                                                                                   |
-| `tool_attempts`           | 12     | Governed tool attempts per run, safe retries included.                                                                         |
-| `corrections`             | 2      | Bounded feedback rounds after a denied proposal.                                                                               |
+| Key                       | Sample | Meaning                                                                                                                                                                                            |
+| ------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `calls_total`             | 24     | Model calls per run across both purposes.                                                                                                                                                          |
+| `calls_agent`             | 12     | Ceiling for agent-purpose calls. Must not exceed `calls_total`.                                                                                                                                    |
+| `calls_security`          | 12     | Ceiling for security-purpose (semantic check) calls. Must not exceed `calls_total`.                                                                                                                |
+| `tokens_total`            | 40000  | Input and output tokens per run across both purposes. Raised from the report's illustrative 20000 on 2026-10-03, because the live story re-sends its growing context and ran out at its 10th call. |
+| `agent_output_tokens`     | 512    | Maximum agent output, sent as Ollama `options.num_predict`. Optional in older v1 revisions; Go defaults to 512.                                                                                    |
+| `security_output_tokens`  | 256    | Maximum semantic-guard output. Optional in older v1 revisions; Go defaults to 256.                                                                                                                 |
+| `input_template_tokens`   | 1024   | Conservative template allowance added to the JSON UTF-8 input byte count. Optional in older v1 revisions; Go defaults to 1024.                                                                     |
+| `request_timeout_seconds` | 20     | Deadline for one model request. Must be shorter than `run_expiry_minutes` (in seconds).                                                                                                            |
+| `local_max_concurrency`   | 2      | Concurrent local model requests.                                                                                                                                                                   |
+| `run_expiry_minutes`      | 15     | Run lifetime from admission.                                                                                                                                                                       |
+| `tool_attempts`           | 12     | Governed tool attempts per run, safe retries included.                                                                                                                                             |
+| `corrections`             | 2      | Bounded feedback rounds after a denied proposal.                                                                                                                                                   |
 
 Counts must also fit a JavaScript safe integer; request timeout is at most 86,400 seconds.
 The user adopted the accounting settings above on 3 October 2026 for GO-06. Every accounted
@@ -196,11 +208,12 @@ data rules; no downloaded executable code"
 | `revision`       | string          | The feed revision this policy binds to, matching `^[a-z0-9][a-z0-9_.-]{0,63}$`.                                                                                                                     |
 | `disabled_rules` | list of strings | Rule IDs from the bound feed that are switched off in this revision; may be empty, no duplicates. Each ID matches `^[a-z0-9][a-z0-9_]{0,63}$`.                                                      |
 
-The issuer, its key and the feed digest are properties of the feed file and its import, not of this
-policy. The feed file (`attack-signatures.json`, SH-46) does not exist yet, so the policy import
-(API-32) checks the `signatures` keys syntactically only. Validating the feed's content, issuer and
-signature, size and pattern grammar, and checking that each `disabled_rules` ID exists in it, is the
-feed import (API-34, blocked by `feed grammar and trust`).
+The issuer and the feed digest are properties of the feed file and its import, not of this policy.
+The import reads the feed named by `path` (`attack-signatures.json`, SH-46) and validates it the way
+Go does: the closed grammar (`normalized_substring` data rules, response `block`), its size, the feed
+revision equal to `revision`, and each `disabled_rules` ID present in the feed. It stores the exact
+bytes with their SHA-256; Go accepts only those bytes. There is no signing key: trust is the
+authenticated import plus the digest pin. Grammar and rule table: `services/gateway/README.md`.
 
 The report says "The same activation command validates the referenced versioned attack-signatures.json
 feed. A failed validation leaves the accepted active version intact". The recommendation for the open

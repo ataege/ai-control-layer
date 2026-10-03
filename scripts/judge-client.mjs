@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Judge client (`pnpm judge`), SH-48. DRAFT: written against the proposal in
-// docs/contracts/control-evaluation-draft.md; X-91 and X-106 are neither approved nor implemented.
+// docs/contracts/control-evaluation-draft.md. The gateway serves X-91 (POST /internal/control/evaluate,
+// GO-82); the NestJS live test entry this client calls (X-106, API-38) does not exist yet, and the
+// request body still follows the draft rather than the frozen X-91 schema.
 //
 // Submits one ad-hoc input, a fixtures/ case or an action proposal to the NestJS live test entry
 // and prints the decision and the active catalog revision. Its only credential is the operator's
@@ -11,7 +13,7 @@ import { parseArgs } from "node:util";
 import { fromRepositoryRoot } from "./lib/repo-root.mjs";
 
 export const DRAFT_NOTICE =
-  "DRAFT judge client: written against docs/contracts/control-evaluation-draft.md; the live test entry (X-106) and POST /internal/control/evaluate (X-91) are not approved or implemented yet.";
+  "DRAFT judge client: the gateway serves POST /internal/control/evaluate (X-91), but the API's live test entry (X-106, API-38) that this client calls is not implemented yet, so every call ends without a decision.";
 export const DEFAULT_API_URL = "http://localhost:3001";
 export const EVALUATE_PATH = "/api/control/evaluate";
 const FIXTURE_FILES = ["fixtures/semantic-corpus.json", "fixtures/hostile-notes.json"];

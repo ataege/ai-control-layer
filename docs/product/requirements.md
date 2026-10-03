@@ -199,7 +199,7 @@ breaking an official requirement:
 - `policy.yaml` as the configuration file; the attack feed `attack-signatures.json`.
 - The model `qwen3.5:4b` through Ollama (provisional, decision 6). The criteria only say "local
   models (such as those run via Ollama)".
-- Every example limit and threshold in the report (24 calls, 20,000 tokens, 0.75 threshold and so on):
+- Every example limit and threshold in the report (24 calls, 20,000 tokens, 0.75 threshold and so on; the team's `tokens_total` is now 40,000, README decision 29):
   "illustrative team settings, not sponsor requirements or measured performance".
 - The command names `make verify-controls` and `make reset-demo`.
 
