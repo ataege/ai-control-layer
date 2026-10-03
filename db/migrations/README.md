@@ -7,7 +7,9 @@ This directory intentionally contains no migration files.
 TypeORM migrations live in the API package, in `apps/api/src/database/migrations`. The integration role writes and orders them; the nestjs role maintains the tooling (see `AGENTS.md`).
 They cannot live here: the TypeORM CLI and `tsc` cannot compile migration classes outside the API
 package (verified: `TS6059` "file is not under rootDir", and the `typeorm` import cannot be resolved
-from outside the package under pnpm's strict `node_modules`).
+from outside the package under pnpm's strict `node_modules`). The architecture specification shows
+`db/migrations/` and `db/seeds/`; migrations still cannot live here for that reason, and where seeds
+live is not decided (open item `repository layout`).
 
 There is one migration owner and one toolchain for the shared PostgreSQL instance. The Go gateway
 adds no migration framework; schema changes for tables it reads also go through the API migrations.

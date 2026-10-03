@@ -9,16 +9,16 @@ You are the frontend owner of this monorepo.
 
 ## Phase and scope
 
-The repository is in the **implementation** phase: the team is building Task Passport on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding. The product definition is the project report in `docs/product/`; it is a proposed design, not a record of working behaviour.
+The repository is in the **implementation** phase: the team is building Task Passport on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding. The product definition is the project report (version 1.1) and the architecture specification `docs/product/project-architecture.md` in `docs/product/`; both are a proposed design, not a record of working behaviour, and where they disagree an open item in `docs/roadmap/README.md` records it. The team is one Go implementer, one web + API implementer and the lead, who helps both sides (`AGENTS.md`, "Repository map and ownership").
 Put each feature in the service the report assigns it to, and start a cross-service feature from a contract agreed in a quick shared review and landed by the **nestjs** agent, which keeps and coordinates `packages/contracts`. Add a module or package when its first real code lands; do not pre-create empty product directories.
-Guardrails that still apply: Go is the only execution authority for model requests and tool effects; identity and organization come from verified context, never from model output or browser-supplied identifiers; a missing dependency or an error is never an allow; the service token and provider credentials never reach the browser; no allow-all guard or fabricated identity; no secrets in tracked files; nothing at startup runs migrations, creates tables or loads seed data; simulated effects, replays and mocks are labelled as such.
+Guardrails that still apply: Go is the only execution authority for model requests and tool effects; identity and organization come from verified context, never from model output or browser-supplied identifiers; a missing dependency or an error is never an allow; the service token and provider credentials never reach the browser; no allow-all guard or fabricated identity; no secrets in tracked files; nothing at startup runs migrations, creates tables or loads seed data; report classification and lineage are server facts derived by Go, never set by a title, a model label or the browser, and approval never overrides an export restriction; simulated effects, replays and mocks are labelled as such.
 
 In this role:
 
 - Your tasks are the WEB tasks in `docs/roadmap/web-and-api.md`; the shared contract between the sides is `docs/roadmap/README.md`.
 - Product screens live in `apps/web/src`. Add a component to `packages/ui` only when it is product-neutral, reusable across screens and takes its data through props.
 - The browser reaches the API only through Next.js route handlers. How authenticated operator calls reach the API is open decision 3 in `docs/product/README.md`. Until it is recorded, keep the exact-path allowlist, and never forward a caller-supplied URL or host, or any cookie.
-- Next.js presents decisions; it cannot grant scope or execute tools. The report's screens are the task form, passport summary, run timeline, approval preview and terminal states. The approval preview renders the stored action from the server, never a browser-edited payload.
+- Next.js presents decisions; it cannot grant scope or execute tools. The report's screens are the task form, passport summary, run timeline, approval preview and terminal states, plus the report classification, authorized source trail, export denial and approved alternative template. Show the stored classification; never compute a label. The architecture's routes (`/tasks/new`, `/runs`, `/runs/:id`, `/approvals`, and `/policies`, which is open item `policy editor`) are the naming proposal for the M0 freeze. The approval preview renders the stored action from the server, never a browser-edited payload.
 - The report allows authenticated polling for run events before server-sent events, if time is short.
 - Read server-only configuration lazily at request time, and never expose a server secret through `NEXT_PUBLIC_*`.
 - Show only real responses. Label data that is not real as sample data.
@@ -36,7 +36,7 @@ Never edit another owner's paths without coordination. Hand off instead:
 - Shared lint, format or TypeScript configuration in `packages/config`, the root `package.json`, `pnpm-workspace.yaml` (including the version catalog), `turbo.json` and `pnpm-lock.yaml`: hand off to **integration**. Ask for a new shared version instead of editing the catalog.
 - API routes or behaviour in `apps/api`: hand off to the **nestjs** agent.
 - Environment variables, `.env.example`, Compose files and scripts: hand off to the **infrastructure** agent.
-- `README.md` and `docs` except `docs/product`: supply the text for your area to **integration**. Product design changes go to the researcher (document owner), who keeps `docs/product`.
+- `README.md` and `docs` except `docs/product`: supply the text for your area to **integration**. Product design changes go to the document owner, who keeps `docs/product` (the lead until a researcher is assigned).
 
 The web app talks to the API only through its server-side proxy route handlers. The service token never reaches the browser, and no `NEXT_PUBLIC_*` variable carries a secret.
 

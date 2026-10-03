@@ -1,45 +1,52 @@
 # Go side roadmap
 
 **Status.** This file plans the Go side of Task Passport: the GO tasks. It is derived from the
-project report, `docs/product/task-passport-project-report.docx` (version 1.0, design baseline,
-3 October 2026), and from the repository at commit `5c38d8b`. Nothing in it is implemented: every
+project report, `docs/product/task-passport-project-report.docx` (version 1.1, "Report provenance and
+safe continuation", 3 October 2026), the architecture specification
+`docs/product/project-architecture.md`, and the repository at commit `789bcd7`. Lines marked
+"Report 1.1 change" amend the task they sit in; where they disagree with the older fields, they win. Nothing in it is implemented: every
 task is open and every sync point it provides is unreached. Sizes are estimates, not a schedule. The
 spine, `docs/roadmap/README.md`, is the contract for this file: its milestones, tiers, sync points
 (X), shared tasks (SH), open decisions, task format and definition of done apply here unchanged.
 
 ## Who is on this side
 
-From the spine, "Sides and people", and the report's table "Proposed team ownership":
+One person, the Go implementer, holds every task in this file: the report's Implementer 3 (agent
+runtime), Implementer 4 (enforcement) and the Go parts of Implementer 5 (the four tool adapters,
+trusted source manifests, deterministic internal and vendor rendering, transactional effects), and
+every module the report's team table does not name (the internal API that verifies service identity
+and operator context, the runtime repository and events, data minimization, the labelled action
+replay, the Go DTO mirrors, and the Go endpoints for X-25 and X-64 if `form options` and
+`stored report read` choose Go). The lead helps when needed. Implementer 5's migrations, seeds,
+database roles, reset and deployment work is on the shared track in the spine.
+
+The report's role descriptions, from "Proposed team ownership" (report 1.1), name the areas:
 
 - **Implementer 3 (agent runtime):** "Go worker, provider integration, bounded agent loop, model
   reservations, usage accounting, and cancellation checks."
 - **Implementer 4 (enforcement):** "Go admission, immutable passport, argument checks, exact-action
-  approvals, execution claims, and denial feedback."
-- **Implementer 5 (data and integration),** for the four tool adapters (`read_invoice`,
-  `read_vendor`, `create_report`, `queue_report`). Implementer 5's migrations, database roles,
-  fixtures, reset and deployment work is on the shared track in the spine. The report also gives
-  Implementer 5 the "transactional effects"; the team records their placement in SH-07.
-- **Modules the report's team table does not name:** the internal API that verifies service
-  identity and operator context, the runtime repository and events, data minimization, the
-  labelled action replay, the Go DTO mirrors, and the Go endpoints for X-25 and X-64 if
-  `form options` and `stored report read` choose Go. SH-07 records their owners and those of the
-  starter's existing packages (`cmd/gateway`, `internal/config`, `internal/logging`,
-  `internal/database`, `internal/health`, `internal/httpserver`); until then this file says "Owner
-  recorded in SH-07".
+  approvals, execution claims, and denial feedback", now with report provenance and the export
+  checks.
+- **Implementer 5 (data and integration), Go parts:** the four tool adapters (`read_invoice`,
+  `read_vendor`, `create_report`, `queue_report`), trusted source manifests, deterministic internal
+  and vendor rendering, transactional effects.
 
-All of them share the go role and `services/gateway`, with one owner per Go package recorded in
-`services/gateway/README.md` (AGENTS.md, "Repository map and ownership").
+Inside one side the tasks are done by one person, so they run in sequence, not in parallel. Every
+package belongs to the Go implementer and is recorded in `services/gateway/README.md` when it is
+created (AGENTS.md, "Repository map and ownership").
 
 ## How to read this file
 
-- **Read the full report first**, then `docs/product/README.md`, then the spine (AGENTS.md, "Read
+- **Read the full report first**, then `docs/product/project-architecture.md` and
+  `docs/product/README.md`, then the spine (AGENTS.md, "Read
   the project report first").
 - **Milestones** are the spine's: P before the coding window, then M0 to M6 for the report's
   relative windows. Each section quotes the report's team focus and exit condition for its window;
   the organizers' confirmed rules and deadline take precedence.
-- **Owner groups.** Inside a milestone the tasks are grouped by owner: Implementer 3, Implementer
-  4, Implementer 5, then "Owner recorded in SH-07 (modules the report's team table does not
-  name)". IDs follow milestone order and, inside a milestone, the owner groups, not build order, so
+- **Area groups.** Inside a milestone the tasks are grouped by responsibility area: agent runtime
+  (report role Implementer 3), enforcement (Implementer 4), tool adapters, provenance and rendering
+  (Implementer 5), then modules the report's team table does not name. All are the Go implementer's.
+  IDs follow milestone order and, inside a milestone, the area groups, not build order, so
   a task may depend on a higher number in the same milestone. A late addition takes the next free
   number and sits where its milestone and owner group put it, as GO-62 does after GO-18 (spine,
   "IDs"). A moved task keeps its number too: GO-60 moved from M5 to M4 to sit with its consumer,
@@ -49,8 +56,10 @@ All of them share the go role and `services/gateway`, with one owner per Go pack
   "Blocked by" cites the strings of the spine's "Open decisions and blockers" verbatim.
   `Provides: X-15 (part: ...)` marks a task that delivers part of a sync point; this side has
   delivered it when every task marked "(part)" for it is done (spine, "Sync points").
-- **Paths** are existing repository paths. New Go code is "a new package, named at M0 by its
-  owner". The owner records the package in `services/gateway/README.md` when it is created and
+- **Paths** are existing repository paths. New Go code is "a new package, named at M0 by the
+  Go implementer"; the architecture's package tree (`internal/api`, `admission`, `passport`, `worker`,
+  `model`, `policy`, `provenance`, `approvals`, `budget`, `executor`, `tools`, `audit`, `repository`) is
+  the proposal, with its open points in `Go package layout`. The Go implementer records the package in `services/gateway/README.md` when it is created and
   supplies its "Product modules" row in `docs/architecture.md` to integration (AGENTS.md,
   "Implementation workflow", step 6).
 - **Tests.** `pnpm --filter gateway run test` runs the unit tests. Database-backed tests run
@@ -85,72 +94,81 @@ All of them share the go role and `services/gateway`, with one owner per Go pack
 
 ## Task overview
 
-Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 15 Tier B, 2 Tier C. 6 name decision 7 (the authentication hold) under "Blocked by". Generated from the task blocks below on 2026-10-03. The task blocks are the source of truth: when you add, drop or rename a task, update its row in the same change.
+Every task in this file, one row each, in milestone order. 71 tasks: 50 Tier A, 19 Tier B, 2 Tier C. 7 name decision 7 (the authentication hold) under "Blocked by". Generated from the task blocks below on 2026-10-03. The task blocks are the source of truth: when you add, drop or rename a task, update its row in the same change.
 
-| ID    | When | Tier | Owner                                                                                                     | Size         | Task                                                                           | Blocked by                                                                            |
-| ----- | ---- | ---- | --------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| GO-01 | P    | A    | Implementer 3 (agent runtime)                                                                             | S, 0.5-1 h   | Decide: handling of model responses that propose several actions               | nothing                                                                               |
-| GO-02 | P    | A    | Implementer 3 (agent runtime)                                                                             | S, 0.5-1.5 h | Decide: how dispatched attempts are identified for worker recovery             | nothing                                                                               |
-| GO-03 | P    | A    | Implementer 3 (agent runtime) with Implementer 5 (infrastructure role)                                    | S, 0.5-1.5 h | Decide: Go input to decision 6 (provider client, reservation sizing, usage)    | nothing                                                                               |
-| GO-04 | P    | A    | Implementer 4 (enforcement)                                                                               | S, 1-2 h     | Decide: canonical argument representation and action digest                    | nothing                                                                               |
-| GO-05 | P    | A    | the replay owner recorded in SH-07 (not named in the report's team table)                                 | S, 0.5-1 h   | Decide: how the labelled action replay enters a run and is marked              | Go package owners                                                                     |
-| GO-06 | M0   | A    | Implementer 3 (agent runtime)                                                                             | S, 2-4 h     | Bring up the model provider connection from Go                                 | decision 6                                                                            |
-| GO-07 | M0   | A    | Implementer 5 (data and integration) with Implementer 3 and the data-minimization owner recorded in SH-07 | S, 1-2 h     | Record the tool-result contract and each tool's idempotency rule               | Go package owners, canonical arguments                                                |
-| GO-08 | M1   | A    | Implementer 3 (agent runtime)                                                                             | M, 3-6 h     | Claim durable jobs with a lease in one worker                                  | nothing                                                                               |
-| GO-09 | M1   | B    | Implementer 3 (agent runtime)                                                                             | S, 1-3 h     | Cover the worker in graceful shutdown and readiness                            | worker readiness                                                                      |
-| GO-10 | M1   | A    | Implementer 3 (agent runtime)                                                                             | M, 4-8 h     | Run a live model step through the model gateway                                | decision 6, multiple-action responses, model call retries (the failure handling only) |
-| GO-11 | M1   | A    | Implementer 3 (agent runtime)                                                                             | M, 3-6 h     | Run the bounded agent loop for permitted actions                               | nothing                                                                               |
-| GO-12 | M1   | A    | Implementer 4 (enforcement)                                                                               | S, 2-4 h     | Canonicalize tool arguments and compute the action digest                      | canonical arguments                                                                   |
-| GO-13 | M1   | A    | Implementer 4 (enforcement)                                                                               | M, 4-8 h     | Admit a start-run request and issue the passport, run and job together         | decision 4, decision 7 (which app records carry the operator's authority)             |
-| GO-14 | M1   | A    | Implementer 4 (enforcement)                                                                               | S, 1-2 h     | Serve `POST /internal/runs`                                                    | command timeout budget, decision 4, decision 7                                        |
-| GO-15 | M1   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Store each proposed action and decide allow, deny or approval required         | nothing                                                                               |
-| GO-16 | M1   | A    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 2-4 h     | Execute an allowed action through its registered adapter                       | nothing                                                                               |
-| GO-17 | M1   | A    | Implementer 5 (data and integration)                                                                      | S, 2-4 h     | Build `read_invoice`                                                           | nothing                                                                               |
-| GO-18 | M1   | A    | the DTO owner recorded in SH-07                                                                           | S, 1.5-3 h   | Mirror the frozen contracts in Go DTOs                                         | Go package owners                                                                     |
-| GO-62 | M1   | A    | the DTO owner recorded in SH-07                                                                           | S, 0.5-1 h   | Mirror the operator context contract in Go                                     | Go package owners, decision 4, decision 7                                             |
-| GO-19 | M1   | A    | the runtime repository owner recorded in SH-07                                                            | M, 4-8 h     | Build the runtime repository with guarded state transitions                    | Go package owners                                                                     |
-| GO-20 | M1   | A    | the runtime repository owner recorded in SH-07                                                            | S, 2-4 h     | Build the Go PostgreSQL test harness on the X-24 command                       | Go package owners                                                                     |
-| GO-21 | M1   | A    | the internal API owner recorded in SH-07                                                                  | M, 3-6 h     | Verify service identity and operator context on every internal command         | decision 4, decision 7, Go package owners                                             |
-| GO-22 | M1   | A    | the events owner recorded in SH-07                                                                        | S, 2-4 h     | Write safe decision events with every state change                             | Go package owners                                                                     |
-| GO-23 | M1   | A    | the data-minimization owner recorded in SH-07, with Implementer 5                                         | S, 2-3 h     | Enforce tool-result field allowlists and minimize the model context            | Go package owners                                                                     |
-| GO-24 | M1   | A    | the events owner recorded in SH-07, with the internal API owner                                           | S, 2-3 h     | Serve the run, usage and event reads, if the read path chooses Go endpoints    | read path, passport in the run view, Go package owners                                |
-| GO-25 | M1   | A    | the Go owner recorded in SH-07 for this endpoint                                                          | S, 1-2 h     | Serve the task form options, if `form options` chooses a Go endpoint           | form options, Go package owners                                                       |
-| GO-26 | M2   | A    | Implementer 3 (agent runtime)                                                                             | S, 2-3 h     | Validate the narrow final result and complete the run                          | final result format                                                                   |
-| GO-27 | M2   | A    | Implementer 3 (agent runtime) with Implementers 4 and 5                                                   | S, 1-2 h     | Prove a permitted reconciliation on the Go side                                | nothing                                                                               |
-| GO-28 | M2   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Check resource relationships and destinations at the gate                      | nothing                                                                               |
-| GO-29 | M2   | B    | Implementer 4 (enforcement) with Implementer 3                                                            | S, 2-4 h     | Return structured denial feedback and stop at the correction limit             | nothing                                                                               |
-| GO-30 | M2   | A    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 1-3 h     | Prove the resource and destination boundaries                                  | nothing                                                                               |
-| GO-31 | M2   | A    | Implementer 5 (data and integration)                                                                      | S, 1-3 h     | Build `read_vendor`                                                            | nothing                                                                               |
-| GO-32 | M2   | A    | Implementer 5 (data and integration)                                                                      | S, 2-4 h     | Build `create_report`                                                          | record versions                                                                       |
-| GO-33 | M2   | A    | Implementer 5 (data and integration)                                                                      | S, 3-5 h     | Build `queue_report`                                                           | record versions                                                                       |
-| GO-34 | M2   | A    | Implementer 5 (data and integration) with Implementer 4 and the runtime repository owner                  | S, 2-4 h     | Commit each demo effect with its execution record and event in one transaction | decision 2                                                                            |
-| GO-35 | M2   | A    | Implementer 5 (data and integration) with the data-minimization owner                                     | S, 1-3 h     | Replace protected values with opaque references resolved inside adapters       | nothing                                                                               |
-| GO-36 | M2   | A    | the replay owner recorded in SH-07                                                                        | S, 2-3 h     | Replay a prohibited proposal through the real gate, labelled                   | Go package owners, replay entry                                                       |
-| GO-37 | M2   | A    | the Go owner recorded in SH-07 for this endpoint, with Implementer 5                                      | S, 1-2 h     | Serve the stored report, if `stored report read` chooses a Go endpoint         | stored report read, final result format, Go package owners                            |
-| GO-38 | M2   | B    | the owner recorded in SH-07 for `internal/config` and `internal/database`                                 | S, 1-2 h     | Connect with the Go database roles from X-35                                   | decision 2, Go package owners                                                         |
-| GO-39 | M3   | A    | Implementer 3 (agent runtime)                                                                             | M, 5-8 h     | Reserve model allowance before every dispatch and settle it afterwards         | decision 6, dispatched attempts                                                       |
-| GO-40 | M3   | A    | Implementer 3 (agent runtime) with Implementer 4                                                          | S, 2-4 h     | Release the lease during a review wait and resume the original action          | nothing                                                                               |
-| GO-41 | M3   | B    | Implementer 3 (agent runtime)                                                                             | S, 2-3 h     | Persist cancellation through the internal cancel command                       | decision 4, decision 7                                                                |
-| GO-42 | M3   | A    | Implementer 3 (agent runtime)                                                                             | S, 1-2 h     | Prove the limit-triggered stop                                                 | model call retries (the retry part only)                                              |
-| GO-43 | M3   | A    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 3-5 h     | Freeze the exact action for review                                             | nothing                                                                               |
-| GO-44 | M3   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Accept the approval decision through the internal command                      | decision 4, decision 7                                                                |
-| GO-45 | M3   | A    | Implementer 4 (enforcement)                                                                               | M, 3-6 h     | Recheck before execution and claim the attempt in one transaction              | record versions                                                                       |
-| GO-46 | M3   | A    | Implementer 4 (enforcement)                                                                               | S, 1-2 h     | Prove approval integrity                                                       | nothing                                                                               |
-| GO-47 | M3   | A    | Implementer 5 (data and integration) with Implementers 3 and 4                                            | S, 1-2 h     | Prove the legitimate task on the Go side                                       | nothing                                                                               |
-| GO-48 | M3   | A    | the internal API owner recorded in SH-07, with Implementer 4                                              | S, 1-2 h     | Serve the exact review payload, if the read path chooses Go endpoints          | read path, review payload read, Go package owners                                     |
-| GO-49 | M4   | B    | Implementer 3 (agent runtime)                                                                             | M, 3-6 h     | Recover expired leases without replaying dispatched work                       | dispatched attempts                                                                   |
-| GO-50 | M4   | B    | Implementer 3 (agent runtime) with Implementer 4                                                          | S, 1-3 h     | Prove budget concurrency                                                       | nothing                                                                               |
-| GO-51 | M4   | B    | Implementer 3 (agent runtime)                                                                             | S, 1-2 h     | Prove that cancellation and expiry stop dispatch, also after a review wait     | nothing                                                                               |
-| GO-52 | M4   | B    | Implementer 4 (enforcement) with Implementer 3                                                            | S, 2-3 h     | Check current revocations before dispatch and before execution                 | revocation reads, decision 2                                                          |
-| GO-53 | M4   | B    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 2-4 h     | Handle known failures, safe retries and unknown outcomes                       | nothing                                                                               |
-| GO-54 | M4   | B    | Implementer 4 (enforcement)                                                                               | S, 1-3 h     | Prove approval replay under concurrent requests                                | nothing                                                                               |
-| GO-55 | M4   | B    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 1-3 h     | Prove the database execution transaction with fault injection                  | decision 2                                                                            |
-| GO-56 | M4   | B    | Implementer 5 (data and integration) with the data-minimization owner recorded in SH-07                   | S, 1-3 h     | Inspect model context, events and output channels for protected fields         | Go package owners                                                                     |
-| GO-57 | M4   | B    | the internal API owner recorded in SH-07                                                                  | S, 1-3 h     | Prove organization access at the internal boundary                             | decision 4, decision 7, Go package owners                                             |
-| GO-60 | M4   | C    | the events owner recorded in SH-07                                                                        | S, 1-3 h     | Optional: stream events from Go, if the read path chooses Go endpoints         | read path, decision 3, Go package owners                                              |
-| GO-58 | M5   | B    | Implementer 3 (agent runtime) with Implementer 4                                                          | S, 1-3 h     | Make every Go stop, failure and denial state readable                          | nothing                                                                               |
-| GO-59 | M5   | C    | Implementer 4 (enforcement) with Implementer 5                                                            | S, 1-2 h     | Optional: rehearse an unknown outcome                                          | nothing                                                                               |
-| GO-61 | M6   | B    | Implementers 3, 4 and 5 with the owners recorded in SH-07                                                 | S, 1-2 h     | Supply the Go technical handoff text                                           | nothing                                                                               |
+| ID    | When | Tier | Owner                                                                                     | Size         | Task                                                                                        | Blocked by                                                                                                                                                    |
+| ----- | ---- | ---- | ----------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GO-01 | P    | A    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 0.5-1 h   | Decide: handling of model responses that propose several actions                            | nothing                                                                                                                                                       |
+| GO-02 | P    | A    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 0.5-1.5 h | Decide: how dispatched attempts are identified for worker recovery                          | nothing                                                                                                                                                       |
+| GO-03 | P    | A    | Go implementer (report role: Implementer 3, agent runtime) with the lead (infrastructure) | S, 0.5-1.5 h | Decide: Go input to decision 6 (provider client, reservation sizing, usage)                 | nothing                                                                                                                                                       |
+| GO-04 | P    | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-2 h     | Decide: canonical argument representation and action digest                                 | nothing                                                                                                                                                       |
+| GO-05 | P    | A    | Go implementer (a module the report's team table does not name)                           | S, 0.5-1 h   | Decide: how the labelled action replay enters a run and is marked                           | nothing                                                                                                                                                       |
+| GO-06 | M0   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 2-4 h     | Bring up the model provider connection from Go                                              | `decision 6 in docs/product/README.md`                                                                                                                        |
+| GO-07 | M0   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 1-2 h     | Record the tool-result contract and each tool's idempotency rule                            | `canonical arguments`                                                                                                                                         |
+| GO-08 | M1   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | M, 3-6 h     | Claim durable jobs with a lease in one worker                                               | nothing                                                                                                                                                       |
+| GO-09 | M1   | B    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 1-3 h     | Cover the worker in graceful shutdown and readiness                                         | `worker readiness`                                                                                                                                            |
+| GO-10 | M1   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | M, 4-8 h     | Run a live model step through the model gateway                                             | `decision 6 in docs/product/README.md`; `multiple-action responses`; `model call retries` (the failure handling only)                                         |
+| GO-11 | M1   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | M, 3-6 h     | Run the bounded agent loop for permitted actions                                            | nothing                                                                                                                                                       |
+| GO-12 | M1   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 2-4 h     | Canonicalize tool arguments and compute the action digest                                   | `canonical arguments`                                                                                                                                         |
+| GO-13 | M1   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | M, 4-8 h     | Admit a start-run request and issue the passport, run and job together                      | `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md` (which `app` records carry the operator's authority); `passport report fields` |
+| GO-14 | M1   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-2 h     | Serve `POST /internal/runs`                                                                 | `command timeout budget`; `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`                                                      |
+| GO-15 | M1   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | M, 3-6 h     | Store each proposed action and decide allow, deny or approval required                      | nothing                                                                                                                                                       |
+| GO-16 | M1   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 2-4 h     | Execute an allowed action through its registered adapter                                    | nothing                                                                                                                                                       |
+| GO-17 | M1   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 2-4 h     | Build `read_invoice`                                                                        | nothing                                                                                                                                                       |
+| GO-18 | M1   | A    | Go implementer (a module the report's team table does not name)                           | S, 1.5-3 h   | Mirror the frozen contracts in Go DTOs                                                      | nothing                                                                                                                                                       |
+| GO-62 | M1   | A    | Go implementer (a module the report's team table does not name)                           | S, 0.5-1 h   | Mirror the operator context contract in Go                                                  | `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`                                                                                |
+| GO-19 | M1   | A    | Go implementer (a module the report's team table does not name)                           | M, 4-8 h     | Build the runtime repository with guarded state transitions                                 | nothing                                                                                                                                                       |
+| GO-20 | M1   | A    | Go implementer (a module the report's team table does not name)                           | S, 2-4 h     | Build the Go PostgreSQL test harness on the X-24 command                                    | nothing                                                                                                                                                       |
+| GO-21 | M1   | A    | Go implementer (a module the report's team table does not name)                           | M, 3-6 h     | Verify service identity and operator context on every internal command                      | `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`                                                                                |
+| GO-22 | M1   | A    | Go implementer (a module the report's team table does not name)                           | S, 2-4 h     | Write safe decision events with every state change                                          | nothing                                                                                                                                                       |
+| GO-23 | M1   | A    | Go implementer (a module the report's team table does not name)                           | S, 2-3 h     | Enforce tool-result field allowlists and minimize the model context                         | nothing                                                                                                                                                       |
+| GO-24 | M1   | A    | Go implementer (a module the report's team table does not name)                           | S, 2-3 h     | Serve the run, usage and event reads, if the read path chooses Go endpoints                 | `read path`; `passport in the run view`                                                                                                                       |
+| GO-25 | M1   | A    | Go implementer (a module the report's team table does not name)                           | S, 1-2 h     | Serve the task form options, if `form options` chooses a Go endpoint                        | `form options`                                                                                                                                                |
+| GO-26 | M2   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 2-3 h     | Validate the narrow final result and complete the run                                       | `final result format`                                                                                                                                         |
+| GO-27 | M2   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 1-2 h     | Prove a permitted reconciliation on the Go side                                             | nothing                                                                                                                                                       |
+| GO-71 | M2   | B    | Go implementer (report role: Implementer 3, agent runtime, and Implementer 5, provenance) | S, 2-4 h     | Record the conservative context manifest, if `internal report rendering` admits model prose | `internal report rendering`; `report storage`                                                                                                                 |
+| GO-28 | M2   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | M, 3-6 h     | Check resource relationships and destinations at the gate                                   | nothing                                                                                                                                                       |
+| GO-29 | M2   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 2-4 h     | Return structured denial feedback and stop at the correction limit                          | nothing                                                                                                                                                       |
+| GO-64 | M2   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 2-4 h     | Deny a restricted report export at the gate before approval                                 | nothing                                                                                                                                                       |
+| GO-66 | M2   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-2 h     | Prove the denied internal export on the Go side                                             | nothing                                                                                                                                                       |
+| GO-31 | M2   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 1-3 h     | Build `read_vendor`                                                                         | nothing                                                                                                                                                       |
+| GO-32 | M2   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 2-4 h     | Build `create_report`                                                                       | `record versions`; `internal report rendering` (internal body only)                                                                                           |
+| GO-33 | M2   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 3-5 h     | Build `queue_report`                                                                        | `record versions`                                                                                                                                             |
+| GO-34 | M2   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 2-4 h     | Commit each demo effect with its execution record and event in one transaction              | `decision 2 in docs/product/README.md`                                                                                                                        |
+| GO-35 | M2   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 1-3 h     | Replace protected values with opaque references resolved inside adapters                    | nothing                                                                                                                                                       |
+| GO-63 | M2   | A    | Go implementer (report role: Implementer 4, enforcement, and Implementer 5, provenance)   | M, 4-8 h     | Build the report provenance module                                                          | `report storage`; `source classification storage`                                                                                                             |
+| GO-65 | M2   | A    | Go implementer (report role: Implementer 5, rendering)                                    | S, 3-5 h     | Render the vendor report from the approved projection                                       | `vendor projection fields`                                                                                                                                    |
+| GO-67 | M2   | A    | Go implementer (report role: Implementer 5, rendering)                                    | S, 1-2 h     | Prove the approved external projection on the Go side                                       | nothing                                                                                                                                                       |
+| GO-36 | M2   | A    | Go implementer (a module the report's team table does not name)                           | S, 2-3 h     | Replay a prohibited proposal through the real gate, labelled                                | `replay entry`                                                                                                                                                |
+| GO-37 | M2   | A    | Go implementer (a module the report's team table does not name)                           | S, 1-2 h     | Serve the stored report, if `stored report read` chooses a Go endpoint                      | `stored report read`; `final result format`; `report storage`                                                                                                 |
+| GO-38 | M2   | B    | Go implementer (a module the report's team table does not name)                           | S, 1-2 h     | Connect with the Go database roles from X-35                                                | `decision 2 in docs/product/README.md`                                                                                                                        |
+| GO-39 | M3   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | M, 5-8 h     | Reserve model allowance before every dispatch and settle it afterwards                      | `decision 6 in docs/product/README.md`; `dispatched attempts`                                                                                                 |
+| GO-40 | M3   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 2-4 h     | Release the lease during a review wait and resume the original action                       | nothing                                                                                                                                                       |
+| GO-41 | M3   | B    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 2-3 h     | Persist cancellation through the internal cancel command                                    | `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`                                                                                |
+| GO-42 | M3   | A    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 1-2 h     | Prove the limit-triggered stop                                                              | `model call retries` (the retry part only)                                                                                                                    |
+| GO-43 | M3   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 3-5 h     | Freeze the exact action for review                                                          | `record versions`                                                                                                                                             |
+| GO-44 | M3   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | M, 3-6 h     | Accept the approval decision through the internal command                                   | `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`                                                                                |
+| GO-45 | M3   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | M, 3-6 h     | Recheck before execution and claim the attempt in one transaction                           | `record versions`                                                                                                                                             |
+| GO-46 | M3   | A    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-2 h     | Prove approval integrity                                                                    | nothing                                                                                                                                                       |
+| GO-69 | M3   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-2 h     | Prove that approval cannot override the export restriction                                  | nothing                                                                                                                                                       |
+| GO-47 | M3   | A    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 1-2 h     | Prove the legitimate task on the Go side                                                    | nothing                                                                                                                                                       |
+| GO-48 | M3   | A    | Go implementer (a module the report's team table does not name)                           | S, 1-2 h     | Serve the exact review payload, if the read path chooses Go endpoints                       | `read path`; `review payload read`                                                                                                                            |
+| GO-49 | M4   | B    | Go implementer (report role: Implementer 3, agent runtime)                                | M, 3-6 h     | Recover expired leases without replaying dispatched work                                    | `dispatched attempts`                                                                                                                                         |
+| GO-50 | M4   | B    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 1-3 h     | Prove budget concurrency                                                                    | nothing                                                                                                                                                       |
+| GO-51 | M4   | B    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 1-2 h     | Prove that cancellation and expiry stop dispatch, also after a review wait                  | nothing                                                                                                                                                       |
+| GO-52 | M4   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 2-3 h     | Check current revocations before dispatch and before execution                              | `revocation reads`; `decision 2 in docs/product/README.md`                                                                                                    |
+| GO-53 | M4   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 2-4 h     | Handle known failures, safe retries and unknown outcomes                                    | nothing                                                                                                                                                       |
+| GO-54 | M4   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-3 h     | Prove approval replay under concurrent requests                                             | nothing                                                                                                                                                       |
+| GO-55 | M4   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-3 h     | Prove the database execution transaction with fault injection                               | `decision 2 in docs/product/README.md`                                                                                                                        |
+| GO-30 | M4   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-3 h     | Prove the resource and destination boundaries                                               | nothing                                                                                                                                                       |
+| GO-68 | M4   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-3 h     | Prove label and rename tampering and missing lineage                                        | `rename operation` (rename part)                                                                                                                              |
+| GO-70 | M4   | B    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-3 h     | Prove source or template policy changes after review                                        | nothing                                                                                                                                                       |
+| GO-56 | M4   | B    | Go implementer (report role: Implementer 5, tool adapters)                                | S, 1-3 h     | Inspect model context, events and output channels for protected fields                      | nothing                                                                                                                                                       |
+| GO-57 | M4   | B    | Go implementer (a module the report's team table does not name)                           | S, 1-3 h     | Prove organization access at the internal boundary                                          | `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`                                                                                |
+| GO-60 | M4   | C    | Go implementer (a module the report's team table does not name)                           | S, 1-3 h     | Optional: stream events from Go, if the read path chooses Go endpoints                      | `read path`; `decision 3 in docs/product/README.md`                                                                                                           |
+| GO-58 | M5   | B    | Go implementer (report role: Implementer 3, agent runtime)                                | S, 1-3 h     | Make every Go stop, failure and denial state readable                                       | nothing                                                                                                                                                       |
+| GO-59 | M5   | C    | Go implementer (report role: Implementer 4, enforcement)                                  | S, 1-2 h     | Optional: rehearse an unknown outcome                                                       | nothing                                                                                                                                                       |
+| GO-61 | M6   | B    | Go implementer (all report roles on this side)                                            | S, 1-2 h     | Supply the Go technical handoff text                                                        | nothing                                                                                                                                                       |
 
 ## Constraints for the Go side
 
@@ -200,8 +218,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
 13. **Secrets stay secret.** The provider credential and any operator-context secret are
     `logging.Secret` values, never logged or returned, and payloads stay out of logs. Source:
     AGENTS.md working rules 8 and 9; `.claude/agents/go.md`.
-14. **Per-package ownership.** A package is added when its first real code lands, with no empty
-    directories, and its owner is recorded in `services/gateway/README.md`. Source: AGENTS.md
+14. **Packages.** A package is added when its first real code lands, with no empty directories, and
+    is recorded in `services/gateway/README.md`; the Go implementer owns all of them. Source: AGENTS.md
     guardrail 1 and "Repository map and ownership"; `.claude/agents/go.md`.
 15. **Go 1.27 or newer on each Go developer's machine** (SH-08). On the preparation machine Go
     1.27.1 is installed at `/usr/local/go`: on 2026-10-03 `/usr/local/go/bin/go version` printed
@@ -238,10 +256,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
 - Decide tasks are decisions, not code. Code written before the coding window waits on decision 8
   (spine, "Before the coding window (P)").
 
-### Implementer 3 (agent runtime)
+### Agent runtime (report role: Implementer 3)
 
 - [ ] **GO-01 · Decide: handling of model responses that propose several actions**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 0.5-1 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 0.5-1 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
   - Work: Options: (1) reject the whole response as a denied proposal with a stable reason code and
@@ -249,9 +267,9 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     stores every proposed action and states which one is evaluated and what happens to the others.
     No proposal is recorded. Either way "the worker should not silently execute an arbitrary
     subset". What the decision 6 provider can constrain (GO-03) may narrow the options. Owner per
-    the spine's open-items table (`multiple-action responses`): Implementer 3;
+    the spine's open-items table (`multiple-action responses`): the Go implementer;
     `docs/product/README.md` records no numbered decision for it.
-  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher (document
+  - Done when: the outcome is recorded in `docs/product/README.md` by the document owner (document
     owner), by M1 at the latest.
   - Tests: none (a decision).
   - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
@@ -260,7 +278,7 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-02 · Decide: how dispatched attempts are identified for worker recovery**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 0.5-1.5 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 0.5-1.5 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
   - Work: Decide what marks a model request and a tool execution as dispatched, so a worker that
@@ -273,8 +291,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     attempt with no recorded outcome otherwise is an unknown outcome); (2) another mechanism the
     owner proposes. No proposal is recorded. The constraints the outcome needs reach SH-27 through
     the shared review in SH-14. Owner per the spine's open-items table (`dispatched attempts`):
-    Implementer 3; `docs/product/README.md` records no numbered decision for it.
-  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher, by M3 at the
+    the Go implementer; `docs/product/README.md` records no numbered decision for it.
+  - Done when: the outcome is recorded in `docs/product/README.md` by the document owner, by M3 at the
     latest and before SH-27 writes the tables.
   - Tests: none (a decision).
   - Report: "Threat model limits and unresolved design choices" ("Durable worker recovery requires
@@ -282,8 +300,7 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-03 · Decide: Go input to decision 6 (provider client, reservation sizing, usage)**
-  - Owner: Implementer 3 (agent runtime) with Implementer 5 (infrastructure role) · Tier: A ·
-    Size: S (estimate 0.5-1.5 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) with the lead (infrastructure) · Tier: A · Size: S (estimate 0.5-1.5 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`, `services/gateway/go.mod`,
     `services/gateway/internal/config/config.go`
@@ -296,19 +313,19 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     never floating-point equality; (5) whether the provider can be held to one tool call or a final
     answer per response, which GO-01 relies on. Options for (1): the hand-written client or a
     library the owner names; no proposal is recorded. Owner in `docs/product/README.md` (decision
-    6): go (Implementer 3) with infrastructure.
+    6): go (the Go implementer) with the lead (infrastructure).
   - Done when: these points are recorded with decision 6 in `docs/product/README.md` by the
-    researcher, as part of SH-04's outcome.
+    document owner, as part of SH-04's outcome.
   - Tests: none (a decision).
   - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
   - Blocked by: nothing
 
-### Implementer 4 (enforcement)
+### Enforcement (report role: Implementer 4)
 
 - [ ] **GO-04 · Decide: canonical argument representation and action digest**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 1-2 h)
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
   - Work: Define how Go represents the "supported argument types, rejecting ambiguous or unsupported
@@ -321,10 +338,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     no floating-point values and treats the digest as change detection only: "hashing a request
     does not authenticate its author or make its contents authorized". The outcome feeds X-09 at
     the M0 freeze (SH-10). Owner per the spine's open-items table (`canonical arguments`):
-    Implementer 4, because the argument checks and exact-action approvals depend on it; Go is "the
+    the Go implementer, because the argument checks and exact-action approvals depend on it; Go is "the
     authority for action canonicalization" (`docs/product/README.md`), which records no numbered
     decision for it.
-  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher before the M0
+  - Done when: the outcome is recorded in `docs/product/README.md` by the document owner before the M0
     freeze, so X-09 can carry it.
   - Tests: none (a decision).
   - Report: "Exact action approval versioning and execution rechecks" ("Canonicalization must be
@@ -333,12 +350,12 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     presenters" (Canonical arguments)
   - Blocked by: nothing
 
-### Owner recorded in SH-07 (modules the report's team table does not name)
+### Modules the report's team table does not name (Go implementer)
 
 - [ ] **GO-05 · Decide: how the labelled action replay enters a run and is marked**
-  - Owner: the replay owner recorded in SH-07 (not named in the report's team table) · Tier: A ·
-    Size: S (estimate 0.5-1 h)
-  - Depends on: SH-07 · Needs: nothing · Provides: nothing
+  - **Report 1.1 change:** A recorded proposal enters a run for the export test (beat 5) and for the supporting rehearsal of an out-of-scope read (beat 9); the beat 6 sentence is dropped. Report field: "Supporting rehearsals hostile instructions limits and uncertainty".
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 0.5-1 h)
+  - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
   - Work: The report asks for "a clearly labeled adversarial action replay that submits a
     prohibited proposal to the same validation and execution path" and says "never present a
@@ -349,43 +366,44 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     proposal for the next model step of a named run; (2) an operation the interface triggers
     through NestJS, which needs the conditional sync point X-65 (the replay trigger through NestJS)
     and a facade operation on the other side. No proposal is recorded. Owner per the spine's
-    open-items table (`replay entry`): the replay owner recorded in SH-07;
+    open-items table (`replay entry`): the Go implementer;
     `docs/product/README.md` records no numbered decision for it.
-  - Done when: the outcome is recorded in `docs/product/README.md` by the researcher before the M0
+  - Done when: the outcome is recorded in `docs/product/README.md` by the document owner before the M0
     freeze, so X-12 carries the replay label.
   - Tests: none (a decision).
   - Report: "Live demonstration storyboard and proof checks" (Reliable demonstrations without
     invented behavior); "Illustrative invoice scenario and future domain adaptations" (Scene 2 a
     hostile instruction in a business document)
-  - Blocked by: `Go package owners`
+  - Blocked by: nothing
 
 ## M0: hours 0-2
 
 - **Team focus (report).** "Confirm rules and sponsor expectations; freeze task, contracts, tool
-  arguments, policy fixture, and schema ownership. Bring up the starter and provider connection."
+  arguments, policy fixture, and schema ownership. Bring up the starter and provider connection. Fix
+  the two classifications, two report templates and approved vendor field projection."
 - **Exit condition (report).** "A single documented workflow, working service connectivity, and an
   agreed contract example for each command and event."
 - **Sync points needed by the end (spine):** X-03 to X-06. SH-11 lands X-07 to X-13 after the
   freeze; they are needed by M1.
-- The Go owners take part in the freeze (SH-10): they bring the canonical form (GO-04), the Go
+- The Go implementer takes part in the freeze (SH-10): they bring the canonical form (GO-04), the Go
   checks behind the four tools' typed arguments and the names of the internal operations they
   provide. SH-12 brings up the starter on every machine.
 
-### Implementer 3 (agent runtime)
+### Agent runtime (report role: Implementer 3)
 
 - [ ] **GO-06 · Bring up the model provider connection from Go**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 2-4 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: SH-04, GO-03 · Needs: X-01, X-04 · Provides: nothing
   - Paths: `services/gateway/internal/config/config.go`,
     `services/gateway/internal/config/config_test.go`,
     `services/gateway/internal/logging/logging.go`, `services/gateway/cmd/gateway/main.go`,
-    `services/gateway/README.md`; a new package for the model gateway, named at M0 by its owner
+    `services/gateway/README.md`; a new package for the model gateway, named at M0 by the Go implementer
   - Work: On its owner's machine, once SH-12 has run there, read the credential SH-13 wires as a
     `logging.Secret` and build the only outbound client to the decision 6 provider, with bounded
     timeouts. A missing credential never leads to a dispatch; the owner records in
     `services/gateway/README.md` whether the gateway then refuses to start or starts and fails
     every dispatch closed with a recorded reason. If the model name or pricing become environment
-    variables, each goes through the infrastructure owner in one change (`.env.example`, the
+    variables, each goes through the lead (infrastructure) in one change (`.env.example`, the
     gateway's Compose map, the README tables), as SH-13 does for the credential (SH-37, only if
     any are added). Outbound HTTPS from the gateway image stays unverified until the container
     path runs (X-02).
@@ -403,12 +421,12 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     "Architecture and chart reading guide" (Figure 1)
   - Blocked by: `decision 6 in docs/product/README.md`
 
-### Implementer 5 (tool adapters)
+### Tool adapters, provenance and rendering (report role: Implementer 5)
 
 - [ ] **GO-07 · Record the tool-result contract and each tool's idempotency rule**
-  - Owner: Implementer 5 (data and integration) with Implementer 3 and the data-minimization owner
-    recorded in SH-07 · Tier: A · Size: S (estimate 1-2 h, person-hours summed)
-  - Depends on: SH-07, SH-10, GO-04 · Needs: X-06 · Provides: nothing
+  - **Report 1.1 change:** Record the `create_report` arguments ("Scoped source references and registered template identifier"); `read_invoice` may return the internal note where expressly allowed, with its restriction: "Readable data may have stricter export rules than invoice fields approved for the vendor."
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 1-2 h, person-hours summed)
+  - Depends on: SH-10, GO-04 · Needs: X-06 · Provides: nothing
   - Paths: `services/gateway/README.md`
   - Work: Agreed in the M0 freeze session and Go-internal, so it has no sync point (spine,
     "Contracts to freeze first"): for each of the four tools, with the typed arguments agreed in
@@ -417,14 +435,14 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     known-safe to retry under the same action identifier, and which outcomes count as unknown).
     "The runtime developer depends on the action schema and tool-result contract."
   - Done when: each of the four tools has a recorded field allowlist, its opaque references and a
-    defined idempotency rule in `services/gateway/README.md`, agreed by Implementers 3 and 5 and the
-    data-minimization owner ("Each tool returns an explicit field allowlist; protected values remain
+    defined idempotency rule in `services/gateway/README.md`, recorded by the Go implementer
+    ("Each tool returns an explicit field allowlist; protected values remain
     opaque references"; "Each action needs a stable identifier and a defined idempotency rule").
   - Tests: none at the record; GO-17, GO-23, GO-31 to GO-33 and GO-53 test it.
   - Report: "Relative implementation milestones and critical dependencies" (Critical path and
     sensible reductions); "Illustrative passport and interface contracts" (Narrow final result and
     context boundary); "Durable state idempotency audit and uncertain outcomes"
-  - Blocked by: `Go package owners`; `canonical arguments`
+  - Blocked by: `canonical arguments`
 
 ## M1: hours 2-6
 
@@ -440,19 +458,19 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
 - While decision 7 is on hold the M1 exit, X-27 and X-28 cannot be reached (spine, "Milestones");
   see "The authentication hold" above for what proceeds.
 
-### Implementer 3 (agent runtime)
+### Agent runtime (report role: Implementer 3)
 
 - [ ] **GO-08 · Claim durable jobs with a lease in one worker**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 3-6 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-19, GO-20 · Needs: X-19 · Provides: nothing
   - Paths: `services/gateway/cmd/gateway/main.go`, `services/gateway/internal/database/database.go`,
-    `services/gateway/README.md`; a new package for the worker, named at M0 by its owner
+    `services/gateway/README.md`; a new package for the worker, named at M0 by the Go implementer
   - Work: Start one worker inside the gateway process (decision 5: PostgreSQL jobs with leases, no
     broker, one worker process for the prototype). It claims a job with a lease in a short
     transaction, renews the lease while it works and persists progress through the runtime
     repository. The worker shares the pool's 10 connections with the HTTP handlers and holds no
     connection or lock across a model or tool request. If worker settings become environment
-    variables, they go through the infrastructure owner in one change (SH-37);
+    variables, they go through the lead (infrastructure) in one change (SH-37);
     constants need none.
   - Done when: a job stored by admission is claimed by exactly one worker and processed under a
     live lease (Figure 4: "Go worker claims job with lease"; MVP requirement Durable execution:
@@ -467,7 +485,7 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-09 · Cover the worker in graceful shutdown and readiness**
-  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-08 · Needs: nothing · Provides: X-32
   - Paths: `services/gateway/cmd/gateway/main.go`, `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/shutdown_test.go`,
@@ -497,9 +515,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: `worker readiness`
 
 - [ ] **GO-10 · Run a live model step through the model gateway**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 4-8 h)
-  - Depends on: GO-01, GO-06, GO-19, GO-22, GO-23 · Needs: X-04, X-06, X-09, X-11 ·
-    Provides: nothing
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 4-8 h)
+  - Depends on: GO-01, GO-06, GO-19, GO-22, GO-23 · Needs: X-04, X-06, X-09, X-11 · Provides: nothing
   - Paths: `services/gateway/internal/config/config.go`, `services/gateway/README.md`; the model
     gateway package from GO-06
   - Work: Each model step sends the context GO-23 builds to the decision 6 provider with the
@@ -528,11 +545,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     critical dependencies" (Hours 2-6, live model call); "Delivery scope and six person ownership"
     (Proposed team ownership); "Risk register and scope controls" (Provider instability or
     unsuitable output)
-  - Blocked by: `decision 6 in docs/product/README.md`; `multiple-action responses`;
-    `model call retries` (the failure handling only)
+  - Blocked by: `decision 6 in docs/product/README.md`; `multiple-action responses`; `model call retries` (the failure handling only)
 
 - [ ] **GO-11 · Run the bounded agent loop for permitted actions**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 3-6 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-08, GO-10, GO-15, GO-16 · Needs: X-06, X-11 · Provides: nothing
   - Paths: the worker package from GO-08
   - Work: Before every model request, including the first after a claim and the one after each tool
@@ -562,12 +578,12 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     investigate)
   - Blocked by: nothing
 
-### Implementer 4 (enforcement)
+### Enforcement (report role: Implementer 4)
 
 - [ ] **GO-12 · Canonicalize tool arguments and compute the action digest**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 2-4 h)
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-04, GO-18 · Needs: X-09 · Provides: nothing
-  - Paths: a new package for enforcement, named at M0 by its owner
+  - Paths: a new package for enforcement, named at M0 by the Go implementer
   - Work: Implement GO-04's outcome: the canonical form of each tool's typed arguments, the rejection
     of ambiguous or unsupported values, and the digest that identifies a stored action and detects a
     change. The digest never stands in for the stored record or the policy checks.
@@ -582,9 +598,9 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: `canonical arguments`
 
 - [ ] **GO-13 · Admit a start-run request and issue the passport, run and job together**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 4-8 h)
-  - Depends on: GO-18, GO-19, GO-20, GO-22 · Needs: X-06, X-07, X-08, X-13, X-18, X-19, X-21,
-    X-22 · Provides: nothing
+  - **Report 1.1 change:** The passport adds allowed report templates, source authority and the projection rules or source policy version; both templates are in the grant (shape: `passport report fields`).
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 4-8 h)
+  - Depends on: GO-18, GO-19, GO-20, GO-22 · Needs: X-06, X-07, X-08, X-13, X-18, X-19, X-21, X-22 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`; a new package for admission, named at
     M0 by its owner
   - Work: Derive the passport from the verified operator context, the authoritative task and policy
@@ -611,11 +627,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     relationships matter); "Functional requirements MVP boundary and deferred scope" (Trusted
     admission); "Threat model limits and unresolved design choices" (Verification priorities);
     "Illustrative passport and interface contracts" (Illustrative passport fields)
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
-    (which `app` records carry the operator's authority)
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md` (which `app` records carry the operator's authority); `passport report fields`
 
 - [ ] **GO-14 · Serve `POST /internal/runs`**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 1-2 h)
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-13, GO-21 · Needs: X-07, X-08, X-13 · Provides: X-28
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`, `services/gateway/cmd/gateway/main.go`,
@@ -635,11 +650,11 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations; Decision and error semantics); "Technical architecture and service ownership"
     (Interfaces and repository strategy)
-  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md`;
-    `decision 7 in docs/product/README.md`
+  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-15 · Store each proposed action and decide allow, deny or approval required**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - **Report 1.1 change:** Report actions go through the provenance check (GO-63) before the policy decision; unknown report lineage is a denial.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-12, GO-13, GO-19, GO-22 · Needs: X-06, X-09, X-13 · Provides: nothing
   - Paths: the enforcement package from GO-12
   - Work: Store every proposal as an immutable action (stable identifier, tool, canonical
@@ -666,9 +681,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-16 · Execute an allowed action through its registered adapter**
-  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: A · Size: S (estimate 2-4 h)
+  - **Report 1.1 change:** Done when quote: "Only registered adapters would be executable."; Figure 7 is now Figure 8.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-15, GO-17, GO-19, GO-23 · Needs: X-09 · Provides: nothing
-  - Paths: a new package for the tool executor, named at M0 by its owner
+  - Paths: a new package for the tool executor, named at M0 by the Go implementer
   - Work: Execute only the registered adapter Go selects from the stored action, by its stable action
     identifier, after a fresh check that the stored action still matches its digest and the run is
     still active and unexpired. Record the attempt and its outcome through the runtime repository,
@@ -686,12 +702,13 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     minimization"; "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: nothing
 
-### Implementer 5 (tool adapters)
+### Tool adapters, provenance and rendering (report role: Implementer 5)
 
 - [ ] **GO-17 · Build `read_invoice`**
-  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 2-4 h)
+  - **Report 1.1 change:** Returns the internal investigation note where the field rules allow, with its trusted Internal only label.
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-07, GO-20 · Needs: X-06, X-09, X-20, X-21 · Provides: nothing
-  - Paths: a new package for the tool adapters, named at M0 by its owner
+  - Paths: a new package for the tool adapters, named at M0 by the Go implementer
   - Work: The adapter takes `invoice_id` only, checks itself that the invoice belongs to the run's
     organization and to the passport (an upstream check never replaces its own: "Resource-owning
     services must still enforce their own authorization"), and returns exactly the GO-07 fields, with
@@ -707,15 +724,14 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     arguments and resource relationships, not only the tool name")
   - Blocked by: nothing
 
-### Owner recorded in SH-07 (modules the report's team table does not name)
+### Modules the report's team table does not name (Go implementer)
 
 - [ ] **GO-18 · Mirror the frozen contracts in Go DTOs**
-  - Owner: the DTO owner recorded in SH-07 · Tier: A · Size: S (estimate 1.5-3 h)
-  - Depends on: SH-07 · Needs: X-07, X-08, X-09, X-10, X-11, X-12, X-13 ·
-    Provides: X-15 (part: the X-07 to X-13 mirrors)
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1.5-3 h)
+  - Depends on: nothing · Needs: X-07, X-08, X-09, X-10, X-11, X-12, X-13 · Provides: X-15 (part: the X-07 to X-13 mirrors)
   - Paths: `services/gateway/internal/health/dto.go`,
     `services/gateway/internal/health/dto_test.go`, `packages/contracts/fixtures` (read; landed by
-    SH-11), `services/gateway/README.md`; a new DTO file or package, named at M0 by its owner
+    SH-11), `services/gateway/README.md`; a new DTO file or package, named at M0 by the Go implementer
   - Work: Mirror each frozen contract and the error envelope's reason fields in Go, following
     "Changing a shared contract" in `docs/team-workflow.md`. The fixture test lists fixtures by
     explicit case, so an unlisted fixture is never checked: add a test that fails for any fixture
@@ -730,10 +746,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     `pnpm --filter gateway run test`.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
-  - Blocked by: `Go package owners`
+  - Blocked by: nothing
 
 - [ ] **GO-62 · Mirror the operator context contract in Go**
-  - Owner: the DTO owner recorded in SH-07 · Tier: A · Size: S (estimate 0.5-1 h, split from GO-18)
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 0.5-1 h, split from GO-18)
   - Depends on: GO-18 · Needs: X-14 · Provides: X-15 (part: the X-14 mirror)
   - Paths: `services/gateway/internal/health/dto_test.go`, `services/gateway/README.md`; the DTO
     file or package from GO-18
@@ -745,14 +761,13 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     passes. `pnpm --filter gateway run test`.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
-  - Blocked by: `Go package owners`; `decision 4 in docs/product/README.md`;
-    `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-19 · Build the runtime repository with guarded state transitions**
-  - Owner: the runtime repository owner recorded in SH-07 · Tier: A · Size: M (estimate 4-8 h)
-  - Depends on: SH-07, GO-20 · Needs: X-19 · Provides: nothing
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 4-8 h)
+  - Depends on: GO-20 · Needs: X-19 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`, `services/gateway/cmd/gateway/main.go`,
-    `services/gateway/README.md`; a new package for the runtime repository, named at M0 by its owner
+    `services/gateway/README.md`; a new package for the runtime repository, named at M0 by the Go implementer
   - Work: The single writer of the `runtime` schema (Figure 1: "Owns runtime writes"), with short
     explicit transactions, schema-qualified SQL, row mapping, and run and action state transitions
     that reject an invalid move such as executing a denied action or resuming a completed run. "A
@@ -769,11 +784,11 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     ownership); "Durable state idempotency audit and uncertain outcomes"; "Validation plan and
     evidence matrix" ("Exercise malformed tool arguments and invalid state transitions as well as
     valid ones")
-  - Blocked by: `Go package owners`
+  - Blocked by: nothing
 
 - [ ] **GO-20 · Build the Go PostgreSQL test harness on the X-24 command**
-  - Owner: the runtime repository owner recorded in SH-07 · Tier: A · Size: S (estimate 2-4 h)
-  - Depends on: SH-07 · Needs: X-24 · Provides: nothing
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: nothing · Needs: X-24 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`,
     `services/gateway/internal/database/database_test.go`, `services/gateway/scripts/go.mjs`,
     `services/gateway/README.md`
@@ -795,11 +810,12 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "Atomic allowances hard limits and estimated cost" ("the application must choose and
     verify the appropriate transaction boundaries"); "Validation plan and evidence matrix"
     (Interpreting results honestly)
-  - Blocked by: `Go package owners`
+  - Blocked by: nothing
 
 - [ ] **GO-21 · Verify service identity and operator context on every internal command**
-  - Owner: the internal API owner recorded in SH-07 · Tier: A · Size: M (estimate 3-6 h)
-  - Depends on: SH-03, SH-07, GO-62 · Needs: X-13, X-14, X-23 · Provides: X-27
+  - **Report 1.1 change:** Both proposed internal command paths (`POST /internal/runs/:id/cancel`, `POST /internal/actions/:id/approval`) carry an identifier, so the `withJSONErrors` change applies; package per `Go package layout`.
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 3-6 h)
+  - Depends on: SH-03, GO-62 · Needs: X-13, X-14, X-23 · Provides: X-27
   - Paths: `services/gateway/internal/httpserver/middleware.go`,
     `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/errors.go`,
@@ -832,12 +848,12 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Validation plan and evidence
     matrix" ("a hidden URL is not a protection")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`;
-    `Go package owners`
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-22 · Write safe decision events with every state change**
-  - Owner: the events owner recorded in SH-07 · Tier: A · Size: S (estimate 2-4 h)
-  - Depends on: SH-07, GO-19 · Needs: X-12, X-13, X-19 · Provides: nothing
+  - **Report 1.1 change:** Events link the run, action, policy version, matched rule, report ID, template version, classification, lineage-check outcome and actual effect; event names from SH-10 (the architecture's examples include `report.created`, `report.export_denied`, `report.safe_template_offered`).
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-19 · Needs: X-12, X-13, X-19 · Provides: nothing
   - Paths: the runtime repository package from GO-19
   - Work: Admission, each decision, approval, execution, stop and failure writes an event in the
     same transaction as its state change: ordered per run with a cursor, linking "the run, action,
@@ -854,13 +870,13 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
     semantics)
-  - Blocked by: `Go package owners`
+  - Blocked by: nothing
 
 - [ ] **GO-23 · Enforce tool-result field allowlists and minimize the model context**
-  - Owner: the data-minimization owner recorded in SH-07, with Implementer 5 · Tier: A ·
-    Size: S (estimate 2-3 h)
-  - Depends on: SH-07, GO-07 · Needs: X-06 · Provides: nothing
-  - Paths: a new package for data minimization, named at M0 by its owner
+  - **Report 1.1 change:** The authorized internal note may enter the model context with its restriction; the architecture places context minimization in the model gateway (`Go package layout`).
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
+  - Depends on: GO-07 · Needs: X-06 · Provides: nothing
+  - Paths: a new package for data minimization, named at M0 by the Go implementer
   - Work: Apply the GO-07 allowlist to every tool result before the worker sees it, and build every
     model request only from "the fixed task template and authorized parameters" plus minimized
     earlier results, so the rule covers "initial task input, retrieved documents, tool results and
@@ -876,11 +892,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "The enforcement loop and data minimization" (Minimize information before it enters the
     model); "Illustrative passport and interface contracts" (Narrow final result and context
     boundary)
-  - Blocked by: `Go package owners`
+  - Blocked by: nothing
 
 - [ ] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
-  - Owner: the events owner recorded in SH-07, with the internal API owner · Tier: A ·
-    Size: S (estimate 2-3 h)
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
   - Depends on: SH-05, GO-21, GO-22 · Needs: X-11, X-12 · Provides: X-29, X-30
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
@@ -901,11 +916,11 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
-  - Blocked by: `read path`; `passport in the run view`; `Go package owners`
+  - Blocked by: `read path`; `passport in the run view`
 
 - [ ] **GO-25 · Serve the task form options, if `form options` chooses a Go endpoint**
-  - Owner: the Go owner recorded in SH-07 for this endpoint · Tier: A · Size: S (estimate 1-2 h)
-  - Depends on: SH-07, GO-21 · Needs: X-21 · Provides: X-25
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-21 · Needs: X-21 · Provides: X-25
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
   - Work: Only if the document owner settles `form options` with a Go endpoint: return the options
@@ -920,27 +935,31 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "Project definition purpose and intended outcome" (What a passport would contain);
     "Relative implementation milestones and critical dependencies" (Critical path and sensible
     reductions: "keep a fixed server-owned task template")
-  - Blocked by: `form options`; `Go package owners`
+  - Blocked by: `form options`
 
 ## M2: hours 6-10
 
-- **Team focus (report).** "Complete four adapters, scoped reads, structured report creation,
-  destination checks, and bounded correction feedback."
-- **Exit condition (report).** "A permitted reconciliation succeeds; an explicit prohibited
-  proposal produces no business effect."
+- **Team focus (report).** "Complete the four adapters, scoped reads, trusted source manifests, both
+  fixed report templates, inherited classifications, destination checks and bounded feedback."
+- **Exit condition (report).** "An internal report is retained for authorized internal viewing; its vendor
+  export is denied; a separate approved-field vendor report can be created."
 - **Sync points needed by the end (spine):** X-33 to X-38, X-63 and X-64 (X-65 only if the replay
   is triggered through NestJS). This side provides X-36, X-37, X-38 and X-63, X-64 if
   `stored report read` chooses a Go endpoint, X-65 if `replay entry` has the interface trigger the
-  replay (GO-05, option 2), through a task the replay owner adds once that outcome is chosen
+  replay (GO-05, option 2), through a task the Go implementer adds once that outcome is chosen
   (spine, X-65), and X-67 early (GO-29), which the spine needs by M3.
-- **First integrated deliverables placed here (spine).** Implementer 4: "An out-of-scope proposal
-  is denied before the tool adapter runs." Implementer 5: "A permitted action produces one
-  inspectable database effect and its matching execution record."
+- **Report 1.1.** This side adds X-72 and X-75 (GO-66, GO-67) and needs X-68 to X-71; GO-29 is now
+  Tier A and provides X-67 with GO-47; GO-30 moved to M4 with X-37 and X-38. The first integrated
+  deliverables of Implementer 4 ("An Internal only report cannot be exported to the correct vendor,
+  even if an approval is submitted.") and Implementer 5 ("The stored vendor report uses only
+  approved invoice fields and creates one matching outbox effect.") start here with GO-66 and GO-67
+  and complete at M3 (GO-69, GO-47).
 
-### Implementer 3 (agent runtime)
+### Agent runtime (report role: Implementer 3)
 
 - [ ] **GO-26 · Validate the narrow final result and complete the run**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 2-3 h)
+  - **Report 1.1 change:** The final result may reference both reports.
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-32 · Needs: X-11, X-33 · Provides: nothing
   - Paths: the worker package from GO-08
   - Work: A final answer passes only the `final result format` outcome. The report recommends "a
@@ -961,9 +980,9 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: `final result format`
 
 - [ ] **GO-27 · Prove a permitted reconciliation on the Go side**
-  - Owner: Implementer 3 (agent runtime) with Implementers 4 and 5 · Tier: A ·
-    Size: S (estimate 1-2 h)
-  - Depends on: GO-11, GO-26, GO-28, GO-31, GO-32 · Needs: X-16, X-33, X-34 · Provides: X-63
+  - **Report 1.1 change:** Rewritten for beats 3 and 4: the agent reads the permitted invoice fields and the note, identifies INV104 in A01 and A02, and `create_report` stores the `internal_investigation_v1` report as Internal only with its source trail. Provides X-63 as amended in the spine.
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-11, GO-26, GO-28, GO-31, GO-32, GO-63 · Needs: X-16, X-33, X-34 · Provides: X-63
   - Paths: none (a scenario test in the packages above)
   - Work: Run the reconciliation over the X-34 fixtures through the real gate, executor and adapters,
     once with the decision 6 model and once with a labelled provider test double for repeatability,
@@ -978,10 +997,24 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
-### Implementer 4 (enforcement)
+- [ ] **GO-71 · Record the conservative context manifest, if `internal report rendering` admits model prose**
+  - Owner: Go implementer (report role: Implementer 3, agent runtime, and Implementer 5, provenance) · Tier: B · Size: S (estimate 2-4 h)
+  - Depends on: GO-23, GO-63 · Needs: X-69 · Provides: nothing
+  - Paths: the model gateway package from GO-10
+  - Work: Conditional. "Go tracks the trusted provenance of task input and model-visible tool results"
+    and attaches it to the internal report. If `internal report rendering` chooses server rendering
+    only, this task becomes "Dropped: `internal report rendering` chose server rendering only".
+  - Done when: the internal report's stored context manifest lists every source the model saw.
+  - Tests: a database-backed test through the X-24 command.
+  - Report: "Report provenance and inherited restrictions"; "Live demonstration storyboard and proof
+    checks" (beat 3)
+  - Blocked by: `internal report rendering`; `report storage`
+
+### Enforcement (report role: Implementer 4)
 
 - [ ] **GO-28 · Check resource relationships and destinations at the gate**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - **Report 1.1 change:** `create_report` needs a permitted fixed template; `queue_report` an authorized report and recipient; the export restriction itself is GO-64.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-15 · Needs: X-06, X-09, X-20, X-33 · Provides: nothing
   - Paths: the enforcement package from GO-12
   - Work: Go beyond the tool name. `read_vendor` accepts only a vendor of the organization that is
@@ -1005,8 +1038,9 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-29 · Return structured denial feedback and stop at the correction limit**
-  - Owner: Implementer 4 (enforcement) with Implementer 3 · Tier: B · Size: S (estimate 2-4 h)
-  - Depends on: GO-11, GO-15, GO-27, GO-36 · Needs: X-06, X-13, X-16, X-34 · Provides: X-67
+  - **Report 1.1 change:** Tier A (the slice's safe continuation). After an export denial the feedback names `vendor_reconciliation_v1` only when the passport permits that template and its source set, and grants no new authority. Proof: the blocked export continues to the newly rendered vendor report in the same passport and run; exhausted or unauthorized recovery stops. Report: MVP Bounded recovery; Figure 6; beat 7.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-11, GO-15, GO-27, GO-36, GO-64, GO-65 · Needs: X-06, X-13, X-16, X-34 · Provides: X-67 (part: continuation and stop)
   - Paths: the enforcement package from GO-12; the worker package from GO-08
   - Work: After a denial, give the model a safe structured reason (reason code, safe message and,
     where one exists, the permitted alternative such as the registered vendor or the permitted
@@ -1034,33 +1068,37 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     deferred scope" (Bounded recovery); "Live demonstration storyboard and proof checks" (beat 6)
   - Blocked by: nothing
 
-- [ ] **GO-30 · Prove the resource and destination boundaries**
-  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: A · Size: S (estimate 1-3 h)
-  - Depends on: GO-28, GO-31, GO-33, GO-36 · Needs: X-16, X-34 · Provides: X-37, X-38
-  - Paths: none (scenario tests in the packages above)
-  - Work: With the X-34 fixtures, submit an out-of-scope invoice, a vendor outside the task and a
-    changed recipient, from the live model where it proposes them and otherwise from the labelled
-    replay (GO-36). Capture the state before and after each: the denial record, the excluded
-    records' versions, the report and outbox counts and the absence of an execution attempt. Also
-    show that the hostile note changed neither the stored passport nor the operator identity (demo
-    beat 4).
-  - Done when: X-37 and X-38 are reached with the evidence the report lists, Resource boundary:
-    "Denial record plus unchanged excluded records and absence of an execution attempt."; Destination
-    boundary: "Stored proposal, rule decision, and outbox comparison."; and Implementer 4's first
-    integrated deliverable is observed: "An out-of-scope proposal is denied before the tool adapter
-    runs."
-  - Tests: scenario tests asserting, for each denied proposal, no adapter call, no execution record,
-    unchanged record versions and unchanged report and outbox counts; replayed proposals carry the
-    replay label. The X-24 command.
-  - Report: "Validation plan and evidence matrix" (critical checks Resource boundary and Destination
-    boundary); "Live demonstration storyboard and proof checks" (beats 4 and 5); "Risk register and
-    scope controls" (Demo proves logs, not prevention)
+- [ ] **GO-64 · Deny a restricted report export at the gate before approval**
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-15, GO-28, GO-63 · Needs: X-13 · Provides: nothing
+  - Paths: the enforcement package from GO-12
+  - Work: For `queue_report`, before the policy decision, verify the artifact's content hash and
+    manifest and its restriction against the destination. A forbidden export is
+    `report_export_restricted`, a denial and not an approval request, with its safe event.
+  - Done when: an Internal only report proposed for Atlas is denied before review, no approval request
+    and no outbox row exist, and the event names the rule.
+  - Tests: unit tests for the destination rule; a database-backed test through the X-24 command.
+  - Report: "Report provenance and inherited restrictions" (Export checks and safe continuation);
+    "Functional requirements MVP boundary and deferred scope" (Denied export)
   - Blocked by: nothing
 
-### Implementer 5 (tool adapters)
+- [ ] **GO-66 · Prove the denied internal export on the Go side**
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-27, GO-36, GO-64 · Needs: X-16, X-34 · Provides: X-72
+  - Paths: none (a scenario test in the packages above)
+  - Work: The live model or a labelled replay proposes `queue_report` of the internal report to Atlas;
+    capture the source manifest, the label, the denial rule and the outbox count.
+  - Done when: the evidence X-72 names is captured: "Trusted source manifest and label; export denial
+    rule; unchanged outbox count."
+  - Tests: the scenario test with the before and after outbox count quoted.
+  - Report: "Validation plan and evidence matrix" (Inherited restriction); "Live demonstration
+    storyboard and proof checks" (beat 5); challenge concern Sensitive data exposure
+  - Blocked by: nothing
+
+### Tool adapters, provenance and rendering (report role: Implementer 5)
 
 - [ ] **GO-31 · Build `read_vendor`**
-  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: GO-17, GO-35 · Needs: X-20 · Provides: nothing
   - Paths: the adapter package from GO-17
   - Work: The adapter takes `vendor_id` only, checks itself that the vendor belongs to the
@@ -1076,8 +1114,9 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-32 · Build `create_report`**
-  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 2-4 h)
-  - Depends on: GO-17, GO-34 · Needs: X-33 · Provides: nothing
+  - **Report 1.1 change:** Rewritten: takes "Scoped source references and registered template identifier"; resolves trusted source records and versions, renders the permitted template, and derives and persists provenance, classification and content hash through GO-63, inside GO-34's transaction. `internal_investigation_v1` is always Internal only with all consumed sources' restrictions. The model never selects the classification; vendor rendering is GO-65. Tests add: a model-supplied classification or source list is ignored; missing lineage stores nothing.
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 2-4 h)
+  - Depends on: GO-17, GO-34, GO-63 · Needs: X-33, X-68, X-69 · Provides: nothing
   - Paths: the adapter package from GO-17
   - Work: The adapter takes authorized invoice references and a registered template, checks every
     reference against the passport itself, and stores a structured report with a stable identifier,
@@ -1093,10 +1132,11 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "Illustrative passport and interface contracts" (Proposed tool argument boundaries);
     "Functional requirements MVP boundary and deferred scope" (Product decisions that keep the MVP
     coherent)
-  - Blocked by: `record versions`
+  - Blocked by: `record versions`; `internal report rendering` (internal body only)
 
 - [ ] **GO-33 · Build `queue_report`**
-  - Owner: Implementer 5 (data and integration) · Tier: A · Size: S (estimate 3-5 h)
+  - **Report 1.1 change:** Rewritten: no rendering. Checks the immutable report against its content hash and manifest, inherited restrictions, source and template versions, exact content and review, and queues the exact reviewed permitted report.
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 3-5 h)
   - Depends on: GO-32, GO-34, GO-35 · Needs: X-33 · Provides: nothing
   - Paths: the adapter package from GO-17
   - Work: The adapter takes a stored report reference and a trusted recipient reference. It checks
@@ -1118,8 +1158,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: `record versions`
 
 - [ ] **GO-34 · Commit each demo effect with its execution record and event in one transaction**
-  - Owner: Implementer 5 (data and integration) with Implementer 4 and the runtime repository owner
-    · Tier: A · Size: S (estimate 2-4 h)
+  - **Report 1.1 change:** Report content and lineage commit atomically, "so an artifact cannot exist without its restrictions"; that replaces the old first-deliverable quote.
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: SH-06, GO-16, GO-19, GO-22 · Needs: X-33 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`; the executor package from GO-16
   - Work: For `create_report` and `queue_report`, the effect, its completion record and its event
@@ -1128,7 +1168,7 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     identifier. "Separate connections with different credentials would not provide that atomicity
     automatically." Until the service roles arrive (X-35, GO-38) the single starter user serves this
     connection; GO-55 repeats the proof on the final one. The report gives these transactional
-    effects to Implementer 5; SH-07 records their placement.
+    effects to Implementer 5; on this team they are the Go implementer's.
   - Done when: Implementer 5's first integrated deliverable is observed: "A permitted action
     produces one inspectable database effect and its matching execution record."
   - Tests: database-backed: a successful effect has exactly one completion record and one event; an
@@ -1139,8 +1179,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: `decision 2 in docs/product/README.md`
 
 - [ ] **GO-35 · Replace protected values with opaque references resolved inside adapters**
-  - Owner: Implementer 5 (data and integration) with the data-minimization owner · Tier: A ·
-    Size: S (estimate 1-3 h)
+  - **Report 1.1 change:** The note is readable but not exportable.
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: GO-17, GO-23 · Needs: X-06 · Provides: nothing
   - Paths: the adapter package from GO-17; the data-minimization package from GO-23
   - Work: For each value the X-06 field rules protect, the adapter returns an opaque reference that
@@ -1159,13 +1199,61 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     model); "Terminology for developers and presenters" (Opaque reference)
   - Blocked by: nothing
 
-### Owner recorded in SH-07 (modules the report's team table does not name)
+- [ ] **GO-63 · Build the report provenance module**
+  - Owner: Go implementer (report role: Implementer 4, enforcement, and Implementer 5, provenance) · Tier: A · Size: M (estimate 4-8 h)
+  - Depends on: GO-13, GO-15, GO-19, GO-22 · Needs: X-06, X-08, X-68, X-69, X-70, X-71 · Provides: nothing
+  - Paths: a new package, named at M0 by the Go implementer (architecture proposal: `internal/provenance`)
+  - Work: Resolve trusted source records and versions under the passport, derive the classification
+    (the internal template is always Internal only; an Internal only source context never becomes
+    Vendor shareable through a model label), validate template and projection versions, authorize
+    creation and export, and persist the lineage. Fail closed on "Missing, unclassified or unresolved
+    lineage".
+  - Done when: every report creation and export decision reads the stored lineage, and a report
+    without complete trusted lineage is neither created nor exported.
+  - Tests: unit tests for the derivation rules; a database-backed test through the X-24 command that a
+    model-declared label, a title and a missing source each fail closed.
+  - Report: "Report provenance and inherited restrictions"; "Functional requirements MVP boundary and
+    deferred scope" (Trusted source classifications, Inherited report restrictions); "Validation plan
+    and evidence matrix" (Inherited restriction, Missing lineage, Label and rename tampering)
+  - Blocked by: `report storage`; `source classification storage`
+
+- [ ] **GO-65 · Render the vendor report from the approved projection**
+  - Owner: Go implementer (report role: Implementer 5, rendering) · Tier: A · Size: S (estimate 3-5 h)
+  - Depends on: GO-32, GO-63 · Needs: X-06, X-68 · Provides: nothing
+  - Paths: the adapter package from GO-17
+  - Work: Render `vendor_reconciliation_v1` directly from the named projection of authorized database
+    fields, in a fixed format with typed fields, with no model prose, internal report text or raw
+    values. Identical inputs give identical bytes. Store the projection rule and its version with the
+    report.
+  - Done when: the vendor report holds only the approved fields, and the internal note's text is
+    absent from it.
+  - Tests: a golden-bytes test for identical inputs; a test that the internal note never appears.
+  - Report: "Report provenance and inherited restrictions" (Fixed prototype classification and
+    template matrix); "Functional requirements MVP boundary and deferred scope" (Trusted template
+    manifests); "Validation plan and evidence matrix" (Approved external projection)
+  - Blocked by: `vendor projection fields`
+
+- [ ] **GO-67 · Prove the approved external projection on the Go side**
+  - Owner: Go implementer (report role: Implementer 5, rendering) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-29, GO-65 · Needs: X-16, X-34 · Provides: X-75
+  - Paths: none (a scenario test in the packages above)
+  - Work: After the denial, the vendor report is rendered; capture its content, the selected fields,
+    and the source, template and projection versions; internal free text is absent.
+  - Done when: the evidence X-75 names is captured: "Serialized report content, selected fields,
+    source versions, template and projection versions."
+  - Tests: the scenario test with the serialized content quoted.
+  - Report: "Validation plan and evidence matrix" (Approved external projection); "Live demonstration
+    storyboard and proof checks" (beat 7)
+  - Blocked by: nothing
+
+### Modules the report's team table does not name (Go implementer)
 
 - [ ] **GO-36 · Replay a prohibited proposal through the real gate, labelled**
-  - Owner: the replay owner recorded in SH-07 · Tier: A · Size: S (estimate 2-3 h)
-  - Depends on: SH-07, GO-05, GO-15 · Needs: X-12, X-34 · Provides: X-36
-  - Paths: `services/gateway/README.md`; a new package or command for the replay, named at M0 by its
-    owner
+  - **Report 1.1 change:** The stored proposals are the export of a genuinely created internal report and the out-of-scope read or redirect. Tier A: the denied export is in the slice, and the report asks for a labelled replay when the live model does not propose the send.
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
+  - Depends on: GO-05, GO-15 · Needs: X-12, X-34 · Provides: X-36
+  - Paths: `services/gateway/README.md`; a new package or command for the replay, named at M0 by the Go
+    implementer
   - Work: Implement GO-05's outcome: submit a stored prohibited proposal taken from the hostile note
     in X-34 (reading the out-of-scope invoice or changing the recipient) "to the same validation and
     execution path", marked as a replay in the stored action and in every event it produces, and
@@ -1180,12 +1268,12 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Report: "Live demonstration storyboard and proof checks" (Reliable demonstrations without
     invented behavior); "Risk register and scope controls" (Provider instability or unsuitable
     output)
-  - Blocked by: `Go package owners`; `replay entry`
+  - Blocked by: `replay entry`
 
 - [ ] **GO-37 · Serve the stored report, if `stored report read` chooses a Go endpoint**
-  - Owner: the Go owner recorded in SH-07 for this endpoint, with Implementer 5 · Tier: A ·
-    Size: S (estimate 1-2 h)
-  - Depends on: SH-07, GO-21, GO-32 · Needs: X-33 · Provides: X-64
+  - **Report 1.1 change:** Serves the extended X-64 (classification, template and projection versions, content hash, destination class, lineage summary).
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-21, GO-32 · Needs: X-33 · Provides: X-64
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
   - Work: Only if the document owner settles `stored report read` with a private Go endpoint: return
@@ -1200,12 +1288,11 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
   - Report: "Illustrative passport and interface contracts" (Narrow final result and context
     boundary)
-  - Blocked by: `stored report read`; `final result format`; `Go package owners`
+  - Blocked by: `stored report read`; `final result format`; `report storage`
 
 - [ ] **GO-38 · Connect with the Go database roles from X-35**
-  - Owner: the owner recorded in SH-07 for `internal/config` and `internal/database` · Tier: B ·
-    Size: S (estimate 1-2 h)
-  - Depends on: SH-06, SH-07 · Needs: X-35 · Provides: nothing
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: B · Size: S (estimate 1-2 h)
+  - Depends on: SH-06 · Needs: X-35 · Provides: nothing
   - Paths: `services/gateway/internal/config/config.go`,
     `services/gateway/internal/config/config_test.go`,
     `services/gateway/internal/database/database.go`,
@@ -1222,7 +1309,7 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     `demo` tables. The X-24 command; `pnpm --filter gateway run test`.
   - Report: "Architecture and chart reading guide"; "Data ownership and the transition from starter
     to product"; "Technical architecture and service ownership" (Proposed ownership)
-  - Blocked by: `decision 2 in docs/product/README.md`; `Go package owners`
+  - Blocked by: `decision 2 in docs/product/README.md`
 
 ## M3: hours 10-14
 
@@ -1234,10 +1321,10 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   X-42, X-45 and its halves of X-44 and X-46, X-41 if the read path chooses Go endpoints, and its
   half of X-53 early; X-67 came with GO-29 at M2. X-66 is the Next.js + NestJS side's.
 
-### Implementer 3 (agent runtime)
+### Agent runtime (report role: Implementer 3)
 
 - [ ] **GO-39 · Reserve model allowance before every dispatch and settle it afterwards**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: M (estimate 5-8 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 5-8 h)
   - Depends on: GO-02, GO-03, GO-10 · Needs: X-06, X-11, X-39 · Provides: X-53
   - Paths: the model gateway package from GO-06; the runtime repository package from GO-19
   - Work: Before each model request, reserve the call count, the capped tokens and the estimated
@@ -1262,7 +1349,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
 
 - [ ] **GO-40 · Release the lease during a review wait and resume the original action**
-  - Owner: Implementer 3 (agent runtime) with Implementer 4 · Tier: A · Size: S (estimate 2-4 h)
+  - **Report 1.1 change:** Figure 7; quote "Approval pauses the durable job and binds the original action."
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-08, GO-11, GO-43, GO-44 · Needs: X-39 · Provides: nothing
   - Paths: the worker package from GO-08
   - Work: When the gate requires approval and GO-43 has frozen the action, persist the
@@ -1272,7 +1360,7 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     pass the action to the recheck in GO-45. On rejection or expiry, continue on the blocked-action
     path (GO-11; GO-29 adds the correction). No worker holds the job during the wait, so an approval
     nobody decides needs its own trigger: at its expiry it closes as expired (GO-44) and the run
-    continues on the blocked-action path, by a mechanism the owner chooses within constraint 9; the
+    continues on the blocked-action path, by a mechanism the Go implementer chooses within constraint 9; the
     closure, its event and what resumes the run commit together.
   - Done when: an approval wait survives the browser closing and the worker stopping, and resumes
     the original stored action (Figure 6: "Approval pauses the durable job and applies to the
@@ -1288,7 +1376,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: nothing
 
 - [ ] **GO-41 · Persist cancellation through the internal cancel command**
-  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: S (estimate 2-3 h)
+  - **Report 1.1 change:** Figure 7; name proposal `POST /internal/runs/:id/cancel`.
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-21 · Needs: X-11, X-13 · Provides: X-42
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`; the worker
@@ -1312,7 +1401,8 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-42 · Prove the limit-triggered stop**
-  - Owner: Implementer 3 (agent runtime) · Tier: A · Size: S (estimate 1-2 h)
+  - **Report 1.1 change:** Beat 9; X-46 as amended in the spine.
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-39, GO-45 · Needs: X-16, X-34 · Provides: X-46
   - Paths: none (a scenario test in the packages above)
   - Work: In a separate run with the small configured allowance from X-34, or in a clearly labelled
@@ -1324,22 +1414,23 @@ Every task in this file, one row each, in milestone order. 62 tasks: 45 Tier A, 
     the document owner revises that evidence (spine, "Scope changes"). Either way, show the
     reported usage, the reservations and any unresolved reservation.
   - Done when: the Go half of X-46 is reached: "The next request is rejected before dispatch; a
-    terminal reason is visible and the ledger does not record an unaccounted call." (demo beat 8;
+    terminal reason is visible and the ledger does not record an unaccounted call." (demo beat 9;
     the vertical slice's "one limit-triggered stop").
   - Tests: the scenario test counts dispatches against reservation and usage rows, checks the stop
     reason and that no request left Go after the limit; with bounded retries adopted, each retry has
     its own reservation and usage row. The X-24 command.
-  - Report: "Live demonstration storyboard and proof checks" (beat 8); "Threat model limits and
+  - Report: "Live demonstration storyboard and proof checks" (beat 9); "Threat model limits and
     unresolved design choices" (smallest credible vertical slice); "Mapping the proposal to the
     Goldman Sachs challenge" (Unpredictable costs)
   - Blocked by: `model call retries` (the retry part only)
 
-### Implementer 4 (enforcement)
+### Enforcement (report role: Implementer 4)
 
 - [ ] **GO-43 · Freeze the exact action for review**
-  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: A · Size: S (estimate 3-5 h)
+  - **Report 1.1 change:** The frozen payload adds the report identifier, content hash, source manifest and its digest, classification, template and projection versions, exact recipient and exact outbound content: "Freeze the payload and bind its source records, template and projection to versions." The content is the stored server-rendered report.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 3-5 h)
   - Depends on: GO-12, GO-15, GO-33 · Needs: X-09, X-39 · Provides: nothing
-  - Paths: a new package for the approval manager, named at M0 by its owner
+  - Paths: a new package for the approval manager, named at M0 by the Go implementer
   - Work: Before requesting review, store "the tool, canonical arguments, recipient, affected
     resources, relevant versions, exact outbound content, passport reference, policy version and
     expiry", with the content `queue_report` renders and its digest, as the `exact reviewed
@@ -1354,10 +1445,11 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     events hold no review content. The X-24 command.
   - Report: "Exact action approval versioning and execution rechecks"; "Users operating model and
     proposed user journeys" (Journey 2 review an exact outbound effect)
-  - Blocked by: `exact reviewed material`; `record versions`
+  - Blocked by: `record versions`
 
 - [ ] **GO-44 · Accept the approval decision through the internal command**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - **Report 1.1 change:** Name proposal `POST /internal/actions/:id/approval`; an approval cannot override an Internal only export denial.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-21, GO-43 · Needs: X-10, X-13, X-18, X-39 · Provides: X-40
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`; the approval
@@ -1383,7 +1475,8 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-45 · Recheck before execution and claim the attempt in one transaction**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: M (estimate 3-6 h)
+  - **Report 1.1 change:** The recheck adds current source and template policy and revocations, resource and report lineage preconditions and destination restrictions, with the new reason codes; Figure 8.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-16, GO-40, GO-44 · Needs: X-39 · Provides: nothing
   - Paths: the executor package from GO-16
   - Work: Immediately before executing an allowed or approved action, recheck its integrity (the
@@ -1406,7 +1499,8 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `record versions`
 
 - [ ] **GO-46 · Prove approval integrity**
-  - Owner: Implementer 4 (enforcement) · Tier: A · Size: S (estimate 1-2 h)
+  - **Report 1.1 change:** Adds a changed template or projection version; Report: Scene 4 precise human review and one simulated delivery.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-45 · Needs: X-16, X-34 · Provides: X-45
   - Paths: none (scenario tests in the packages above)
   - Work: After an approval, change the content, the recipient or a source record version, and try
@@ -1423,12 +1517,28 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     adaptations" (Scene 3 precise human review)
   - Blocked by: nothing
 
-### Implementer 5 (tool adapters)
+- [ ] **GO-69 · Prove that approval cannot override the export restriction**
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-2 h)
+  - Depends on: GO-44, GO-64 · Needs: X-34 · Provides: X-77
+  - Paths: none (a scenario test in the packages above)
+  - Work: Submit an approval decision or a replayed grant for the denied export; the export stays
+    denied and no outbox row exists. Tier B by the spine's rule (a critical check outside the slice);
+    the team may raise it, since it completes Implementer 4's first integrated deliverable.
+  - Done when: the evidence X-77 names is captured: "Submitted approval or replayed grant; export
+    remains denied with no outbox effect." and Implementer 4's first integrated deliverable is
+    observed: "An Internal only report cannot be exported to the correct vendor, even if an approval
+    is submitted."
+  - Tests: the scenario test with the outbox count quoted.
+  - Report: "Validation plan and evidence matrix" (Approval cannot override classification);
+    "Delivery scope and six person ownership" (Proposed team ownership)
+  - Blocked by: nothing
+
+### Tool adapters, provenance and rendering (report role: Implementer 5)
 
 - [ ] **GO-47 · Prove the legitimate task on the Go side**
-  - Owner: Implementer 5 (data and integration) with Implementers 3 and 4 · Tier: A ·
-    Size: S (estimate 1-2 h)
-  - Depends on: GO-27, GO-40, GO-45 · Needs: X-16, X-34 · Provides: X-44
+  - **Report 1.1 change:** Work: internal report, denied export, vendor report, review, one outbox row; the reviewed bytes match the simulated queued content. Done when adds Implementer 5's first integrated deliverable, "The stored vendor report uses only approved invoice fields and creates one matching outbox effect." Beat 8.
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: A · Size: S (estimate 1-2 h)
+  - Depends on: GO-27, GO-40, GO-45, GO-29, GO-64, GO-65 · Needs: X-16, X-34 · Provides: X-44, X-67 (part: reviewed outbox effect)
   - Paths: none (a scenario test in the packages above)
   - Work: Run the full reconciliation through the approval to the queued report, once with the
     decision 6 model and once with a labelled provider test double, and capture the report
@@ -1441,11 +1551,11 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     demonstration storyboard and proof checks" (beat 7)
   - Blocked by: nothing
 
-### Owner recorded in SH-07 (modules the report's team table does not name)
+### Modules the report's team table does not name (Go implementer)
 
 - [ ] **GO-48 · Serve the exact review payload, if the read path chooses Go endpoints**
-  - Owner: the internal API owner recorded in SH-07, with Implementer 4 · Tier: A ·
-    Size: S (estimate 1-2 h)
+  - **Report 1.1 change:** The review payload adds the report fields of GO-43; "Review payloads and source manifests need their own access rules".
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: SH-05, GO-21, GO-43 · Needs: X-09 · Provides: X-41
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`, `services/gateway/README.md`
@@ -1461,12 +1571,13 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Users operating model and proposed user journeys" (Journey 2 review
     an exact outbound effect)
-  - Blocked by: `read path`; `review payload read`; `Go package owners`
+  - Blocked by: `read path`; `review payload read`
 
 ## M4: hours 14-18
 
 - **Team focus (report).** "Exercise concurrency and waiting-state recovery; inspect context and
-  safe events; finish reset and deployment procedures."
+  safe events; finish reset and deployment procedures. Verify label tampering, missing lineage, rename
+  attempts and changed source-policy versions."
 - **Exit condition (report).** "Critical checks have recorded outcomes, and the team can reset
   fixtures and repeat the workflow."
 - **Sync points needed by the end (spine):** X-02 and X-47 to X-57. This side provides X-51, X-52,
@@ -1474,10 +1585,10 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   optional X-60 (Tier C) gets its Go half here (GO-60), only if events stream from Go. SH-31
   records the outcomes.
 
-### Implementer 3 (agent runtime)
+### Agent runtime (report role: Implementer 3)
 
 - [ ] **GO-49 · Recover expired leases without replaying dispatched work**
-  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: M (estimate 3-6 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: M (estimate 3-6 h)
   - Depends on: GO-02, GO-39, GO-40, GO-45 · Needs: X-24, X-39 · Provides: X-54
   - Paths: the worker package from GO-08
   - Work: Implement GO-02's outcome. A worker that takes over an expired lease reads the
@@ -1498,7 +1609,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `dispatched attempts`
 
 - [ ] **GO-50 · Prove budget concurrency**
-  - Owner: Implementer 3 (agent runtime) with Implementer 4 · Tier: B · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-39, GO-45 · Needs: X-24, X-34, X-39 · Provides: X-52
   - Paths: none (concurrency tests in the packages above)
   - Work: Race model reservations and tool reservations against one remaining allowance and capture
@@ -1515,7 +1626,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: nothing
 
 - [ ] **GO-51 · Prove that cancellation and expiry stop dispatch, also after a review wait**
-  - Owner: Implementer 3 (agent runtime) · Tier: B · Size: S (estimate 1-2 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: GO-41, GO-45, GO-52 · Needs: X-24, X-34 · Provides: X-55
   - Paths: none (scenario tests in the packages above)
   - Work: Cancel a running run, cancel a run waiting for approval, let a run pass its expiry, and
@@ -1532,10 +1643,11 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     (Cancellation and revocation)
   - Blocked by: nothing
 
-### Implementer 4 (enforcement)
+### Enforcement (report role: Implementer 4)
 
 - [ ] **GO-52 · Check current revocations before dispatch and before execution**
-  - Owner: Implementer 4 (enforcement) with Implementer 3 · Tier: B · Size: S (estimate 2-3 h)
+  - **Report 1.1 change:** Adds source and template revocations.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-45 · Needs: X-35, X-47 · Provides: nothing
   - Paths: the enforcement package from GO-12; the worker package from GO-08
   - Work: Read the current revocation records NestJS writes in `app`, as the `revocation reads`
@@ -1554,7 +1666,8 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `revocation reads`; `decision 2 in docs/product/README.md`
 
 - [ ] **GO-53 · Handle known failures, safe retries and unknown outcomes**
-  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: B · Size: S (estimate 2-4 h)
+  - **Report 1.1 change:** Figure 9.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 2-4 h)
   - Depends on: GO-07, GO-45 · Needs: X-11, X-39 · Provides: nothing
   - Paths: the executor package from GO-16; the adapter package from GO-17
   - Work: Classify each execution as succeeded, failed with a known outcome, or uncertain (Figure
@@ -1578,7 +1691,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: nothing
 
 - [ ] **GO-54 · Prove approval replay under concurrent requests**
-  - Owner: Implementer 4 (enforcement) · Tier: B · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-44, GO-45 · Needs: X-24, X-34 · Provides: X-51
   - Paths: none (concurrency tests in the packages above)
   - Work: Send concurrent approval decisions and concurrent execution attempts for one approved
@@ -1593,7 +1706,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: nothing
 
 - [ ] **GO-55 · Prove the database execution transaction with fault injection**
-  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: B · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-34, GO-45 · Needs: X-24, X-35 · Provides: X-57
   - Paths: none (fault-injection tests in the packages above)
   - Work: Inject failures between the effect, the completion record and the event of
@@ -1608,11 +1721,62 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: `decision 2 in docs/product/README.md`
 
-### Implementer 5 (tool adapters)
+- [ ] **GO-30 · Prove the resource and destination boundaries**
+  - **Report 1.1 change:** Tier B, moved to M4 where X-37 and X-38 are needed (the ID stays). The beat 4 sentence is dropped; "The attempted out-of-scope read would leave no corresponding data access or effect." Report: beat 9 and "Supporting rehearsals". It no longer carries a first integrated deliverable.
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-28, GO-31, GO-33, GO-36 · Needs: X-16, X-34 · Provides: X-37, X-38
+  - Paths: none (scenario tests in the packages above)
+  - Work: With the X-34 fixtures, submit an out-of-scope invoice, a vendor outside the task and a
+    changed recipient, from the live model where it proposes them and otherwise from the labelled
+    replay (GO-36). Capture the state before and after each: the denial record, the excluded
+    records' versions, the report and outbox counts and the absence of an execution attempt. Also
+    show that the hostile note changed neither the stored passport nor the operator identity (demo
+    beat 4).
+  - Done when: X-37 and X-38 are reached with the evidence the report lists, Resource boundary:
+    "Denial record plus unchanged excluded records and absence of an execution attempt."; Destination
+    boundary: "Stored proposal, rule decision, and outbox comparison."; and Implementer 4's first
+    integrated deliverable is observed: "An out-of-scope proposal is denied before the tool adapter
+    runs."
+  - Tests: scenario tests asserting, for each denied proposal, no adapter call, no execution record,
+    unchanged record versions and unchanged report and outbox counts; replayed proposals carry the
+    replay label. The X-24 command.
+  - Report: "Validation plan and evidence matrix" (critical checks Resource boundary and Destination
+    boundary); "Live demonstration storyboard and proof checks" (beats 4 and 5); "Risk register and
+    scope controls" (Demo proves logs, not prevention)
+  - Blocked by: nothing
+
+- [ ] **GO-68 · Prove label and rename tampering and missing lineage**
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-63, GO-64 · Needs: X-34 · Provides: X-73, X-74
+  - Paths: none (scenario tests in the packages above)
+  - Work: Submit an agent-supplied classification, a "Public summary" title (through the operation
+    `rename operation` names; until then a public label in the arguments), a copied artifact, and
+    unknown, incomplete or unverifiable source metadata.
+  - Done when: the evidence of X-73 ("Stored provenance before and after attempt; denied export or
+    rejected unsupported mutation.") and X-74 ("Rejected report proposal or export denial with no
+    outbox row.") is captured.
+  - Tests: the scenario tests with the stored provenance before and after quoted.
+  - Report: "Validation plan and evidence matrix" (Label and rename tampering, Missing lineage);
+    "Live demonstration storyboard and proof checks" (beat 6)
+  - Blocked by: `rename operation` (rename part)
+
+- [ ] **GO-70 · Prove source or template policy changes after review**
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
+  - Depends on: GO-45, GO-52 · Needs: X-34, X-47 · Provides: X-76
+  - Paths: none (scenario tests in the packages above)
+  - Work: During the review wait, change the source versions or the template or projection version,
+    or revoke a source or template; the old approval is rejected and nothing stale is queued.
+  - Done when: the evidence X-76 names is captured: "Old approval is rejected; no stale report is
+    queued."
+  - Tests: the scenario tests with the rejected approval and the outbox count quoted.
+  - Report: "Validation plan and evidence matrix" (Source or template policy changes)
+  - Blocked by: nothing
+
+### Tool adapters, provenance and rendering (report role: Implementer 5)
 
 - [ ] **GO-56 · Inspect model context, events and output channels for protected fields**
-  - Owner: Implementer 5 (data and integration) with the data-minimization owner recorded in SH-07
-    · Tier: B · Size: S (estimate 1-3 h)
+  - **Report 1.1 change:** "Inspect model context separately from outbox content; the model may see an authorized internal note while the vendor report excludes it." The Sensitive data exposure evidence moves to GO-66 and GO-47.
+  - Owner: Go implementer (report role: Implementer 5, tool adapters) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-22, GO-23, GO-35, GO-47 · Needs: X-06, X-12, X-34 · Provides: X-50
   - Paths: none (inspection tests in the packages above)
   - Work: For a fixture run that reaches the queued report (the GO-47 scenario), serialize every
@@ -1639,12 +1803,12 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     register and scope controls" (Data leakage through secondary views); "The enforcement loop and
     data minimization"; "Functional requirements MVP boundary and deferred scope" (Data
     minimization); "Mapping the proposal to the Goldman Sachs challenge" (Sensitive data exposure)
-  - Blocked by: `Go package owners`
+  - Blocked by: nothing
 
-### Owner recorded in SH-07 (modules the report's team table does not name)
+### Modules the report's team table does not name (Go implementer)
 
 - [ ] **GO-57 · Prove organization access at the internal boundary**
-  - Owner: the internal API owner recorded in SH-07 · Tier: B · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-14, GO-21, GO-41, GO-44 · Needs: X-22, X-24, X-34 · Provides: X-56
   - Paths: `services/gateway/internal/httpserver/server_test.go`
   - Work: Call every internal command, and every Go read if the read path chose Go endpoints,
@@ -1658,11 +1822,10 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     read is rejected, and the runtime rows are identical before and after.
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`;
-    `Go package owners`
+  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-60 · Optional: stream events from Go, if the read path chooses Go endpoints**
-  - Owner: the events owner recorded in SH-07 · Tier: C · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (a module the report's team table does not name) · Tier: C · Size: S (estimate 1-3 h)
   - Depends on: GO-24 · Needs: X-12 · Provides: X-60
   - Paths: `services/gateway/internal/httpserver/server.go`,
     `services/gateway/internal/httpserver/server_test.go`
@@ -1678,7 +1841,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Relative implementation milestones and critical dependencies" ("use authenticated
     polling before adding SSE if necessary"); "Illustrative passport and interface contracts"
     (Proposed browser and runtime operations)
-  - Blocked by: `read path`; `decision 3 in docs/product/README.md`; `Go package owners`
+  - Blocked by: `read path`; `decision 3 in docs/product/README.md`
 
 ## M5: hours 18-21
 
@@ -1687,13 +1850,13 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 - **Exit condition (report).** "A reviewer can understand the task boundary, attempted action,
   decision, actual effect, and limitation without narration filling gaps."
 - **Sync points needed by the end (spine):** X-58 and X-59; X-61 is optional (Tier C).
-  SH-32 recaptures the evidence from the final build and SH-33 runs the rehearsal; the Go owners
-  rerun their scenario tests against that build.
+  SH-32 recaptures the evidence from the final build and SH-33 runs the rehearsal; the Go implementer
+  reruns the scenario tests against that build.
 
-### Implementer 3 (agent runtime)
+### Agent runtime (report role: Implementer 3)
 
 - [ ] **GO-58 · Make every Go stop, failure and denial state readable**
-  - Owner: Implementer 3 (agent runtime) with Implementer 4 · Tier: B · Size: S (estimate 1-3 h)
+  - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-29, GO-42, GO-53 · Needs: X-13, X-16 · Provides: nothing
   - Paths: `services/gateway/internal/httpserver/errors.go`; the packages above
   - Work: Check every reason code and terminal state Go emits against the storyboard (X-16): each
@@ -1710,10 +1873,11 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     behavior); "Illustrative passport and interface contracts" (Decision and error semantics)
   - Blocked by: nothing
 
-### Implementer 4 (enforcement)
+### Enforcement (report role: Implementer 4)
 
 - [ ] **GO-59 · Optional: rehearse an unknown outcome**
-  - Owner: Implementer 4 (enforcement) with Implementer 5 · Tier: C · Size: S (estimate 1-2 h)
+  - **Report 1.1 change:** Report: "Supporting rehearsals hostile instructions limits and uncertainty".
+  - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: C · Size: S (estimate 1-2 h)
   - Depends on: GO-53 · Needs: X-34 · Provides: X-61
   - Paths: none (a labelled rehearsal in the packages above)
   - Work: Simulate an unknown external result for one action, labelled as a simulation, and show the
@@ -1732,15 +1896,15 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   artifacts, and submit using the confirmed organizer requirements."
 - **Exit condition (report).** "Submission checklist is complete; the demonstration matches the
   submitted build and its documented limitations."
-- **Sync points needed by the end (spine):** X-62. The Go owners take part in the feature freeze and
+- **Sync points needed by the end (spine):** X-62. The Go implementer takes part in the feature freeze and
   the critical-fault fixes (SH-34): "If a critical check fails, either fix it or narrow the
   supported behavior and the claims."
 
-### All Go owners
+### All Go areas
 
 - [ ] **GO-61 · Supply the Go technical handoff text**
-  - Owner: Implementers 3, 4 and 5 with the owners recorded in SH-07 · Tier: B ·
-    Size: S (estimate 1-2 h)
+  - **Report 1.1 change:** Adds provenance, templates, the projection and the 13 reason codes; limitation: "The lineage mechanism covers fixed templates and registered adapters".
+  - Owner: Go implementer (all report roles on this side) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: SH-34 · Needs: X-02, X-48, X-49, X-59 · Provides: X-62
   - Paths: `services/gateway/README.md`, `docs/architecture.md` (text supplied to integration)
   - Work: Write the Go part of "setup instructions, architecture and boundaries, synthetic-data
@@ -1764,27 +1928,37 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 ### (a) Critical checks, MVP requirements and the Tier A basis
 
 Critical checks ("Validation plan and evidence matrix", "Proposed critical checks"). Every one of
-the twelve involves the Go side. SH-28 and SH-31 record the outcomes.
+the eighteen involves the Go side. SH-28 and SH-31 record the outcomes.
 
-| Critical check                 | Go tasks that make it pass                                                  | Go evidence    | Recorded by |
-| ------------------------------ | --------------------------------------------------------------------------- | -------------- | ----------- |
-| Legitimate task                | GO-13, GO-26, GO-32, GO-33, GO-34, GO-43, GO-44, GO-45, GO-47               | X-44 (Go half) | SH-28       |
-| Resource boundary              | GO-15, GO-17, GO-28, GO-31, GO-30                                           | X-37           | SH-28       |
-| Destination boundary           | GO-13, GO-28, GO-33, GO-30                                                  | X-38           | SH-28       |
-| Field minimization             | GO-07, GO-22, GO-23, GO-35, GO-56                                           | X-50 (Go half) | SH-31       |
-| Approval integrity             | GO-12, GO-43, GO-45, GO-46                                                  | X-45           | SH-28       |
-| Approval replay                | GO-33, GO-34, GO-44, GO-45, GO-54                                           | X-51           | SH-31       |
-| Budget concurrency             | GO-39, GO-45, GO-50                                                         | X-52           | SH-31       |
-| Unknown usage                  | GO-39                                                                       | X-53 (Go half) | SH-31       |
-| Waiting-state restart          | GO-02, GO-08, GO-40, GO-49                                                  | X-54           | SH-31       |
-| Cancellation and expiry        | GO-11, GO-41, GO-45, GO-51                                                  | X-55 (Go half) | SH-31       |
-| Organization access            | GO-14, GO-21, GO-41, GO-44, GO-57; GO-24 and GO-48 if the read path uses Go | X-56 (Go half) | SH-31       |
-| Database execution transaction | GO-34, GO-55                                                                | X-57           | SH-31       |
+| Critical check                          | Go tasks that make it pass                                                  | Go evidence    | Recorded by |
+| --------------------------------------- | --------------------------------------------------------------------------- | -------------- | ----------- |
+| Legitimate task                         | GO-13, GO-26, GO-32, GO-33, GO-34, GO-43, GO-44, GO-45, GO-47               | X-44 (Go half) | SH-28       |
+| Resource boundary                       | GO-15, GO-17, GO-28, GO-31, GO-30                                           | X-37           | SH-31       |
+| Destination boundary                    | GO-13, GO-28, GO-33, GO-30                                                  | X-38           | SH-31       |
+| Field minimization                      | GO-07, GO-22, GO-23, GO-35, GO-56                                           | X-50 (Go half) | SH-31       |
+| Approval integrity                      | GO-12, GO-43, GO-45, GO-46                                                  | X-45           | SH-28       |
+| Approval replay                         | GO-33, GO-34, GO-44, GO-45, GO-54                                           | X-51           | SH-31       |
+| Budget concurrency                      | GO-39, GO-45, GO-50                                                         | X-52           | SH-31       |
+| Unknown usage                           | GO-39                                                                       | X-53 (Go half) | SH-31       |
+| Waiting-state restart                   | GO-02, GO-08, GO-40, GO-49                                                  | X-54           | SH-31       |
+| Cancellation and expiry                 | GO-11, GO-41, GO-45, GO-51                                                  | X-55 (Go half) | SH-31       |
+| Organization access                     | GO-14, GO-21, GO-41, GO-44, GO-57; GO-24 and GO-48 if the read path uses Go | X-56 (Go half) | SH-31       |
+| Database execution transaction          | GO-34, GO-55                                                                | X-57           | SH-31       |
+| Inherited restriction                   | GO-17, GO-27, GO-32, GO-63, GO-64, GO-66                                    | X-72           | SH-28       |
+| Label and rename tampering              | GO-32, GO-63, GO-64, GO-68                                                  | X-73           | SH-31       |
+| Missing lineage                         | GO-32, GO-63, GO-68                                                         | X-74           | SH-31       |
+| Approved external projection            | GO-29, GO-65, GO-67                                                         | X-75           | SH-28       |
+| Source or template policy changes       | GO-45, GO-52, GO-70                                                         | X-76           | SH-31       |
+| Approval cannot override classification | GO-44, GO-64, GO-69                                                         | X-77           | SH-31       |
 
-The storyboard proofs this side also provides: the permitted reconciliation of beat 3 and the M2
-exit (GO-23, GO-26, GO-27; X-63, observed in SH-36), the continuation of beat 6 in the same run
-(GO-29, GO-36; X-67, recorded in SH-28) and the limit-triggered stop of beat 8 (GO-39, GO-45,
-GO-42; X-46, Go half, recorded in SH-28).
+Report 1.1 adds the last six rows and moves Resource boundary and Destination boundary out of the vertical slice (SH-31 records them); GO-29 is Tier A for the safe continuation.
+
+The storyboard proofs this side also provides (report 1.1 beats): the internal investigation of
+beats 3 and 4 and the M2 exit (GO-23, GO-27, GO-32, GO-63; X-63, observed in SH-36), the denied export
+of beat 5 (GO-64, GO-66; X-72), the tampering attempts of beat 6 (GO-68; X-73), the safe continuation
+of beat 7 (GO-29, GO-65, GO-67; X-67, X-75, recorded in SH-28), the reviewed delivery of beat 8
+(GO-43 to GO-47; X-44) and the limit-triggered stop of beat 9 (GO-39, GO-45, GO-42; X-46, Go half,
+recorded in SH-28).
 
 MVP requirements ("Functional requirements MVP boundary and deferred scope", "Proposed MVP
 requirements and acceptance evidence"). Every one of the ten involves the Go side.
@@ -1846,17 +2020,17 @@ fields and their purpose"):
 
 Internal operations NestJS calls (spine, "Internal runtime operations"):
 
-| Operation                                       | Go task                                                                   | Sync point |
-| ----------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
-| `POST /internal/runs`                           | GO-14                                                                     | X-28       |
-| Cancel command (named at M0)                    | GO-41                                                                     | X-42       |
-| Approval decision command (named at M0)         | GO-44                                                                     | X-40       |
-| Run and usage view; sanitized events by cursor  | GO-24, if the read path uses Go                                           | X-29, X-30 |
-| Exact review payload                            | GO-48, if the read path uses Go                                           | X-41       |
-| Stored report and registered template           | GO-37, if `stored report read` uses Go                                    | X-64       |
-| Task form options                               | GO-25, if `form options` uses Go                                          | X-25       |
-| Events as server-sent events (optional, Tier C) | GO-60, if events stream from Go                                           | X-60       |
-| Replay trigger through NestJS (conditional)     | none until `replay entry` chooses it; the replay owner adds the task then | X-65       |
+| Operation                                       | Go task                                                                     | Sync point |
+| ----------------------------------------------- | --------------------------------------------------------------------------- | ---------- |
+| `POST /internal/runs`                           | GO-14                                                                       | X-28       |
+| Cancel command (named at M0)                    | GO-41                                                                       | X-42       |
+| Approval decision command (named at M0)         | GO-44                                                                       | X-40       |
+| Run and usage view; sanitized events by cursor  | GO-24, if the read path uses Go                                             | X-29, X-30 |
+| Exact review payload                            | GO-48, if the read path uses Go                                             | X-41       |
+| Stored report and registered template           | GO-37, if `stored report read` uses Go                                      | X-64       |
+| Task form options                               | GO-25, if `form options` uses Go                                            | X-25       |
+| Events as server-sent events (optional, Tier C) | GO-60, if events stream from Go                                             | X-60       |
+| Replay trigger through NestJS (conditional)     | none until `replay entry` chooses it; the Go implementer adds the task then | X-65       |
 
 Sync points this side provides, each in or before the milestone that needs it (spine, "Sync
 points"):
@@ -1870,23 +2044,23 @@ points"):
 | M6              | X-62 GO-61                                                                                                            |
 | None (optional) | X-60 GO-60; X-61 GO-59                                                                                                |
 
-**Totals (estimates, not a schedule).** 62 tasks; their ranges add up to 110-222 h, 166 h at the
-midpoints (Tier A 128.5 h, Tier B 34 h, Tier C 3.5 h). That includes 5 h of decide tasks and 7 h of
-conditional endpoint tasks of which only one outcome survives; without them and Tier C it is
-150.5 h. For comparison, the per-row medians of the four estimates' Go midpoints add up to 136.8 h,
-and the four methods' Go midpoints run from 68.25 h to 141.5 h (the estimates are not in the
-repository). Per milestone at the midpoints: P 5 h, M0 4.5 h, M1 64 h, M2 33 h, M3 31 h, M4 23.5 h,
-M5 3.5 h, M6 1.5 h. The spine's capacity observation ("Sides and people", "Effort split") applies
-here too: under one estimate's own assumption of 18 to 20 focused hours per implementer (not a
-report figure), the Go side's 2.3 to 2.5 people have about 41-50 h in the window. Tier A alone is
-87-170 h (128.5 h at the midpoints), all of it in P to M3, and M1 holds 43-85 h, of which 42-82 h
-is Tier A, in a 4-hour window. Removing every Tier B and Tier C task does not close the gap: the
-tiers set the order of cuts but do not make the work fit, and narrowing inside Tier A is the team
-decision described in the spine's "Tiers", recorded through its "Scope changes".
+**Totals (estimates, not a schedule).** 71 tasks; their ranges add up to 126-255 h, 190.5 h at the
+midpoints (Tier A 145.5 h, Tier B 41.5 h, Tier C 3.5 h). That includes 5 h of decide tasks, 7 h of
+conditional endpoint tasks of which only one outcome survives and the conditional GO-71 (3 h);
+without them and Tier C it is 172 h. Report 1.1 added GO-63 to GO-71 (24.5 h at the midpoints). For
+comparison, the per-row medians of the four estimates' Go midpoints add up to 136.8 h, and the four
+methods' Go midpoints run from 68.25 h to 141.5 h (both before report 1.1; the estimates are not in
+the repository). Per milestone at the midpoints: P 5 h, M0 4.5 h, M1 64 h, M2 50 h, M3 32.5 h, M4
+29.5 h, M5 3.5 h, M6 1.5 h. One person, the Go implementer, has at most 24 h in the window (18-20 h
+under one estimate's own assumption of focused hours, not a report figure), plus the lead's help.
+Tier A alone is 99-192 h (145.5 h at the midpoints), all of it in P to M3, and M1 holds 43-85 h, of
+which 42-82 h is Tier A, against at most 4 person-hours. Removing every Tier B and Tier C task does
+not close the gap: the tiers set the order of cuts but do not make the work fit, and narrowing inside
+Tier A is the team decision described in the spine's "Tiers", recorded through its "Scope changes".
 
 ### (b) Diagram components and transitions
 
-Diagram 1 (`docs/product/task-passport-architecture.svg`, Figures 1-3): the ten components of the
+Diagram 1 (section 1 of `docs/product/project-architecture.md`, report Figures 1-3): the ten components of the
 GO group and the provider outside it.
 
 | Component                                                                              | Go tasks                                                                                 |
@@ -1943,7 +2117,7 @@ spine's "Diagram 1 boundary crossings" says. The report: "The diagram's internal
 path should not imply that Go can directly edit every NestJS-owned policy record." Revocation
 writes stay in NestJS (X-47); GO-52 reads them under GATE -> APPDB.
 
-Diagram 2 (`docs/product/task-passport-run-lifecycle.svg`, Figures 4-8): all 51 transitions, grouped
+Diagram 2 (section 2 of `docs/product/project-architecture.md`, report Figures 4-9): all 51 transitions, grouped
 by the task that covers them.
 
 | Transitions                                                                                                                                     | Go tasks                                                    |
