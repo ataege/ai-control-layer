@@ -51,6 +51,14 @@ var (
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// Record identifier shapes (X-09): a fixed prefix and letters, digits, underscores and hyphens, so
+// no prose fits inside an id. Both stay within the semantic action check's constrained identifier
+// format (at most 128 characters), so every id the gate accepts needs no semantic call.
+var (
+	invoiceIDPattern = regexp.MustCompile(`^invoice_[A-Za-z0-9_-]{1,120}$`)
+	vendorIDPattern  = regexp.MustCompile(`^vendor_[A-Za-z0-9_-]{1,121}$`)
+)
+
 // replaySourcePattern is the label of a labelled replay (GO-05, GO-36): labelled_replay:<fixture id>.
 var replaySourcePattern = regexp.MustCompile(`^labelled_replay:[A-Za-z0-9._-]{1,200}$`)
 
@@ -89,11 +97,11 @@ func (CreateReportArguments) Tool() ToolName { return ToolCreateReport }
 func (QueueReportArguments) Tool() ToolName  { return ToolQueueReport }
 
 func (arguments ReadInvoiceArguments) validate() error {
-	return validateIdentifier("invoice_id", arguments.InvoiceID)
+	return validateRecordID("invoice_id", arguments.InvoiceID, invoiceIDPattern)
 }
 
 func (arguments ReadVendorArguments) validate() error {
-	return validateIdentifier("vendor_id", arguments.VendorID)
+	return validateRecordID("vendor_id", arguments.VendorID, vendorIDPattern)
 }
 
 func (arguments CreateReportArguments) validate() error {
@@ -105,7 +113,7 @@ func (arguments CreateReportArguments) validate() error {
 	}
 	seenSourceInvoiceIDs := make(map[string]bool, len(arguments.SourceInvoiceIDs))
 	for _, invoiceID := range arguments.SourceInvoiceIDs {
-		if err := validateIdentifier("source_invoice_ids", invoiceID); err != nil {
+		if err := validateRecordID("source_invoice_ids", invoiceID, invoiceIDPattern); err != nil {
 			return err
 		}
 		if seenSourceInvoiceIDs[invoiceID] {
@@ -120,7 +128,21 @@ func (arguments QueueReportArguments) validate() error {
 	if !uuidPattern.MatchString(arguments.ReportID) {
 		return fmt.Errorf("%w: report_id is not a lowercase UUID", ErrInvalidArguments)
 	}
+	// Recipient references stay bounded, not pattern-strict, so a redirected recipient (an address
+	// taken from content) is stored as a proposal and denied with destination_not_allowed by the
+	// passport's exact-match allowlist and run-scope check, before any semantic check (lead decision).
 	return validateIdentifier("recipient_reference", arguments.RecipientReference)
+}
+
+// validateRecordID accepts only a record identifier of the documented shape (X-09).
+func validateRecordID(fieldName, value string, pattern *regexp.Regexp) error {
+	if err := validateIdentifier(fieldName, value); err != nil {
+		return err
+	}
+	if !pattern.MatchString(value) {
+		return fmt.Errorf("%w: %s is not a record identifier", ErrInvalidArguments, fieldName)
+	}
+	return nil
 }
 
 // validateIdentifier accepts a non-empty, bounded value without control characters. The value is
