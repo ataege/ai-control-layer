@@ -203,6 +203,36 @@ type Ceiling struct {
 	RequestTimeout time.Duration
 }
 
+// RefusalKind names the limit that refused a reservation.
+type RefusalKind string
+
+const (
+	RefusalPaused          RefusalKind = "ledger_paused"
+	RefusalCallsTotal      RefusalKind = "calls_total"
+	RefusalPurposeCalls    RefusalKind = "purpose_calls"
+	RefusalTokenTotal      RefusalKind = "token_total"
+	RefusalPurposeTokens   RefusalKind = "purpose_tokens"
+	RefusalConcurrencySlot RefusalKind = "concurrency_slot"
+)
+
+// ReservationRefusal says which limit refused a reservation, with the requested estimate and what
+// remained (tokens for token limits, calls or slots otherwise). It carries numbers only and
+// unwraps to ErrPaused, ErrExhausted or ErrConcurrencyLimit.
+type ReservationRefusal struct {
+	Kind      RefusalKind
+	Purpose   string
+	Requested int64
+	Limit     int64
+	Remaining int64
+	cause     error
+}
+
+func (refusal *ReservationRefusal) Error() string {
+	return fmt.Sprintf("%v: %s (%s)", refusal.cause, refusal.Kind, refusal.Purpose)
+}
+
+func (refusal *ReservationRefusal) Unwrap() error { return refusal.cause }
+
 // CeilingReserver reserves a call under a ceiling.
 type CeilingReserver interface {
 	ReserveWithin(ctx context.Context, runID, callID, purpose string, tokens int64, ceiling Ceiling) (Reservation, error)
@@ -249,20 +279,23 @@ func (store *PostgresStore) ReserveWithin(ctx context.Context, runID, callID, pu
 	if ceiling.RequestTimeout > 0 && ceiling.RequestTimeout < balance.RequestTimeout {
 		balance.RequestTimeout = ceiling.RequestTimeout
 	}
+	refusal := func(kind RefusalKind, limit, remaining int64, cause error) error {
+		return &ReservationRefusal{Kind: kind, Purpose: purpose, Requested: tokens, Limit: limit, Remaining: max(remaining, 0), cause: cause}
+	}
 	switch {
 	case balance.Paused:
-		return Reservation{}, ErrPaused
+		return Reservation{}, refusal(RefusalPaused, balance.Limit, balance.Limit-balance.Used-balance.Reserved, ErrPaused)
 	case balance.Agent.Calls+balance.Security.Calls >= balance.CallLimit:
-		return Reservation{}, fmt.Errorf("%w: model call limit", ErrExhausted)
+		return Reservation{}, refusal(RefusalCallsTotal, balance.CallLimit, balance.CallLimit-balance.Agent.Calls-balance.Security.Calls, ErrExhausted)
 	case share.Calls >= share.CallLimit:
-		return Reservation{}, fmt.Errorf("%w: %s call limit", ErrExhausted, purpose)
+		return Reservation{}, refusal(RefusalPurposeCalls, share.CallLimit, share.CallLimit-share.Calls, ErrExhausted)
 	case balance.Used > balance.Limit || balance.Reserved > balance.Limit-balance.Used || tokens > balance.Limit-balance.Used-balance.Reserved:
-		return Reservation{}, fmt.Errorf("%w: shared tokens", ErrExhausted)
+		return Reservation{}, refusal(RefusalTokenTotal, balance.Limit, balance.Limit-balance.Used-balance.Reserved, ErrExhausted)
 	case share.TokenLimit != nil && (share.UsedTokens > *share.TokenLimit || share.ReservedTokens > *share.TokenLimit-share.UsedTokens ||
 		tokens > *share.TokenLimit-share.UsedTokens-share.ReservedTokens):
-		return Reservation{}, fmt.Errorf("%w: %s tokens", ErrExhausted, purpose)
+		return Reservation{}, refusal(RefusalPurposeTokens, *share.TokenLimit, *share.TokenLimit-share.UsedTokens-share.ReservedTokens, ErrExhausted)
 	case balance.CallsInFlight >= balance.MaxConcurrentCalls:
-		return Reservation{}, ErrConcurrencyLimit
+		return Reservation{}, refusal(RefusalConcurrencySlot, balance.MaxConcurrentCalls, balance.MaxConcurrentCalls-balance.CallsInFlight, ErrConcurrencyLimit)
 	}
 	_, err = transaction.Exec(ctx, `
 		INSERT INTO runtime.model_token_reservations(run_id, organization_id, call_id, purpose, token_reservation, status,
