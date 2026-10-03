@@ -1,8 +1,8 @@
 # Next.js and NestJS side roadmap
 
 **Status.** Plan only: every task is open and nothing in it is implemented. Derived from the
-project report, `docs/product/task-passport-project-report.docx` (version 1.1, "Report provenance and
-safe continuation", 3 October 2026), from the architecture specification
+project report, `docs/product/task-passport-project-report.docx` (version 1.2, "Official requirements and hybrid security controls", 3 October 2026; lines marked
+"Report 1.2 change" amend a task and win over older text and "Report 1.1 change" lines), from the architecture specification
 `docs/product/project-architecture.md`, from the spine `docs/roadmap/README.md` and from the
 repository at commit `789bcd7`. Lines marked "Report 1.1 change" amend the task they sit in; where
 they disagree with the older fields, they win. Sizes are estimates, not a schedule. The milestone windows are relative to the report's
@@ -19,7 +19,9 @@ scope and six person ownership", report 1.1):
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------- |
 | Web + API implementer (Implementer 1, interface; Implementer 2, application API) | Interface: task form, passport summary, run timeline, approval preview, terminal states, report classification, authorized source trail, export denial and approved alternative template. Application API: NestJS authentication, membership checks, task configuration, runtime facade, authorized event feed, versioned source-policy and projection configuration; coordinates shared contracts | frontend: `apps/web`, `packages/ui`; nestjs: `apps/api`, `packages/contracts` | API, WEB |
 
-One person does both, so the API and WEB tasks run in sequence, not in parallel; the lead helps when
+Report 1.2 adds the policy-file and feed imports, catalog activation, the security summary and audit
+export (API-31 to API-37), and the posture views (WEB-29 to WEB-32). One person does both, so the API
+and WEB tasks run in sequence, not in parallel; the lead helps when
 needed. By default the same person also writes the migrations and seeds on the shared track
 (`shared-track assignment`).
 
@@ -116,7 +118,7 @@ Work that does not wait on decision 7:
 
 ## Task overview
 
-Every task in this file, one row each, in milestone order. 58 tasks: 38 Tier A, 16 Tier B, 4 Tier C. 23 name decision 7 (the authentication hold) under "Blocked by". Generated from the task blocks below on 2026-10-03. The task blocks are the source of truth: when you add, drop or rename a task, update its row in the same change.
+Every task in this file, one row each, in milestone order. 69 tasks: 49 Tier A, 16 Tier B, 4 Tier C. 24 name decision 7 (the authentication hold) under "Blocked by". Generated from the task blocks below on 2026-10-03. The task blocks are the source of truth: when you add, drop or rename a task, update its row in the same change.
 
 ### NestJS (report role: Implementer 2)
 
@@ -124,6 +126,8 @@ Every task in this file, one row each, in milestone order. 58 tasks: 38 Tier A, 
 | ------ | ---- | ---- | -------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | API-01 | P    | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 0.5-1 h   | Confirm the migration tooling against the Compose PostgreSQL image                                          | a fix it needs before the coding window waits on `decision 8 in docs/product/README.md`                                             |
 | API-02 | M0   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 0.5-1.5 h | Check the frozen examples against the checks the public API makes                                           | `contract owners`; the operator context part also `decision 4 in docs/product/README.md` and `decision 7 in docs/product/README.md` |
+| API-31 | M0   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-3 h     | Add the control catalog, active revision and feed records                                                   | nothing                                                                                                                             |
+| API-32 | M0   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 3-5 h     | Import and validate `policy.yaml` into an immutable catalog revision                                        | nothing                                                                                                                             |
 | API-03 | M1   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2.5 h   | Deny every non-public route by default                                                                      | nothing                                                                                                                             |
 | API-04 | M1   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Add the task template, policy version and tool definition entities                                          | nothing                                                                                                                             |
 | API-05 | M1   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2.5 h   | Add the user and membership entities                                                                        | `decision 7 in docs/product/README.md`                                                                                              |
@@ -143,13 +147,18 @@ Every task in this file, one row each, in milestone order. 58 tasks: 38 Tier A, 
 | API-28 | M2   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Add the report template and projection rule records                                                         | `vendor projection fields` (rule content)                                                                                           |
 | API-29 | M2   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-3 h     | Record trusted source classifications and recipient rules, if `source classification storage` chooses `app` | `source classification storage`                                                                                                     |
 | API-30 | M2   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Serve the report classification and trusted source trail to authorized users                                | `stored report read`; `report storage`; `read path`; `decision 7 in docs/product/README.md`                                         |
+| API-34 | M2   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Validate and import the signature feed                                                                      | `feed grammar and trust`                                                                                                            |
 | API-19 | M3   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Serve the exact review payload to authorized reviewers only                                                 | `read path`; `review payload read`; `decision 7 in docs/product/README.md`                                                          |
 | API-20 | M3   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1.5-3 h   | Forward approval decisions through `POST /api/actions/{id}/approval`                                        | `decision 7 in docs/product/README.md`                                                                                              |
 | API-21 | M3   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2 h     | Forward cancellation through `POST /api/runs/{id}/cancel`                                                   | `decision 7 in docs/product/README.md`                                                                                              |
 | API-22 | M3   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1.5-3.5 h | Record revocations in the app schema                                                                        | `revocation reads`; `decision 7 in docs/product/README.md`                                                                          |
+| API-33 | M3   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 3-5 h     | Serve the authenticated policy reload and activation                                                        | `catalog activation protocol`; `decision 7 in docs/product/README.md`                                                               |
 | API-23 | M4   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1.5-3 h   | Record organization access evidence on the public path                                                      | nothing                                                                                                                             |
 | API-24 | M4   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2.5 h   | Record field minimization evidence for the activity views                                                   | nothing                                                                                                                             |
 | API-25 | M4   | C    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Optional: serve the activity feed over server-sent events                                                   | `read path`; `decision 3 in docs/product/README.md`                                                                                 |
+| API-35 | M4   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Serve the security summary                                                                                  | `read path`                                                                                                                         |
+| API-36 | M4   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 2-4 h     | Serve the sanitized audit export                                                                            | `read path`                                                                                                                         |
+| API-37 | M4   | A    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2 h     | Prove the audit export and security summary                                                                 | nothing                                                                                                                             |
 | API-26 | M5   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 1-2 h     | Clean up the API's error states                                                                             | nothing                                                                                                                             |
 | API-27 | M6   | B    | Web + API implementer (report role: Implementer 2, application API)                                | S, 0.5-1.5 h | Supply the NestJS part of the technical handoff                                                             | nothing                                                                                                                             |
 
@@ -172,15 +181,19 @@ Every task in this file, one row each, in milestone order. 58 tasks: 38 Tier A, 
 | WEB-13 | M2   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 1-2 h     | Label the simulated outbox, replays and the development demonstration     | nothing                                                                                               |
 | WEB-27 | M2   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 2-4 h     | Show the report classification and source trail on the run page           | `stored report read`                                                                                  |
 | WEB-28 | M2   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 2-4 h     | Explain the export denial and the safe continuation                       | nothing                                                                                               |
+| WEB-32 | M2   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 2-3 h     | Show hybrid decisions in the run timeline                                 | nothing                                                                                               |
 | WEB-14 | M3   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | M, 3.5-6.5 h | Build the approval preview of the stored action                           | `review payload read`; `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md` |
 | WEB-15 | M3   | B    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 0.5-1.5 h | Add the cancel control that says cancellation is not a reversal           | `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`                        |
 | WEB-16 | M3   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 1.5-3.5 h | Show usage with reported, reserved and estimated amounts apart            | `decision 6 in docs/product/README.md` (the estimated cost display)                                   |
 | WEB-17 | M3   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 0.5-1.5 h | Show the limit-triggered stop with its terminal reason                    | nothing                                                                                               |
 | WEB-18 | M3   | A    | Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) | S, 1-3 h     | Run the legitimate task through the interface                             | nothing                                                                                               |
+| WEB-29 | M3   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 2-3 h     | Show the active controls, policy revision and reload state                | nothing                                                                                               |
 | WEB-19 | M4   | B    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 0.5-1.5 h | Show unknown usage as uncertain on a real run                             | `decision 6 in docs/product/README.md`                                                                |
 | WEB-20 | M4   | B    | Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) | S, 0.5-1.5 h | Repeat the workflow through the interface after a reset                   | nothing                                                                                               |
 | WEB-21 | M4   | C    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 1-3 h     | Optional: receive the activity feed over server-sent events               | `decision 3 in docs/product/README.md`                                                                |
 | WEB-22 | M4   | C    | Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) | M, 3-6 h     | Optional: show the demonstration baseline in the interface                | `demonstration baseline`; `read path`                                                                 |
+| WEB-30 | M4   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 3-5 h     | Build the security posture dashboard                                      | nothing                                                                                               |
+| WEB-31 | M4   | A    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 1-2 h     | Offer the authorized audit export                                         | nothing                                                                                               |
 | WEB-23 | M5   | B    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 2-4 h     | Polish the error states                                                   | nothing                                                                                               |
 | WEB-24 | M5   | B    | Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) | S, 1-3 h     | Make every demonstration beat observable for the rehearsal                | nothing                                                                                               |
 | WEB-25 | M5   | C    | Web + API implementer (report role: Implementer 1, interface)                                      | S, 1-3 h     | Optional: polish comprehension beyond the exit condition                  | nothing                                                                                               |
@@ -284,7 +297,7 @@ Every task in this file, one row each, in milestone order. 58 tasks: 38 Tier A, 
   `docs/team-workflow.md` ("Changing a shared contract"); the spine, "Contracts to freeze first".
 - **Truthful labels.** The simulated outbox, replays, sample data, the development demonstration and
   estimated cost are labelled. Limits shown come from the persisted passport and policy; the
-  report's example limits are illustrative values, not requirements. Source: AGENTS.md guardrail 7;
+  report's example limits are illustrative values, not requirements. Source: AGENTS.md guardrail 9;
   report "Live demonstration storyboard and proof checks" and "Atomic allowances hard limits and
   estimated cost".
 - **Health and diagnostics stay public.** Health and diagnostics stay public in local development
@@ -343,11 +356,9 @@ The interface work has no task of its own in P: SH-02 (decision 3) and SH-08 cov
 
 ## M0 (hours 0-2)
 
-- Team focus (report 1.1): "Confirm rules and sponsor expectations; freeze task, contracts, tool
-  arguments, policy fixture, and schema ownership. Bring up the starter and provider connection. Fix
-  the two classifications, two report templates and approved vendor field projection."
-- Exit condition (report 1.1): "A single documented workflow, working service connectivity, and an
-  agreed contract example for each command and event."
+- Team focus (report 1.2): "Confirm start/deadline and reuse guidance. Freeze task/adapter/verdict contracts, policy schema, shared and security budgets, two templates, projection and migration ownership. Choose a local model that runs on the actual machine."
+- Exit condition (report 1.2): "Services connect; policy imports successfully; agent and guard requests can be made within recorded limits; the initial test command and fixtures exist."
+- Report 1.2 sync points (spine): X-78, X-80, X-81, X-84, X-89 (initial).
 - Sync points needed by the end (spine): X-03 to X-06. This side consumes X-03 and X-06 directly;
   X-05 reaches it through X-16. SH-11 lands X-07 to X-13 after the freeze; they are needed by M1.
 
@@ -384,6 +395,26 @@ must enforce and show, so that any gap reaches the document owner in the same se
     operations); "Technical architecture and service ownership" (Interfaces and repository strategy)
   - Blocked by: `contract owners`; the operator context part also `decision 4 in docs/product/README.md` and `decision 7 in docs/product/README.md`
 
+- [ ] **API-31 · Add the control catalog, active revision and feed records**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
+  - Depends on: SH-10 · Needs: X-78 · Provides: X-80 (part: entities)
+  - Paths: `apps/api/src` (a new module; the architecture proposes PoliciesModule), `apps/api/src/database/typeorm-options.ts`
+  - Work: `app` entities with `schema: "app"` for immutable catalog revisions (content, file digest, source file name, validation result, created by), the active-version pointer with its requested, validated and active states, and trusted feed revisions (issuer, revision, digest). Names are decided at the M0 freeze.
+  - Done when: once SH-43 has migrated them, a revision and its pointer can be stored and Go can read the active one.
+  - Tests: `pnpm --filter api run test`; `pnpm db:migration:generate <Name>` yields only `app` statements.
+  - Report: "Data ownership and the transition from starter to product" (Proposed database ownership); "Central policy configuration and safe reload"
+  - Blocked by: nothing
+
+- [ ] **API-32 · Import and validate `policy.yaml` into an immutable catalog revision**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 3-5 h, this roadmap's estimate)
+  - Depends on: API-31 · Needs: X-78 · Provides: X-81
+  - Paths: `apps/api/src` (the module from API-31); `package.json` for an explicit import command (through integration)
+  - Work: Parse a bounded schema, reject unknown executable plugins and arbitrary URLs, validate rule and model references and budget values, record the file digest and write a new immutable revision. The first valid import sets the active pointer; an invalid file never partially activates and leaves an error visible. The file is an import input, "not a second configuration authority". The authenticated reload is API-33.
+  - Done when: the sample file imports successfully and an invalid copy is rejected with its reason (M0 exit: "policy imports successfully").
+  - Tests: `pnpm --filter api run test` with valid and invalid files (unknown model, impossible limit, URL, unknown control).
+  - Report: "Central policy configuration and safe reload"; "Illustrative passport and interface contracts" (Documented policy file and reload contract)
+  - Blocked by: nothing
+
 ### Next.js (report role: Implementer 1)
 
 - [ ] **WEB-01 · Check the frozen examples against what the interface must show**
@@ -411,10 +442,9 @@ must enforce and show, so that any gap reaches the document owner in the same se
 
 ## M1 (hours 2-6)
 
-- Team focus (report): "Build the vertical path in parallel: task form, authenticated facade,
-  admission, worker, live model call, one read tool, and event feed."
-- Exit condition (report): "A real operator starts a run; Go executes a permitted tool; the
-  interface displays the actual persisted result."
+- Team focus (report 1.2): "Build task form, authenticated facade, admission, local model gateway, one governed read, deterministic content handling, live semantic tool-result check and events."
+- Exit condition (report 1.2): "A real task executes one allowed read; a hostile tool-result fixture is blocked before agent context; both model purposes appear in usage and latency records."
+- Report 1.2 sync points (spine): X-79, X-85, X-86.
 - Sync points needed by the end (spine): X-07 to X-32. This side provides X-17 (API-04 and API-05),
   X-26 (API-10), X-31 (API-07, API-11, API-13, API-14 and WEB-02) and, if `form options` chooses
   app records, X-25 (API-12).
@@ -460,6 +490,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Blocked by: nothing
 
 - [ ] **API-04 · Add the task template, policy version and tool definition entities**
+  - **Report 1.2 change:** The policy configuration now comes from `policy.yaml` imported into the catalog (API-31 to API-33); there is no policy editor screen.
   - **Report 1.1 change:** Module names: the architecture's proposal, TasksModule, PoliciesModule and ToolsModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: SH-10 · Needs: X-24 · Provides: X-17 (part: task, policy and tool entities)
@@ -625,6 +656,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **API-11 · Start a run through `POST /api/runs`**
+  - **Report 1.2 change:** The facade also forwards the catalog validation request of API-33.
   - **Report 1.1 change:** Module proposal RuntimeModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-10 · Needs: X-03, X-07, X-13, X-15, X-28 · Provides: X-31 (part)
@@ -651,6 +683,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Blocked by: `decision 7 in docs/product/README.md`; `command timeout budget`
 
 - [ ] **API-12 · Serve the task form's options**
+  - **Report 1.2 change:** Model choices come only from the active catalog allowlist.
   - **Report 1.1 change:** The options add which internal evidence may be consulted and which report types may be created.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3.5 h)
   - Depends on: API-04, API-08 · Needs: X-06, X-21, X-24; X-25 unless `form options` chooses app
@@ -818,6 +851,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Blocked by: `decision 7 in docs/product/README.md`; `smoke under login`
 
 - [ ] **WEB-05 · Build the task form**
+  - **Report 1.2 change:** Model selection is constrained by the catalog allowlist.
   - **Report 1.1 change:** The form adds internal evidence and report types; route proposal `/tasks/new`.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2.5-5 h)
   - Depends on: WEB-03, WEB-04, API-11, API-12 · Needs: X-06, X-25 · Provides: nothing
@@ -874,7 +908,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     sample-data wording. Hand the matching texts of `README.md` and `docs/architecture.md`
     ("The starter has only `GET` routes", the CORS sentence, the empty "Product modules" table) to
     integration.
-  - Done when: no page states something the build contradicts (AGENTS.md guardrail 7; "Verify that
+  - Done when: no page states something the build contradicts (AGENTS.md guardrail 9; "Verify that
     spending uncertainty, simulated effects and unimplemented features remain visible in the report
     and demonstration").
   - Tests: `pnpm smoke` (the three pages still answer 200); a browser check of the shell, quoted.
@@ -884,12 +918,12 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ## M2 (hours 6-10)
 
-- Team focus (report 1.1): "Complete the four adapters, scoped reads, trusted source manifests, both
-  fixed report templates, inherited classifications, destination checks and bounded feedback."
+- Team focus (report 1.2): "Complete the four adapters, scoped reads, trusted source manifests, both fixed report templates, inherited classifications, destination checks and bounded feedback. Implement current-catalog lookup and versioned signature-rule activation; add otherwise permitted action semantic checks."
 - Exit condition (report 1.1): "An internal report is retained for authorized internal viewing; its
   vendor export is denied; a separate approved-field vendor report can be created." This side adds
   API-28 to API-30, WEB-27 and WEB-28 and needs X-68, X-69 and X-71; X-37 and X-38 are needed by M4
   now.
+- Report 1.2 sync points (spine): X-82, X-87, X-88.
 - Sync points needed by the end (spine): X-33 to X-38, X-63 and X-64 (X-65 only if the replay is
   triggered through NestJS). This side consumes X-34, X-35, X-36 and X-64, and X-65 in that case,
   and provides none of them; the X-65 tasks (the facade operation and the control that triggers it) are added once that outcome is chosen (spine, X-65).
@@ -906,6 +940,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
 ### NestJS (report role: Implementer 2)
 
 - [ ] **API-16 · Check role and object access on every read and command**
+  - **Report 1.2 change:** Roles add the configuration operator (policy reload) and the security reader (audit export); the policy administrator edits "the validated central policy file".
   - **Report 1.1 change:** Roles: "approval cannot widen the passport or override a source restriction"; the policy administrator role is to "Maintain versioned policies, trusted source classifications, and the two permitted template manifests".
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-11, API-13, API-14 · Needs: X-24, X-34 · Provides: nothing
@@ -1016,9 +1051,20 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     storyboard and proof checks" (beat 4)
   - Blocked by: `stored report read`; `report storage`; `read path`; `decision 7 in docs/product/README.md`
 
+- [ ] **API-34 · Validate and import the signature feed**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
+  - Depends on: API-32 · Needs: X-87 · Provides: X-88
+  - Paths: `apps/api/src` (the module from API-31)
+  - Work: Validate the schema, the pinned issuer and signature or the authenticated trusted import, the bounded size and the supported pattern grammar before incorporating the feed into a catalog revision. "A content hash alone does not authenticate its publisher." Untrusted or invalid revisions keep the last-known-good feed and expose the failure.
+  - Done when: the sample feed imports, and a tampered or oversized copy is rejected.
+  - Tests: `pnpm --filter api run test` with valid, tampered, oversized and unsupported-grammar feeds.
+  - Report: "Hybrid security controls and managed attack signatures" (Trusted historical attack feed)
+  - Blocked by: `feed grammar and trust`
+
 ### Next.js (report role: Implementer 1)
 
 - [ ] **WEB-08 · Show the passport summary beside the timeline**
+  - **Report 1.2 change:** The passport summary shows the active policy version and the allowed models.
   - **Report 1.1 change:** Shows the allowed report templates. No policy editor is planned (open item `policy editor`).
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1.5-4 h)
   - Depends on: WEB-06 · Needs: X-08 · Provides: nothing
@@ -1172,12 +1218,22 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     and proposed user journeys" (Journey 3)
   - Blocked by: nothing
 
+- [ ] **WEB-32 · Show hybrid decisions in the run timeline**
+  - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
+  - Depends on: WEB-06 · Needs: X-12, X-13 · Provides: nothing
+  - Paths: `apps/web`
+  - Work: Show allowed, blocked and redacted decisions with their rule, reason code, revision and model purpose. Blocked text is withheld and never shown as consumed by the agent; a guard failure is a visible pause.
+  - Done when: the hostile-note run shows the block before context and the clean run shows its allow.
+  - Tests: `pnpm --filter web run test` with the contract fixtures.
+  - Report: "Live demonstration storyboard and proof checks" (beat 10); "Users operating model and proposed user journeys" (Journey 3)
+  - Blocked by: nothing
+
 ## M3 (hours 10-14)
 
-- Team focus (report): "Add frozen action previews, authorized approval decisions, approval
-  consumption, model/tool reservations, and controlled stopping."
+- Team focus (report 1.2): "Add frozen action previews, authorized approval decisions, approval consumption, model/tool reservations, and controlled stopping. Finish shared/purpose token limits, request timeout and local concurrency enforcement, validated policy reload and last-known-good behavior."
 - Exit condition (report): "The reviewed action executes once; changed content and depleted
   allowance cannot dispatch an operation."
+- Report 1.2 sync points (spine): X-83.
 - Sync points needed by the end (spine): X-39 to X-46, X-66 and X-67. This side provides X-43 (its
   approval part from API-20 and WEB-14, its cancel part from API-21 and WEB-15), X-44 (WEB-18, its
   Next.js and NestJS part), X-46 (WEB-17, its Next.js part) and X-66 (API-22), and already delivers
@@ -1280,6 +1336,16 @@ this side starts and reviews.
     cancellation and revocation prevent future dispatch after a review wait")
   - Blocked by: `revocation reads`; `decision 7 in docs/product/README.md`
 
+- [ ] **API-33 · Serve the authenticated policy reload and activation**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 3-5 h, this roadmap's estimate)
+  - Depends on: API-32, API-16 · Needs: X-79 · Provides: X-83 (part: import and pointer)
+  - Paths: `apps/api/src` (the module from API-31 and the runtime facade)
+  - Work: `POST /api/policies/reload`: verify the actor is an authorized configuration operator, import the file through API-32, ask Go to validate and acknowledge the candidate, then publish the active pointer. Expose the requested, validated and active revisions and the reload error. Invalid reloads keep the last-known-good revision.
+  - Done when: a valid edit becomes active without restarting any service and an invalid edit leaves the previous revision active with a visible error.
+  - Tests: `pnpm --filter api run test` for authority, validation failure and the Go acknowledgement failure.
+  - Report: "Central policy configuration and safe reload"; "Illustrative passport and interface contracts" (Proposed browser and runtime operations)
+  - Blocked by: `catalog activation protocol`; `decision 7 in docs/product/README.md`
+
 ### Next.js (report role: Implementer 1)
 
 - [ ] **WEB-14 · Build the approval preview of the stored action**
@@ -1328,6 +1394,7 @@ this side starts and reviews.
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **WEB-16 · Show usage with reported, reserved and estimated amounts apart**
+  - **Report 1.2 change:** Shows agent and security usage separately.
   - **Report 1.1 change:** Beat 9; X-46 as amended in the spine.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1.5-3.5 h)
   - Depends on: WEB-08 · Needs: X-11 · Provides: nothing
@@ -1385,13 +1452,21 @@ this side starts and reviews.
     demonstration storyboard and proof checks" (Proposed demo sequence, beats 1, 3 and 7)
   - Blocked by: nothing
 
+- [ ] **WEB-29 · Show the active controls, policy revision and reload state**
+  - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
+  - Depends on: API-33 · Needs: X-83 · Provides: nothing
+  - Paths: `apps/web`
+  - Work: Show the active revision, the enabled controls and thresholds, and the requested, validated and active reload states with any rejection, "so judges can see when a change is effective".
+  - Done when: after a valid and an invalid reload the page shows the right active revision and the error.
+  - Tests: `pnpm --filter web run test` with the contract fixtures.
+  - Report: "Users operating model and proposed user journeys" (Journey 4); "Central policy configuration and safe reload"
+  - Blocked by: nothing
+
 ## M4 (hours 14-18)
 
-- Team focus (report 1.1): "Exercise concurrency and waiting-state recovery; inspect context and safe
-  events; finish reset and deployment procedures. Verify label tampering, missing lineage, rename
-  attempts and changed source-policy versions."
-- Exit condition (report): "Critical checks have recorded outcomes, and the team can reset fixtures
-  and repeat the workflow."
+- Team focus (report 1.2): "Run the automated positive/negative/redaction/budget/exploit suite; exercise approval concurrency, source-version changes, policy changes, guard failures and waiting-state recovery. Complete management summary, sanitized audit export, latency summary and judge client."
+- Exit condition (report 1.2): "Actual assertion results are retained; missing or failed checks remain visible; judge can change a rule and submit an unexpected input through real controls."
+- Report 1.2 sync points (spine): X-89 (complete), X-90 to X-104.
 - Sync points needed by the end (spine): X-02 and X-47 to X-57. This side provides X-50 (API-24),
   X-53 (WEB-19) and X-56 (API-23), each for its part; X-47 (API-22) and X-55 (API-21) were
   delivered in M3. It consumes X-48 (WEB-20); X-02 and X-49 reach it through the spine.
@@ -1461,6 +1536,36 @@ sit here, before the final build's evidence is captured, and are cut first.
     runtime operations)
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`
 
+- [ ] **API-35 · Serve the security summary**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
+  - Depends on: API-16 · Needs: X-85, X-95 · Provides: X-93
+  - Paths: `apps/api/src` (the activity module; the architecture proposes ActivityModule)
+  - Work: `GET /api/security/summary`: organization-scoped active controls, allowed, blocked and redacted counts, rule hits, security failures, unresolved usage and agent and security consumption, with no raw protected content.
+  - Done when: the summary's counts reconcile with the persisted decisions for a seeded run.
+  - Tests: `pnpm --filter api run test` with an authorized and a cross-organization caller.
+  - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
+  - Blocked by: `read path`
+
+- [ ] **API-36 · Serve the sanitized audit export**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
+  - Depends on: API-16 · Needs: X-79, X-85 · Provides: X-94
+  - Paths: `apps/api/src` (the activity module)
+  - Work: `GET /api/security/audit/export`: sanitized JSON or CSV decision records for authorized security readers, scoped by organization, time or cursor and run, with explicit range limits. Records carry stable rule and reason codes, model purpose, policy and feed revisions and timings; "CSV text cells are neutralized against spreadsheet formula interpretation". Not a tamper-proof audit system.
+  - Done when: an authorized reader exports both formats and an unauthorized or cross-organization request is rejected.
+  - Tests: `pnpm --filter api run test`, including a CSV cell starting with `=`.
+  - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
+  - Blocked by: `read path`
+
+- [ ] **API-37 · Prove the audit export and security summary**
+  - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
+  - Depends on: API-35, API-36 · Needs: X-89 · Provides: X-104
+  - Paths: none (tests run through the X-89 suite)
+  - Work: Reconcile the summary with the event records, export authorized JSON and CSV, reject a cross-organization request and show that protected text is omitted.
+  - Done when: the evidence of X-104 is captured.
+  - Tests: the suite cases with the results quoted.
+  - Report: "Validation plan and evidence matrix" (Audit export and security summary)
+  - Blocked by: nothing
+
 ### Next.js (report role: Implementer 1)
 
 - [ ] **WEB-19 · Show unknown usage as uncertain on a real run**
@@ -1528,12 +1633,32 @@ sit here, before the final build's evidence is captured, and are cut first.
     register and scope controls" (Demo proves logs, not prevention)
   - Blocked by: `demonstration baseline`; `read path`
 
+- [ ] **WEB-30 · Build the security posture dashboard**
+  - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 3-5 h, this roadmap's estimate)
+  - Depends on: API-35 · Needs: X-93 · Provides: nothing
+  - Paths: `apps/web`
+  - Work: Management aggregates for allowed, blocked and redacted interactions, active controls, rule hits, security failures, unresolved usage and agent and security consumption, with measured durations kept apart from cost estimates. Show only real responses.
+  - Done when: the dashboard matches the summary for a seeded run.
+  - Tests: `pnpm --filter web run test` with the contract fixtures.
+  - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel); "Delivery scope and six person ownership" (Implementer 1)
+  - Blocked by: nothing
+
+- [ ] **WEB-31 · Offer the authorized audit export**
+  - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
+  - Depends on: API-36 · Needs: X-94 · Provides: nothing
+  - Paths: `apps/web`
+  - Work: Let an authorized security reader choose the range and format and download the export through the server-side proxy; hide the control from others.
+  - Done when: an authorized reader downloads JSON and CSV and an unauthorized one sees no control and gets a refusal.
+  - Tests: `pnpm --filter web run test`.
+  - Report: "Durable state idempotency audit and uncertain outcomes"
+  - Blocked by: nothing
+
 ## M5 (hours 18-21)
 
-- Team focus (report): "Polish comprehension and error states; rehearse the complete story; capture
-  evidence from the final build."
+- Team focus (report 1.2): "Polish comprehension and error states; rehearse the complete story; capture evidence from the final build. Run live semantic fixtures and performance measurements on the presentation machine; rehearse configuration changes and ad-hoc input."
 - Exit condition (report): "A reviewer can understand the task boundary, attempted action, decision,
   actual effect, and limitation without narration filling gaps."
+- Report 1.2 sync points (spine): X-105.
 - Sync points needed by the end (spine): X-58 and X-59 (X-60 and X-61 are optional). This side
   provides X-58 (WEB-24); API-27 and WEB-26 consume X-59 in M6.
 
@@ -1543,6 +1668,7 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
 ### NestJS (report role: Implementer 2)
 
 - [ ] **API-26 · Clean up the API's error states**
+  - **Report 1.2 change:** Uses the 20 proposed reason codes.
   - **Report 1.1 change:** Uses the 13 proposed reason codes.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: API-20, API-21 · Needs: X-13 · Provides: nothing
@@ -1587,11 +1713,12 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
   - Blocked by: nothing
 
 - [ ] **WEB-24 · Make every demonstration beat observable for the rehearsal**
+  - **Report 1.2 change:** Twelve beats in three evidence segments.
   - **Report 1.1 change:** Nine beats.
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: WEB-13, WEB-17, WEB-18, WEB-23 · Needs: X-16 · Provides: X-58
   - Paths: `apps/web/src/app` (the product pages)
-  - Work: Walk the nine beats of the demo specification (X-16) on the final build and fix what the
+  - Work: Walk the twelve beats of the demo specification (X-16) on the final build and fix what the
     interface does not show: the passport, the attempted action and its decision, the actual effect
     and the limitation, with the labels for the simulated outbox, replays and estimated cost. Beat
     2's baseline uses SH-28's documented read-only queries unless `demonstration baseline` names
@@ -1599,7 +1726,7 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
   - Done when: someone who did not build the screens can observe the M5 exit: "A reviewer can
     understand the task boundary, attempted action, decision, actual effect, and limitation without
     narration filling gaps."
-  - Tests: a walk-through of the nine beats on the final build with screenshots, quoted.
+  - Tests: a walk-through of the twelve beats on the final build with screenshots, quoted.
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence); "Relative
     implementation milestones and critical dependencies" (Proposed 24-hour implementation sequence)
   - Blocked by: nothing
@@ -1623,8 +1750,7 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
 
 ## M6 (hours 21-24)
 
-- Team focus (report): "Freeze features, fix critical faults, finalize documentation and artifacts,
-  and submit using the confirmed organizer requirements."
+- Team focus (report 1.2): "Freeze the submission build and configuration, fix critical faults before the confirmed deadline, capture test/telemetry evidence, finalize the maximum 10-slide PDF and HackTribe fields, and submit. Preserve the submitted commit and artifact checksums."
 - Exit condition (report): "Submission checklist is complete; the demonstration matches the
   submitted build and its documented limitations."
 - Sync points needed by the end (spine): X-62. This side provides it with the Go side (API-27 and
@@ -1637,6 +1763,7 @@ handoff from X-62, and RS-09 submits.
 ### NestJS (report role: Implementer 2)
 
 - [ ] **API-27 · Supply the NestJS part of the technical handoff**
+  - **Report 1.2 change:** Adds the policy file, catalog reload, security summary and audit export.
   - **Report 1.1 change:** Adds the report templates and projection rules.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: SH-34 · Needs: X-59 · Provides: X-62 (part)
@@ -1849,15 +1976,16 @@ spine: the plan assumes the starter may be used (X-01, so a negative answer chan
 container run checks this side's images (X-02), the requirements sheet feeds the demo specification
 (X-05 into X-16), and the deployment procedure is SH-30's.
 
-**Totals (estimates, not a schedule).** 58 tasks; their ranges add up to 88.5-194.5 h, 141.5 h at
-the midpoints (Tier A 104.5 h, Tier B 25.5 h, Tier C 11.5 h). Report 1.1 added API-28 to API-30,
-WEB-27 and WEB-28 (14 h at the midpoints). Per milestone: P 0.5-1 h, M0 1-3 h, M1 35.5-75 h, M2
-23-50.5 h, M3 13-28.5 h, M4 9.5-21.5 h, M5 5-12 h, M6 1-3 h; the SH tasks the web + API implementer
-owns by default (SH-01 to SH-03, SH-11, SH-39 and the migrations and seeds) come on top. Tier A alone
-is 66.5-142.5 h, all of it in P to M3, against at most 24 person-hours for one implementer working all
-24 hours without a break. M1 holds 35.5-75 h (Tier A 34-71.5 h; Tier B 1.5-3.5 h in API-15 and
-WEB-07; no Tier C) against 4 person-hours in hours 2-6. Removing every Tier B and Tier C task does not
-close the gap; narrowing inside Tier A is the team decision described in the spine's "Tiers".
+**Totals (estimates, not a schedule).** 69 tasks; their ranges add up to 111.5-234.5 h, 173 h at the
+midpoints (Tier A 136 h, Tier B 25.5 h, Tier C 11.5 h). Report 1.1 added API-28 to API-30, WEB-27 and
+WEB-28 (14 h at the midpoints) and report 1.2 added API-31 to API-37 and WEB-29 to WEB-32 (31.5 h).
+Per milestone: P 0.5-1 h, M0 6-11 h, M1 35.5-75 h, M2 27-57.5 h, M3 18-36.5 h, M4 18.5-38.5 h, M5
+5-12 h, M6 1-3 h; the SH tasks the web + API implementer owns by default (SH-01 to SH-03, SH-11, SH-39,
+SH-42 and the migrations and seeds) come on top. Tier A alone is 89.5-182.5 h, now including M4 work,
+against at most 24 person-hours for one implementer working all 24 hours without a break. M1 holds
+35.5-75 h (Tier A 34-71.5 h; Tier B 1.5-3.5 h in API-15 and WEB-07; no Tier C) against 4
+person-hours in hours 2-6. Removing every Tier B and Tier C task does not close the gap; narrowing
+inside Tier A is the team decision described in the spine's "Tiers".
 
 ### Report items that need no task in this file
 

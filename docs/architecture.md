@@ -293,13 +293,14 @@ waiting on PostgreSQL answers 503 at once instead of holding up the drain.
 
 ## Product modules
 
-None yet. The intended product design is the report and the architecture specification,
+None yet. The intended product design is the report (version 1.2) and the architecture specification,
 [docs/product/project-architecture.md](product/project-architecture.md) (overview in
 [docs/product](product/README.md)); it is a design, not implemented code. The specification's
 repository structure differs from this repository: migrations stay in
 `apps/api/src/database/migrations`, Compose is `infra/compose.yaml` and design files are in
 `docs/product` (open item `repository layout`); its private service network is open item
-`deployment network`. When the first code of a product module lands, add a row here in the same change.
+`deployment network`, and it predates report 1.2's hybrid controls, catalog, feed, reporting and
+telemetry (`architecture specification version`). When the first code of a product module lands, add a row here in the same change.
 
 | Module | Owner service | Responsibility | Contracts | Tables |
 | ------ | ------------- | -------------- | --------- | ------ |

@@ -155,11 +155,14 @@ The project is in the implementation phase. Every feature follows the same loop.
    `git pull --rebase --autostash` and `git push` (`AGENTS.md`, "Committing and pushing"). Merge
    small and often.
 
-The report settles several team-level decisions: four components and no message broker, one model
-provider called only by Go, two report classifications and two fixed report templates with report
+The report settles several team-level decisions: four components and no message broker, one locally
+hosted model provider called only by Go and serving the agent and the security evaluator under
+separate metered purposes (report 1.2), hybrid deterministic and semantic controls, one editable
+`policy.yaml` imported into a versioned control catalog, an automated test suite, a security summary
+and audit export, performance telemetry, two report classifications and two fixed report templates with report
 provenance in Go, organization-scoped authentication in NestJS with a seeded demo
-operator, and synthetic data in the `demo` schema. Still open for the whole team: which model
-provider, the authentication mechanism, and the other open decisions in
+operator, and synthetic data in the `demo` schema. Still open for the whole team: which local
+model, the authentication mechanism, and the other open decisions in
 [docs/product/README.md](product/README.md), including the open items between the report and the
 architecture specification. Demo data
 is an explicit, documented command, never loaded at application startup, and labelled as sample
