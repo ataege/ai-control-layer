@@ -19,4 +19,8 @@ export const GENERATED_SECRETS = {
     label: "operator-context signing key",
     generate: () => randomBytes(48).toString("base64url"), // 64 characters, 384 bits
   },
+  DEMO_OPERATOR_PASSWORD: {
+    label: "demo operator password",
+    generate: () => randomBytes(12).toString("base64url"), // 16 characters
+  },
 };

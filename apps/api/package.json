@@ -17,7 +17,8 @@
     "migration:generate": "node scripts/typeorm-cli.mjs generate",
     "migration:show": "node scripts/typeorm-cli.mjs show",
     "migration:run": "node scripts/typeorm-cli.mjs run",
-    "migration:revert": "node scripts/typeorm-cli.mjs revert"
+    "migration:revert": "node scripts/typeorm-cli.mjs revert",
+    "seed": "nest build && node dist/seed.js"
   },
   "dependencies": {
     "@nestjs/common": "12.1.2",

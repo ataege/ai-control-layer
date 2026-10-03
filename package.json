@@ -27,11 +27,12 @@
     "test:db": "node scripts/test-db.mjs",
     "test:fixtures": "node --test \"fixtures/*.test.mjs\"",
     "check:instructions": "node scripts/check-instructions.mjs",
-    "db:migration:create": "node scripts/with-env.mjs pnpm --filter api run migration:create",
-    "db:migration:generate": "node scripts/with-env.mjs pnpm --filter api run migration:generate",
-    "db:migration:show": "node scripts/with-env.mjs pnpm --filter api run migration:show",
-    "db:migration:run": "node scripts/with-env.mjs pnpm --filter api run migration:run",
-    "db:migration:revert": "node scripts/with-env.mjs pnpm --filter api run migration:revert"
+    "db:migration:create": "node scripts/with-env.mjs corepack pnpm --filter api run migration:create",
+    "db:migration:generate": "node scripts/with-env.mjs corepack pnpm --filter api run migration:generate",
+    "db:migration:show": "node scripts/with-env.mjs corepack pnpm --filter api run migration:show",
+    "db:migration:run": "node scripts/with-env.mjs corepack pnpm --filter api run migration:run",
+    "db:migration:revert": "node scripts/with-env.mjs corepack pnpm --filter api run migration:revert",
+    "db:seed": "node scripts/with-env.mjs corepack pnpm --filter api run seed"
   },
   "prettier": "@workspace/config/prettier",
   "devDependencies": {

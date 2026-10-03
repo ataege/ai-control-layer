@@ -9,6 +9,7 @@ const validEnvironment = {
   GATEWAY_URL: "http://localhost:8080",
   GATEWAY_SERVICE_TOKEN: "example-service-token-0123456789abcdef",
   OPERATOR_CONTEXT_SIGNING_KEY: "test-signing-key-0123456789abcdef",
+  DEMO_OPERATOR_PASSWORD: "demo-password-12345",
 };
 
 function captureValidationError(
@@ -54,7 +55,7 @@ describe("parseEnvironment", () => {
       GATEWAY_SERVICE_TOKEN: "too-short-token-value",
     });
 
-    expect(error.missingVariables).toEqual(["OPERATOR_CONTEXT_SIGNING_KEY", "POSTGRES_PASSWORD"]);
+    expect(error.missingVariables).toEqual(["DEMO_OPERATOR_PASSWORD", "OPERATOR_CONTEXT_SIGNING_KEY", "POSTGRES_PASSWORD"]);
     expect(error.invalidVariables).toEqual(["GATEWAY_SERVICE_TOKEN", "GATEWAY_URL"]);
     expect(error.message).not.toContain("not-a-url-value");
     expect(error.message).not.toContain("too-short-token-value");
