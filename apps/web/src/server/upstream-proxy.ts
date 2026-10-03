@@ -16,6 +16,7 @@ export const UPSTREAM_PREFIXES = [
   ...UPSTREAM_PATHS,
   "/api/runs",
   "/api/actions",
+  "/api/auth",
 ] as const;
 
 // Longer than the API's own upstream timeouts, so its mapped status arrives first.
@@ -110,12 +111,13 @@ function isPathAllowed(path: string): boolean {
 
 export async function proxyUpstream(
   request: Request,
-  upstreamPath: string, // includes query for endpoints that support it
+  upstreamPath: string,
   { timeoutMs = DEFAULT_UPSTREAM_TIMEOUT_MS, buffer = true }: ProxyOptions = {},
 ): Promise<Response> {
   const requestId = resolveRequestId(request);
 
-  const pathname = upstreamPath.split("?")[0];
+  const normalizedUrl = new URL(upstreamPath, "http://localhost");
+  const pathname = normalizedUrl.pathname;
   if (!isPathAllowed(pathname)) {
     return proxyErrorResponse(
       500,
@@ -139,7 +141,7 @@ export async function proxyUpstream(
     );
   }
 
-  const upstreamUrl = `${upstreamBaseUrl}${upstreamPath}`;
+  const upstreamUrl = `${upstreamBaseUrl}${pathname}${normalizedUrl.search}`;
 
   const headers = new Headers();
   headers.set("accept", "application/json");

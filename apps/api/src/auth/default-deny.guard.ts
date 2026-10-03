@@ -51,28 +51,34 @@ export class DefaultDenyGuard implements CanActivate {
       throw new UnauthorizedException("Missing session cookie");
     }
 
+    let principal;
     try {
-      const principal = await this.authProvider.authenticate(sessionCookie);
-      
-      const membership = await this.membershipRepository.findOne({
-        where: { userId: principal.subjectId }
-      });
-
-      if (!membership) {
-        throw new UnauthorizedException("User has no organization membership");
-      }
-
-      request.operatorContext = {
-        userId: membership.userId,
-        organizationId: membership.organizationId,
-        roles: membership.roles,
-      };
-
-      (request as any)["user"] = principal;
-      return true;
-    } catch (e) {
-      if (e instanceof UnauthorizedException) throw e;
+      principal = await this.authProvider.authenticate(sessionCookie);
+    } catch {
       throw new UnauthorizedException("Invalid or expired session");
     }
+    
+    let membership;
+    try {
+      membership = await this.membershipRepository.findOne({
+        where: { userId: principal.subjectId },
+        order: { createdAt: "ASC" }
+      });
+    } catch {
+      throw new ServiceUnavailableException("Database unavailable");
+    }
+
+    if (!membership) {
+      throw new UnauthorizedException("User has no organization membership");
+    }
+
+    request.operatorContext = {
+      userId: membership.userId,
+      organizationId: membership.organizationId,
+      roles: membership.roles,
+    };
+
+    (request as any)["user"] = principal;
+    return true;
   }
 }

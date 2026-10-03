@@ -10,20 +10,31 @@ import { getRepositoryToken } from "@nestjs/typeorm";
 import { Membership } from "../identity/entities/membership.entity.js";
 
 /** Boots a Nest app from the given module metadata with the same HTTP wiring as main.ts. */
-export async function createTestApp(metadata: ModuleMetadata): Promise<NestExpressApplication> {
+export async function createTestApp(
+  metadata: ModuleMetadata,
+  options: { mockAuth?: boolean } = { mockAuth: true }
+): Promise<NestExpressApplication> {
+  const providers = [
+    { provide: DataSource, useValue: { isInitialized: true } },
+    { provide: APP_GUARD, useClass: DefaultDenyGuard },
+    ...(metadata.providers || []),
+  ];
+
+  if (options.mockAuth) {
+    providers.push(
+      { provide: AUTH_PROVIDER, useValue: { authenticate: async () => ({ subjectId: "test-user" }) } },
+      { provide: getRepositoryToken(Membership), useValue: { findOne: async () => ({ userId: "test-user", organizationId: "test-org", roles: [] }) } }
+    );
+  }
+
   const moduleRef = await Test.createTestingModule({
     ...metadata,
     imports: [...(metadata.imports || [])],
-    providers: [
-      { provide: DataSource, useValue: { isInitialized: true } },
-      { provide: APP_GUARD, useClass: DefaultDenyGuard },
-      { provide: AUTH_PROVIDER, useValue: { authenticate: async () => ({ subjectId: "test-user" }) } },
-      { provide: getRepositoryToken(Membership), useValue: { findOne: async () => ({ userId: "test-user", organizationId: "test-org", roles: [] }) } },
-      ...(metadata.providers || []),
-    ],
+    providers,
   }).compile();
+  
   const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
-  configureApp(app, ["http://localhost:3000"], "test-cookie-secret");
+  configureApp(app, ["http://localhost:3000"]);
   await app.init();
   return app;
 }

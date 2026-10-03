@@ -37,8 +37,8 @@ export class AppConfigService {
     return this.environment.COMMAND_TIMEOUT_MS;
   }
 
-  get cookieSecret(): string {
-    return this.environment.COOKIE_SECRET;
+  get operatorContextSigningKey(): string {
+    return this.environment.OPERATOR_CONTEXT_SIGNING_KEY;
   }
 
   get databaseTimeoutMs(): number {

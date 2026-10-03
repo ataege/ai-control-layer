@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Unique } from "typeorm";
 import { User } from "./user.entity.js";
 import { Organization } from "./organization.entity.js";
 
 @Entity({ schema: "app", name: "memberships" })
+@Unique(["userId", "organizationId"])
 export class Membership {
   @PrimaryGeneratedColumn("uuid")
   id: string;

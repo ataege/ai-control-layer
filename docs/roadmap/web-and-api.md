@@ -459,7 +459,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ### NestJS (report role: Implementer 2)
 
-- [x] **API-03 · Deny every non-public route by default**
+- [ ] **API-03 · Deny every non-public route by default**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2.5 h)
   - Depends on: nothing · Needs: X-03 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,
@@ -490,7 +490,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     production identity controls")
   - Blocked by: nothing
 
-- [x] **API-04 · Add the task template, policy version and tool definition entities**
+- [ ] **API-04 · Add the task template, policy version and tool definition entities**
   - **Report 1.2 change:** The policy configuration now comes from `policy.yaml` imported into the catalog (API-31 to API-33); there is no policy editor screen.
   - **Report 1.1 change:** Module names: the architecture's proposal, TasksModule, PoliciesModule and ToolsModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -519,7 +519,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     requirements MVP boundary and deferred scope" (Product decisions that keep the MVP coherent)
   - Blocked by: nothing
 
-- [x] **API-05 · Add the user and membership entities**
+- [ ] **API-05 · Add the user and membership entities**
   - **Report 1.1 change:** Adds `organizations` (architecture table proposal).
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2.5 h)
   - Depends on: SH-01, SH-10 · Needs: X-24 · Provides: X-17 (part: user and membership entities)
@@ -541,7 +541,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [x] **API-06 · Authenticate the operator through a real credential check**
+- [ ] **API-06 · Authenticate the operator through a real credential check**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 4-7 h)
   - Depends on: API-03, API-05, SH-01 · Needs: X-18, X-22, X-23, X-24 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,
@@ -568,7 +568,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     (Journey 1 create and delegate a task)
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [x] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
+- [ ] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: API-06, SH-02 · Needs: nothing · Provides: X-31 (part)
   - Paths: `apps/api/src/app.setup.ts`, `apps/api/src/config/environment.ts`,
@@ -585,11 +585,10 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Tests: specs: forged `x-forwarded-for` and `x-forwarded-host` headers change nothing (forwarder
     option), or a credentialed preflight from an allowed origin passes while another origin gets no
     CORS headers (direct option): `pnpm --filter api run test`; `pnpm smoke`.
-    - Results (2026-10-03): Decision 3 settled as "same-origin forwarder". Tests implemented in app.setup.spec.ts to ensure forged x-forwarded-* headers are ignored by default.
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [x] **API-08 · Resolve the operator context and check organization membership**
+- [ ] **API-08 · Resolve the operator context and check organization membership**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-06 · Needs: X-18, X-22, X-24 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.types.ts`, `apps/api/src` (the module from API-05)
@@ -605,13 +604,12 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Tests: specs with a stub Go: a principal without a membership is refused and the stub receives
     nothing; an organization identifier in the body, query or path is ignored; database-backed tests
     against the seeded memberships through X-24: `pnpm --filter api run test`.
-    - Results (2026-10-03): DefaultDenyGuard now resolves OperatorContext (userId, organizationId, roles) directly from the trusted membership records. Tests implemented in default-deny.guard.spec.ts to verify organization identifiers in body/query/path are completely ignored.
   - Report: "Users operating model and proposed user journeys" ("The organization boundary would be
     enforced in the application and runtime, not inferred from a record identifier supplied by the
     browser or agent"); "Data ownership and the transition from starter to product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [x] **API-09 · Add a fail-closed command client toward Go**
+- [ ] **API-09 · Add a fail-closed command client toward Go**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: SH-11 · Needs: X-13 · Provides: nothing
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
@@ -630,12 +628,11 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     4xx envelope with a reason code, a 5xx, a timeout, a refused connection, a body that is not JSON
     and an unknown field each map to their own outcome; a redirect is not followed; the token never
     appears in a result or a log line: `pnpm --filter api run test`.
-    - Results (2026-10-03): GatewayClientService now exposes postCommand, mapping fetch responses strictly to a CommandOutcome discriminated union. COMMAND_TIMEOUT_MS defaults to 10s. Token is protected. Tests passing.
   - Report: "Illustrative passport and interface contracts" (Decision and error semantics); "Risk
     register and scope controls" (NestJS/Go contract drift)
   - Blocked by: `command timeout budget`
 
-- [x] **API-10 · Carry the verified operator context on every runtime command**
+- [ ] **API-10 · Carry the verified operator context on every runtime command**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-08, API-09, SH-03 · Needs: X-14, X-23, X-27 · Provides: X-26
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
@@ -653,14 +650,13 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     request body reaches the context; no secret appears in a log line or a result; against the real
     gateway, a command without valid context is rejected: `pnpm --filter api run test`; `pnpm smoke`
     with the checks SH-23 adds at M1.
-    - Results (2026-10-03): GatewayClientService now uses jose to sign a short-lived JWT containing the OperatorContext. Tests updated to verify JWT integrity and payload.
   - Report: "Technical architecture and service ownership" (Interfaces and repository strategy);
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Delivery scope and six person
     ownership" (Proposed team ownership)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [x] **API-11 · Start a run through `POST /api/runs`**
+- [ ] **API-11 · Start a run through `POST /api/runs`**
   - **Report 1.2 change:** The facade also forwards the catalog validation request of API-33.
   - **Report 1.1 change:** Module proposal RuntimeModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -687,7 +683,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     and deferred scope" (Trusted admission)
   - Blocked by: `decision 7 in docs/product/README.md`; `command timeout budget`
 
-- [x] **API-12 · Serve the task form's options**
+- [ ] **API-12 · Serve the task form's options**
   - **Report 1.2 change:** Model choices come only from the active catalog allowlist.
   - **Report 1.1 change:** The options add which internal evidence may be consulted and which report types may be created.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3.5 h)
@@ -710,7 +706,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     "Architecture and chart reading guide" (Interpreting the full architecture)
   - Blocked by: `form options`; `decision 7 in docs/product/README.md`
 
-- [x] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
+- [ ] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-08, X-11, X-24, X-29 ·
@@ -736,7 +732,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     interface"); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
   - Blocked by: `read path`; `passport in the run view`; `decision 7 in docs/product/README.md`
 
-- [x] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
+- [ ] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-12, X-24, X-30 ·
@@ -783,7 +779,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ### Next.js (report role: Implementer 1)
 
-- [x] **WEB-02 · Build the browser to API path chosen in decision 3**
+- [ ] **WEB-02 · Build the browser to API path chosen in decision 3**
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: A · Size: M (estimate 3-7 h)
   - Depends on: SH-02 · Needs: X-03 · Provides: X-31 (part)
   - Paths: `apps/web/src/server/upstream-proxy.ts`, `apps/web/src/server/upstream-proxy.test.ts`,
@@ -810,7 +806,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [x] **WEB-03 · Add a typed client for the product operations**
+- [ ] **WEB-03 · Add a typed client for the product operations**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 1.5-4 h)
   - Depends on: SH-11 · Needs: X-07, X-11, X-12, X-13 · Provides: nothing
   - Paths: `apps/web/src/lib/fetch-json.ts`, `apps/web/src/lib/fetch-json.test.ts`, `apps/web/src/lib`

@@ -60,7 +60,7 @@ describe("DefaultDenyGuard", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
     expect(authProviderMock.authenticate).toHaveBeenCalledWith("valid-session-id");
-    expect(membershipRepoMock.findOne).toHaveBeenCalledWith({ where: { userId: "test-user" } });
+    expect(membershipRepoMock.findOne).toHaveBeenCalledWith({ where: { userId: "test-user" }, order: { createdAt: "ASC" } });
   });
 
   it("denies access if the user has no membership, and an organization identifier in body/query/path is ignored", async () => {

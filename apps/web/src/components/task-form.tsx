@@ -9,8 +9,8 @@ export function TaskForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create Task</CardTitle>
-        <CardDescription>Configure a new delegated task.</CardDescription>
+        <CardTitle>Create Task (Sample Form)</CardTitle>
+        <CardDescription>Mock configuration form for demonstration purposes.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">

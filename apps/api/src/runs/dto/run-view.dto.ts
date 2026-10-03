@@ -17,9 +17,14 @@ export const RunViewSchema = z.object({
 
 export const SanitizedEventSchema = z.object({
   id: z.string().uuid(),
-  type: z.string(),
-  timestamp: z.string(),
-  details: z.record(z.string(), z.unknown()),
+  type: z.string().max(256),
+  timestamp: z.string().datetime(),
+  details: z.object({
+    message: z.string().max(2000).optional(),
+    tool: z.string().max(256).optional(),
+    action: z.string().max(256).optional(),
+    decision: z.string().max(256).optional(),
+  }).strict(),
 }) satisfies z.ZodType<SanitizedEvent>;
 
 export const SanitizedEventsResponseSchema = z.object({

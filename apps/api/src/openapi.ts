@@ -8,7 +8,7 @@ export function setupOpenApi(app: INestApplication): void {
     .setTitle("Task Passport API")
     .setDescription("Internal API for Task Passport operators and automated tests.")
     .setVersion("1.0")
-    .addCookieAuth("sid")
+    .addCookieAuth("session")
     .build();
   const document = SwaggerModule.createDocument(app, documentConfig);
   SwaggerModule.setup(`${GLOBAL_PREFIX}/docs`, app, document, {

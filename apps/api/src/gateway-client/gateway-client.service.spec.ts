@@ -13,8 +13,8 @@ const COMMAND_TIMEOUT_MS = 150;
 type StubBehaviour = "healthy" | "unauthorized" | "server-error" | "bad-request" | "not-ready" | "slow" | "garbage" | "redirect";
 
 function createClient(gatewayUrl: string): GatewayClientService {
-  const config: Pick<AppConfigService, "gatewayUrl" | "gatewayServiceToken" | "gatewayTimeoutMs" | "commandTimeoutMs"> =
-    { gatewayUrl, gatewayServiceToken: SERVICE_TOKEN, gatewayTimeoutMs: GATEWAY_TIMEOUT_MS, commandTimeoutMs: COMMAND_TIMEOUT_MS };
+  const config: Pick<AppConfigService, "gatewayUrl" | "gatewayServiceToken" | "operatorContextSigningKey" | "gatewayTimeoutMs" | "commandTimeoutMs"> =
+    { gatewayUrl, gatewayServiceToken: SERVICE_TOKEN, operatorContextSigningKey: "test-signing-key-0123456789abcdef", gatewayTimeoutMs: GATEWAY_TIMEOUT_MS, commandTimeoutMs: COMMAND_TIMEOUT_MS };
   return new GatewayClientService(config as AppConfigService);
 }
 
@@ -89,11 +89,7 @@ describe("GatewayClientService", () => {
     expect(check.reason).toBeUndefined();
     expect(check.latencyMs).toBeGreaterThanOrEqual(0);
     expect(receivedPath).toBe("/internal/ping");
-          expect(receivedHeaders.authorization).toMatch(/^Bearer eyJ/);
-      const token = receivedHeaders.authorization!.replace("Bearer ", "");
-      const secret = new TextEncoder().encode(SERVICE_TOKEN);
-      const { payload: jwtPayload } = await jwtVerify(token, secret, { issuer: "gateway-client" });
-      expect(jwtPayload).toBeDefined();
+          expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
     expect(receivedHeaders["x-request-id"]).toBe("req-ping-1");
   });
 
@@ -181,9 +177,10 @@ describe("GatewayClientService", () => {
       
       expect(outcome).toEqual({ success: true, data: { status: "ok", service: "gateway" } });
       expect(receivedPath).toBe("/internal/runs");
-            expect(receivedHeaders.authorization).toMatch(/^Bearer eyJ/);
-      const token = receivedHeaders.authorization!.replace("Bearer ", "");
-      const secret = new TextEncoder().encode(SERVICE_TOKEN);
+            expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
+      expect(receivedHeaders["x-operator-context"]).toMatch(/^eyJ/);
+      const token = receivedHeaders["x-operator-context"] as string;
+      const secret = new TextEncoder().encode("test-signing-key-0123456789abcdef");
       const { payload: jwtPayload } = await jwtVerify(token, secret, { issuer: "gateway-client" });
       expect(jwtPayload).toBeDefined();
       expect(receivedHeaders["x-request-id"]).toBe("req-cmd-1");

@@ -41,8 +41,8 @@ export function getSafeMessage(code: string): string {
 // Type Guards for frozen contracts
 function isStartRunResponse(data: unknown): data is StartRunResponse {
   return typeof data === "object" && data !== null && 
-    "runId" in data && typeof (data as any).runId === "string" &&
-    "passportId" in data && typeof (data as any).passportId === "string";
+    "runId" in data && typeof (data as Record<string, unknown>).runId === "string" &&
+    "passportId" in data && typeof (data as Record<string, unknown>).passportId === "string";
 }
 
 function isTaskFormOptions(data: unknown): data is TaskFormOptions {
@@ -53,8 +53,8 @@ function isRunView(data: unknown): data is RunView {
   return typeof data === "object" && data !== null && "id" in data && "status" in data;
 }
 
-function isSanitizedEventArray(data: unknown): data is SanitizedEvent[] {
-  return Array.isArray(data) && (data.length === 0 || (typeof data[0] === "object" && "id" in data[0] && "type" in data[0]));
+function isSanitizedEventsResponse(data: unknown): data is { events: SanitizedEvent[]; nextCursor?: string } {
+  return typeof data === "object" && data !== null && "events" in data && Array.isArray((data as Record<string, unknown>).events);
 }
 
 // Ensure the result matches the guard or return an invalid_json error.
@@ -93,35 +93,15 @@ export class ProductClient {
     return enforceGuard(result, isStartRunResponse);
   }
 
-  static async getRunOptions(): Promise<FetchJsonResult<TaskFormOptions>> {
-    const result = await fetchJson("/api/runs/options");
-    return enforceGuard(result, isTaskFormOptions);
-  }
 
   static async getRun(id: string): Promise<FetchJsonResult<RunView>> {
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
     return enforceGuard(result, isRunView);
   }
 
-  static async getRunEvents(id: string, cursor?: string): Promise<FetchJsonResult<SanitizedEvent[]>> {
+  static async getRunEvents(id: string, cursor?: string): Promise<FetchJsonResult<{ events: SanitizedEvent[]; nextCursor?: string }>> {
     const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`);
-    return enforceGuard(result, isSanitizedEventArray);
-  }
-
-  static async cancelRun(id: string): Promise<FetchJsonResult<void>> {
-    const result = await postJson(`/api/runs/${encodeURIComponent(id)}/cancel`, {});
-    if (result.ok) {
-      return result as FetchJsonResult<void>;
-    }
-    return result;
-  }
-
-  static async approveAction(id: string, decision: any): Promise<FetchJsonResult<void>> {
-    const result = await postJson(`/api/actions/${encodeURIComponent(id)}/approval`, decision);
-    if (result.ok) {
-      return result as FetchJsonResult<void>;
-    }
-    return result;
+    return enforceGuard(result, isSanitizedEventsResponse);
   }
 }

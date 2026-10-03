@@ -11,8 +11,8 @@ export function RunTimeline() {
   return (
     <Card className="h-full">
       <CardHeader>
-        <CardTitle>Run Timeline</CardTitle>
-        <CardDescription>Live execution events for the current task.</CardDescription>
+        <CardTitle>Run Timeline (Sample Data)</CardTitle>
+        <CardDescription>Mock execution events for demonstration purposes.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">

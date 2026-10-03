@@ -5,7 +5,7 @@ export class User {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, transformer: { to: (value: string) => value?.toLowerCase(), from: (value) => value } })
   email: string;
 
   @Column()

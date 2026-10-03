@@ -24,13 +24,6 @@ export class RunsController {
     private readonly formOptionRepo: Repository<FormOption>,
   ) {}
 
-  @Get('options')
-  @ApiOperation({ summary: 'Get task form options' })
-  @ApiResponse({ status: 200, description: 'Returns task form options.' })
-  async getOptions(@Req() req: { operatorContext: OperatorContext }): Promise<TaskFormOptions> {
-    if (!req.operatorContext) {
-      throw new InternalServerErrorException('Missing operator context');
-    }
     const record = await this.formOptionRepo.findOne({
       where: { organizationId: req.operatorContext.organizationId },
     });
@@ -90,31 +83,14 @@ export class RunsController {
     if (outcome.success) {
       return outcome.data;
     } else {
-      if (outcome.reason === 'unauthorized') {
-        throw new HttpException({ code: 'unauthorized', message: 'Not authorized to start run' }, 403);
+      if (outcome.reason === 'timeout') {
+        throw new HttpException({ code: 'timeout', message: 'The request timed out. The outcome is unconfirmed.' }, 504);
       }
-      if (outcome.reason === 'bad_request') {
-        throw new HttpException({ code: outcome.code || 'bad_request', message: 'Admission rejected' }, 400);
-      }
-      throw new HttpException({ code: outcome.reason, message: `Run start failed: ${outcome.reason}` }, 500);
+      if (outcome.reason === 'timeout') {
+      throw new HttpException({ code: 'timeout', message: 'The request timed out.' }, 504);
     }
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a run view' })
-  @ApiResponse({ status: 200, description: 'Returns the run view.' })
-  async getRun(
-    @Param('id') id: string,
-    @Req() req: { id: string; operatorContext: OperatorContext },
-  ): Promise<RunView> {
-    const outcome = await this.gateway.fetchQuery(
-      `/internal/runs/${id}`,
-      req.id,
-      RunViewSchema,
-      req.operatorContext,
-    );
-    if (outcome.success) {
-      return outcome.data;
+    if (outcome.reason === 'timeout') {
+      throw new HttpException({ code: 'timeout', message: 'The request timed out.' }, 504);
     }
     if (outcome.reason === 'unauthorized') {
       throw new HttpException({ code: 'unauthorized', message: 'Unauthorized' }, 403);
@@ -122,33 +98,7 @@ export class RunsController {
     if (outcome.reason === 'bad_request' && outcome.code === 'not_found') {
       throw new NotFoundException({ code: 'not_found', message: 'Run not found' });
     }
-    throw new HttpException({ code: outcome.reason, message: 'Failed to get run view' }, 500);
-  }
-
-  @Get(':id/events')
-  @ApiOperation({ summary: 'Get sanitized events for a run' })
-  @ApiResponse({ status: 200, description: 'Returns a list of sanitized events.' })
-  async getRunEvents(
-    @Param('id') id: string,
-    @Query('cursor') cursor: string | undefined,
-    @Req() req: { id: string; operatorContext: OperatorContext },
-  ): Promise<{ events: SanitizedEvent[]; nextCursor?: string }> {
-    const queryPath = cursor ? `/internal/runs/${id}/events?cursor=${encodeURIComponent(cursor)}` : `/internal/runs/${id}/events`;
-    const outcome = await this.gateway.fetchQuery(
-      queryPath,
-      req.id,
-      SanitizedEventsResponseSchema,
-      req.operatorContext,
-    );
-    if (outcome.success) {
-      return outcome.data;
-    }
-    if (outcome.reason === 'unauthorized') {
-      throw new HttpException({ code: 'unauthorized', message: 'Unauthorized' }, 403);
-    }
-    if (outcome.reason === 'bad_request' && outcome.code === 'not_found') {
-      throw new NotFoundException({ code: 'not_found', message: 'Run not found' });
-    }
-    throw new HttpException({ code: outcome.reason, message: 'Failed to get run events' }, 500);
+    const statusCode = outcome.reason === 'bad_request' ? 400 : 500;
+    throw new HttpException({ code: outcome.code || outcome.reason, message: 'Failed to get run events' }, statusCode);
   }
 }
