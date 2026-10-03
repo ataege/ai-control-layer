@@ -15,6 +15,7 @@ import (
 
 	"starter/services/gateway/internal/admission"
 	"starter/services/gateway/internal/agent"
+	"starter/services/gateway/internal/budget"
 	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/catalog/catalogtest"
 	"starter/services/gateway/internal/config"
@@ -414,8 +415,34 @@ func TestStoryAfterApproval(t *testing.T) {
 		events = append(events, event)
 	}
 	rows.Close()
+	// GO-29: one run and one passport from the denied proposal to the queued report, one counted
+	// correction, and usage within that passport's limits.
+	ctx := context.Background()
+	corrections, err := policy.NewCorrectionCounter(world.pool).CorrectionsUsed(ctx,
+		policy.RunIdentity{OrganizationID: world.organizationID, RunID: world.passport.RunID})
+	if err != nil || corrections != 1 {
+		t.Fatalf("counted corrections %d (%v), want the one report_export_restricted denial", corrections, err)
+	}
+	deniedActionID, _, _ := world.actionAt(t, 5)
+	if sameRun := world.count(t, `SELECT count(*) FROM runtime.actions AS action
+		JOIN runtime.runs AS run ON run.id = action.run_id AND run.organization_id = action.organization_id
+		WHERE action.organization_id = $1 AND action.id IN ($2, $3) AND run.id = $4 AND run.passport_id = $5`,
+		deniedActionID, queueActionID, world.passport.RunID, world.passport.PassportID); sameRun != 2 {
+		t.Fatalf("the denied and the executed queue_report belong to %d of the run's actions under its passport, want 2", sameRun)
+	}
+	usage, err := budget.NewPostgresStore(world.pool).Snapshot(ctx, world.passport.RunID)
+	limits := world.passport.Limits
+	if err != nil || usage.Agent.Calls > limits.CallsAgent || usage.Agent.Calls+usage.Security.Calls > limits.CallsTotal ||
+		usage.Used > limits.TokensTotal || usage.Reserved != 0 {
+		t.Fatalf("usage %+v outside the passport's limits %+v (%v)", usage, limits, err)
+	}
+
 	t.Logf("evidence GO-47 (X-44, Go half, fixture provider): reports %s; one outbox row to the registered address with the reviewed content hash; events %v",
 		vendorID, events)
+	t.Logf("evidence GO-29: one run %s under passport %s from the denied export to the queued report; corrections %d of %d; "+
+		"calls agent %d of %d, security %d, total %d of %d; tokens used %d of %d, reserved %d",
+		world.passport.RunID, world.passport.PassportID, corrections, limits.Corrections, usage.Agent.Calls, limits.CallsAgent,
+		usage.Security.Calls, usage.Agent.Calls+usage.Security.Calls, limits.CallsTotal, usage.Used, limits.TokensTotal, usage.Reserved)
 
 	// GO-56 on the agent path after the approval: the outbox row holds the address only as its
 	// recipient and never the internal note; every other channel holds neither (the frozen review
