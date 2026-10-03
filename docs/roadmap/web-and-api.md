@@ -541,7 +541,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-06 · Authenticate the operator through a real credential check**
+- [x] **API-06 · Authenticate the operator through a real credential check**
+  - **Done (2026-10-03, api-impl-n):** Completed the explicit development operator seed (SH-19) through `pnpm db:seed`, using the fixture organization and `.env` password, preserving credentials and operator/reviewer membership on reruns and refusing drift. Fixed the cookie provider to look up the stored SHA-256 session hash. PostgreSQL tests exercise idempotence, real sign-in, HttpOnly cookie access, wrong/missing credentials, logout and role drift. `pnpm --filter api run lint`, `typecheck`, `test` and `build`: exit 0 (`test`: "109 passed (109)"); `pnpm test:db api`: "18 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; `pnpm smoke`: "28 passed, 0 failed, 5 skipped" (host mode does not capture service logs). An isolated local PostgreSQL cluster was used; Docker/container checks were not run (Docker unavailable). No startup seed or migration.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 4-7 h)
   - Depends on: API-03, API-05, SH-01 · Needs: X-18, X-22, X-23, X-24 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,

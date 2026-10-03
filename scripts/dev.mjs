@@ -68,7 +68,9 @@ const WEB_FORBIDDEN_VARIABLE_PATTERN =
 function environmentWithout(...forbiddenPatterns) {
   return Object.fromEntries(
     Object.entries(environment).filter(
-      ([variableName]) => !forbiddenPatterns.some((pattern) => pattern.test(variableName)),
+      ([variableName]) =>
+        variableName !== "DEMO_OPERATOR_PASSWORD" &&
+        !forbiddenPatterns.some((pattern) => pattern.test(variableName)),
     ),
   );
 }
