@@ -93,6 +93,7 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | `internal/model`      | User (sole Go implementer) |
 | `internal/budget`     | User (sole Go implementer) |
 | `internal/testdb`     | User (sole Go implementer) |
+| `internal/security`   | Go implementer, session c1 |
 
 New packages get their ownership row when their first real code lands.
 
@@ -108,6 +109,7 @@ internal/httpserver/  routes, middleware, error envelope, server lifecycle
 internal/model/       bounded Ollama transport and accounted calls
 internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
+internal/security/    hybrid security controls: content rules (GO-74)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -314,6 +316,39 @@ run. This settles the transport mechanism, not the frozen claim schema, signing 
 audience or key handoff. GO-62 mirrors the agreed operator-context contract when it lands; GO-21
 uses it without treating a valid signature alone as object authorization. No operator-context
 schema is currently present in `packages/contracts` on that main commit.
+
+## Deterministic content controls (GO-74)
+
+`internal/security` applies the `secret_pattern` guard of the active catalog to designated text
+fields. The caller passes the catalog settings and trusted source metadata; the package reads
+neither PostgreSQL nor `policy.yaml`, and it never sets or changes a field's source
+classification, so masking an internal note does not make its report Vendor shareable.
+
+| Boundary      | Designated fields (lead's delegate, 3 October 2026) |
+| ------------- | --------------------------------------------------- |
+| `tool_result` | `tool_result_text`, `internal_note`                 |
+| `model_input` | `model_input_text`                                  |
+
+- Rules: `secret_password_keyword_v1` and `secret_url_credential_v1` (password),
+  `secret_api_token_keyword_v1`, `secret_iban_v1` (mod-97 checked) and `secret_payment_card_v1`
+  (Luhn checked). Keyword rules need a credential-shaped value (letters and digits, minimum length),
+  so "password policy" stays readable. The patterns are fixed Go code (RE2, linear time), not
+  catalog data.
+- Spans are byte offsets; they must lie in the text, be non-empty and fall on UTF-8 rune boundaries,
+  and overlaps merge. An invalid span is an error and withholds the field.
+- `redact` replaces each span with `[REDACTED:<kind>]` (`content_redacted`); `block` withholds the
+  whole field (`content_blocked`). The record names the first matched rule and the evaluated catalog
+  revision, and never holds the inspected text.
+- A field over `MaxFieldBytes` (4096) or with invalid UTF-8 is withheld whole, never truncated
+  (`field_limit`, `content_too_large`), whatever the guard settings. The bound keeps one security
+  call's byte-based token reservation small against the shared run total.
+- Missing catalog revision, an unknown mode or an undesignated field return an error and no text.
+
+`content_blocked` and `content_too_large` were approved by the lead's delegate on 3 October 2026
+and wait to be frozen in the reason vocabulary (X-13). Tests read `fixtures/semantic-corpus.json`:
+the six secret cases must give exactly their fixture spans, and the benign, hard-negative and attack
+cases and `fixtures/hostile-notes.json` must give none. This is a finite fixture set, not universal
+secret detection.
 
 ## Proposed tool results and idempotency (GO-07)
 
