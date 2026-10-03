@@ -84,6 +84,26 @@ Database files live in the named volume `starter_postgres-data`, mounted at `/va
 `POSTGRES_PASSWORD` and `POSTGRES_DB` only take effect when the volume is first created; to start
 over with new values, remove the volume yourself with `docker volume rm starter_postgres-data`.
 
+## Several checkouts on one machine
+
+The Compose project is named `starter` in `compose.yaml`, so every checkout (for example a second
+git worktree) drives the same containers and the same volume by default. A worktree with its own
+`.env` then has a different `POSTGRES_PASSWORD` from the existing volume, and its `down` commands
+would stop the other checkout's database. To keep a second checkout separate, add two lines to its
+untracked `.env`:
+
+```sh
+COMPOSE_PROJECT_NAME=starter-<suffix>   # own containers, network and volume
+POSTGRES_PORT=55440                     # any free host port
+```
+
+`scripts/compose.mjs` passes `--env-file .env` on every call, so `up` and `down` both use that
+project name, and `pnpm dev` and `pnpm smoke` read the same port. Check the resolved name before the
+first `up` with
+`docker compose --project-directory . --env-file .env -f infra/compose.yaml config | head -1`. The
+web, API and gateway host ports (3000, 3001, 8080) are still shared: run one stack at a time, or
+change them as described in "Changing ports" in the root `README.md`.
+
 ## Health checks
 
 Each check uses a program that exists in its image: `pg_isready` over TCP for PostgreSQL,
