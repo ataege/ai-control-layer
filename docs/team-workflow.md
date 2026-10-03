@@ -95,7 +95,7 @@ generated files land in `packages/ui` and belong to the frontend owner.
 
 ## Branching and integration habits
 
-- Work in small branches and merge often. Pull or rebase before you start and before you merge.
+- Work in small branches and merge often. Pull (merge, never rebase a pushed branch) before you start and before you merge.
 - Keep the default branch green: run the checks for your area before merging and `pnpm verify`
   before anything that touches shared files.
 - Announce changes to shared files (contracts, root configuration, `.env.example`, Compose files)
@@ -152,7 +152,7 @@ The project is in the implementation phase. Every feature follows the same loop.
    through the infrastructure owner. When a design decision changes, tell the document owner, so
    the report's decision record, contracts, demonstration and claim-to-proof list change together.
 7. **Commit and push.** One commit per completed task, with its ID in the subject, then
-   `git pull --rebase --autostash` and `git push` (`AGENTS.md`, "Committing and pushing"). Merge
+   `git pull --no-rebase` with a clean tree (never `git stash`) and `git push` (`AGENTS.md`, "Committing and pushing"). Merge
    small and often.
 
 The report settles several team-level decisions: four components and no message broker, one locally
@@ -243,7 +243,7 @@ pnpm check:instructions
 
 ## Adding the first entity and migration
 
-The 2026-10-02 baseline has no entities, no migrations and no tables. When the team needs its first
+When the team needs its first
 table:
 
 1. **Agree on it.** The owner of the feature and the migration owner (integration) agree that a

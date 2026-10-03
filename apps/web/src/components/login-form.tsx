@@ -23,7 +23,7 @@ export function LoginForm() {
 
     try {
       const result = await ProductClient.signIn({ email, password });
-      
+
       if (!result.ok) {
         setError(getSafeMessage(result.error));
         return;
@@ -36,7 +36,7 @@ export function LoginForm() {
       } else {
         router.push("/");
       }
-      
+
       router.refresh();
     } catch {
       setError("An unexpected error occurred during sign in.");
@@ -48,7 +48,7 @@ export function LoginForm() {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-background/50 p-8 shadow-2xl backdrop-blur-xl transition-all before:absolute before:inset-0 before:-z-10 before:bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] before:from-primary/10 before:via-background before:to-background">
       <div className="mb-8 flex flex-col items-center space-y-2 text-center">
-        <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/20 mb-4">
+        <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/20">
           <ShieldAlert className="size-6 text-primary" aria-hidden="true" />
         </div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Welcome back</h1>
@@ -95,7 +95,7 @@ export function LoginForm() {
 
         <Button
           type="submit"
-          className="w-full group relative overflow-hidden transition-all hover:ring-2 hover:ring-primary/20 hover:ring-offset-2 hover:ring-offset-background"
+          className="group relative w-full overflow-hidden transition-all hover:ring-2 hover:ring-primary/20 hover:ring-offset-2 hover:ring-offset-background"
           disabled={isLoading}
         >
           <span className="relative z-10 flex items-center gap-2">
@@ -104,7 +104,10 @@ export function LoginForm() {
             ) : (
               <>
                 Sign In
-                <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                <ArrowRight
+                  className="size-4 transition-transform group-hover:translate-x-1"
+                  aria-hidden="true"
+                />
               </>
             )}
           </span>

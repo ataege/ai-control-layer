@@ -31,6 +31,10 @@ services/gateway/bin/
 
 # Claude Code local-only settings
 .claude/settings.local.json
+.claude/worktrees/
 
 # Browser automation output
 .playwright-mcp/
+
+# verify:controls results (machine-readable runs of the control test suite)
+.verify-controls/

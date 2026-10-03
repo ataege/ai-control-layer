@@ -36,7 +36,6 @@ export const environmentSchema = databaseEnvironmentSchema.extend({
   GATEWAY_URL: httpUrlSchema,
   GATEWAY_SERVICE_TOKEN: z.string().min(32),
   OPERATOR_CONTEXT_SIGNING_KEY: z.string().min(32),
-  DEMO_OPERATOR_PASSWORD: z.string().min(8),
   GATEWAY_TIMEOUT_MS: timeoutMsSchema.default(3000),
   COMMAND_TIMEOUT_MS: timeoutMsSchema.default(10000),
   CORS_ALLOWED_ORIGINS: corsOriginsSchema,

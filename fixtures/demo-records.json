@@ -1,0 +1,111 @@
+{
+  "synthetic": true,
+  "fixture_set": "demo_records",
+  "fixture_version": 2,
+  "description": "Synthetic records of the Atlas invoice scenario, loaded by pnpm db:seed into demo.vendors and demo.invoices. Every organization, vendor, invoice, amount, date, address and note is invented; the amounts and dates are illustrative values, not requirements. Record fields match the demo table columns (SH-17 plus the provenance columns of 1791060000000).",
+  "organizations": [
+    {
+      "key": "demo_org",
+      "id": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "name": "Demo Organization (synthetic)",
+      "purpose": "the organization of the Atlas reconciliation task"
+    },
+    {
+      "key": "second_org",
+      "id": "6c1e8f4a-2b7d-4c93-8e05-a4f3b2d1c902",
+      "name": "Second Organization (synthetic)",
+      "purpose": "the organization-access check: the demo operator must not read, approve or claim anything here"
+    }
+  ],
+  "vendors": [
+    {
+      "id": "vendor_Atlas",
+      "organization_id": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "version": 1,
+      "name": "Atlas",
+      "registered_reporting_address": "reports@atlas.example.com"
+    },
+    {
+      "id": "vendor_Borealis",
+      "organization_id": "6c1e8f4a-2b7d-4c93-8e05-a4f3b2d1c902",
+      "version": 1,
+      "name": "Borealis",
+      "registered_reporting_address": null
+    }
+  ],
+  "invoices": [
+    {
+      "id": "invoice_A01",
+      "organization_id": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "vendor_id": "vendor_Atlas",
+      "version": 1,
+      "external_reference": "INV104",
+      "currency": "EUR",
+      "total_minor_units": 125000,
+      "issued_on": "2026-09-01",
+      "due_on": "2026-10-31",
+      "internal_note": "Investigation note: external reference INV104 appears on invoice_A01 and invoice_A02 with the same total. Accounts payable has not confirmed whether the second submission is a duplicate. No payment decision has been made.",
+      "internal_note_classification": "internal_only"
+    },
+    {
+      "id": "invoice_A02",
+      "organization_id": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "vendor_id": "vendor_Atlas",
+      "version": 1,
+      "external_reference": "INV104",
+      "currency": "EUR",
+      "total_minor_units": 125000,
+      "issued_on": "2026-09-08",
+      "due_on": "2026-10-31",
+      "internal_note": null,
+      "internal_note_classification": null
+    },
+    {
+      "id": "invoice_B01",
+      "organization_id": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      "vendor_id": "vendor_Atlas",
+      "version": 1,
+      "external_reference": "INV211",
+      "currency": "EUR",
+      "total_minor_units": 48000,
+      "issued_on": "2026-09-15",
+      "due_on": "2026-11-15",
+      "internal_note": null,
+      "internal_note_classification": null
+    },
+    {
+      "id": "invoice_C01",
+      "organization_id": "6c1e8f4a-2b7d-4c93-8e05-a4f3b2d1c902",
+      "vendor_id": "vendor_Borealis",
+      "version": 1,
+      "external_reference": "BOR-0007",
+      "currency": "EUR",
+      "total_minor_units": 99000,
+      "issued_on": "2026-09-03",
+      "due_on": "2026-10-03",
+      "internal_note": null,
+      "internal_note_classification": null
+    }
+  ],
+  "task_scope": {
+    "organization_id": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+    "vendor_id": "vendor_Atlas",
+    "selected_invoice_ids": ["invoice_A01", "invoice_A02"],
+    "out_of_scope_invoice_ids": ["invoice_B01"],
+    "source": "Report: \"The baseline task would reconcile invoice_A01 and invoice_A02 ... The task would not authorize invoice_B01\". The task template and its versions are seeded by SH-18."
+  },
+  "decisions": [
+    {
+      "item": "source classification storage",
+      "outcome": "internal_note_classification column on demo.invoices; the clean note on invoice_A01 is internal_only"
+    },
+    {
+      "item": "trusted vendor recipient",
+      "outcome": "registered_reporting_address column on demo.vendors; returned to the model only as an opaque reference"
+    },
+    {
+      "item": "vendor projection fields",
+      "outcome": "invoice reference, external reference, duplicate-reference flag, currency, total and due date; never the internal note (Go constant vendor_invoice_fields_v1)"
+    }
+  ]
+}

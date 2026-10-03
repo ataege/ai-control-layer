@@ -3,6 +3,7 @@ import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Logger } from "@nestjs/common";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import type { AppConfigService } from "../config/app-config.service.js";
 import { GatewayClientService } from "./gateway-client.service.js";
 
@@ -10,11 +11,32 @@ const SERVICE_TOKEN = "test-service-token-0123456789abcdef";
 const GATEWAY_TIMEOUT_MS = 150;
 const COMMAND_TIMEOUT_MS = 150;
 
-type StubBehaviour = "healthy" | "unauthorized" | "server-error" | "bad-request" | "not-ready" | "slow" | "garbage" | "redirect";
+type StubBehaviour =
+  | "not-found"
+  | "healthy"
+  | "unauthorized"
+  | "server-error"
+  | "bad-request"
+  | "not-ready"
+  | "slow"
+  | "garbage"
+  | "redirect";
 
 function createClient(gatewayUrl: string): GatewayClientService {
-  const config: Pick<AppConfigService, "gatewayUrl" | "gatewayServiceToken" | "operatorContextSigningKey" | "gatewayTimeoutMs" | "commandTimeoutMs"> =
-    { gatewayUrl, gatewayServiceToken: SERVICE_TOKEN, operatorContextSigningKey: "test-signing-key-0123456789abcdef", gatewayTimeoutMs: GATEWAY_TIMEOUT_MS, commandTimeoutMs: COMMAND_TIMEOUT_MS };
+  const config: Pick<
+    AppConfigService,
+    | "gatewayUrl"
+    | "gatewayServiceToken"
+    | "operatorContextSigningKey"
+    | "gatewayTimeoutMs"
+    | "commandTimeoutMs"
+  > = {
+    gatewayUrl,
+    gatewayServiceToken: SERVICE_TOKEN,
+    operatorContextSigningKey: "test-signing-key-0123456789abcdef",
+    gatewayTimeoutMs: GATEWAY_TIMEOUT_MS,
+    commandTimeoutMs: COMMAND_TIMEOUT_MS,
+  };
   return new GatewayClientService(config as AppConfigService);
 }
 
@@ -36,6 +58,9 @@ describe("GatewayClientService", () => {
         serverResponse.end(JSON.stringify(body));
       };
       switch (stubBehaviour) {
+        case "not-found":
+          sendJson(404, { error: { code: "not_found" } });
+          break;
         case "healthy":
           sendJson(200, { status: "ok", service: "gateway" });
           break;
@@ -89,7 +114,7 @@ describe("GatewayClientService", () => {
     expect(check.reason).toBeUndefined();
     expect(check.latencyMs).toBeGreaterThanOrEqual(0);
     expect(receivedPath).toBe("/internal/ping");
-          expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
+    expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
     expect(receivedHeaders["x-request-id"]).toBe("req-ping-1");
   });
 
@@ -167,17 +192,28 @@ describe("GatewayClientService", () => {
   });
 
   describe("postCommand", () => {
-    const { z } = require("zod");
     const testSchema = z.object({ result: z.string() });
+    // An explicit test operator context: the client itself never invents one.
+    const testOperatorContext = {
+      userId: "c28e2545-2de6-41b9-9be6-d21ae01e4901",
+      organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      roles: ["operator"],
+    };
 
     it("posts a command and parses a successful response", async () => {
       stubBehaviour = "healthy";
       const payload = { input: "test" };
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-1", payload, z.object({ status: z.string(), service: z.string() }));
-      
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-1",
+        payload,
+        z.object({ status: z.string(), service: z.string() }),
+        testOperatorContext,
+      );
+
       expect(outcome).toEqual({ success: true, data: { status: "ok", service: "gateway" } });
       expect(receivedPath).toBe("/internal/runs");
-            expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
+      expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
       expect(receivedHeaders["x-operator-context"]).toMatch(/^eyJ/);
       const token = receivedHeaders["x-operator-context"] as string;
       const secret = new TextEncoder().encode("test-signing-key-0123456789abcdef");
@@ -188,8 +224,14 @@ describe("GatewayClientService", () => {
 
     it("handles an unauthorized response and does not expose the token", async () => {
       stubBehaviour = "unauthorized";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-2", {}, testSchema);
-      expect(outcome).toEqual({ success: false, reason: "unauthorized" });
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-2",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
+      expect(outcome).toEqual({ success: false, reason: "unauthorized", statusCode: 401 });
       const exposedText = JSON.stringify([outcome, loggedWarnings.mock.calls]);
       expect(exposedText).not.toContain(SERVICE_TOKEN);
       expect(exposedText).not.toContain("upstream-secret-detail");
@@ -197,33 +239,156 @@ describe("GatewayClientService", () => {
 
     it("handles a bad request response with a code", async () => {
       stubBehaviour = "bad-request";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-3", {}, testSchema);
-      expect(outcome).toEqual({ success: false, reason: "bad_request", code: "invalid_input" });
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-3",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
+      expect(outcome).toEqual({
+        success: false,
+        reason: "bad_request",
+        code: "invalid_input",
+        statusCode: 400,
+      });
     });
 
     it("handles a server error response with a code", async () => {
       stubBehaviour = "server-error";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-4", {}, testSchema);
-      expect(outcome).toEqual({ success: false, reason: "server_error", code: "internal_error" });
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-4",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
+      expect(outcome).toEqual({
+        success: false,
+        reason: "server_error",
+        code: "internal_error",
+        statusCode: 500,
+      });
     });
 
     it("handles a body that is not JSON", async () => {
       stubBehaviour = "garbage";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-5", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-5",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       expect(outcome).toEqual({ success: false, reason: "invalid_response" });
     });
 
     it("does not follow redirects", async () => {
       stubBehaviour = "redirect";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-6", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-6",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       // Fetch with redirect: "manual" returns 302 directly. It matches unexpected_status if we don't handle it
-      expect(outcome).toEqual({ success: false, reason: "unexpected_status" });
+      expect(outcome).toEqual({ success: false, reason: "unexpected_status", statusCode: 302 });
     });
 
     it("handles a timeout", async () => {
       stubBehaviour = "slow";
-      const outcome = await client.postCommand("/internal/runs", "req-cmd-7", {}, testSchema);
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-7",
+        {},
+        testSchema,
+        testOperatorContext,
+      );
       expect(outcome).toEqual({ success: false, reason: "timeout" });
+    });
+  });
+  describe("getRead", () => {
+    const context = {
+      userId: "c28e2545-2de6-41b9-9be6-d21ae01e4901",
+      organizationId: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+      roles: ["operator"],
+    };
+    const schema = z.strictObject({ status: z.string(), service: z.string() });
+
+    it("signs only the supplied verified context and preserves query parameters", async () => {
+      stubBehaviour = "healthy";
+      await expect(
+        client.getRead("/internal/runs/run/events?after=3&limit=10", "read-1", schema, context),
+      ).resolves.toEqual({ success: true, data: { status: "ok", service: "gateway" } });
+      expect(receivedPath).toBe("/internal/runs/run/events?after=3&limit=10");
+      expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
+      expect(receivedHeaders["x-request-id"]).toBe("read-1");
+      const { payload } = await jwtVerify(
+        receivedHeaders["x-operator-context"] as string,
+        new TextEncoder().encode("test-signing-key-0123456789abcdef"),
+        { issuer: "gateway-client", audience: "gateway", algorithms: ["HS256"] },
+      );
+      expect(payload.ctx).toEqual(context);
+    });
+
+    it.each([
+      ["not-found", "bad_request", 404],
+      ["unauthorized", "unauthorized", 401],
+      ["server-error", "server_error", 500],
+      ["not-ready", "server_error", 503],
+      ["redirect", "unexpected_status", 302],
+    ] as const)(
+      "fails closed on %s and retains HTTP status",
+      async (behaviour, reason, statusCode) => {
+        stubBehaviour = behaviour;
+        const result = await client.getRead("/internal/runs/run", "read-2", schema, context);
+        expect(result).toMatchObject({ success: false, reason, statusCode });
+        expect(JSON.stringify([result, loggedWarnings.mock.calls])).not.toContain(SERVICE_TOKEN);
+        expect(JSON.stringify(result)).not.toContain("upstream-secret-detail");
+      },
+    );
+
+    it("fails on timeout and refused connections", async () => {
+      stubBehaviour = "slow";
+      await expect(
+        client.getRead("/internal/runs/run", "read-3", schema, context),
+      ).resolves.toEqual({ success: false, reason: "timeout" });
+      await expect(
+        createClient("http://127.0.0.1:1").getRead("/internal/runs/run", "read-4", schema, context),
+      ).resolves.toEqual({ success: false, reason: "unreachable" });
+    });
+
+    it("refuses missing or malformed context before dispatching either method", async () => {
+      for (const invalid of [
+        undefined,
+        { ...context, organizationId: "" },
+        { ...context, roles: ["operator", "operator"] },
+      ]) {
+        await expect(
+          client.getRead("/internal/runs/run", "read-5", schema, invalid as typeof context),
+        ).resolves.toEqual({ success: false, reason: "unauthorized" });
+        await expect(
+          client.postCommand("/internal/runs", "read-5", {}, schema, invalid as typeof context),
+        ).resolves.toEqual({ success: false, reason: "unauthorized" });
+      }
+      expect(receivedPath).toBeUndefined();
+    });
+
+    it("rejects non-JSON and unknown response fields", async () => {
+      stubBehaviour = "garbage";
+      await expect(
+        client.getRead("/internal/runs/run", "read-6", schema, context),
+      ).resolves.toEqual({ success: false, reason: "invalid_response" });
+      stubBehaviour = "healthy";
+      await expect(
+        client.getRead(
+          "/internal/runs/run",
+          "read-7",
+          z.strictObject({ status: z.string() }),
+          context,
+        ),
+      ).resolves.toEqual({ success: false, reason: "invalid_response" });
     });
   });
 });

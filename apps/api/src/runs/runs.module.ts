@@ -1,12 +1,10 @@
-import { Module } from '@nestjs/common';
-import { RunsController } from './runs.controller.js';
-import { GatewayClientModule } from '../gateway-client/gateway-client.module.js';
-
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { FormOption } from './entities/form-option.entity.js';
+import { Module } from "@nestjs/common";
+import { GatewayClientModule } from "../gateway-client/gateway-client.module.js";
+import { RunsController } from "./runs.controller.js";
+import { ControlEvaluationController } from "./control-evaluation.controller.js";
 
 @Module({
-  imports: [GatewayClientModule, TypeOrmModule.forFeature([FormOption])],
-  controllers: [RunsController],
+  imports: [GatewayClientModule],
+  controllers: [RunsController, ControlEvaluationController],
 })
 export class RunsModule {}

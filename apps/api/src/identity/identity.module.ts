@@ -7,9 +7,7 @@ import { PasswordHash } from "./entities/password-hash.entity.js";
 import { Session } from "./entities/session.entity.js";
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([User, Organization, Membership, PasswordHash, Session]),
-  ],
+  imports: [TypeOrmModule.forFeature([User, Organization, Membership, PasswordHash, Session])],
   exports: [TypeOrmModule],
 })
 export class IdentityModule {}

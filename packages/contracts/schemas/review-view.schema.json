@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "review-view.schema.json",
+  "title": "ReviewView",
+  "description": "GO-43/GO-44 (lane w3), GET /internal/actions/{actionId}/review: the exact review material frozen before review (policy.ReviewPayload), served only to a reviewer of the organization. Field names are snake_case because the frozen payload's stored SHA-256 digest is computed over exactly this encoding; they are not reshaped. A queue_report review always carries the resolved recipient and the stored report with its source manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "canonicalization_version",
+    "action_id",
+    "run_id",
+    "passport_id",
+    "policy_revision_id",
+    "tool",
+    "canonical_arguments",
+    "recipient",
+    "report",
+    "expires_at"
+  ],
+  "properties": {
+    "canonicalization_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "action_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "passport_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "policy_revision_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "tool": {
+      "enum": ["read_invoice", "read_vendor", "create_report", "queue_report"]
+    },
+    "canonical_arguments": {
+      "type": "object",
+      "description": "The stored action's canonical arguments (X-09 shape of the tool)."
+    },
+    "recipient": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reference", "vendor_id", "address"],
+          "properties": {
+            "reference": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "vendor_id": {
+              "type": "string",
+              "pattern": "^vendor_[A-Za-z0-9_-]{1,121}$"
+            },
+            "address": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 320,
+              "description": "The registered reporting address the outbox row will use; shown to the reviewer only."
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "report": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "version",
+            "template",
+            "template_version",
+            "projection_rule",
+            "projection_rule_version",
+            "classification",
+            "content_hash",
+            "content",
+            "sources",
+            "source_manifest_digest"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "template": {
+              "enum": ["internal_investigation_v1", "vendor_reconciliation_v1"]
+            },
+            "template_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "projection_rule": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "projection_rule_version": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "classification": {
+              "enum": ["internal_only", "vendor_shareable"]
+            },
+            "content_hash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "content": {
+              "type": "string",
+              "description": "The exact report content that would be queued."
+            },
+            "sources": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "id", "version", "classification", "consumed_fields"],
+                "properties": {
+                  "kind": {
+                    "enum": ["invoice"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^invoice_[A-Za-z0-9_-]{1,120}$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "classification": {
+                    "enum": ["internal_only", "vendor_shareable"]
+                  },
+                  "consumed_fields": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            },
+            "source_manifest_digest": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "expires_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "tool": {
+            "const": "queue_report"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "canonical_arguments": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["report_id", "recipient_reference"],
+            "properties": {
+              "report_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "recipient_reference": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            }
+          },
+          "recipient": {
+            "type": "object"
+          },
+          "report": {
+            "type": "object"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "recipient": {
+            "type": "null"
+          },
+          "report": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -8,6 +8,8 @@ import (
 
 const validServiceToken = "config-test-token-0123456789abcdefghij"
 
+const validSigningKey = "config-test-signing-key-0123456789abcdef"
+
 func lookupFromMap(environment map[string]string) LookupFunc {
 	return func(name string) (string, bool) {
 		value, isSet := environment[name]
@@ -17,10 +19,10 @@ func lookupFromMap(environment map[string]string) LookupFunc {
 
 func validEnvironment() map[string]string {
 	return map[string]string{
-		"GATEWAY_SERVICE_TOKEN": validServiceToken,
-		"POSTGRES_USER":         "starter",
-		"POSTGRES_PASSWORD":     "database-password-value",
-		"POSTGRES_DB":           "starter",
+		"GATEWAY_SERVICE_TOKEN":        validServiceToken,
+		"OPERATOR_CONTEXT_SIGNING_KEY": validSigningKey,
+		"POSTGRES_GATEWAY_PASSWORD":    "database-password-value",
+		"POSTGRES_DB":                  "starter",
 	}
 }
 
@@ -36,7 +38,29 @@ func TestLoadFromAcceptsMinimalEnvironment(t *testing.T) {
 	if loadedConfig.Postgres.Password.Reveal() != "database-password-value" {
 		t.Error("database password was not loaded")
 	}
+	if loadedConfig.OperatorContextSigningKey.Reveal() != validSigningKey {
+		t.Error("operator context signing key was not loaded")
+	}
 }
+
+func TestLoadFromRejectsMissingOrShortSigningKey(t *testing.T) {
+	for name, signingKey := range map[string]*string{"unset": nil, "31 characters": pointerTo(strings.Repeat("k", 31))} {
+		environment := validEnvironment()
+		delete(environment, "OPERATOR_CONTEXT_SIGNING_KEY")
+		if signingKey != nil {
+			environment["OPERATOR_CONTEXT_SIGNING_KEY"] = *signingKey
+		}
+		_, err := LoadFrom(lookupFromMap(environment))
+		if err == nil || !strings.Contains(err.Error(), "OPERATOR_CONTEXT_SIGNING_KEY") {
+			t.Errorf("%s: error = %v", name, err)
+		}
+		if signingKey != nil && strings.Contains(err.Error(), *signingKey) {
+			t.Errorf("%s: error echoes the key", name)
+		}
+	}
+}
+
+func pointerTo(value string) *string { return &value }
 
 func TestLoadFromReportsEveryProblemWithoutValues(t *testing.T) {
 	const shortToken = "short-token-value"
@@ -48,7 +72,6 @@ func TestLoadFromReportsEveryProblemWithoutValues(t *testing.T) {
 		"GATEWAY_SERVICE_TOKEN": shortToken,
 		"GATEWAY_PORT":          badPort,
 		"POSTGRES_PORT":         "70000",
-		"POSTGRES_USER":         "starter",
 		"POSTGRES_DB":           "starter",
 		"DATABASE_TIMEOUT_MS":   badTimeout,
 		"LOG_LEVEL":             badLevel,
@@ -62,8 +85,8 @@ func TestLoadFromReportsEveryProblemWithoutValues(t *testing.T) {
 	errorText := err.Error()
 
 	expectedVariables := []string{
-		"GATEWAY_SERVICE_TOKEN", "GATEWAY_PORT", "POSTGRES_PORT",
-		"POSTGRES_PASSWORD", "DATABASE_TIMEOUT_MS", "LOG_LEVEL",
+		"GATEWAY_SERVICE_TOKEN", "OPERATOR_CONTEXT_SIGNING_KEY", "GATEWAY_PORT", "POSTGRES_PORT",
+		"POSTGRES_GATEWAY_PASSWORD", "DATABASE_TIMEOUT_MS", "LOG_LEVEL",
 	}
 	for _, variableName := range expectedVariables {
 		if !strings.Contains(errorText, variableName) {
@@ -117,7 +140,7 @@ func TestLoadFromRequiresServiceToken(t *testing.T) {
 }
 
 func TestLoadFromRejectsBlankRequiredVariables(t *testing.T) {
-	for _, variableName := range []string{"POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"} {
+	for _, variableName := range []string{"POSTGRES_GATEWAY_PASSWORD", "POSTGRES_DB"} {
 		t.Run(variableName, func(t *testing.T) {
 			environment := validEnvironment()
 			environment[variableName] = "   "
@@ -154,5 +177,29 @@ func TestLoadFromBoundsDatabaseTimeout(t *testing.T) {
 				t.Fatalf("error = %v, want a DATABASE_TIMEOUT_MS range problem", err)
 			}
 		})
+	}
+}
+
+func TestLoadFromConnectsAsTheGatewayRoleAndNamesTheFix(t *testing.T) {
+	environment := validEnvironment()
+	// The bootstrap user's credentials are present but must not be used by the gateway.
+	environment["POSTGRES_USER"] = "starter"
+	environment["POSTGRES_PASSWORD"] = "bootstrap-password-value"
+	loadedConfig, err := LoadFrom(lookupFromMap(environment))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if loadedConfig.Postgres.User != GatewayDatabaseRole || loadedConfig.Postgres.Password.Reveal() != "database-password-value" {
+		t.Fatalf("connects as %q with the wrong password", loadedConfig.Postgres.User)
+	}
+
+	delete(environment, "POSTGRES_GATEWAY_PASSWORD")
+	_, err = LoadFrom(lookupFromMap(environment))
+	if err == nil || !strings.Contains(err.Error(), "POSTGRES_GATEWAY_PASSWORD is required") ||
+		!strings.Contains(err.Error(), "pnpm db:roles") {
+		t.Fatalf("error = %v, want the missing role password and the fix", err)
+	}
+	if strings.Contains(err.Error(), "bootstrap-password-value") {
+		t.Fatal("the error echoes a password")
 	}
 }

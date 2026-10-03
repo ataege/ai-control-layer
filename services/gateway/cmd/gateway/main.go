@@ -15,17 +15,29 @@ import (
 	"syscall"
 	"time"
 
+	"starter/services/gateway/internal/admission"
+	"starter/services/gateway/internal/agent"
+	"starter/services/gateway/internal/api"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/config"
 	"starter/services/gateway/internal/database"
+	"starter/services/gateway/internal/evaluation"
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/logging"
+	"starter/services/gateway/internal/operatorcontext"
+	"starter/services/gateway/internal/policy"
+	"starter/services/gateway/internal/repository"
 )
 
 const (
 	// Kept below the default 10 s container stop grace period.
-	shutdownTimeout    = 8 * time.Second
+	shutdownTimeout = 8 * time.Second
+	// The worker drains in parallel with HTTP, inside the same budget.
+	workerDrainTimeout = 6 * time.Second
 	healthcheckTimeout = 2 * time.Second
+	// A requested catalog revision is validated within about this long after its import.
+	catalogActivationInterval = time.Second
 )
 
 func main() {
@@ -71,14 +83,91 @@ func run() error {
 	// Runs after Run returns: HTTP drains first, then the pool closes.
 	defer pool.Close()
 
+	// Validates and activates each newly requested catalog revision (catalog activation
+	// protocol). Stopped before the pool closes: the deferred calls run in reverse order.
+	activationStopped := make(chan struct{})
+	go func() {
+		defer close(activationStopped)
+		catalog.WatchRequested(signalContext, pool, catalogActivationInterval, logger)
+	}()
+	defer func() {
+		stopSignals()
+		<-activationStopped
+	}()
+
+	operatorContextVerifier, err := operatorcontext.NewVerifier(loadedConfig.OperatorContextSigningKey)
+	if err != nil {
+		return err
+	}
+
+	// One catalog loader for admission and the agent chain. A missing model configuration does
+	// not stop the gateway: every model call then fails closed and no run can take a step.
+	catalogLoader := catalog.NewLoader()
+	// Readiness follows the active catalog (GO-72): no enforceable catalog, not ready. Stopped
+	// before the pool closes, like the activation watcher.
+	catalogReadiness := catalog.NewReadiness(catalogLoader)
+	readinessStopped := make(chan struct{})
+	go func() {
+		defer close(readinessStopped)
+		catalogReadiness.Watch(signalContext, pool, catalogActivationInterval, logger)
+	}()
+	defer func() {
+		stopSignals()
+		<-readinessStopped
+	}()
+	modelConfig, modelErr := config.LoadModel()
+	if modelErr != nil {
+		logger.Warn("model not configured; every model call fails closed", "error", modelErr.Error())
+	}
+	chain, err := agent.NewProductionChain(pool, catalogLoader, agent.ChainConfig{
+		Model: modelConfig, ModelConfigured: modelErr == nil, Logger: logger,
+	})
+	if err != nil {
+		return err
+	}
+	chain.Worker.Start()
+	// Overdue approvals close as expired while no worker holds their run (GO-40).
+	go chain.Expiry.Run(signalContext)
+	workerStopped := make(chan struct{})
+	go func() {
+		defer close(workerStopped)
+		<-signalContext.Done()
+		if stopErr := chain.Worker.Stop(workerDrainTimeout); stopErr != nil {
+			logger.Warn("worker stopped before its step finished; the job is reclaimed after its lease", "error", stopErr.Error())
+		}
+	}()
+
+	runtimeRepository := repository.New(pool)
 	handler := httpserver.NewHandler(httpserver.Options{
-		Logger:       logger,
-		Health:       health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger},
-		ServiceToken: loadedConfig.ServiceToken,
+		Logger: logger,
+		Health: health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger,
+			Worker: chain.Worker, Catalog: catalogReadiness},
+		ServiceToken:    loadedConfig.ServiceToken,
+		OperatorContext: operatorContextVerifier,
+		InternalCommands: api.Commands(api.Dependencies{
+			Admitter:  admission.New(runtimeRepository, catalogLoader),
+			Options:   admission.NewOptionsReader(pool, catalogLoader),
+			Canceller: runtimeRepository,
+			Approvals: policy.NewApprovals(pool),
+			Runs:      runtimeRepository,
+			Database:  pool,
+			// GO-82: the same controls as the agent path, on the chain built above.
+			Evaluator: evaluation.New(evaluation.Dependencies{
+				Repository: runtimeRepository, Catalog: catalogLoader, Database: pool,
+				Semantic: chain.Evaluator, Inspector: chain.Inspector,
+				Gates: evaluation.JudgeGates(chain.Scopes, policy.NewPostgresRelationships(pool),
+					policy.NewSecurityActionEvaluator(chain.Inspector, chain.Settings)),
+			}),
+		}),
 	})
 	listenAddress := net.JoinHostPort(loadedConfig.Host, strconv.Itoa(loadedConfig.Port))
 	server := httpserver.NewServer(listenAddress, handler, logger)
-	return httpserver.Run(signalContext, server, shutdownTimeout, logger)
+	runErr := httpserver.Run(signalContext, server, shutdownTimeout, logger)
+	// The worker stops before the deferred pool.Close; stopSignals also ends a run that returned
+	// without a signal (for example a listen failure).
+	stopSignals()
+	<-workerStopped
+	return runErr
 }
 
 // runHealthcheck lets a container health check work without curl or wget.

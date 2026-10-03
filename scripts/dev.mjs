@@ -57,7 +57,9 @@ if (selectedServiceNames.some((serviceName) => serviceName !== "gateway")) {
 
 // Mirrors infra/compose.yaml: only the gateway receives the local model settings, only the API
 // holds the session signing secret, and the web app holds no server secret at all.
-const GATEWAY_ONLY_VARIABLE_PATTERN = /^MODEL_/;
+const GATEWAY_ONLY_VARIABLE_PATTERN = /^(MODEL_|POSTGRES_GATEWAY_PASSWORD$)/;
+// The gateway connects as its own role (GO-38), never with the bootstrap user that owns the schema.
+const BOOTSTRAP_DATABASE_CREDENTIAL_PATTERN = /^POSTGRES_(USER|PASSWORD)$/;
 const API_ONLY_VARIABLE_PATTERN = /^AUTH_JWT_SECRET$/;
 const WEB_FORBIDDEN_VARIABLE_PATTERN =
   /^(GATEWAY_SERVICE_TOKEN$|OPERATOR_CONTEXT_SIGNING_KEY$|POSTGRES_)/;
@@ -66,7 +68,9 @@ const WEB_FORBIDDEN_VARIABLE_PATTERN =
 function environmentWithout(...forbiddenPatterns) {
   return Object.fromEntries(
     Object.entries(environment).filter(
-      ([variableName]) => !forbiddenPatterns.some((pattern) => pattern.test(variableName)),
+      ([variableName]) =>
+        variableName !== "DEMO_OPERATOR_PASSWORD" &&
+        !forbiddenPatterns.some((pattern) => pattern.test(variableName)),
     ),
   );
 }
@@ -78,7 +82,7 @@ const environmentByService = {
     WEB_FORBIDDEN_VARIABLE_PATTERN,
   ),
   api: environmentWithout(GATEWAY_ONLY_VARIABLE_PATTERN),
-  gateway: environmentWithout(API_ONLY_VARIABLE_PATTERN),
+  gateway: environmentWithout(API_ONLY_VARIABLE_PATTERN, BOOTSTRAP_DATABASE_CREDENTIAL_PATTERN),
 };
 
 const services = selectedServiceNames.map((serviceName) => ({

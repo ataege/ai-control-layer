@@ -1,4 +1,5 @@
-import { BadRequestException, Controller, Get, Logger } from "@nestjs/common";
+import { BadRequestException, Controller, Get, HttpException, Logger, Param } from "@nestjs/common";
+import reasonContract from "@workspace/contracts/schemas/reason-code.schema.json" with { type: "json" };
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -8,6 +9,17 @@ import { Public } from "../auth/public.decorator.js";
 @Public()
 @Controller("failing")
 class FailingController {
+  @Get("reason/:code")
+  reason(@Param("code") code: string): never {
+    throw new HttpException({ code, message: "The operation was refused" }, 409);
+  }
+
+  @Get("sensitive")
+  sensitive(): never {
+    throw Object.assign(new Error("Bearer test-service-secret; protected review payload"), {
+      name: "test-signing-secret",
+    });
+  }
   @Get("unexpected")
   throwUnexpected(): never {
     throw new Error("connection string postgres://starter:hunter2@db-host:5432/starter");
@@ -47,7 +59,7 @@ describe("AllExceptionsFilter", () => {
     loggedErrors.mockRestore();
   });
 
-  it("hides the details of unexpected errors and logs them server-side", async () => {
+  it("hides unexpected error details in both responses and general logs", async () => {
     const response = await request(app.getHttpServer())
       .get("/api/failing/unexpected?debug=query-value")
       .set("x-request-id", "req-filter-1");
@@ -67,8 +79,30 @@ describe("AllExceptionsFilter", () => {
     expect(serializedBody).not.toContain("query-value");
     expect(loggedErrors).toHaveBeenCalledWith(
       "request failed",
-      expect.objectContaining({ requestId: "req-filter-1", stack: expect.any(String) as string }),
+      expect.objectContaining({ requestId: "req-filter-1", errorName: "Error" }),
     );
+    expect(JSON.stringify(loggedErrors.mock.calls)).not.toContain("hunter2");
+    expect(JSON.stringify(loggedErrors.mock.calls)).not.toContain("stack");
+  });
+
+  it.each(reasonContract.enum)("preserves the shared reason code %s", async (code) => {
+    const response = await request(app.getHttpServer())
+      .get(`/api/failing/reason/${code}`)
+      .expect(409);
+    expect(response.body).toMatchObject({ error: { code, message: "The operation was refused" } });
+  });
+
+  it("never exposes credentials, review content or an untrusted exception name", async () => {
+    loggedErrors.mockClear();
+    const response = await request(app.getHttpServer()).get("/api/failing/sensitive").expect(500);
+    const text = JSON.stringify([response.body, loggedErrors.mock.calls]);
+    for (const sensitive of [
+      "test-service-secret",
+      "test-signing-secret",
+      "protected review payload",
+    ]) {
+      expect(text).not.toContain(sensitive);
+    }
   });
 
   it("keeps the message of client errors", async () => {

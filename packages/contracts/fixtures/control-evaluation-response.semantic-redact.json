@@ -1,0 +1,46 @@
+{
+  "evaluationId": "7b8c9d0e-1f2a-4b3c-9d4e-5f6a7b8c9d0e",
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "actionId": null,
+  "decision": "redact",
+  "reasonCode": "content_redacted",
+  "safeMessage": "A configured secret pattern was masked before the text could reach the model.",
+  "alternativeTemplate": null,
+  "controls": [
+    {
+      "boundary": "model_input",
+      "controlClass": "deterministic",
+      "control": "secret_pattern",
+      "outcome": "redact",
+      "reasonCode": "content_redacted",
+      "ruleId": null,
+      "feedRevision": null
+    },
+    {
+      "boundary": "model_input",
+      "controlClass": "deterministic",
+      "control": "signature_match",
+      "outcome": "pass",
+      "reasonCode": null,
+      "ruleId": null,
+      "feedRevision": null
+    },
+    {
+      "boundary": "model_input",
+      "controlClass": "semantic",
+      "control": "semantic_injection",
+      "outcome": "pass",
+      "reasonCode": null,
+      "ruleId": null,
+      "feedRevision": null
+    }
+  ],
+  "semantic": {
+    "source": "live",
+    "riskCategory": "none",
+    "score": 0.05,
+    "reasonCode": "no_risk_found"
+  },
+  "content": { "text": "Use account [REDACTED:bank_account] for the transfer summary." },
+  "catalog": { "admissionRevisionId": 1, "activeRevisionId": 1, "feedRevisionId": 1 }
+}

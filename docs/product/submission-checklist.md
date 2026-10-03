@@ -6,10 +6,71 @@ rules [S9] §5, §6, §12 and §13; general HackYeah rules [S11] §4.3, §5.8 an
 package and deadline controls" and the hours 21-24 row of "Proposed 24-hour implementation
 sequence". Requirement IDs refer to [requirements.md](requirements.md).
 
-**Deadline.** Submission on HackTribe no later than **11:00 on 4 October 2026** (the lead's reading;
-the printed "11:00 PM" is organizer question 2). Until the organizers confirm, work to 11:00.
+**Deadline.** Submission on HackTribe no later than **11:00 AM on 4 October 2026**, confirmed in
+writing by the organizers on 3 October 2026: "until 11:00 AM tomorrow" (organizer question 2).
 "Any alterations and modifications made after the statutory time is expired will not be considered
 by the Jury." ([S9] §13)
+
+## 0. HackTribe text to paste (final, 4 October)
+
+The organizers' announcement, relayed by the lead on 3 October 2026 at about 19:30 (verbatim in
+[organizer-questions.md](organizer-questions.md), answer 2): a first draft needs "a few sentences about
+the project you are working on, information about the category you are competing in", and "After
+submitting the draft, you can still freely edit and update your project until 11:00 AM tomorrow." The
+"Published" option "does not matter at this stage". If the first draft is not submitted yet, submit
+the **short description** below with the category now, then paste the final text.
+
+- [ ] **Project title:** `Task Passport`
+- [ ] **Category:** AI Control Layer (Goldman Sachs)
+- [ ] **Team name:** **[FILL team name]** (the team decides)
+- [ ] **Team members (1 to 6):** **[FILL members]**. The git history of `main` shows three authors:
+      Ata Ege, Noyan67 and Batın Adıgüzel. The user confirms the names, whether to add anyone else, and
+      that each member is not excluded by rule 6 ([S9] §6, G-4).
+- [ ] **Short description** (for the first draft; also usable as a one-paragraph summary):
+
+> Task Passport is an AI control layer that governs one bounded agent task. A Go gateway issues an
+> immutable task passport (the tools, records, recipients, report templates and model budget the task
+> may use) and checks every governed model call and tool action against it, with deterministic rules
+> and a separately metered semantic check on a local model. The demonstration, on synthetic invoices
+> and a simulated outbox, shows an agent that may read an internal note and contact the vendor, but
+> whose report built from that note cannot be exported to the vendor; the task still finishes through
+> a separate vendor report built only from approved fields.
+
+- [ ] **Final description** (paste before 11:00 AM; fill **[FILL build]** with the frozen commit, or
+      keep `cdfee55` if the rerun did not happen, as section 3 says):
+
+> **What it is.** Task Passport is an AI control layer that governs one bounded agent task. A Go
+> gateway issues an immutable task passport (the tools, records, recipients, report templates and
+> model budget the task may use) and checks every governed model call and tool action against it.
+> Deterministic checks decide scope, destination and report lineage first. A separately metered
+> semantic check on a local model (`qwen3.5:4b` through Ollama) can block or redact untrusted text but
+> never grants access, and it fails closed.
+>
+> **What it shows.** On synthetic invoices and a simulated outbox (a database record; no email is
+> sent), an agent may read an internal investigation note and the vendor is a permitted recipient, yet
+> a report built from that note inherits its Internal only restriction and its export to the vendor is
+> denied; approval cannot override it. The task still finishes through a separate vendor report
+> rendered from approved invoice fields, reviewed as an exact action and queued once. The denied export
+> is shown with a labelled replay of a scripted proposal through the real gate, not as a live-model
+> action.
+>
+> **Control-layer deliverables.** An editable policy file with validated live import and a last-good
+> fallback; a four-rule attack-signature feed (trusted by authenticated import and SHA-256, not
+> signed); budgets reserved before every model call, with separate agent and security allowances; a
+> security summary and a sanitized JSON and CSV audit export; performance telemetry; a small
+> control-evaluation adapter; and a one-command test suite. `pnpm verify:controls` passed 1,145 cases
+> on build **[FILL build]** (live model: 28 of 29 labels matched on our fixture set, 0 false
+> positives, 1 false negative whose action the gate still denies).
+>
+> **Limits.** No universal prompt-injection detection; the protection covers two report templates and
+> stored lineage; the semantic check does not run on the four tools' action proposals; the audit
+> export is not tamper-proof; there are no automatic model retries. **Pre-event work:** the starter and
+> the design documents were prepared before the start, and the project was built with AI coding
+> assistance (Claude Code); see `docs/preparation-record.md`. Stack: Next.js, NestJS, Go, PostgreSQL,
+> Ollama (MIT) and `qwen3.5:4b` (Apache 2.0). Repository:
+> https://github.com/ataege/ai-control-layer
+
+- [ ] After the first draft: replace it with the final description before 11:00 AM on 4 October.
 
 ## 1. Before the freeze (M5, by about 08:00)
 
@@ -57,20 +118,34 @@ The freeze time is the team's decision (SH-34); leave enough time to capture evi
 before 11:00. After the freeze, only critical fixes, each followed by recapturing the evidence it
 affects.
 
+**Freeze plan for today, 4 October (decided by the lead's delegate):**
+
+1. The Go code freezes at **08:00**.
+2. Lane c1 then runs `pnpm verify:controls` once more on the frozen commit, in a quiet window, and
+   commits its sanitized results under `docs/evidence/`. The slides cite that run.
+3. If the rerun fails, or cannot happen by **09:30**, the slides cite the run of build `cdfee55`
+   (`docs/evidence/verify-controls-2026-10-03T21-53-09Z.json`) with the words "evidence of build
+   `cdfee55`; later changes covered by the deterministic suite only".
+4. Whichever run is cited, the submission description and the slides name its commit, the file and
+   its SHA-256, and say "on this fixture set". A failed rerun is reported, not hidden.
+
+Fill in below: the frozen commit ___ at ___; rerun started ___, result ___; file ___, SHA-256 ___;
+which run the slides cite ___.
+
 Record each item at the freeze and again if a critical fix changes it:
 
-| Item                                      | How to record it                                                                                                                     | Value |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----- |
-| Submitted commit (build identifier, X-59) | `git rev-parse HEAD` on `main` after the last merge                                                                                  |       |
-| Branch pushed                             | `git status` shows nothing to push; the hash is on `origin/main`                                                                     |       |
-| Policy file                               | `shasum -a 256 config/policy.yaml`, plus the active catalog revision ID                                                              |       |
-| Signature feed                            | `shasum -a 256 config/attack-signatures.json`, plus its revision                                                                     |       |
-| Model                                     | `ollama list` name and ID of the model in `allowed_models` (decision 6)                                                              |       |
-| Test results                              | The machine-readable result file of the control suite (X-89) and its SHA-256                                                         |       |
-| Performance measurements                  | The benchmark output (X-95, SH-50) and its SHA-256                                                                                   |       |
-| Presentation PDF                          | `shasum -a 256` of the submitted PDF                                                                                                 |       |
-| Evidence bundle                           | SHA-256 of each screenshot, recording and export sample used on the slides (SH-32)                                                   |       |
-| Project report                            | `task-passport-project-report.docx` brought to the submitted model, contracts, policy and scope (RS-09 "Done when"), and its SHA-256 |       |
+| Item                                      | How to record it                                                                                                                     | Value                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Submitted commit (build identifier, X-59) | `git rev-parse HEAD` on `main` after the last merge                                                                                  |                                                                                                                                                                                                                                                                                                 |
+| Branch pushed                             | `git status` shows nothing to push; the hash is on `origin/main`                                                                     |                                                                                                                                                                                                                                                                                                 |
+| Policy file                               | `shasum -a 256 config/policy.yaml`, plus the active catalog revision ID                                                              |                                                                                                                                                                                                                                                                                                 |
+| Signature feed                            | `shasum -a 256 config/attack-signatures.json`, plus its revision                                                                     |                                                                                                                                                                                                                                                                                                 |
+| Model                                     | `ollama list` name and ID of the model in `allowed_models` (decision 6)                                                              |                                                                                                                                                                                                                                                                                                 |
+| Test results                              | The machine-readable result file of the control suite (X-89) and its SHA-256                                                         | Plan: rerun on the frozen commit (freeze 08:00, rerun in a quiet window, fallback to the `cdfee55` run at 09:30). Candidate until then: `docs/evidence/verify-controls-2026-10-03T21-53-09Z.json` (SHA-256 `5954f087ca2446e3d39d5a20e896db98c709ee3bcf1fb54ef1d8da790350ba58`, build `cdfee55`) |
+| Performance measurements                  | The benchmark output (X-95, SH-50) and its SHA-256                                                                                   |                                                                                                                                                                                                                                                                                                 |
+| Presentation PDF                          | `shasum -a 256` of the submitted PDF                                                                                                 |                                                                                                                                                                                                                                                                                                 |
+| Evidence bundle                           | SHA-256 of each screenshot, recording and export sample used on the slides (SH-32)                                                   |                                                                                                                                                                                                                                                                                                 |
+| Project report                            | `task-passport-project-report.docx` brought to the submitted model, contracts, policy and scope (RS-09 "Done when"), and its SHA-256 |                                                                                                                                                                                                                                                                                                 |
 
 - [ ] Every screenshot and recording names the build identifier above.
 - [ ] The demonstration machine runs exactly the submitted commit, policy, feed and model.

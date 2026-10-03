@@ -1,0 +1,29 @@
+{
+  "eventId": "42",
+  "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "actionId": "1f2e3d4c-5b6a-4789-8a0b-c1d2e3f4a5b6",
+  "eventType": "report.export_denied",
+  "decision": "deny",
+  "reasonCode": "report_export_restricted",
+  "catalogRevisionId": 2,
+  "maskedSummary": {
+    "purpose": null,
+    "admissionCatalogRevisionId": 1,
+    "matchedRule": null,
+    "feedRevision": null,
+    "reportId": "4d5e6f70-8192-4a3b-8c5d-6e7f8091a2b3",
+    "template": "internal_investigation_v1",
+    "classification": "internal_only",
+    "lineageCheck": "passed",
+    "effect": "none",
+    "replaySource": null,
+    "alternativeTemplate": "vendor_reconciliation_v1",
+    "safeMessage": "The report inherits an Internal only restriction and cannot be sent to a vendor.",
+    "actorId": null,
+    "inputSource": null,
+    "evaluationId": null,
+    "rejectionCause": null
+  },
+  "occurredAt": "2026-10-03T12:06:00Z"
+}

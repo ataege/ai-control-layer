@@ -1,8 +1,16 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException, ServiceUnavailableException } from "@nestjs/common";
+import {
+  CanActivate,
+  ExecutionContext,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { IS_PUBLIC_KEY } from "./public.decorator.js";
 import type { Request } from "express";
-import { AUTH_PROVIDER, AuthProvider } from "./auth.types.js";
+import { AUTH_PROVIDER, AuthProvider, type AuthenticatedPrincipal } from "./auth.types.js";
+import { readSessionCookie } from "./session-cookie.js";
 import { DataSource, Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Membership } from "../identity/entities/membership.entity.js";
@@ -13,11 +21,13 @@ declare global {
   namespace Express {
     interface Request {
       operatorContext: OperatorContext;
+      /** The principal the auth provider resolved from the session cookie. */
+      user?: AuthenticatedPrincipal;
     }
   }
 }
 
-/** 
+/**
  * Global guard that denies access to all routes unless they are marked with @Public().
  * As per decision 7 hold, protected routes return 501 Not Implemented.
  */
@@ -27,7 +37,7 @@ export class DefaultDenyGuard implements CanActivate {
     private reflector: Reflector,
     @Inject(AUTH_PROVIDER) private authProvider: AuthProvider,
     private dataSource: DataSource,
-    @InjectRepository(Membership) private membershipRepository: Repository<Membership>
+    @InjectRepository(Membership) private membershipRepository: Repository<Membership>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -35,7 +45,7 @@ export class DefaultDenyGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    
+
     if (isPublic) {
       return true;
     }
@@ -45,7 +55,7 @@ export class DefaultDenyGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest<Request>();
-    const sessionCookie = request.cookies?.session;
+    const sessionCookie = readSessionCookie(request);
 
     if (!sessionCookie) {
       throw new UnauthorizedException("Missing session cookie");
@@ -54,15 +64,18 @@ export class DefaultDenyGuard implements CanActivate {
     let principal;
     try {
       principal = await this.authProvider.authenticate(sessionCookie);
-    } catch {
-      throw new UnauthorizedException("Invalid or expired session");
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw new UnauthorizedException("Invalid or expired session");
+      }
+      throw new ServiceUnavailableException("Authentication unavailable");
     }
-    
+
     let membership;
     try {
       membership = await this.membershipRepository.findOne({
         where: { userId: principal.subjectId },
-        order: { createdAt: "ASC" }
+        order: { createdAt: "ASC" },
       });
     } catch {
       throw new ServiceUnavailableException("Database unavailable");
@@ -78,7 +91,7 @@ export class DefaultDenyGuard implements CanActivate {
       roles: membership.roles,
     };
 
-    (request as any)["user"] = principal;
+    request.user = principal;
     return true;
   }
 }

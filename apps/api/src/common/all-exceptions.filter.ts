@@ -8,6 +8,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import type { ErrorResponse } from "@workspace/contracts";
+import reasonContract from "@workspace/contracts/schemas/reason-code.schema.json" with { type: "json" };
 import type { Request, Response } from "express";
 import { getRequestPath } from "./request-id.middleware.js";
 
@@ -23,26 +24,33 @@ const ERROR_CODES_BY_STATUS: Record<number, string> = {
 };
 
 const KNOWN_ERROR_CODES = new Set([
-  "bad_request", "unauthorized", "forbidden", "not_found", 
-  "method_not_allowed", "internal_error", "not_implemented",
-  "resource_out_of_scope", "destination_not_allowed", 
-  "report_export_restricted", "report_lineage_missing", 
-  "source_policy_changed", "template_not_allowed", 
-  "approval_required", "approval_expired", "action_changed", 
-  "resource_version_changed", "allowance_exhausted", 
-  "run_cancelled", "outcome_unknown", "semantic_injection_detected", 
-  "security_evaluator_unavailable", "security_allowance_exhausted", 
-  "content_redacted", "signature_match", "policy_reload_rejected", 
-  "model_not_allowed", "upstream_unreachable", "upstream_timeout", 
-  "invalid_json", "configuration_error", "timeout", "network_error", "server_error", "unexpected_status"
+  ...reasonContract.enum,
+  "conflict",
+  "bad_request",
+  "unauthorized",
+  "forbidden",
+  "not_found",
+  "method_not_allowed",
+  "internal_error",
+  "not_implemented",
+  "outcome_unconfirmed",
+  "upstream_unavailable",
+  "upstream_unreachable",
+  "upstream_timeout",
+  "invalid_json",
+  "configuration_error",
+  "timeout",
+  "network_error",
+  "server_error",
+  "unexpected_status",
 ]);
 
 function resolveErrorCode(statusCode: number, exception: unknown): string {
   if (exception instanceof HttpException) {
     const payload = exception.getResponse();
-    if (typeof payload === "object" && payload !== null && "code" in payload && typeof (payload as any).code === "string") {
-      const code = (payload as any).code;
-      if (KNOWN_ERROR_CODES.has(code)) {
+    if (typeof payload === "object" && payload !== null && "code" in payload) {
+      const code: unknown = payload.code;
+      if (typeof code === "string" && KNOWN_ERROR_CODES.has(code)) {
         return code;
       }
     }
@@ -108,14 +116,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const requestPath = getRequestPath(request);
 
     if (statusCode >= 500) {
-      // Full detail goes to the server log only.
+      // General logs carry correlation metadata only; exception text may contain credentials
+      // or protected review content from an unavailable dependency.
       this.logger.error("request failed", {
         requestId: request.requestId,
         path: requestPath,
         statusCode,
-        errorName: exception instanceof Error ? exception.name : typeof exception,
-        errorMessage: exception instanceof Error ? exception.message : String(exception),
-        stack: exception instanceof Error ? exception.stack : undefined,
+        errorName:
+          exception instanceof HttpException
+            ? "HttpException"
+            : exception instanceof Error
+              ? "Error"
+              : typeof exception,
       });
     }
 

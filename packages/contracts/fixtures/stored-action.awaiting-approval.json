@@ -1,0 +1,20 @@
+{
+  "actionId": "1f2e3d4c-5b6a-4789-8a0b-c1d2e3f4a5b6",
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "stepNumber": 5,
+  "proposal": {
+    "tool": "queue_report",
+    "arguments": {
+      "report_id": "4d5e6f70-8192-4a3b-8c5d-6e7f8091a2b3",
+      "recipient_reference": "recipient:5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b:vendor_Atlas"
+    }
+  },
+  "canonicalizationVersion": 1,
+  "actionDigest": "3f6c2a9d8b7e1f4c5a0d9e8b7c6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c9b8a",
+  "idempotencyKey": "1f2e3d4c-5b6a-4789-8a0b-c1d2e3f4a5b6",
+  "evaluatedCatalogRevisionId": 1,
+  "status": "awaiting_approval",
+  "expiresAt": "2026-10-03T12:10:00Z",
+  "createdAt": "2026-10-03T12:05:00Z",
+  "replaySource": "labelled_replay:hostile_export_v1"
+}

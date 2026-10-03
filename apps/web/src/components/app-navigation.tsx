@@ -16,6 +16,8 @@ const NAVIGATION_ITEMS: readonly AppShellNavigationItem[] = [
   { href: "/tasks/new", label: "New Task", icon: <LayoutGridIcon aria-hidden="true" /> },
   { href: "/components", label: "Components", icon: <LayoutGridIcon aria-hidden="true" /> },
   { href: "/diagnostics", label: "Diagnostics", icon: <ActivityIcon aria-hidden="true" /> },
+  { href: "/judge", label: "Judge", icon: <LayoutGridIcon aria-hidden="true" /> },
+  { href: "/security", label: "Security", icon: <ActivityIcon aria-hidden="true" /> },
 ];
 
 /** Connects the generic AppShell to the Next.js router. */

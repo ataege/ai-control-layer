@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "security-event-page.schema.json",
+  "title": "SecurityEventPage",
+  "description": "GO-83: one window-cursor page of the organization's X-12 events, including events without a run; every committed event is returned once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["events", "nextCursor"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "safe-event.schema.json"
+      },
+      "maxItems": 500
+    },
+    "nextCursor": {
+      "type": "string",
+      "pattern": "^v1\\.[0-9]{1,20}\\.[0-9]{1,20}\\.[0-9]{1,19}$"
+    }
+  }
+}

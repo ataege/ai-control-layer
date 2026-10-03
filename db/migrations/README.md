@@ -42,16 +42,26 @@ They need the root `.env` (`pnpm run setup`) and, except for `create`, a running
 4. Review the generated SQL, run `pnpm format`, then apply it with `pnpm db:migration:run`.
 5. Commit the entity and the migration together.
 
-## Expected behaviour with zero entities
+## Expected behaviour with no entity change
 
-With no entities, `pnpm db:migration:generate <Name>` prints
+When the entities and the migrated database already agree (also the case with zero entities, as in the
+starter baseline), `pnpm db:migration:generate <Name>` prints
 
 ```
 No changes in database schema were found - cannot generate a migration. To create a new empty migration use "typeorm migration:create" command
 ```
 
-and exits with a non-zero code. That is correct for the starter.
+and exits with a non-zero code. That is correct: it shows the migrations cover every entity.
 
 TypeORM keeps its bookkeeping in a table named `migrations` in the `public` schema.
 `db:migration:show` creates that table, empty, when it is missing (observed on an empty database);
 `run` and `revert` also create it if it is missing. `generate` and `create` do not create it.
+
+## Model token ledger (GO-06)
+
+`1791043000000-AddModelTokenBudgets.ts` adds `runtime.model_token_budgets` and
+`runtime.model_token_reservations`. Go owns every balance mutation; NestJS only supplies this
+migration through the shared toolchain. This task adds no runtime TypeORM entities or startup
+schema changes. The migration's down step drops only its own two tables and retains the schema.
+Go package behavior, test commands and the future service-role/run relationship are documented
+in `services/gateway/internal/budget/README.md` and `services/gateway/README.md`.

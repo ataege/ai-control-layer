@@ -12,13 +12,13 @@ export async function hashPassword(password: string): Promise<string> {
 
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   if (!storedHash.startsWith("s$")) return false;
-  
+
   const [, salt, key] = storedHash.split("$");
   if (!salt || !key) return false;
-  
+
   const keyBuffer = Buffer.from(key, "hex");
   const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
-  
+
   if (keyBuffer.length !== derivedKey.length) return false;
   return timingSafeEqual(keyBuffer, derivedKey);
 }

@@ -93,7 +93,7 @@ export async function fetchJson<ResponseBody>(
         ...meta,
       };
     }
-    
+
     // Empty 2xx is considered a success (e.g., 204 No Content).
     if (bodyText === "") {
       return { ok: true, status: response.status, data: undefined as ResponseBody, ...meta };
@@ -143,9 +143,9 @@ export async function postJson<ResponseBody>(
     const response = await fetchImplementation(relativeUrl, {
       method: "POST",
       cache: "no-store",
-      headers: { 
-        "accept": "application/json",
-        "content-type": "application/json"
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
       },
       body: JSON.stringify(body),
       signal: combinedSignal,

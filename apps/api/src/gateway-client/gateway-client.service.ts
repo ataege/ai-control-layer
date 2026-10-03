@@ -22,13 +22,34 @@ export type CommandFailureReason =
 
 export type CommandOutcome<T> =
   | { success: true; data: T }
-  | { success: false; reason: CommandFailureReason; code?: string };
+  | { success: false; reason: CommandFailureReason; code?: string; statusCode?: number };
 
 const errorEnvelopeSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string().optional(),
   }),
+});
+
+const operatorContextSchema = z.strictObject({
+  userId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
+  organizationId: z
+    .string()
+    .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
+  roles: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(64)
+        .refine((role) =>
+          [...role].every(
+            (character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127,
+          ),
+        ),
+    )
+    .max(16)
+    .refine((roles) => new Set(roles).size === roles.length),
 });
 
 const PING_PATH = "/internal/ping";
@@ -105,7 +126,7 @@ export class GatewayClientService {
       .setExpirationTime("1m")
       .setJti(randomUUID())
       .setIssuer("gateway-client");
-    
+
     return await jwt.sign(this.operatorKey);
   }
 
@@ -180,8 +201,33 @@ export class GatewayClientService {
     requestId: string,
     body: unknown,
     responseSchema: Schema,
-    context?: OperatorContext,
+    context: OperatorContext,
   ): Promise<CommandOutcome<z.infer<Schema>>> {
+    return this.runtimeRequest("POST", path, requestId, responseSchema, context, body);
+  }
+
+  /** Reads Go-owned state with the same authenticated boundary and deadline as commands. */
+  async getRead<Schema extends z.ZodTypeAny>(
+    path: string,
+    requestId: string,
+    responseSchema: Schema,
+    context: OperatorContext,
+  ): Promise<CommandOutcome<z.infer<Schema>>> {
+    return this.runtimeRequest("GET", path, requestId, responseSchema, context);
+  }
+
+  private async runtimeRequest<Schema extends z.ZodTypeAny>(
+    method: "GET" | "POST",
+    path: string,
+    requestId: string,
+    responseSchema: Schema,
+    context: OperatorContext,
+    body?: unknown,
+  ): Promise<CommandOutcome<z.infer<Schema>>> {
+    const verifiedContext = operatorContextSchema.safeParse(context);
+    if (!verifiedContext.success) {
+      return { success: false, reason: "unauthorized" };
+    }
     try {
       const headers: Record<string, string> = {
         accept: "application/json",
@@ -189,18 +235,13 @@ export class GatewayClientService {
         [REQUEST_ID_HEADER]: requestId,
         authorization: `Bearer ${this.config.gatewayServiceToken}`,
       };
-      if (context) {
-        headers["x-operator-context"] = await this.buildToken(context);
-      } else {
-        // For tests that don't pass context but expect it, let's just pass a dummy one if needed
-        // Actually, the test will just pass no context. Let's make sure test passes.
-        headers["x-operator-context"] = await this.buildToken({ userId: "test", organizationId: "test", roles: [] });
-      }
+      // Every command carries the verified operator context; there is no fallback identity.
+      headers["x-operator-context"] = await this.buildToken(verifiedContext.data);
 
       const response = await fetch(new URL(path, this.config.gatewayUrl), {
-        method: "POST",
+        method,
         headers,
-        body: JSON.stringify(body),
+        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
         redirect: "manual",
         signal: AbortSignal.timeout(this.config.commandTimeoutMs),
       });
@@ -218,95 +259,40 @@ export class GatewayClientService {
       }
 
       if (response.status === 401 || response.status === 403) {
-        return { success: false, reason: "unauthorized" };
+        await response.body?.cancel().catch(() => undefined);
+        return { success: false, reason: "unauthorized", statusCode: response.status };
       }
 
       if (response.status >= 400 && response.status < 500) {
         const json = await readJsonObject(response);
         const parsedError = errorEnvelopeSchema.safeParse(json);
         if (parsedError.success) {
-          return { success: false, reason: "bad_request", code: parsedError.data.error.code };
+          return {
+            success: false,
+            reason: "bad_request",
+            code: parsedError.data.error.code,
+            statusCode: response.status,
+          };
         }
-        return { success: false, reason: "bad_request" };
+        return { success: false, reason: "bad_request", statusCode: response.status };
       }
 
       if (response.status >= 500) {
         const json = await readJsonObject(response);
         const parsedError = errorEnvelopeSchema.safeParse(json);
         if (parsedError.success) {
-          return { success: false, reason: "server_error", code: parsedError.data.error.code };
+          return {
+            success: false,
+            reason: "server_error",
+            code: parsedError.data.error.code,
+            statusCode: response.status,
+          };
         }
-        return { success: false, reason: "server_error" };
+        return { success: false, reason: "server_error", statusCode: response.status };
       }
 
-      return { success: false, reason: "unexpected_status" };
-    } catch (error) {
-      if (isTimeoutError(error)) {
-        return { success: false, reason: "timeout" };
-      }
-      return { success: false, reason: "unreachable" };
-    }
-  }
-
-  /** Performs an authenticated GET request to the gateway, expecting a Zod-validated response. */
-  async fetchQuery<Schema extends z.ZodTypeAny>(
-    path: string,
-    responseSchema: Schema,
-    context?: OperatorContext,
-  ): Promise<CommandOutcome<z.infer<Schema>>> {
-    try {
-      const headers: Record<string, string> = {
-        accept: "application/json",
-        authorization: `Bearer ${this.config.gatewayServiceToken}`,
-      };
-      if (context) {
-        headers["x-operator-context"] = await this.buildToken(context);
-      } else {
-        headers["x-operator-context"] = await this.buildToken({ userId: "test", organizationId: "test", roles: [] });
-      }
-
-      const response = await fetch(new URL(path, this.config.gatewayUrl), {
-        method: "GET",
-        headers,
-        redirect: "manual",
-        signal: AbortSignal.timeout(this.config.commandTimeoutMs),
-      });
-
-      if (response.status >= 200 && response.status < 300) {
-        const json = await readJsonObject(response);
-        if (!json) {
-          return { success: false, reason: "invalid_response" };
-        }
-        const parsed = responseSchema.safeParse(json);
-        if (parsed.success) {
-          return { success: true, data: parsed.data };
-        }
-        return { success: false, reason: "invalid_response" };
-      }
-
-      if (response.status === 401 || response.status === 403) {
-        return { success: false, reason: "unauthorized" };
-      }
-
-      if (response.status >= 400 && response.status < 500) {
-        const json = await readJsonObject(response);
-        const parsedError = errorEnvelopeSchema.safeParse(json);
-        if (parsedError.success) {
-          return { success: false, reason: "bad_request", code: parsedError.data.error.code };
-        }
-        return { success: false, reason: "bad_request" };
-      }
-
-      if (response.status >= 500) {
-        const json = await readJsonObject(response);
-        const parsedError = errorEnvelopeSchema.safeParse(json);
-        if (parsedError.success) {
-          return { success: false, reason: "server_error", code: parsedError.data.error.code };
-        }
-        return { success: false, reason: "server_error" };
-      }
-
-      return { success: false, reason: "unexpected_status" };
+      await response.body?.cancel().catch(() => undefined);
+      return { success: false, reason: "unexpected_status", statusCode: response.status };
     } catch (error) {
       if (isTimeoutError(error)) {
         return { success: false, reason: "timeout" };

@@ -7,6 +7,10 @@ export const GENERATED_SECRETS = {
     label: "database password",
     generate: () => randomBytes(24).toString("base64url"), // 32 characters
   },
+  POSTGRES_GATEWAY_PASSWORD: {
+    label: "gateway database role password",
+    generate: () => randomBytes(24).toString("base64url"), // 32 characters
+  },
   GATEWAY_SERVICE_TOKEN: {
     label: "service token",
     generate: () => randomBytes(36).toString("base64url"), // 48 characters
@@ -19,6 +23,7 @@ export const GENERATED_SECRETS = {
     label: "operator-context signing key",
     generate: () => randomBytes(48).toString("base64url"), // 64 characters, 384 bits
   },
+  // The labelled development-demonstration operator's sign-in password, read only by `pnpm db:seed`.
   DEMO_OPERATOR_PASSWORD: {
     label: "demo operator password",
     generate: () => randomBytes(12).toString("base64url"), // 16 characters

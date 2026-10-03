@@ -31,9 +31,18 @@ describe("App Setup (Decision 3: Forwarder)", () => {
       controllers: [SetupTestController],
       providers: [
         { provide: APP_GUARD, useClass: DefaultDenyGuard },
-        { provide: AUTH_PROVIDER, useValue: { authenticate: async () => ({ subjectId: "test" }) } },
+        {
+          provide: AUTH_PROVIDER,
+          useValue: { authenticate: () => Promise.resolve({ subjectId: "test" }) },
+        },
         { provide: DataSource, useValue: { isInitialized: true } },
-        { provide: getRepositoryToken(Membership), useValue: { findOne: async () => ({ userId: "test", organizationId: "test-org", roles: [] }) } },
+        {
+          provide: getRepositoryToken(Membership),
+          useValue: {
+            findOne: () =>
+              Promise.resolve({ userId: "test", organizationId: "test-org", roles: [] }),
+          },
+        },
       ],
     }).compile();
 
@@ -47,9 +56,10 @@ describe("App Setup (Decision 3: Forwarder)", () => {
       .set("x-forwarded-host", "hacker.com");
 
     expect(response.status).toBe(200);
+    const body = response.body as { ip: string; host: string };
     // Since trust proxy is false, IP should be the loopback address of the test client (e.g. ::ffff:127.0.0.1 or ::1)
-    expect(response.body.ip).not.toBe("203.0.113.195");
-    expect(response.body.host).not.toBe("hacker.com");
+    expect(body.ip).not.toBe("203.0.113.195");
+    expect(body.host).not.toBe("hacker.com");
 
     await app.close();
   });

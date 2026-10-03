@@ -1,0 +1,32 @@
+{
+  "evaluationId": "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d",
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "actionId": null,
+  "decision": "deny",
+  "reasonCode": "signature_match",
+  "safeMessage": "The tool result matched a known instruction-redirection signature and was withheld.",
+  "alternativeTemplate": null,
+  "controls": [
+    {
+      "boundary": "tool_result",
+      "controlClass": "deterministic",
+      "control": "secret_pattern",
+      "outcome": "pass",
+      "reasonCode": null,
+      "ruleId": null,
+      "feedRevision": null
+    },
+    {
+      "boundary": "tool_result",
+      "controlClass": "deterministic",
+      "control": "signature_match",
+      "outcome": "block",
+      "reasonCode": "signature_match",
+      "ruleId": "prompt_ignore_previous_v1",
+      "feedRevision": "feed_v1"
+    }
+  ],
+  "semantic": null,
+  "content": null,
+  "catalog": { "admissionRevisionId": 1, "activeRevisionId": 2, "feedRevisionId": 1 }
+}

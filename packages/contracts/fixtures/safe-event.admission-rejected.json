@@ -1,0 +1,29 @@
+{
+  "eventId": "7",
+  "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+  "runId": null,
+  "actionId": null,
+  "eventType": "admission.rejected",
+  "decision": "deny",
+  "reasonCode": "resource_out_of_scope",
+  "catalogRevisionId": 1,
+  "maskedSummary": {
+    "purpose": null,
+    "admissionCatalogRevisionId": null,
+    "matchedRule": null,
+    "feedRevision": null,
+    "reportId": null,
+    "template": null,
+    "classification": null,
+    "lineageCheck": null,
+    "effect": "none",
+    "replaySource": null,
+    "alternativeTemplate": null,
+    "safeMessage": "Requested invoice is outside the task's authority.",
+    "actorId": null,
+    "inputSource": null,
+    "evaluationId": null,
+    "rejectionCause": null
+  },
+  "occurredAt": "2026-10-03T11:59:00Z"
+}

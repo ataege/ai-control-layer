@@ -14,6 +14,8 @@ import (
 
 const minimumServiceTokenLength = 32
 
+const minimumSigningKeyLength = 32
+
 // Kept below the HTTP write timeout so a slow readiness ping can still answer.
 const (
 	minimumDatabaseTimeoutMilliseconds = 100
@@ -22,12 +24,14 @@ const (
 
 // Config holds every runtime setting of the gateway.
 type Config struct {
-	Host            string
-	Port            int
-	ServiceToken    logging.Secret
-	Postgres        Postgres
-	DatabaseTimeout time.Duration
-	LogLevel        slog.Level
+	Host         string
+	Port         int
+	ServiceToken logging.Secret
+	// OperatorContextSigningKey verifies the X-Operator-Context token NestJS signs (decision 4).
+	OperatorContextSigningKey logging.Secret
+	Postgres                  Postgres
+	DatabaseTimeout           time.Duration
+	LogLevel                  slog.Level
 }
 
 // Postgres holds the discrete connection settings shared with the API.
@@ -65,10 +69,12 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		Host: reader.stringOr("GATEWAY_HOST", "127.0.0.1"),
 		Port: reader.port("GATEWAY_PORT", 8080),
 		Postgres: Postgres{
-			Host:     reader.stringOr("POSTGRES_HOST", "localhost"),
-			Port:     reader.port("POSTGRES_PORT", 5432),
-			User:     reader.required("POSTGRES_USER"),
-			Password: logging.NewSecret(reader.required("POSTGRES_PASSWORD")),
+			Host: reader.stringOr("POSTGRES_HOST", "localhost"),
+			Port: reader.port("POSTGRES_PORT", 5432),
+			// The gateway's own role (X-35, CreateServiceRoles); the bootstrap user that runs the
+			// migrations is not the gateway's user (GO-38). Fail closed without its password.
+			User:     GatewayDatabaseRole,
+			Password: logging.NewSecret(reader.requiredWithFix("POSTGRES_GATEWAY_PASSWORD", gatewayRolePasswordFix)),
 			Database: reader.required("POSTGRES_DB"),
 		},
 		DatabaseTimeout: reader.milliseconds("DATABASE_TIMEOUT_MS", 3000),
@@ -84,6 +90,13 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		reader.addProblem("GATEWAY_SERVICE_TOKEN must not start or end with whitespace")
 	}
 	loadedConfig.ServiceToken = logging.NewSecret(serviceToken)
+
+	// Same rule as the API, which signs with this key.
+	signingKey := reader.required("OPERATOR_CONTEXT_SIGNING_KEY")
+	if signingKey != "" && len(signingKey) < minimumSigningKeyLength {
+		reader.addProblem(fmt.Sprintf("OPERATOR_CONTEXT_SIGNING_KEY must be at least %d characters", minimumSigningKeyLength))
+	}
+	loadedConfig.OperatorContextSigningKey = logging.NewSecret(signingKey)
 
 	if len(reader.problems) > 0 {
 		return Config{}, &ValidationError{Problems: reader.problems}
@@ -107,6 +120,23 @@ func (reader *environmentReader) stringOr(name, fallback string) string {
 		return strings.TrimSpace(value)
 	}
 	return fallback
+}
+
+// GatewayDatabaseRole is the database role the gateway connects as. Its name is fixed by the
+// CreateServiceRoles migration and is never configurable.
+const GatewayDatabaseRole = "task_passport_gateway"
+
+// gatewayRolePasswordFix names the steps that give the gateway role its login password.
+const gatewayRolePasswordFix = "run `pnpm run setup`, then `pnpm db:migration:run`, then `pnpm db:roles`"
+
+// requiredWithFix is required with the steps that fix a missing value in its problem text.
+func (reader *environmentReader) requiredWithFix(name, fix string) string {
+	value, isSet := reader.lookup(name)
+	if !isSet || strings.TrimSpace(value) == "" {
+		reader.addProblem(name + " is required: " + fix)
+		return ""
+	}
+	return value
 }
 
 // required rejects blank values but returns the value untrimmed:

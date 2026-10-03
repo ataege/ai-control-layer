@@ -41,10 +41,6 @@ export class AppConfigService {
     return this.environment.OPERATOR_CONTEXT_SIGNING_KEY;
   }
 
-  get demoOperatorPassword(): string {
-    return this.environment.DEMO_OPERATOR_PASSWORD;
-  }
-
   get databaseTimeoutMs(): number {
     return this.environment.DATABASE_TIMEOUT_MS;
   }

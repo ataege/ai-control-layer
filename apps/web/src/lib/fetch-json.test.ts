@@ -107,9 +107,13 @@ describe("fetchJson", () => {
       Response.json({ status: "ok" }, { headers: { "x-request-id": "request-post" } }),
     );
 
-    const result = await postJson<{ status: string }>("/api/actions", { cmd: "do" }, {
-      fetchImplementation: fetchMock,
-    });
+    const result = await postJson<{ status: string }>(
+      "/api/actions",
+      { cmd: "do" },
+      {
+        fetchImplementation: fetchMock,
+      },
+    );
 
     expect(result).toMatchObject({
       ok: true,
@@ -117,7 +121,7 @@ describe("fetchJson", () => {
       data: { status: "ok" },
       requestId: "request-post",
     });
-    
+
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: "POST",
       body: JSON.stringify({ cmd: "do" }),
