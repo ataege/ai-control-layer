@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/provenance"
 )
 
@@ -40,7 +41,7 @@ func createReport(ctx context.Context, tx pgx.Tx, current scope, request EffectR
 	}
 	template, registered := provenance.LookupTemplate(arguments.Template)
 	if !registered || !current.allowsTemplate(template.Name) {
-		return failed(ReasonTemplateNotAllowed, "action.failed", arguments.Template), nil
+		return failed(ReasonTemplateNotAllowed), nil
 	}
 	sourceIDs := slices.Clone(arguments.SourceInvoiceIDs)
 	slices.Sort(sourceIDs)
@@ -49,7 +50,7 @@ func createReport(ctx context.Context, tx pgx.Tx, current scope, request EffectR
 	}
 	for _, invoiceID := range sourceIDs {
 		if !current.allowsInvoice(invoiceID) {
-			return failed(ReasonResourceOutOfScope, "action.failed", invoiceID), nil
+			return failed(ReasonResourceOutOfScope), nil
 		}
 	}
 	invoices, err := loadInvoiceSnapshots(ctx, tx, current, sourceIDs)
@@ -57,7 +58,7 @@ func createReport(ctx context.Context, tx pgx.Tx, current scope, request EffectR
 		return adapterOutcome{}, err
 	}
 	if len(invoices) != len(sourceIDs) {
-		return failed(ReasonResourceOutOfScope, "action.failed", arguments.Template), nil
+		return failed(ReasonResourceOutOfScope), nil
 	}
 
 	var content string
@@ -69,10 +70,10 @@ func createReport(ctx context.Context, tx pgx.Tx, current scope, request EffectR
 		var vendorID string
 		content, sources, vendorID = renderVendor(invoices)
 		if vendorID == "" || !current.allowsVendor(vendorID) {
-			return failed(ReasonResourceOutOfScope, "action.failed", arguments.Template), nil
+			return failed(ReasonResourceOutOfScope), nil
 		}
 	default:
-		return failed(ReasonTemplateNotAllowed, "action.failed", arguments.Template), nil
+		return failed(ReasonTemplateNotAllowed), nil
 	}
 
 	stored, err := provenance.StoreReport(ctx, tx, provenance.NewReport{
@@ -80,20 +81,22 @@ func createReport(ctx context.Context, tx pgx.Tx, current scope, request EffectR
 		Template: template, Sources: sources, Title: reportTitle(template), Content: content,
 	})
 	if errors.Is(err, provenance.ErrLineage) {
-		return failed(ReasonReportLineageMissing, "action.failed", arguments.Template), nil
+		outcome := failed(ReasonReportLineageMissing)
+		outcome.events[0].summary.LineageCheck = text("missing")
+		return outcome, nil
 	}
 	if err != nil {
 		return adapterOutcome{}, err
 	}
-	return adapterOutcome{
-		result: EffectResult{Outcome: OutcomeSucceeded, ModelFacing: ReportResult{
-			ReportID: stored.ID, Version: stored.Version, Template: stored.TemplateName,
-			Classification: stored.Classification, ContentHash: hex.EncodeToString(stored.ContentHash[:]),
-			SourceInvoiceIDs: sourceIDs,
-		}},
-		eventType:  "report.created",
-		resourceID: stored.ID,
-	}, nil
+	storedTemplate := contracts.ReportTemplate(stored.TemplateName)
+	return succeeded(ReportResult{
+		ReportID: stored.ID, Version: stored.Version, Template: stored.TemplateName,
+		Classification: stored.Classification, ContentHash: hex.EncodeToString(stored.ContentHash[:]),
+		SourceInvoiceIDs: sourceIDs,
+	}, contracts.EventReportCreated, contracts.MaskedSummary{
+		ReportID: &stored.ID, Template: &storedTemplate, Classification: &stored.Classification,
+		LineageCheck: text("passed"), Effect: text("report_created"),
+	}), nil
 }
 
 // reportTitle is the fixed display title of a template; a title never grants export authority.

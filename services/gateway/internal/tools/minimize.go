@@ -74,6 +74,16 @@ func MinimizeForModel(tool string, result EffectResult) (MinimizedResult, error)
 		}
 		// References and Go-derived metadata only; the report content stays in the database.
 		return MinimizedResult{JSON: encoded}, nil
+	case ToolQueueReport:
+		var queued QueueResult
+		if err := reencode(result.ModelFacing, &queued); err != nil {
+			return MinimizedResult{}, err
+		}
+		encoded, err := json.Marshal(queued)
+		if err != nil {
+			return MinimizedResult{}, fmt.Errorf("tools: encode queue result: %w", err)
+		}
+		return MinimizedResult{JSON: encoded}, nil
 	default:
 		return MinimizedResult{}, fmt.Errorf("%w: %s", errUnknownTool, tool)
 	}

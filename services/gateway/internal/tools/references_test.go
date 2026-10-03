@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/testdb"
 )
 
@@ -78,6 +79,37 @@ func TestNoToolResultCarriesTheRegisteredAddress(t *testing.T) {
 		}
 		if strings.Contains(string(minimized.JSON), "atlas.example.com") {
 			t.Errorf("%s result holds the registered address: %s", call.tool, minimized.JSON)
+		}
+	}
+}
+
+func TestResolveRecipientForReviewAppliesTheSameChecks(t *testing.T) {
+	world := openWorld(t, func(world *testWorld) passportScope { return scenarioScope(world, true) })
+	passport := contracts.PassportScope{
+		InvoiceIDs: []string{world.invoiceA01, world.invoiceA02}, VendorIDs: []string{world.atlasID},
+		RecipientReferences: []string{recipientReference(world.runID, world.atlasID)},
+	}
+	vendorID, address, reason, err := ResolveRecipientForReview(context.Background(), world.tx, world.organizationID, world.runID,
+		passport, recipientReference(world.runID, world.atlasID))
+	if err != nil || reason != "" || vendorID != world.atlasID || address != "reports@atlas.example.com" {
+		t.Fatalf("valid: %q %q %q %v", vendorID, address, reason, err)
+	}
+	for name, call := range map[string]func() (string, string, string, error){
+		"another run": func() (string, string, string, error) {
+			return ResolveRecipientForReview(context.Background(), world.tx, world.organizationID, testdb.ID(t), passport, recipientReference(world.runID, world.atlasID))
+		},
+		"another organization": func() (string, string, string, error) {
+			return ResolveRecipientForReview(context.Background(), world.tx, testdb.ID(t), world.runID, passport, recipientReference(world.runID, world.atlasID))
+		},
+		"not in the passport list": func() (string, string, string, error) {
+			unlisted := passport
+			unlisted.RecipientReferences = nil
+			return ResolveRecipientForReview(context.Background(), world.tx, world.organizationID, world.runID, unlisted, recipientReference(world.runID, world.atlasID))
+		},
+	} {
+		vendorID, address, reason, err := call()
+		if err != nil || reason != ReasonDestinationNotAllowed || vendorID != "" || address != "" {
+			t.Errorf("%s: %q %q %q %v, want destination_not_allowed and no values", name, vendorID, address, reason, err)
 		}
 	}
 }
