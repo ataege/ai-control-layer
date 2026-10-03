@@ -27,9 +27,9 @@ stored arguments again and recomputes the digest; it never hashes stored bytes.
 
 Argument shapes (proposed for X-09; renamed here if X-09 freezes different names):
 
-| Tool            | Arguments                                                                     |
-| --------------- | ----------------------------------------------------------------------------- |
-| `read_invoice`  | `invoice_id`                                                                  |
-| `read_vendor`   | `vendor_id`                                                                   |
-| `create_report` | `template` (one of the two fixed templates), `source_invoice_ids` (ordered, unique)  |
-| `queue_report`  | `report_id` (lowercase UUID), `recipient_reference` (trusted directory entry) |
+| Tool            | Arguments                                                                           |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `read_invoice`  | `invoice_id`                                                                        |
+| `read_vendor`   | `vendor_id`                                                                         |
+| `create_report` | `template` (one of the two fixed templates), `source_invoice_ids` (ordered, unique) |
+| `queue_report`  | `report_id` (lowercase UUID), `recipient_reference` (trusted directory entry)       |
