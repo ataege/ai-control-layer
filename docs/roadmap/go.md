@@ -832,7 +832,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     relationships matter); "Functional requirements MVP boundary and deferred scope" (Trusted
     admission); "Threat model limits and unresolved design choices" (Verification priorities);
     "Illustrative passport and interface contracts" (Illustrative passport fields)
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md` (which `app` records carry the operator's authority); `passport report fields`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03) (which `app` records carry the operator's authority); `passport report fields`
 
 - [x] **GO-14 · Serve `POST /internal/runs`**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
@@ -871,10 +871,12 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     invoice_C01 and 400 `limit_not_allowed` for 25 model calls; the key never appeared in the log.
     Not verified: the call from NestJS itself (no seeded app users; SH-19), and the `command timeout
 budget` item stays open (admission is one short transaction).
+  - Commits (audit 2026-10-03): d83f92e (route), a8d412b (the failed admission stage logged behind `503
+decision_unavailable`).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations; Decision and error semantics); "Technical architecture and service ownership"
     (Interfaces and repository strategy)
-  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-15 · Store each proposed action and decide allow, deny or approval required**
   - **Report 1.2 change:** Order per Figure 6: deterministic scope and provenance first, then the semantic check of GO-77 for otherwise permitted proposals.
@@ -1048,7 +1050,7 @@ budget` item stays open (admission is one short transaction).
 typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-19 · Build the runtime repository with guarded state transitions**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 4-8 h)
@@ -1120,6 +1122,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     `pnpm test:db` passes Go and API with no skips; after stopping test PostgreSQL, `pnpm test:db gateway`
     correctly exits 1. `pnpm verify` passes all six steps. No service wiring is changed, so no
     additional smoke was run for GO-20.
+  - Commit (audit 2026-10-03): 3cfa292.
   - Report: "Atomic allowances hard limits and estimated cost" ("the application must choose and
     verify the appropriate transaction boundaries"); "Validation plan and evidence matrix"
     (Interpreting results honestly)
@@ -1175,7 +1178,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Validation plan and evidence
     matrix" ("a hidden URL is not a protection")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-22 · Write safe decision events with every state change**
   - **Report 1.2 change:** Events add the metered purpose, admission and active catalog revisions, matched rule and feed revision; safe summaries omit raw notes, secrets, model requests and classifier reasoning.
@@ -1210,9 +1213,9 @@ typecheck` PASS; `pnpm verify` 6 passed.
     check, effect, replay source, alternative template, safe message); another organization reads
     and writes nothing; a row with an extra summary key fails closed; a failed state change leaves
     no event (GO-19 test). Checks: gateway five checks PASS; `go test -race -count=3
-./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Waits on other lanes:
-    decision, approval and execution events are written by lanes w3, w2 and f3, which must switch
-    their raw inserts to `repository.Join(tx).AppendEvent` for the ordering guarantee.
+./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Commit: 47f3dca. Audit
+    2026-10-03 on main cdfee55: the only `INSERT INTO runtime.audit_events` in the gateway is
+    `repository/events.go`, so every lane's events go through `AppendEvent` and its run lock.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
     semantics)
@@ -2087,6 +2090,13 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
 ./internal/api` with PostgreSQL ok; contracts `test` PASS; `pnpm verify` 6 passed. Not covered
     here: interrupting an in-flight model request (the loop stops at its next check), and the
     approval command refusing a decision on a stopped run, which is lane w3's GO-44 check.
+  - Audit 2026-10-03: (1) the right to cancel is a verified operator of the run's organization; no
+    per-run or role-specific management right exists, so the Tests line's "actor without the right" case
+    is covered only as another organization's operator (404). A role check would need a decision. (2)
+    Since 025a339 (lane f3 maps it, edb712c) a cancellation that lands during a step is never
+    overwritten: `TransitionRun` refuses running, awaiting_approval, paused and completed once
+    `cancel_requested_at` is set (`ErrCancelRequested`), and the loop stops the run with `run_cancelled`
+    (`TestPostgresCancelledRunCannotBeKeptGoing`, `TestApprovedActionOfACancelledRunDoesNotResume`).
   - Report: "Atomic allowances hard limits and estimated cost" (Cancellation and time limits);
     "Illustrative passport and interface contracts" (Proposed browser and runtime operations);
     "Exact action approval versioning and execution rechecks" (Versioned policy and current
@@ -2521,6 +2531,16 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     240, before fd67778) had still reserved that call.
     Calls, tokens and time exhaustion are covered by lane f3's GO-39/GO-79 tests and not repeated
     live here.
+  - Audit 2026-10-03, the automated tests behind the cases not repeated live (all on main cdfee55):
+    calls `TestPostgresCallLimitsSubBudgetsAndConcurrency` and
+    `TestModelLimitStopsTheRunBeforeTheNextDispatch`; tokens `TestPostgresConcurrentSharedBudget` and
+    `TestPostgresOverrunPausesWithoutClipping`; request time
+    `TestModelGatewayDeadlineRetainsTheReservationAndSlot`; run expiry
+    `TestRunsThatMayNotContinueSendNoModelRequest` (expired passport); concurrency cap
+    `TestModelGatewayHoldsAThirdConcurrentRequestOverACapOfTwo`; removed model
+    `TestModelGatewayRefusesModelsOutsideCatalogOrPassport`; lowered catalog limit on a running passport
+    `TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport`; threshold in the next snapshot
+    `TestPostgresActiveSnapshotFollowsThePointer`. The live runs above remain one-off evidence.
   - Report: "Validation plan and evidence matrix" (Policy reload and rollback safety, Model allowlist and current reductions, Local model resources)
   - Blocked by: nothing
 
