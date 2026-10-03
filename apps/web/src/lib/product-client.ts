@@ -2,6 +2,7 @@ import { fetchJson, postJson, FetchJsonResult } from "./fetch-json";
 import type {
   StartRunRequest,
   StartRunResponse,
+  TaskFormOptions,
   RunView,
   SanitizedEvent,
 } from "@workspace/contracts";
@@ -33,8 +34,21 @@ export const REASON_CODE_MESSAGES: Record<string, string> = {
   configuration_error: "A server configuration error occurred.",
 };
 
-export function getSafeMessage(code: string): string {
-  return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
+import { type FetchJsonError } from "./fetch-json";
+
+export function getSafeMessage(error: FetchJsonError | string): string {
+  if (typeof error === "string") {
+    return REASON_CODE_MESSAGES[error] || "An unknown error occurred.";
+  }
+  if (error.kind === "http") {
+    const code = (error.body as { error?: { code?: string } } | undefined)?.error?.code;
+    if (code === "unauthorized") return "Invalid credentials.";
+    if (code) return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
+    if (error.status === 401) return "Invalid credentials.";
+  }
+  if (error.kind === "network") return "The server could not be reached.";
+  if (error.kind === "timeout") return "The request timed out.";
+  return REASON_CODE_MESSAGES[error.kind] || "An unknown error occurred.";
 }
 
 // Type Guards for frozen contracts
@@ -47,6 +61,10 @@ function isStartRunResponse(data: unknown): data is StartRunResponse {
     "passportId" in data &&
     typeof (data as Record<string, unknown>).passportId === "string"
   );
+}
+
+function isTaskFormOptions(data: unknown): data is TaskFormOptions {
+  return typeof data === "object" && data !== null && "templates" in data && "vendors" in data;
 }
 
 function isRunView(data: unknown): data is RunView {
@@ -100,6 +118,11 @@ export class ProductClient {
     return enforceGuard(result, isStartRunResponse);
   }
 
+  static async getOptions(): Promise<FetchJsonResult<TaskFormOptions>> {
+    const result = await fetchJson("/api/runs/options");
+    return enforceGuard(result, isTaskFormOptions);
+  }
+
   static async getRun(id: string): Promise<FetchJsonResult<RunView>> {
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}`);
     return enforceGuard(result, isRunView);
@@ -112,5 +135,41 @@ export class ProductClient {
     const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
     const result = await fetchJson(`/api/runs/${encodeURIComponent(id)}/events${qs}`);
     return enforceGuard(result, isSanitizedEventsResponse);
+  }
+
+  static async signIn(credentials: {
+    email: string;
+    password: string;
+  }): Promise<FetchJsonResult<{ message: string }>> {
+    const result = await postJson("/api/auth/sign-in", credentials);
+    return enforceGuard(
+      result,
+      (data): data is { message: string } =>
+        typeof data === "object" && data !== null && "message" in data,
+    );
+  }
+
+  static async getMe(): Promise<
+    FetchJsonResult<{
+      id: string;
+      email: string;
+      name: string;
+      organizationId: string;
+      roles: string[];
+    }>
+  > {
+    const result = await fetchJson("/api/auth/me");
+    return enforceGuard(
+      result,
+      (
+        data,
+      ): data is {
+        id: string;
+        email: string;
+        name: string;
+        organizationId: string;
+        roles: string[];
+      } => typeof data === "object" && data !== null && "id" in data && "name" in data,
+    );
   }
 }
