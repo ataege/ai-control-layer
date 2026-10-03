@@ -297,8 +297,7 @@ then the outbox row from `psql`.
   almost all model time; gateway overhead about **5 ms**.
 - Observations on one M1 Pro machine under stated load; 10 live samples; not a distribution.
 
-**Evidence:** suite (file above); `docs/evidence/api-audit-export-2026-10-04.json` (captured
-2026-10-03T22:48Z, code commit `c70487e`: 14 event records and 2 assessment records, CSV with 10 and 18
+**Evidence:** suite (file above); `docs/evidence/api-audit-export-2026-10-04.json` (the file name carries 2026-10-04, but the file records `capturedAt` 2026-10-03T22:48Z; code commit `c70487e`: 14 event records and 2 assessment records, CSV with 10 and 18
 columns, `countsMatchSummary`); benchmark in README, "Result on the developer machine (2026-10-03,
 quiet)" (commit `3aeade7`, load average 12.03 at the start, 10 CPUs, 300 samples each for the two
 model-less configurations, 10 live). Claims CL-20 to CL-22.
