@@ -260,10 +260,10 @@ export function TaskForm() {
 
           {error && (
             <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-              <div className="font-semibold mb-1">Admission Rejected</div>
+              <div className="mb-1 font-semibold">Admission Rejected</div>
               <div>{error}</div>
               {errorCode && (
-                <div className="mt-2 text-xs bg-destructive/10 inline-block px-2 py-1 rounded font-mono">
+                <div className="mt-2 inline-block rounded bg-destructive/10 px-2 py-1 font-mono text-xs">
                   Authority / Scope Limit: {errorCode}
                 </div>
               )}
