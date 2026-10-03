@@ -30,8 +30,10 @@ export function DecisionBadges({ badges }: { badges: readonly DecisionBadge[] })
         >
           <span className="flex flex-wrap items-center gap-1.5">
             <Badge variant={RESULT_VARIANT[badge.result]}>{badge.text}</Badge>
-            {badge.source === "fixture" ? (
-              <Badge variant="secondary">Fixture, not live</Badge>
+            {badge.sourceLabel !== null ? (
+              <Badge variant="secondary" title={badge.sourceLabel.full}>
+                {badge.sourceLabel.short}
+              </Badge>
             ) : null}
             {badge.result === "not_applicable" ? (
               <span className="text-xs text-muted-foreground">
@@ -39,6 +41,14 @@ export function DecisionBadges({ badges }: { badges: readonly DecisionBadge[] })
               </span>
             ) : null}
           </span>
+          {badge.sourceLabel !== null ? (
+            <span className="text-xs text-muted-foreground">{badge.sourceLabel.full}</span>
+          ) : null}
+          {badge.basis === "reason_code" ? (
+            <span className="text-xs text-muted-foreground">
+              From the decision&apos;s reason code; the exact controls are on the security page.
+            </span>
+          ) : null}
           {badge.consequence !== null ? (
             <span className="text-xs text-muted-foreground">{badge.consequence}</span>
           ) : null}
