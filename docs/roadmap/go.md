@@ -2146,13 +2146,27 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     (Cancellation and revocation)
   - Blocked by: nothing
 
-- [ ] **GO-81 · Build the repeatable performance benchmark**
+- [x] **GO-81 · Build the repeatable performance benchmark**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-80 · Needs: nothing · Provides: X-95 (part: benchmark)
   - Paths: a new command or test package, named by the Go implementer
   - Work: Record build, hardware, model, fixture size and active catalog, then report sample counts, errors, latency distribution (p50 and p95 only after collecting observations) and throughput. Compare the same permitted operation with optional semantic inspection enabled and disabled in an authorized test configuration; stubbed guard runs isolate gateway overhead and a separate live-model run records actual semantic and provider delay. Never invent latency results.
   - Done when: one documented command produces the benchmark report on the developer machine.
   - Tests: the benchmark run once with its output quoted.
+  - Completed (2026-10-03): W2 lane, branch go/w2: `cmd/benchmark`, run with
+    `node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark [--live]`. It measures the
+    policy lookup and hybrid inspection of one permitted `read_invoice` result with the semantic
+    check off, on with a labelled fixture caller (gateway overhead) and on with the live model.
+    `measurement method` is decided and recorded in the gateway README ("Performance benchmark
+    (GO-81)"): concurrency 1, warmup excluded, the configurations without a model interleaved,
+    GO-80 phase names, nearest-rank p50 and p95, null before observations, plus a separate
+    aggregate of `runtime.timing_records`. Run once (Apple M1 Pro, `qwen3.5:4b`, load average
+    108.88 on 10 CPUs, feed loaded by hand because the API-34 feed import is not on `main`):
+    `semantic_off` 300 samples, 0 errors, total p50 45,021 µs, p95 284,823 µs;
+    `semantic_on_fixture` 300, 0 errors, p50 38,802 µs, p95 279,920 µs, semantic p50 39 µs;
+    `semantic_on_live` 5, 0 errors, p50 16,204,307 µs, provider p50 15,456,473 µs. The full table
+    is in the gateway README. `go test ./cmd/benchmark`: ok. GO-80's recorded spans were empty
+    (its writer is on go/f3, not `main`).
   - Report: "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: `measurement method`
 
