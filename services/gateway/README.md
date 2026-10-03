@@ -309,6 +309,10 @@ limit. Local inference has no tariff, so no cost is recorded.
 - **The audit stream is application evidence**, not tamper-proof: append-only through the gateway's
   grants, but the database owner can change it.
 - **Protected-field inspection is literal** (GO-56): a transformed or encoded value is not found.
+- **A long transaction stalls the organization-wide pages.** The security event and assessment
+  pages return only rows of finished transactions; a long-running or idle-in-transaction session
+  anywhere in the database holds them back. Pages come back empty with the same cursor until it
+  ends; nothing is lost.
 - **Two identical start-run requests create two runs** (`command idempotency keys` is open).
 
 ### Evidence commands
