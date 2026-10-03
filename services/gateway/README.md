@@ -10,7 +10,7 @@ with "Technical handoff (GO-61)".
 | Route                                           | Purpose                                                                                                                                                                   |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /health/live`                              | Process liveness. Never touches PostgreSQL.                                                                                                                               |
-| `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.                                                                                           |
+| `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, the worker runs and an enforceable control catalog is active (GO-72), else `503`.                     |
 | `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                                                                                    |
 | `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable` (the log names the failed stage, for example `catalog`). |
 | `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                                                                        |
@@ -192,13 +192,14 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
    `docs/setup.md` section 7). `MODEL_BASE_URL` and `MODEL_NAME` go in `.env`.
 2. `pnpm run setup` writes `GATEWAY_SERVICE_TOKEN`, `OPERATOR_CONTEXT_SIGNING_KEY` and
    `POSTGRES_GATEWAY_PASSWORD` into `.env` (a missing secret is added to an existing file).
-3. `pnpm infra:up`, then `pnpm db:migration:run` (19 migrations) and `pnpm db:roles` (the gateway
-   role's password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml`
-   as catalog revision 1. Until the feed import (API-34) is on `main`, bind the signature feed by
-   hand ("Attack-signature feed" in `docs/setup.md`); without it every inspection and the replay
-   fail closed.
+3. `pnpm infra:up`, then `pnpm db:migration:run` and `pnpm db:roles` (the gateway role's
+   password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml` with its
+   signature feed (`pnpm policy:import` does the import alone). An import only requests the
+   revision: the running gateway validates and activates it within seconds, or
+   `pnpm catalog:activate` does it once without a gateway. Without an active, enforceable catalog,
+   admission, every inspection and the replay fail closed and readiness is `503`.
 4. `pnpm dev` (or `pnpm dev:gateway`, or `pnpm stack:up` for containers). `GET /health/ready` is
-   `200` only with the database reachable and the worker running.
+   `200` only with the database reachable, the worker running and an enforceable catalog active.
 5. Checks: `pnpm --filter gateway run lint`, `typecheck`, `test`, `build`, then
    `pnpm test:db gateway` against a dedicated test database (set `GOFLAGS=-p=3` on a loaded machine).
 
@@ -767,6 +768,13 @@ reservation stuck as `reserved`; if the settlement still fails, the call is mark
 (reservation and slot held) and returns `model.ErrUsageUnknown`, which pauses the run. The wait for
 a process slot is bounded on its own by one request period, and the provider's request deadline
 starts only once the slot is held.
+
+**Refused reservations are logged.** `budget.ReserveWithin` refuses with a
+`budget.ReservationRefusal` naming the limit (`token_total`, `purpose_tokens`, `calls_total`,
+`purpose_calls`, `concurrency_slot`, `ledger_paused`), the requested estimate, the limit and what
+remained; it unwraps to `ErrExhausted`, `ErrConcurrencyLimit` or `ErrPaused`. The production chain
+logs each refusal of either purpose as `model reservation refused` with the run and call ids, the
+purpose, `limit_kind`, `limit`, `estimate_tokens` and `remaining`: references and numbers only.
 
 **Limitation: unknown calls hold their slots.** A `usage_unknown` reservation keeps its ledger slot
 until a trusted late settlement (`Reconcile`). Such calls normally pause the run; a run that kept
@@ -1403,9 +1411,8 @@ Measurement method (open item `measurement method`, decided by the Go lane for G
   load average, database, active catalog and feed revisions, payload and note sizes, and
   separately aggregates what the gateway recorded in `runtime.timing_records` during real runs.
 
-It needs an enforceable active catalog with its signature feed; without one it fails closed. Until
-the feed import (API-34) is on `main`, load `config/attack-signatures.json` into
-`app.signature_feed_revisions` and the pointer's `active_feed_revision_id` by hand.
+It needs an enforceable active catalog with its signature feed; without one it fails closed. Run
+`pnpm policy:import` and then `pnpm catalog:activate` (or start the gateway) once on the database.
 
 ### Result on the developer machine (2026-10-03, quiet)
 
@@ -1469,6 +1476,14 @@ answers `503` with `status: "unavailable"` and the real database check, and logs
 `worker loop not running`. The readiness schema stays unchanged (open item `worker readiness`,
 option chosen with the lead: no contract change). The gateway process starts the worker and reports
 it in readiness (see "Production chain and gateway wiring").
+
+**Catalog readiness (GO-72).** "With no valid initial catalog, the gateway is not ready and cannot
+dispatch work." `catalog.Readiness` loads the active snapshot through the same `Loader.Active`
+admission uses, at start and then every second, and `health.Handler.Catalog` takes its `Ready()`.
+No active revision, invalid limits or security settings, or signature matching without its bound
+feed make readiness `503` with the real database check, the same shape as the worker check (no
+schema change), and log `"check":"catalog"`; the watcher logs only when readiness changes. A
+rejected new revision keeps the last good one active, so readiness stays `200`.
 
 Tests use a unique job kind per test, so no test claims
 another test's job. Their fixtures need a passport, which rejects `DELETE` by trigger: cleanup

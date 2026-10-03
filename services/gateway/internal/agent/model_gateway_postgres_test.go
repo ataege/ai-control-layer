@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -217,6 +220,8 @@ func TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport(t *testing.T)
 	})
 	active := &switchableCatalog{snapshot: gatewaySnapshot([]string{"test-fixture"}, 20, 2).snapshot}
 	caller := NewCatalogAccountedCaller(provider, budgettest.NewDispatchRecordingStore(pool), fixedAccounting{}, active, pool, "test-fixture")
+	logs := &bytes.Buffer{}
+	caller.logger = slog.New(slog.NewJSONHandler(logs, nil))
 	securityRequest := model.Request{Purpose: model.SecurityPurpose, ContextTokens: contextTokens, Messages: []model.Message{{Role: "user", Content: "fixture"}}}
 	for range 3 {
 		if _, err := caller.Call(context.Background(), run.RunID, testdb.ID(t), securityRequest); err != nil {
@@ -236,6 +241,13 @@ func TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport(t *testing.T)
 	}
 	if hits.Load() != 4 || snapshot.Security.Calls != 3 || snapshot.Security.CallLimit != 12 {
 		t.Fatalf("provider hits %d, security calls %d (stored limit %d)", hits.Load(), snapshot.Security.Calls, snapshot.Security.CallLimit)
+	}
+	// The refusal names its limit in the log, with numbers and references only.
+	logged := logs.String()
+	if !strings.Contains(logged, `"msg":"model reservation refused"`) || !strings.Contains(logged, `"limit_kind":"purpose_calls"`) ||
+		!strings.Contains(logged, `"purpose":"security"`) || !strings.Contains(logged, `"limit":1`) || !strings.Contains(logged, `"remaining":0`) ||
+		strings.Contains(logged, "fixture\"") {
+		t.Fatalf("refusal log: %s", logged)
 	}
 }
 
