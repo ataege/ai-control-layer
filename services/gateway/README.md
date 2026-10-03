@@ -103,6 +103,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/model`           | Go lane f3 (worker, agent, model, budget)                     |
 | `internal/budget`          | Go lane f3 (worker, agent, model, budget)                     |
 | `internal/worker`          | Go lane f3 (worker, agent, model, budget)                     |
+| `internal/agent`           | Go lane f3 (worker, agent, model, budget)                     |
 | `internal/testdb`          | Shared Go lanes; the lead coordinates edits                   |
 | `internal/contracts`       | Go lane 3c (repository, admission, passport, API)             |
 | `internal/repository`      | Go lane 3c (repository, admission, passport, API)             |
@@ -132,6 +133,7 @@ internal/provenance/  registered templates and projection, classification, linea
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
 internal/security/    hybrid security controls: content rules (GO-74), semantic evaluator (GO-75), signature feed (GO-78)
 internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (GO-08)
+internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
@@ -534,6 +536,43 @@ To change the feed, edit the file (byte-stable; prettier skips it), bump `revisi
 (`shasum -a 256 config/attack-signatures.json`), update `committedFeedDigest` in
 `internal/security/feed_file_test.go` and import the new bytes, together with the matching
 `signatures.revision` in `policy.yaml`.
+
+## Agent model step (GO-10)
+
+`agent.Stepper.Step` performs one agent-purpose model request for a run:
+
+1. The configured model must be in the passport's allowed models, else nothing is dispatched
+   (`ErrModelNotAllowed`; GO-79 adds the active-catalog check).
+2. `budget.CallLog.RecordDispatch` commits the GO-02 pre-dispatch record in `runtime.model_calls`
+   (purpose `agent`). Its id is the ledger's call id (alignment decision 3).
+3. `model.AccountedCaller` reserves, dispatches with `think: false` and `stream: false`, and settles
+   or keeps the reservation as `usage_unknown`. The request is the fixed agent instruction followed
+   by the caller's minimized task context (GO-23 builds it), with only the four registered tools
+   offered as functions. Their parameter schemas mirror X-09; a test fails when they drift from
+   `packages/contracts/schemas/action-proposal.schema.json`.
+4. The response becomes exactly one of: one proposal for the gate (arguments untouched: a malformed
+   proposal is stored and denied at the gate), a final answer for GO-26, or a rejection of the
+   whole response with `multiple_actions_not_supported` when it holds several tool calls (GO-01; no
+   subset ever runs). An empty response is `ErrUnusableResponse`.
+5. The call outcome (`completed`, `usage_unknown`, `failed`) is recorded once.
+
+A failed or usage-unknown call returns `ErrModelCallFailed` and the run fails, with no retry: the
+`model call retries` default of Figure 5. The underlying cause stays matchable (`budget.ErrExhausted`,
+`model.ErrTimeout`) for the run's stop reason. Call-count limits, per-purpose sub-budgets and the
+concurrency slot follow in GO-39 and GO-79.
+
+Live evidence on the developer M2/8 GiB machine, Ollama 0.35.1, `qwen3.5:4b` ID `2a654d98e6fb`,
+PostgreSQL 18 on loopback: three runs of the command below each returned one typed
+`read_invoice` with `invoice_id: "invoice_A01"`, 647 input and 30 output tokens, settled to 677 of a
+20,000-token ledger with nothing left reserved. Wall times were 6.50 s (first, cold), 1.07 s and
+0.91 s. These are observations, not a benchmark. The test is opt-in and makes no model request in
+ordinary verification.
+
+```sh
+GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
+  node scripts/with-env.mjs go -C services/gateway test -tags=model_live ./internal/agent \
+  -run '^TestLiveModelProposesATypedAction$' -count=1 -v
+```
 
 ## Worker and job lease (GO-08)
 
