@@ -146,6 +146,7 @@ func run() error {
 		OperatorContext: operatorContextVerifier,
 		InternalCommands: api.Commands(api.Dependencies{
 			Admitter:  admission.New(runtimeRepository, catalogLoader),
+			Options:   admission.NewOptionsReader(pool, catalogLoader),
 			Canceller: runtimeRepository,
 			Approvals: policy.NewApprovals(pool),
 			Runs:      runtimeRepository,
