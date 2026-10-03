@@ -1,29 +1,23 @@
-import { getSafeMessage } from "@/lib/product-client";
+import { classifyFailure, type Failure, type FailureWords } from "@/lib/errors/failure";
 import type { FetchJsonError } from "@/lib/fetch-json";
 
-export interface ReportFailure {
-  title: string;
-  description: string;
-}
-
-/**
- * The words for a report that could not be shown. A report outside its registered template (or an
- * incomplete one) is an error, never free text: the interface renders only stored reports.
- */
-export function describeReportFailure(error: FetchJsonError): ReportFailure {
-  if (error.kind === "http" && error.status === 404) {
-    return {
+// The report page's own words for the two failures that are about the report itself; every other
+// failure (offline, an expired session, an unreachable API, ...) uses the shared states (WEB-23).
+// A report outside its registered template (or an incomplete one) is an error, never free text.
+export const REPORT_FAILURE_WORDS: Partial<Record<"not_found" | "invalid_response", FailureWords>> =
+  {
+    not_found: {
       title: "Report not found",
       description:
         "No stored report with this identifier exists in this run for your organization.",
-    };
-  }
-  if (error.kind === "invalid_json") {
-    return {
+    },
+    invalid_response: {
       title: "Report cannot be shown",
       description:
         "The stored report does not match its registered template or is incomplete, so it is not shown.",
-    };
-  }
-  return { title: "Report unavailable", description: getSafeMessage(error) };
+    },
+  };
+
+export function describeReportFailure(error: FetchJsonError): Failure {
+  return classifyFailure(error, { overrides: REPORT_FAILURE_WORDS });
 }
