@@ -370,31 +370,10 @@ func buildResponse(evaluationID, runID string, admissionRevisionID int64, snapsh
 	return response
 }
 
-// safeMessages are fixed operator messages; they never contain the inspected text.
-var safeMessages = map[contracts.ReasonCode]string{
-	contracts.ReasonSignatureMatch:               "The input matched a known attack signature and was withheld.",
-	contracts.ReasonSemanticInjectionDetected:    "The semantic check judged the input a likely injection and withheld it.",
-	contracts.ReasonContentBlocked:               "A configured secret pattern blocked the input.",
-	contracts.ReasonContentRedacted:              "Configured content was masked before the text could reach the model.",
-	contracts.ReasonContentTooLarge:              "The input exceeds the inspected size limit or is not valid UTF-8 and was withheld.",
-	contracts.ReasonSecurityEvaluatorUnavailable: "The required security check could not run, so the input was not let through.",
-	contracts.ReasonSecurityAllowanceExhausted:   "The run's security allowance is exhausted, so the input was not let through.",
-	contracts.ReasonDecisionUnavailable:          "No decision could be made, so nothing was allowed.",
-	contracts.ReasonResourceOutOfScope:           "The proposed action names a record outside the run's passport.",
-	contracts.ReasonDestinationNotAllowed:        "The proposed destination is not allowed for this run.",
-	contracts.ReasonReportExportRestricted:       "The report inherits an Internal only restriction and cannot be sent to a vendor.",
-	contracts.ReasonToolNotRegistered:            "The proposed tool is not registered.",
-	contracts.ReasonInvalidArguments:             "The proposed arguments do not fit the tool's contract.",
-	contracts.ReasonToolNotAllowed:               "The proposed tool is not in the run's passport.",
-	contracts.ReasonTemplateNotAllowed:           "The proposed report template is not allowed for this run.",
-	contracts.ReasonReportLineageMissing:         "The report's trusted lineage is missing, so it cannot be exported.",
-	contracts.ReasonRunCancelled:                 "The run is cancelled.",
-	contracts.ReasonRunExpired:                   "The run's passport has expired.",
-}
-
 func safeMessageFor(decision contracts.EvaluationDecision, reason contracts.ReasonCode) string {
-	if message, known := safeMessages[reason]; known {
-		return message
+	// One message table for every reason code: contracts.ReasonCode.SafeMessage (GO-58).
+	if reason != "" {
+		return reason.SafeMessage()
 	}
 	switch decision {
 	case contracts.EvaluationAllow:
@@ -402,7 +381,7 @@ func safeMessageFor(decision contracts.EvaluationDecision, reason contracts.Reas
 	case contracts.EvaluationApprovalRequired:
 		return "The action is permitted only after exact review; the evaluation stored and executed nothing."
 	default:
-		return fmt.Sprintf("The interaction was denied (%s).", reason)
+		return "The interaction was denied."
 	}
 }
 

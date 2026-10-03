@@ -42,6 +42,12 @@ func (tx Tx) AppendEvent(ctx context.Context, event NewEvent) (contracts.SafeEve
 	if ctx == nil || !validEvent(event) {
 		return contracts.SafeEvent{}, ErrInvalid
 	}
+	// The single default (lead decision): a reason-coded event without its own message carries
+	// the fixed X-13 message of its code; an emitter's specific message always wins.
+	if event.ReasonCode != nil && event.MaskedSummary.SafeMessage == nil {
+		message := event.ReasonCode.SafeMessage()
+		event.MaskedSummary.SafeMessage = &message
+	}
 	summary, err := json.Marshal(event.MaskedSummary)
 	if err != nil {
 		return contracts.SafeEvent{}, ErrInvalid
