@@ -42,6 +42,11 @@ export type PolicyImportOutcome =
       /** The stored feed revision row (new or reused), or null when the policy imports no feed. */
       feedRevisionId: string | null;
       feedDigest: string | null;
+      /**
+       * True when the policy and its feed equal the current revision (validated, or requested and not
+       * yet checked): nothing was written and `revisionId` is that current revision.
+       */
+      unchanged: boolean;
     }
   | {
       accepted: false;
@@ -49,6 +54,11 @@ export type PolicyImportOutcome =
       issues: PolicyFileIssue[];
       /** The last-known-good revision, unchanged by the rejection; null when none was ever accepted. */
       activeRevisionId: string | null;
+      /**
+       * Set when a valid import was refused only because this requested revision has not been checked
+       * by the gateway yet: nothing was written, and the operator waits for activation and retries.
+       */
+      pendingRevisionId?: string;
     };
 
 /**
@@ -101,19 +111,69 @@ export async function importPolicyFile(
     return reject(validation.fileDigest, validation.issues);
   }
 
-  // The feed is validated and stored before the revision, so a policy whose feed Go would refuse
-  // never becomes a revision at all.
-  let feedRevision: SignatureFeedRevision | null = null;
+  // Everything up to the first write is read-only: the feed is validated and compared with what is
+  // stored, then the import may turn out to be unchanged or refused, and only then are rows written.
+  // A policy whose feed Go would refuse never becomes a revision at all.
+  let checkedFeed: CheckedFeed | null = null;
   if (request.feed !== undefined || validation.policy.controls.signature_match.enabled) {
-    const feedResult = await storeSignatureFeed(
+    const feedResult = await checkSignatureFeed(
       transactionManager,
       validation.policy,
       request.feed,
     );
-    if (!feedResult.stored) {
+    if (!feedResult.ok) {
       return reject(validation.fileDigest, feedResult.issues);
     }
-    feedRevision = feedResult.revision;
+    checkedFeed = feedResult;
+  }
+
+  // An import that changes nothing is a no-op. A new revision with the same digest would move the
+  // pointer, and pending work is bound to the old revision: the executor would refuse it
+  // (source_policy_changed), so a judge's repeated import of an unchanged file during a review wait
+  // would void the approval. "Unchanged" means the same policy digest and the same feed (issuer,
+  // revision, digest) as the current revision, and only a sound current revision counts: validated by
+  // the gateway, or requested and still waiting for it. A rejected request, or an active revision an
+  // old import bootstrapped without validation, needs a fresh revision to be retried or healed.
+  const current = await unchangedCurrentRevision(
+    transactionManager,
+    pointer,
+    validation.fileDigest,
+    checkedFeed,
+  );
+  if (current !== null) {
+    return {
+      accepted: true,
+      unchanged: true,
+      revisionId: current.id,
+      fileDigest: validation.fileDigest,
+      activeRevisionId: pointer.activeRevisionId,
+      feedRevisionId: checkedFeed?.existing?.id ?? null,
+      feedDigest: checkedFeed?.existing?.fileDigest ?? null,
+    };
+  }
+
+  // A second import inside one activation tick could replace a request the gateway has not checked
+  // (good A, then bad B: A is never validated, B is rejected, the old revision stays). Refuse until
+  // the pending request has been checked; nothing is written, and last_error is left alone.
+  const pendingRevisionId = pendingUncheckedRevision(pointer);
+  if (pendingRevisionId !== null) {
+    return {
+      accepted: false,
+      fileDigest: validation.fileDigest,
+      issues: [
+        {
+          path: "(import)",
+          message: `revision ${pendingRevisionId} is still being validated; wait for activation and retry (without a running gateway, run pnpm catalog:activate)`,
+        },
+      ],
+      activeRevisionId: pointer.activeRevisionId,
+      pendingRevisionId,
+    };
+  }
+
+  let feedRevision: SignatureFeedRevision | null = null;
+  if (checkedFeed !== null) {
+    feedRevision = await storeCheckedFeed(transactionManager, checkedFeed);
   }
 
   const revision = await transactionManager.save(
@@ -136,6 +196,7 @@ export async function importPolicyFile(
 
   return {
     accepted: true,
+    unchanged: false,
     revisionId: revision.id,
     fileDigest: validation.fileDigest,
     activeRevisionId: pointer.activeRevisionId,
@@ -155,29 +216,80 @@ function holdsPendingGatewayRejection(pointer: ControlCatalogPointer): boolean {
   );
 }
 
-type FeedStoreResult =
-  { stored: true; revision: SignatureFeedRevision } | { stored: false; issues: PolicyFileIssue[] };
+/**
+ * The requested revision when it is still waiting for the gateway: requested, not the active one (an
+ * old import's first revision is requested = active), not validated, and without a recorded gateway
+ * rejection. null otherwise.
+ */
+function pendingUncheckedRevision(pointer: ControlCatalogPointer): string | null {
+  const requested = pointer.requestedRevisionId;
+  if (
+    requested === null ||
+    requested === pointer.activeRevisionId ||
+    requested === pointer.validatedRevisionId ||
+    holdsPendingGatewayRejection(pointer)
+  ) {
+    return null;
+  }
+  return requested;
+}
 
 /**
- * Validates the feed against the Go grammar and the policy that names it, then stores its exact
- * bytes, or reuses the stored row of the trusted issuer when that revision already holds the same
- * bytes. The same revision with different bytes is refused: changed rules need a new revision.
+ * The current revision (requested, else active) when this import would change nothing: it is sound (see
+ * the caller), its policy digest equals the file's and the feed in play is the stored one. null when
+ * the import must create a revision.
  */
-async function storeSignatureFeed(
+async function unchangedCurrentRevision(
+  transactionManager: EntityManager,
+  pointer: ControlCatalogPointer,
+  policyDigest: string,
+  checkedFeed: CheckedFeed | null,
+): Promise<ControlCatalogRevision | null> {
+  const currentId = pointer.requestedRevisionId ?? pointer.activeRevisionId;
+  if (currentId === null) return null;
+  const sound =
+    currentId === pointer.validatedRevisionId || currentId === pendingUncheckedRevision(pointer);
+  if (!sound) return null;
+  const current = await transactionManager.findOneBy(ControlCatalogRevision, { id: currentId });
+  if (current === null || current.fileDigest !== policyDigest) return null;
+  // The same policy names the same feed revision; it is the same feed when the stored row of the
+  // trusted issuer for that revision has the digest of the feed file. No feed in play: nothing differs.
+  if (checkedFeed !== null && checkedFeed.existing?.fileDigest !== checkedFeed.fileDigest)
+    return null;
+  return current;
+}
+
+type FeedCheck = ({ ok: true } & CheckedFeed) | { ok: false; issues: PolicyFileIssue[] };
+
+/** A feed that passed every check, with the stored row it equals (null: not stored yet). */
+interface CheckedFeed {
+  feed: SignatureFeed;
+  sourceFileName: string;
+  sourceText: string;
+  fileDigest: string;
+  existing: SignatureFeedRevision | null;
+}
+
+/**
+ * Validates the feed against the Go grammar and the policy that names it and looks up the stored row of
+ * the trusted issuer for its revision, without writing anything. The same revision with different bytes
+ * is refused: changed rules need a new revision.
+ */
+async function checkSignatureFeed(
   transactionManager: EntityManager,
   policy: PolicyFile,
   feedFile: PolicyImportRequest["feed"],
-): Promise<FeedStoreResult> {
+): Promise<FeedCheck> {
   if (feedFile === undefined) {
-    return { stored: false, issues: [{ path: "feed", message: "signature feed file is missing" }] };
+    return { ok: false, issues: [{ path: "feed", message: "signature feed file is missing" }] };
   }
   const feedValidation = validateSignatureFeed(feedFile.fileBytes);
   if (!feedValidation.valid) {
-    return { stored: false, issues: feedValidation.issues };
+    return { ok: false, issues: feedValidation.issues };
   }
   const mismatch = feedMismatch(feedValidation.feed, policy.signatures);
   if (mismatch !== null) {
-    return { stored: false, issues: [mismatch] };
+    return { ok: false, issues: [mismatch] };
   }
   const { feed, sourceText, fileDigest } = feedValidation;
   // Go's activation binds the feed by (trusted issuer, revision) (catalog/activation.go), so reuse is
@@ -188,34 +300,46 @@ async function storeSignatureFeed(
     issuer: TRUSTED_FEED_ISSUER,
     revision: feed.revision,
   });
-  if (existing !== null) {
-    if (existing.fileDigest !== fileDigest) {
-      return {
-        stored: false,
-        issues: [
-          {
-            path: "feed.revision",
-            message:
-              "a different feed is stored under this revision (for example from a manual load); recreate the database, or bump the revision if the rules really changed",
-          },
-        ],
-      };
-    }
-    return { stored: true, revision: existing };
+  if (existing !== null && existing.fileDigest !== fileDigest) {
+    return {
+      ok: false,
+      issues: [
+        {
+          path: "feed.revision",
+          message:
+            "a different feed is stored under this revision (for example from a manual load); recreate the database, or bump the revision if the rules really changed",
+        },
+      ],
+    };
   }
-  const revision = await transactionManager.save(
+  return {
+    ok: true,
+    feed,
+    sourceFileName: feedFile.sourceFileName,
+    sourceText,
+    fileDigest,
+    existing,
+  };
+}
+
+/** Stores a checked feed (exact bytes, with their SHA-256), or returns the stored row it equals. */
+async function storeCheckedFeed(
+  transactionManager: EntityManager,
+  checked: CheckedFeed,
+): Promise<SignatureFeedRevision> {
+  if (checked.existing !== null) return checked.existing;
+  return transactionManager.save(
     transactionManager.create(SignatureFeedRevision, {
-      issuer: feed.issuer,
-      revision: feed.revision,
-      sourceFileName: feedFile.sourceFileName,
-      sourceText,
-      fileDigest,
-      content: feed,
+      issuer: checked.feed.issuer,
+      revision: checked.feed.revision,
+      sourceFileName: checked.sourceFileName,
+      sourceText: checked.sourceText,
+      fileDigest: checked.fileDigest,
+      content: checked.feed,
       importSource: "command",
       importedBy: null,
     }),
   );
-  return { stored: true, revision };
 }
 
 /** The checks Go's SettingsFromCatalog makes between a policy and its feed. */
