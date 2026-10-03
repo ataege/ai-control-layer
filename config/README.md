@@ -43,6 +43,21 @@ next to the policy file; the feed half of API-34), and then, in one transaction:
   runs that activation once (the test database and `pnpm reset:demo` do). Until GO-73's activation is on `main`, nothing
   activates a requested revision, so a fresh database has no active catalog and the gateway stays
   not ready.
+- **Unchanged file and feed:** a no-op. When the policy digest and the feed (issuer, revision,
+  digest) equal the current revision (the requested one, else the active one), the command prints
+  "unchanged: revision N is already current", writes nothing and exits 0. A new revision with the same
+  digest would move the pointer, and pending work (an approval waiting for review) is bound to the old
+  revision, so the executor would refuse it as `source_policy_changed`: a judge's repeated import of
+  an unchanged file must not void an approval. Only a sound current revision counts (validated by the
+  gateway, or requested and still waiting for it); a request the gateway rejected, or an active
+  revision an old import bootstrapped without validation, gets a fresh revision, which is how it is
+  retried or healed.
+- **A pending request:** a valid, changed file is refused while the requested revision has not been
+  checked by the gateway yet (it differs from the active and the validated revision and has no
+  recorded gateway rejection). Nothing is written; the command prints "revision N is still being
+  validated; wait for activation and retry" and exits 1 (without a running gateway, run
+  `pnpm catalog:activate`). Otherwise two imports inside one activation tick could replace a good
+  edit before it was ever validated. A file's own problems are reported first.
 - **Invalid file or feed:** stores nothing. The issues are always printed (and returned) and the
   command exits 1; it also records the reason (`policy_reload_rejected`), the file digest and up to 20
   issues on the pointer (`app.control_catalog_pointer`), except when the gateway's own rejection of
