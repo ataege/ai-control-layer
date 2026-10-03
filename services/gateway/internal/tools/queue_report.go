@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/provenance"
 )
 
@@ -43,7 +44,7 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 	// "A generated report ID is not permission to queue an unrelated report."
 	report, err := provenance.LoadReport(ctx, tx, current.organizationID, current.runID, arguments.ReportID)
 	if errors.Is(err, provenance.ErrReportNotFound) {
-		return failed(ReasonResourceOutOfScope, "action.failed", arguments.ReportID), nil
+		return failed(ReasonResourceOutOfScope), nil
 	}
 	if err != nil {
 		return adapterOutcome{}, err
@@ -54,7 +55,7 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 		return adapterOutcome{}, err
 	}
 	if reason != "" {
-		return failed(reason, "report.export_denied", report.ID), nil
+		return exportDenied(report, provenance.ExportDecision{ReasonCode: reason}), nil
 	}
 
 	// The export decision reads the stored lineage and the current source versions only.
@@ -68,7 +69,7 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 	}
 	decision := provenance.AuthorizeExport(report, provenance.DestinationRegisteredVendor, versions)
 	if !decision.Allowed {
-		return failed(decision.ReasonCode, "report.export_denied", report.ID), nil
+		return exportDenied(report, decision), nil
 	}
 	// The recipient must be the vendor of every source invoice of the report.
 	sameVendor, err := sourcesBelongToVendor(ctx, tx, current.organizationID, sourceIDs, recipient.vendorID)
@@ -76,7 +77,7 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 		return adapterOutcome{}, err
 	}
 	if !sameVendor {
-		return failed(ReasonDestinationNotAllowed, "report.export_denied", report.ID), nil
+		return exportDenied(report, provenance.ExportDecision{ReasonCode: ReasonDestinationNotAllowed}), nil
 	}
 
 	var outboxMessageID string
@@ -88,13 +89,47 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 	if err != nil {
 		return adapterOutcome{}, fmt.Errorf("tools: insert simulated outbox row: %w", err)
 	}
-	return adapterOutcome{
-		result: EffectResult{Outcome: OutcomeSucceeded, ModelFacing: QueueResult{
-			OutboxMessageID: outboxMessageID, ReportID: report.ID, Status: StatusQueuedSimulated,
-		}},
-		eventType:  "report.queued_simulated",
-		resourceID: report.ID,
-	}, nil
+	return succeeded(QueueResult{OutboxMessageID: outboxMessageID, ReportID: report.ID, Status: StatusQueuedSimulated},
+		contracts.EventActionSucceeded, reportSummary(report, "passed", "outbox_message_queued")), nil
+}
+
+// exportDenied is a refused export: no outbox row, a report.export_denied event with the stable
+// reason and, where the report itself may not leave, a report.safe_template_offered event naming
+// the already-permitted alternative ("Denial may identify an authorized alternative template
+// without granting extra scope").
+func exportDenied(report provenance.StoredReport, decision provenance.ExportDecision) adapterOutcome {
+	lineageCheck := "passed"
+	switch decision.ReasonCode {
+	case ReasonReportLineageMissing:
+		lineageCheck = "missing"
+	case ReasonResourceVersionChanged, ReasonTemplateNotAllowed:
+		lineageCheck = "failed"
+	}
+	deny := contracts.DecisionDeny
+	denied := reportSummary(report, lineageCheck, "none")
+	outcome := adapterOutcome{
+		result: EffectResult{Outcome: OutcomeFailed, ReasonCode: decision.ReasonCode},
+		events: []eventRecord{{eventType: contracts.EventReportExportDenied, decision: &deny, summary: denied}},
+	}
+	if decision.AlternativeTemplate != "" {
+		alternative := contracts.ReportTemplate(decision.AlternativeTemplate)
+		denied.AlternativeTemplate = &alternative
+		outcome.events[0].summary = denied
+		offered := reportSummary(report, lineageCheck, "none")
+		offered.AlternativeTemplate = &alternative
+		outcome.events = append(outcome.events, eventRecord{eventType: contracts.EventReportSafeTemplateOffered, summary: offered})
+	}
+	return outcome
+}
+
+// reportSummary is the masked metadata of a report event: references and Go-derived labels.
+func reportSummary(report provenance.StoredReport, lineageCheck, effect string) contracts.MaskedSummary {
+	template := contracts.ReportTemplate(report.TemplateName)
+	reportID, classification := report.ID, report.Classification
+	return contracts.MaskedSummary{
+		ReportID: &reportID, Template: &template, Classification: &classification,
+		LineageCheck: text(lineageCheck), Effect: text(effect),
+	}
 }
 
 // sourcesBelongToVendor reports whether every source invoice is the given vendor's.

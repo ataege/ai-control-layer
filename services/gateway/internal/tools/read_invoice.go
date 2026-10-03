@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 // readInvoiceArguments are the X-09 arguments of read_invoice.
@@ -44,7 +46,7 @@ func readInvoice(ctx context.Context, tx pgx.Tx, current scope, rawArguments jso
 		return adapterOutcome{}, fmt.Errorf("%w: invoice_id is required", errPrecondition)
 	}
 	if !current.allowsInvoice(arguments.InvoiceID) {
-		return failed(ReasonResourceOutOfScope, "action.failed", arguments.InvoiceID), nil
+		return failed(ReasonResourceOutOfScope), nil
 	}
 
 	var result InvoiceResult
@@ -60,7 +62,7 @@ func readInvoice(ctx context.Context, tx pgx.Tx, current scope, rawArguments jso
 		&noteText, &noteClassification)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Another organization's invoice and a missing one look the same: no existence leak.
-		return failed(ReasonResourceOutOfScope, "action.failed", arguments.InvoiceID), nil
+		return failed(ReasonResourceOutOfScope), nil
 	}
 	if err != nil {
 		return adapterOutcome{}, fmt.Errorf("tools: read invoice: %w", err)
@@ -72,9 +74,5 @@ func readInvoice(ctx context.Context, tx pgx.Tx, current scope, rawArguments jso
 		}
 		result.InternalNote = &InvoiceNote{Text: *noteText, Classification: *noteClassification}
 	}
-	return adapterOutcome{
-		result:     EffectResult{Outcome: OutcomeSucceeded, ModelFacing: result},
-		eventType:  "action.succeeded",
-		resourceID: result.InvoiceID,
-	}, nil
+	return succeeded(result, contracts.EventActionSucceeded, contracts.MaskedSummary{Effect: text("read")}), nil
 }

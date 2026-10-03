@@ -13,6 +13,9 @@ import (
 	"io"
 
 	"github.com/jackc/pgx/v5"
+
+	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/repository"
 )
 
 // Tool names: the four registered adapters, nothing else is executable.
@@ -29,14 +32,15 @@ const (
 	OutcomeFailed    = "failed"
 )
 
-// Reason codes from the proposed vocabulary (docs/product/README.md) that the adapters return.
+// Reason codes the adapters return, from the shared X-13 vocabulary (contracts.ReasonCode).
+// EffectResult carries them as plain strings so callers can convert them to their own types.
 const (
-	ReasonResourceOutOfScope     = "resource_out_of_scope"
-	ReasonTemplateNotAllowed     = "template_not_allowed"
-	ReasonDestinationNotAllowed  = "destination_not_allowed"
-	ReasonReportExportRestricted = "report_export_restricted"
-	ReasonReportLineageMissing   = "report_lineage_missing"
-	ReasonResourceVersionChanged = "resource_version_changed"
+	ReasonResourceOutOfScope     = string(contracts.ReasonResourceOutOfScope)
+	ReasonTemplateNotAllowed     = string(contracts.ReasonTemplateNotAllowed)
+	ReasonDestinationNotAllowed  = string(contracts.ReasonDestinationNotAllowed)
+	ReasonReportExportRestricted = string(contracts.ReasonReportExportRestricted)
+	ReasonReportLineageMissing   = string(contracts.ReasonReportLineageMissing)
+	ReasonResourceVersionChanged = string(contracts.ReasonResourceVersionChanged)
 )
 
 // EffectRequest is what the executor passes for one claimed attempt. Identity comes from the
@@ -72,20 +76,37 @@ var _ EffectRunner = Runner{}
 // It is an error, not a failed outcome: the executor rolls back and pauses.
 var errPrecondition = errors.New("tools: effect precondition not met")
 
-// adapterOutcome is what one adapter returns to the runner.
+// adapterOutcome is what one adapter returns to the runner: its result and the safe events
+// (X-12) that record it. Events carry references and Go-derived labels only, never values.
 type adapterOutcome struct {
-	result     EffectResult
-	eventType  string
-	resourceID string
+	result EffectResult
+	events []eventRecord
 }
 
-func failed(reasonCode, eventType, resourceID string) adapterOutcome {
+// eventRecord is one safe event of an outcome, before the runner adds the identifiers.
+type eventRecord struct {
+	eventType contracts.EventType
+	decision  *contracts.EventDecision
+	summary   contracts.MaskedSummary
+}
+
+// failed is an adapter's own refusal: no effect, one action.failed event.
+func failed(reasonCode string) adapterOutcome {
 	return adapterOutcome{
-		result:     EffectResult{Outcome: OutcomeFailed, ReasonCode: reasonCode},
-		eventType:  eventType,
-		resourceID: resourceID,
+		result: EffectResult{Outcome: OutcomeFailed, ReasonCode: reasonCode},
+		events: []eventRecord{{eventType: contracts.EventActionFailed, summary: contracts.MaskedSummary{Effect: text("none")}}},
 	}
 }
+
+// succeeded is an adapter's success with one event.
+func succeeded(modelFacing any, eventType contracts.EventType, summary contracts.MaskedSummary) adapterOutcome {
+	return adapterOutcome{
+		result: EffectResult{Outcome: OutcomeSucceeded, ModelFacing: modelFacing},
+		events: []eventRecord{{eventType: eventType, summary: summary}},
+	}
+}
+
+func text(value string) *string { return &value }
 
 // RunEffect runs one adapter inside tx, then completes the attempt and writes its audit event in
 // the same transaction. The executor begins and commits tx; on an error it rolls back and pauses.
@@ -155,8 +176,9 @@ func verifyActionAndAttempt(ctx context.Context, tx pgx.Tx, request EffectReques
 	return nil
 }
 
-// completeAttempt records the outcome on the attempt and writes one audit event with masked
-// metadata only (references, never values).
+// completeAttempt records the outcome on the attempt and appends the outcome's safe events through
+// the shared X-12 event writer, all inside tx. repository.New(tx) begins a savepoint in tx, so
+// the events commit with the effect or not at all.
 func completeAttempt(ctx context.Context, tx pgx.Tx, request EffectRequest, outcome adapterOutcome) error {
 	tag, err := tx.Exec(ctx,
 		`UPDATE runtime.execution_attempts SET outcome = $1, completed_at = now()
@@ -169,23 +191,30 @@ func completeAttempt(ctx context.Context, tx pgx.Tx, request EffectRequest, outc
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("%w: attempt was completed concurrently", errPrecondition)
 	}
-	summary, err := json.Marshal(map[string]string{"tool": request.Tool, "resource": outcome.resourceID})
-	if err != nil {
-		return fmt.Errorf("tools: encode event summary: %w", err)
+	runID, actionID := request.RunID, request.ActionID
+	var catalogRevisionID *int64
+	if request.CatalogRevisionID > 0 {
+		catalogRevisionID = &request.CatalogRevisionID
 	}
-	var reasonCode *string
+	var reasonCode *contracts.ReasonCode
 	if outcome.result.ReasonCode != "" {
-		reasonCode = &outcome.result.ReasonCode
+		code := contracts.ReasonCode(outcome.result.ReasonCode)
+		reasonCode = &code
 	}
-	_, err = tx.Exec(ctx,
-		`INSERT INTO runtime.audit_events
-		   (organization_id, run_id, action_id, event_type, decision, reason_code, catalog_revision_id, masked_summary)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		request.OrganizationID, request.RunID, request.ActionID, outcome.eventType,
-		outcome.result.Outcome, reasonCode, request.CatalogRevisionID, summary,
-	)
+	err = repository.New(tx).InTransaction(ctx, func(eventTx repository.Tx) error {
+		for _, record := range outcome.events {
+			if _, err := eventTx.AppendEvent(ctx, repository.NewEvent{
+				OrganizationID: request.OrganizationID, RunID: &runID, ActionID: &actionID,
+				EventType: record.eventType, Decision: record.decision, ReasonCode: reasonCode,
+				CatalogRevisionID: catalogRevisionID, MaskedSummary: record.summary,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("tools: write audit event: %w", err)
+		return fmt.Errorf("tools: append event: %w", err)
 	}
 	return nil
 }

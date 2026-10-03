@@ -50,6 +50,10 @@ func TestQueueInternalReportToTheRegisteredVendorIsDenied(t *testing.T) {
 	if got := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE action_id = $1 AND event_type = 'report.export_denied' AND reason_code = 'report_export_restricted'`, request.ActionID); got != 1 {
 		t.Fatalf("export_denied events = %d, want 1", got)
 	}
+	if got := world.count(t, `SELECT count(*) FROM runtime.audit_events WHERE action_id = $1 AND event_type = 'report.safe_template_offered'
+	                            AND masked_summary->>'alternativeTemplate' = 'vendor_reconciliation_v1'`, request.ActionID); got != 1 {
+		t.Fatalf("safe_template_offered events = %d, want 1", got)
+	}
 }
 
 func TestQueueVendorReportCreatesOneSimulatedOutboxRow(t *testing.T) {
