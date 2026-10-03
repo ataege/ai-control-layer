@@ -315,7 +315,7 @@ anything else is a decision, not an implemented behaviour.
     positive in runs 1 and 2, two false negatives in run 3): that is the model's variance near the 0.75
     threshold, which is why a label mismatch is recorded and does not fail the suite (`--strict-live`
     does)." The earlier "0 wrong of 84" above does not repeat in run 3, so claims quote run 3 and the
-    variance, not the best result. The results JSON is gitignored and was on the lead's machine only (`.verify-controls/results-2026-10-03T21-16-48Z.json`); the lead has asked lane c1 for a sanitized copy under `docs/evidence/`, which is not on `main` yet, so the numbers are not verifiable from the repository until it lands.
+    variance, not the best result. The sanitized results file is on `main`: `docs/evidence/verify-controls-2026-10-03T21-16-48Z.json` (checked by the researcher: commit `6bbaac1`, 1100 cases, by category positive 102, negative 437, redaction 27, budget 55, exploit 122 with 2 mismatches, other 355; live 27 of 29, 0 false positives, 2 false negatives, 0 guard failures), so these numbers are verifiable from the repository.
 
 24. **Model call retries (`model call retries`).** There are no automatic model-call retries in the
     MVP. A failed, timed-out or unknown agent or security call is never re-sent; its reservation settles
