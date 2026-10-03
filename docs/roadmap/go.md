@@ -2209,13 +2209,27 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     (Cancellation and revocation)
   - Blocked by: nothing
 
-- [ ] **GO-81 · Build the repeatable performance benchmark**
+- [x] **GO-81 · Build the repeatable performance benchmark**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-80 · Needs: nothing · Provides: X-95 (part: benchmark)
   - Paths: a new command or test package, named by the Go implementer
   - Work: Record build, hardware, model, fixture size and active catalog, then report sample counts, errors, latency distribution (p50 and p95 only after collecting observations) and throughput. Compare the same permitted operation with optional semantic inspection enabled and disabled in an authorized test configuration; stubbed guard runs isolate gateway overhead and a separate live-model run records actual semantic and provider delay. Never invent latency results.
   - Done when: one documented command produces the benchmark report on the developer machine.
   - Tests: the benchmark run once with its output quoted.
+  - Completed (2026-10-03): W2 lane, branch go/w2: `cmd/benchmark`, run with
+    `node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark [--live]`. It measures the
+    policy lookup and hybrid inspection of one permitted `read_invoice` result with the semantic
+    check off, on with a labelled fixture caller (gateway overhead) and on with the live model.
+    `measurement method` is decided and recorded in the gateway README ("Performance benchmark
+    (GO-81)"): concurrency 1, warmup excluded, the configurations without a model interleaved,
+    GO-80 phase names, nearest-rank p50 and p95, null before observations, plus a separate
+    aggregate of `runtime.timing_records`. Run once (Apple M1 Pro, `qwen3.5:4b`, load average
+    108.88 on 10 CPUs, feed loaded by hand because the API-34 feed import is not on `main`):
+    `semantic_off` 300 samples, 0 errors, total p50 45,021 µs, p95 284,823 µs;
+    `semantic_on_fixture` 300, 0 errors, p50 38,802 µs, p95 279,920 µs, semantic p50 39 µs;
+    `semantic_on_live` 5, 0 errors, p50 16,204,307 µs, provider p50 15,456,473 µs. The full table
+    is in the gateway README. `go test ./cmd/benchmark`: ok. GO-80's recorded spans were empty
+    (its writer is on go/f3, not `main`).
   - Report: "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: `measurement method`
 
@@ -2252,7 +2266,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: `revocation reads`; `decision 2 in docs/product/README.md`
   - Progress (2026-10-03): blocked on SH-38/X-66 (web + API): `revocation reads` is not decided and no revocation table exists, so no reader is built (a reader that fails closed against a missing table would stop every run; lead decision).
 
-- [ ] **GO-53 · Handle known failures, safe retries and unknown outcomes**
+- [x] **GO-53 · Handle known failures, safe retries and unknown outcomes**
   - **Report 1.1 change:** Figure 9.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 2-4 h)
   - Depends on: GO-07, GO-45 · Needs: X-11, X-39 · Provides: nothing
@@ -2277,6 +2291,18 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     of queue_report retried under the same action yields one outbox row and two counted attempts
     (against w2_check). Missing: the executor's retry loop and unknown-outcome attention state in
     internal/policy (Worker 3).
+  - Completed (2026-10-03): both halves are on `main` (abf3c10): the adapter half above (ca42cb6)
+    and Worker 3's executor half (5a6b211). A known no-effect failure of a retry-safe tool is
+    retried once under the same action id and counts as another tool attempt; a precondition
+    failure fails the action and stops the run; a failed commit leaves the attempt open, marks
+    the action unknown with `action.unknown` (`outcome_unknown`), pauses the run and is never
+    re-queued. Rerun on the merged tree 55c851f against a private PostgreSQL (`starter_test`):
+    `TestSafeRetryUnderTheSameActionQueuesOneMessage` (one outbox row, two attempts),
+    `TestPreconditionFailureFailsTheActionWithoutRetry`, `TestFailedCommitRecordsAnUnknownOutcome`
+    (a second execution is refused), `TestAdapterErrorRollsBackAndPauses`,
+    `TestKnownSafeRetryOfQueueReportYieldsOneOutboxRow` and `TestClassifyRunErrorAndRetrySafety`:
+    PASS. `go test ./internal/tools ./internal/provenance ./internal/reads ./internal/policy` with
+    `GOFLAGS=-p=3`: ok. No reconciliation of unknown effects exists beyond this state (GO-61).
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Architecture and chart
     reading guide" (Figure 8); "Functional requirements MVP boundary and deferred scope" (Safe
     outcomes and retries)
@@ -2440,7 +2466,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-57 · Prove organization access at the internal boundary**
+- [x] **GO-57 · Prove organization access at the internal boundary**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-14, GO-21, GO-41, GO-44 · Needs: X-22, X-24, X-34 · Provides: X-56
   - Paths: `services/gateway/internal/httpserver/server_test.go`
@@ -2453,20 +2479,22 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     its action, or claim its resources.")
   - Tests: internal-boundary tests through the X-24 command: each cross-organization command and
     read is rejected, and the runtime rows are identical before and after.
-  - Progress (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
+  - Completed (2026-10-03): `internal/api/organization_access_test.go` builds organization A's
     committed run (awaiting approval), an action awaiting approval, an internal report, a vendor and
     invoices, and calls every mounted internal route with a valid service token and organization
     B's verified operator context: start a run on A's invoices, cancel A's run, read A's report,
-    approve and reject A's action, read A's review. Each is rejected (start: 400 or 503, cancel and
-    report 404, approval and review 403 or 404), no response contains A's report text or vendor,
-    B gets no passport, and an md5 fingerprint of every row A owns in runtime.passports, runs, jobs,
-    actions, approvals, audit_events, review_payloads, demo.reports, outbox_messages, invoices and
-    vendors is identical before and after; A's own operator still reads the report (200) and
-    cancels the run (200). Checks: `pnpm test:db gateway` 688 passed, 0 failed, 0 skipped; gateway
-    five checks PASS; `pnpm verify` 6 passed. Missing half: lane w2's GO-24 run, usage and event
-    reads are not mounted yet; they join this test when they land. On the seeded test database the
-    cross-organization start-run gets 503 (its catalog binds no feed), so the scope rejection of
-    that call is shown by GO-13's tests instead.
+    approve and reject A's action, read A's review, read A's run state, events and usage (lane w2's
+    GO-24). Each is rejected (start 400 or 503; cancel, report, run state, events and usage 404;
+    approval and review 403 or 404); the organization-wide security summary, assessments and events
+    (GO-83) answer B with none of A's run, action, report or organization ids; no response contains
+    A's report text or vendor; B gets no passport; and an md5 fingerprint of every row A owns in
+    runtime.passports, runs, jobs, actions, approvals, audit_events, review_payloads, demo.reports,
+    outbox_messages, invoices and vendors is identical before and after. A's own operator still
+    reads the report, the run state and the events (200) and cancels the run (200). Checks: `go test
+./internal/api` against the test database PASS; gateway five checks PASS; `pnpm test:db
+gateway` and `pnpm verify` as quoted in the commit. On the seeded test database the
+    cross-organization start-run answers 503 (its catalog binds no feed), so the scope rejection of
+    that call is shown by GO-13's tests.
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`

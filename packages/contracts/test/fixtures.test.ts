@@ -12,6 +12,8 @@ import type {
   ActionProposal,
   ApiReadinessResponse,
   ApprovalDecision,
+  ControlEvaluationRequest,
+  ControlEvaluationResponse,
   ErrorResponse,
   GatewayDiagnosticsResponse,
   GatewayPingResponse,
@@ -260,6 +262,26 @@ export const typedSamples = {
     roles: ["operator", "reviewer"],
   } satisfies OperatorContext,
   approvalDecision: { decision: "approve" } satisfies ApprovalDecision,
+  controlEvaluationRequest: {
+    runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    kind: "action_proposal",
+    text: null,
+    tool: "read_invoice",
+    arguments: { invoice_id: "invoice_B01" },
+  } satisfies ControlEvaluationRequest,
+  controlEvaluationResponse: {
+    evaluationId: "8c9d0e1f-2a3b-4c4d-8e5f-6a7b8c9d0e1f",
+    runId: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+    actionId: null,
+    decision: "deny",
+    reasonCode: "resource_out_of_scope",
+    safeMessage: "The proposed action names a record outside the run's passport.",
+    alternativeTemplate: null,
+    controls: [],
+    semantic: null,
+    content: null,
+    catalog: { admissionRevisionId: 1, activeRevisionId: 1, feedRevisionId: 1 },
+  } satisfies ControlEvaluationResponse,
 };
 
 // Fixture file that each typed literal must equal, one per schema.
@@ -280,6 +302,8 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   safeEvent: "safe-event.admission-rejected.json",
   operatorContext: "operator-context.operator.json",
   approvalDecision: "approval-decision.approve.json",
+  controlEvaluationRequest: "control-evaluation-request.action-proposal.json",
+  controlEvaluationResponse: "control-evaluation-response.scope-deny.json",
 };
 
 test("typed samples are identical to their fixtures", () => {

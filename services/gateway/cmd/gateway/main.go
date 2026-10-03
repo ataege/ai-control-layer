@@ -133,6 +133,7 @@ func run() error {
 			Admitter:  admission.New(runtimeRepository, catalogLoader),
 			Canceller: runtimeRepository,
 			Approvals: policy.NewApprovals(pool),
+			Runs:      runtimeRepository,
 			Database:  pool,
 		}),
 	})
