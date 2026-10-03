@@ -398,6 +398,8 @@ type MaskedSummary struct {
 	ActorID *string `json:"actorId"`
 	// InputSource is "judge" for a control evaluation of submitted input (GO-82); nil otherwise.
 	InputSource *string `json:"inputSource"`
+	// EvaluationID is a control evaluation's id; its control assessments carry the same id.
+	EvaluationID *string `json:"evaluationId"`
 }
 
 func contains[Value comparable](values []Value, candidate Value) bool {

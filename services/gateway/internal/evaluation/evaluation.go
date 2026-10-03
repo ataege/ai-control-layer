@@ -335,8 +335,9 @@ func (evaluator *Evaluator) recordEvidence(ctx context.Context, operator contrac
 		AlternativeTemplate:        result.alternativeTemplate,
 		SafeMessage:                &safeMessage,
 		// Judge evidence is labelled and attributed, so summaries count it apart from agent decisions.
-		ActorID:     pointer(operator.UserID),
-		InputSource: pointer("judge"),
+		ActorID:      pointer(operator.UserID),
+		InputSource:  pointer("judge"),
+		EvaluationID: pointer(evaluationID),
 	}
 	for _, record := range result.records {
 		if record.MatchedRuleID != "" && record.ControlID == security.ControlSignatureMatch {
