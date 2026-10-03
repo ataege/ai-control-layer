@@ -61,6 +61,9 @@ func (world *storyWorld) returnedResults(t *testing.T) []returnedResult {
 		}
 		results = append(results, result)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read rows: %v", err)
+	}
 	return results
 }
 
@@ -122,6 +125,9 @@ func assertInternalReportIsPermitted(t *testing.T, world *storyWorld) string {
 			t.Fatal(err)
 		}
 		lineageSources = append(lineageSources, sourceID)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read rows: %v", err)
 	}
 	rows.Close()
 	for _, sourceID := range lineageSources {

@@ -112,8 +112,10 @@ func logRows(t *testing.T, world *loopWorld, label, query string) {
 	defer rows.Close()
 	for rows.Next() {
 		var line string
-		if rows.Scan(&line) == nil {
-			t.Logf("%s: %s", label, line)
-		}
+		mustScan(t, rows, &line)
+		t.Logf("%s: %s", label, line)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read rows: %v", err)
 	}
 }
