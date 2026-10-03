@@ -2665,10 +2665,10 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     denial asserts it). Provider failure (`TestUnreachableProviderRecordsTheActualFailureState`,
     real stepper, accounted caller and ledger against an unreachable Ollama): `model_calls.outcome`
     `usage_unknown`, the reservation held as `usage_unknown`, the run paused with
-    `outcome_unknown` and an event message saying the call failed or returned no usage (lead: no
-    new X-13 code). Error envelopes: no error text reaches them; admission echoes request ids
-    through `%q`. 3c adds the default safeMessage for every other reason-coded event in
-    `repository.AppendEvent` once this is on `main`.
+    `outcome_unknown` and an event message saying the local model could not be reached (f3's
+    GO-79 joins the transport cause; a bad response has its own message; lead: no new X-13 code). Error envelopes: no error text reaches them; admission echoes request ids
+    through `%q`. Every other reason-coded event gets its X-13 message from 3c's default in
+    `repository.AppendEvent` (go/3c; an emitter's own message wins).
   - Report: "Relative implementation milestones and critical dependencies" (Hours 18-21); "Live
     demonstration storyboard and proof checks" (Reliable demonstrations without invented
     behavior); "Illustrative passport and interface contracts" (Decision and error semantics)

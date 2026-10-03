@@ -52,7 +52,7 @@ func TestUnreachableProviderRecordsTheActualFailureState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if callOutcome != string(budget.CallUsageUnknown) || reservationStatus != "usage_unknown" ||
-		safeMessage != messageModelUsageUnknown || purpose != string(model.AgentPurpose) {
+		safeMessage != messageModelUnreachable || purpose != string(model.AgentPurpose) {
 		t.Fatalf("call %s, reservation %s, event message %q purpose %q", callOutcome, reservationStatus, safeMessage, purpose)
 	}
 	t.Logf("evidence GO-58: provider unreachable -> model_calls.outcome %s, reservation %s, run paused/%s, event safeMessage %q",
