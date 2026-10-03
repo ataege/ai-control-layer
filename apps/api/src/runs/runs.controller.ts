@@ -16,6 +16,11 @@ const StartRunResponseSchema = z.object({
   passportId: z.string(),
 });
 
+interface AuthenticatedRequest extends Request {
+  operatorContext: OperatorContext;
+  id: string;
+}
+
 @ApiTags('runs')
 @Controller('runs')
 export class RunsController {
@@ -69,7 +74,7 @@ export class RunsController {
   @UsePipes(new ZodValidationPipe(StartRunSchema))
   async startRun(
     @Body() dto: StartRunRequest,
-    @Req() req: Request
+    @Req() req: AuthenticatedRequest
   ): Promise<StartRunResponse> {
     if (!req.operatorContext) {
       throw new InternalServerErrorException('Missing operator context');
@@ -103,7 +108,7 @@ export class RunsController {
   @ApiOperation({ summary: 'Get run details' })
   async getRun(
     @Param('id') id: string,
-    @Req() req: Request
+    @Req() req: AuthenticatedRequest
   ): Promise<RunView> {
     const outcome = await this.gateway.fetchQuery(
       `/internal/runs/${encodeURIComponent(id)}`,
@@ -129,7 +134,7 @@ export class RunsController {
   async getRunEvents(
     @Param('id') id: string,
     @Query('after') after: string | undefined,
-    @Req() req: Request
+    @Req() req: AuthenticatedRequest
   ): Promise<{ events: SanitizedEvent[]; nextCursor?: string }> {
     const query = after ? `?after=${encodeURIComponent(after)}` : '';
     const outcome = await this.gateway.fetchQuery(
