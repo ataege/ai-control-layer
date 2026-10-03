@@ -103,6 +103,18 @@ func run() error {
 	// One catalog loader for admission and the agent chain. A missing model configuration does
 	// not stop the gateway: every model call then fails closed and no run can take a step.
 	catalogLoader := catalog.NewLoader()
+	// Readiness follows the active catalog (GO-72): no enforceable catalog, not ready. Stopped
+	// before the pool closes, like the activation watcher.
+	catalogReadiness := catalog.NewReadiness(catalogLoader)
+	readinessStopped := make(chan struct{})
+	go func() {
+		defer close(readinessStopped)
+		catalogReadiness.Watch(signalContext, pool, catalogActivationInterval, logger)
+	}()
+	defer func() {
+		stopSignals()
+		<-readinessStopped
+	}()
 	modelConfig, modelErr := config.LoadModel()
 	if modelErr != nil {
 		logger.Warn("model not configured; every model call fails closed", "error", modelErr.Error())
@@ -129,7 +141,7 @@ func run() error {
 	handler := httpserver.NewHandler(httpserver.Options{
 		Logger: logger,
 		Health: health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger,
-			Worker: chain.Worker},
+			Worker: chain.Worker, Catalog: catalogReadiness},
 		ServiceToken:    loadedConfig.ServiceToken,
 		OperatorContext: operatorContextVerifier,
 		InternalCommands: api.Commands(api.Dependencies{
