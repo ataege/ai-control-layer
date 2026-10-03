@@ -221,11 +221,30 @@ it("uses current database roles rather than session age or browser claims", asyn
   expect(getRead).not.toHaveBeenCalled();
   expect(postCommand).not.toHaveBeenCalled();
 });
-it("refuses a removed membership before any Go call", async () => {
+it.each(routes)("refuses a removed membership before $method $path reaches Go", async (route) => {
   await transaction.manager.getRepository(Membership).delete({ userId: ownUser.id });
-  await request(app.getHttpServer())
-    .get(`/api/runs/${state.runId}`)
+  const client = request(app.getHttpServer());
+  await (route.method === "get" ? client.get(route.path) : client.post(route.path).send(route.body))
     .set("Cookie", cookies[0]!)
     .expect(401);
   expect(getRead).not.toHaveBeenCalled();
+  expect(postCommand).not.toHaveBeenCalled();
+});
+it("ignores browser organization and forwarded identity claims with a real stored session", async () => {
+  const membership = await transaction.manager
+    .getRepository(Membership)
+    .findOneByOrFail({ userId: foreignUser.id });
+  await request(app.getHttpServer())
+    .get(
+      `/api/runs/${state.runId}?organizationId=${membership.organizationId}&userId=${foreignUser.id}`,
+    )
+    .set("Cookie", cookies[0]!)
+    .set("X-Operator-Context", "browser-forged-context")
+    .set("X-Forwarded-User", foreignUser.id)
+    .expect(200);
+  expect(getRead.mock.calls[0]?.at(-1)).toEqual({
+    userId: ownUser.id,
+    organizationId: ownerOrganization,
+    roles: ["operator", "reviewer"],
+  });
 });

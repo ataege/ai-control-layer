@@ -589,7 +589,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
   - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-08 · Resolve the operator context and check organization membership**
+- [x] **API-08 · Resolve the operator context and check organization membership**
+  - Done (2026-10-04): the stored session resolves the user and the global guard loads the current membership and roles from app records on each request. Browser organization/user claims and forged operator headers cannot replace that context. Database-backed public-route tests remove membership before each of eight read/command operations and observe 401 with neither gateway method called; a real stored session with another organization's query/header claims still forwards only its own verified membership. API-16 already covers current role changes. Checks: API lint, typecheck and build exited 0; API unit tests: "367 passed"; `pnpm test:db api`: "67 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Go responses in these authorization tests are explicitly labelled fixtures, not live runtime evidence. The user's stored-session instruction governs the outdated JWT proposal in decision 7; no fallback identity or runtime/demo write was added.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-06 · Needs: X-18, X-22, X-24 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.types.ts`, `apps/api/src` (the module from API-05)
