@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/componen
 import { ErrorState } from "@workspace/ui/components/error-state";
 import { LoadingState } from "@workspace/ui/components/loading-state";
 import { PageHeader } from "@workspace/ui/components/page-header";
+import { CancelRunButton } from "@/components/approval/cancel-run-button";
 import { PassportPanel } from "@/components/passport/passport-panel";
 import { ClassificationBadge } from "@/components/report/classification-badge";
 import { ExportDenial, isExportDenial } from "@/components/report/export-denial";
@@ -167,8 +168,8 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
         title="Task run"
         description={`Run ${id}`}
         actions={
-          // The cancel button mounts here when the cancel route is available (3c).
-          <div data-slot="run-actions" />
+          // The button shows only the server-recorded state and offers nothing for a finished run.
+          <CancelRunButton runId={id} runStatus={run?.status} onCancelled={setRun} />
         }
       />
 
