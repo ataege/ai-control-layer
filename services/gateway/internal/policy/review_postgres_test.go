@@ -225,7 +225,7 @@ func TestUnresolvableRecipientFreezesNothing(t *testing.T) {
 		t.Fatal("a review was frozen for a recipient that does not resolve")
 	}
 	var frozenRows int
-	_ = world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.review_payloads WHERE action_id = $1`, actionID).Scan(&frozenRows)
+	mustScan(t, world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.review_payloads WHERE action_id = $1`, actionID), &frozenRows)
 	if frozenRows != 0 {
 		t.Fatalf("%d payload rows for a refused freeze", frozenRows)
 	}

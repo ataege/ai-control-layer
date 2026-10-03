@@ -82,8 +82,8 @@ func activateRepositoryPolicy(t *testing.T, world *loopWorld) {
 	t.Helper()
 	ctx := context.Background()
 	var previousRevision, previousFeed *int64
-	_ = world.pool.QueryRow(ctx, `SELECT active_revision_id, active_feed_revision_id FROM app.control_catalog_pointer WHERE id = 1`).
-		Scan(&previousRevision, &previousFeed)
+	mustScan(t, world.pool.QueryRow(ctx, `SELECT active_revision_id, active_feed_revision_id FROM app.control_catalog_pointer WHERE id = 1`),
+		&previousRevision, &previousFeed)
 	transaction, err := world.pool.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)

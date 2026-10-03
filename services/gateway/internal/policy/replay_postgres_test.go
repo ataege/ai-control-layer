@@ -109,7 +109,7 @@ func TestLabelledReplayIsDeniedByTheRealGate(t *testing.T) {
 			}
 
 			var storedLabel *string
-			_ = world.pool.QueryRow(ctx, `SELECT replay_source FROM runtime.actions WHERE id = $1`, replayAction).Scan(&storedLabel)
+			mustScan(t, world.pool.QueryRow(ctx, `SELECT replay_source FROM runtime.actions WHERE id = $1`, replayAction), &storedLabel)
 			label := ReplaySourcePrefix + fixtureID
 			if storedLabel == nil || *storedLabel != label {
 				t.Fatalf("stored replay label = %v, want %s", storedLabel, label)
@@ -131,12 +131,12 @@ func TestLabelledReplayIsDeniedByTheRealGate(t *testing.T) {
 			}
 			rows.Close()
 			var liveLabel *string
-			_ = world.pool.QueryRow(ctx, `SELECT replay_source FROM runtime.actions WHERE id = $1`, liveProposal.ActionID).Scan(&liveLabel)
+			mustScan(t, world.pool.QueryRow(ctx, `SELECT replay_source FROM runtime.actions WHERE id = $1`, liveProposal.ActionID), &liveLabel)
 
 			var outbox, attempts, modelCalls int
-			_ = world.pool.QueryRow(ctx, `SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1`, world.run.OrganizationID).Scan(&outbox)
-			_ = world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.execution_attempts WHERE action_id = $1`, replayAction).Scan(&attempts)
-			_ = world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.model_calls WHERE run_id = $1`, world.run.RunID).Scan(&modelCalls)
+			mustScan(t, world.pool.QueryRow(ctx, `SELECT count(*) FROM demo.outbox_messages WHERE organization_id = $1`, world.run.OrganizationID), &outbox)
+			mustScan(t, world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.execution_attempts WHERE action_id = $1`, replayAction), &attempts)
+			mustScan(t, world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.model_calls WHERE run_id = $1`, world.run.RunID), &modelCalls)
 			if events == 0 || outbox != 0 || attempts != 0 || modelCalls != 0 || liveLabel != nil {
 				t.Fatalf("events %d, outbox %d, attempts %d, model calls %d, live label %v", events, outbox, attempts, modelCalls, liveLabel)
 			}

@@ -107,7 +107,7 @@ func TestResourceAndDestinationBoundaries(t *testing.T) {
 			after := takeBoundarySnapshot(t, world, targets.OutOfScopeInvoiceID)
 
 			var storedDecision string
-			_ = world.pool.QueryRow(ctx, `SELECT decision || '/' || reason_code FROM runtime.audit_events WHERE action_id = $1`, proposal.ActionID).Scan(&storedDecision)
+			mustScan(t, world.pool.QueryRow(ctx, `SELECT decision || '/' || reason_code FROM runtime.audit_events WHERE action_id = $1`, proposal.ActionID), &storedDecision)
 			if decision.Outcome != OutcomeDeny || decision.ReasonCode != wantReason || execution.Status != ExecutionRefused || adapter.calls != 0 {
 				t.Fatalf("decision %s/%s, execution %s, adapter calls %d; want deny/%s, refused, 0", decision.Outcome, decision.ReasonCode, execution.Status, adapter.calls, wantReason)
 			}
