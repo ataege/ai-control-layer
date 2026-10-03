@@ -7,7 +7,8 @@ building Task Passport on top of it at HackYeah.
 **Status: implementation phase.** The starter baseline of 2026-10-02 contains infrastructure and
 reusable components only: no entities, no tables, no authentication implementation and no product
 features. Product work is added on top of it, each feature in the service that owns its
-responsibility. The binding rules are in [AGENTS.md](AGENTS.md). Baseline items that are still
+responsibility. The product definition is the project report in [docs/product](docs/product/README.md), and the
+binding rules are in [AGENTS.md](AGENTS.md). Baseline items that are still
 unverified are listed under [Verification status](#verification-status).
 
 | Part                  | Stack                                                   | Path                 |
@@ -480,7 +481,7 @@ The full record is in [docs/preparation-record.md](docs/preparation-record.md).
 | [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service                                  |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                         |
 | [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                     |
-| [docs/product/README.md](docs/product/README.md)         | Product design diagrams (architecture, run lifecycle) and the open decisions against the starter                    |
+| [docs/product/README.md](docs/product/README.md)         | Project report, design diagrams, contracts to freeze and the decisions between design and starter                   |
 | [docs/preparation-record.md](docs/preparation-record.md) | Baseline record: what was prepared, third-party resources and licenses, decisions, deferred areas                   |
 | [AGENTS.md](AGENTS.md)                                   | Binding team instructions (identical to `CLAUDE.md`)                                                                |
 | [infra/README.md](infra/README.md)                       | Compose files, images, published ports, data volume                                                                 |

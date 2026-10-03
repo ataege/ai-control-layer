@@ -5,9 +5,31 @@ These instructions apply to every contributor and coding agent working in this r
 
 ## Current phase
 
-**Implementation.** The team is building the product, Task Passport, on top of the starter baseline for the HackYeah hackathon. This section was switched from "reusable scaffold preparation" on 2026-10-02.
+**Implementation.** The team is building Task Passport, an entry for the Goldman Sachs AI Control Layer challenge at HackYeah 2026, on top of the starter baseline. This section was switched from "reusable scaffold preparation" on 2026-10-02.
 
-This file does not describe the product. The product design is in `docs/product/`: the architecture and run lifecycle diagrams, and the open decisions between them and the starter. It is a design, not implemented code. If the feature you are about to build is not covered there, ask the integration owner before inventing architecture.
+The product definition is the project report, `docs/product/task-passport-project-report.docx` (version 1.0, design baseline, 3 October 2026), together with the two diagrams in `docs/product/`. The report is a proposed design, not a record of implemented behaviour. `docs/product/README.md` lists the decisions it settles and the ones still open. If the feature you are about to build is not covered there, ask the document owner and the owning implementer before inventing architecture. Whether this pre-event starter may be used, and how it must be disclosed, is still open (decision 8 in `docs/product/README.md`): the report says not to presume it is eligible, so the researcher confirms it with the organizers.
+
+The report's MVP is one workflow: invoice reconciliation on synthetic records, one model provider, four registered tools (`read_invoice`, `read_vendor`, `create_report`, `queue_report`) and a simulated report outbox. The full architecture is a target boundary, not a list of screens to build during the hackathon.
+
+## Read the project report first
+
+The project report, `docs/product/task-passport-project-report.docx`, is the reference for what the team is building. Every contributor and coding agent follows these three rules:
+
+1. **At the start of every session, before your first task,** read the full report from beginning to end, including the appendices. A skim, a search or a single section is not enough. Then read `docs/product/README.md` for the decisions recorded since.
+2. **When a question comes up** about the product, scope, users, ownership, contracts, data, limits, the demonstration or what to build next, go back to the report and answer from it. Name the report section you relied on.
+3. **When the report does not answer the question,** or disagrees with this file or `docs/product/README.md`, do not guess and do not silently pick one. Ask the document owner and, for code, the owning implementer. The working rules in this file still govern how you change the repository.
+
+The report is a Word file. Convert it to plain text in a temporary directory outside the repository, read that text, and never commit the converted copy:
+
+```sh
+REPORT_TEXT_DIR=$(mktemp -d)
+# macOS
+textutil -convert txt -output "$REPORT_TEXT_DIR/report.txt" docs/product/task-passport-project-report.docx
+# Linux, WSL or macOS
+unzip -p docs/product/task-passport-project-report.docx word/document.xml | perl -pe 's/<\/w:p>/\n/g; s/<[^>]+>//g; s/&amp;/&/g; s/&lt;/</g; s/&gt;/>/g' > "$REPORT_TEXT_DIR/report.txt"
+```
+
+The text conversion drops the report's eight figures. They reproduce the two diagrams in `docs/product/`, `task-passport-architecture.svg` and `task-passport-run-lifecycle.svg`, so read those as well.
 
 ## Scope
 
@@ -15,53 +37,68 @@ Product features, entities, migrations, authentication and screens are now in sc
 
 What was excluded during preparation, and where it stands now:
 
-| Excluded during preparation                                                                | Status now                                                                                                                                      |
-| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Task passports, agent loops, permissions or policy evaluation                              | In scope. Built in the service that owns the responsibility, after the owner and integration agree where it lives and what its contract is.     |
-| Approval workflows, budget accounting, execution queues, tool execution or audit pipelines | In scope, same rule.                                                                                                                            |
-| Product-specific controllers, DTOs, interfaces, screens or database records                | In scope.                                                                                                                                       |
-| Invoices, vendors, reports, simulated payments or other business examples                  | In scope only if the product needs them. Label sample data as sample data.                                                                      |
-| User entities, login, registration, sessions or authentication                             | In scope if the product needs them. Owned by nestjs, behind the existing `AuthProvider` interface. See the guardrails below.                    |
-| Business migrations, seed data or database tables                                          | In scope through the single migration toolchain. Seed data only as an explicit, documented command.                                             |
-| Live LLM calls, embeddings, vector databases or AI-provider integrations                   | Needs a team decision first: which provider, which service makes the calls, where the key lives (server side, in `.env`, never in the browser). |
-| C++, Redis, Kafka, Kubernetes or additional services                                       | Needs a team decision first, recorded in `docs/architecture.md` together with the Compose, Dockerfile and smoke-check changes it requires.      |
+| Excluded during preparation                                                                | Status now                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Task passports, agent loops, permissions or policy evaluation                              | In scope. Go owns admission, the immutable passport, the bounded agent loop and the action gate. NestJS owns task and policy configuration.                                                                                  |
+| Approval workflows, budget accounting, execution queues, tool execution or audit pipelines | In scope. Go owns exact-action approvals, allowance reservations, durable jobs in PostgreSQL, tool execution and runtime events. NestJS forwards commands and exposes authorized, sanitized reads.                           |
+| Product-specific controllers, DTOs, interfaces, screens or database records                | In scope.                                                                                                                                                                                                                    |
+| Invoices, vendors, reports, simulated payments or other business examples                  | In scope as synthetic data in the `demo` schema: invoices, vendors, reports and a simulated outbox. Payments of any kind, real or simulated, live email delivery and real bank or customer records are out.                  |
+| User entities, login, registration, sessions or authentication                             | In scope. NestJS authenticates users and checks organization membership. A seeded operator for a clearly labelled development demonstration replaces onboarding. Identity federation and production onboarding are deferred. |
+| Business migrations, seed data or database tables                                          | In scope through the single migration toolchain, with the schemas `app`, `runtime` and `demo`. Synthetic fixtures and the reset procedure are explicit, documented commands.                                                 |
+| Live LLM calls, embeddings, vector databases or AI-provider integrations                   | One model provider, called only by Go, with its credentials held by Go. Which provider is still open. Embeddings and vector databases are not in the report's MVP and need a team decision.                                  |
+| C++, Redis, Kafka, Kubernetes or additional services                                       | Out for the prototype. Four components: Next.js, NestJS, Go and PostgreSQL. No C++ execution layer, and PostgreSQL-backed jobs instead of a message broker.                                                                  |
 
 ### Guardrails that still apply
 
 1. **No pre-created structure.** Add a module, package or directory when its first real code lands. No empty directories for future work, no stubs for features nobody is building, no unnecessary abstractions or generated layers.
-2. **Authentication.** `UnimplementedAuthProvider` fails explicitly with 501 until a real provider replaces it. Never add an allow-all guard, a fabricated identity or a fake login. Health and diagnostics stay public in local development unless integration decides otherwise.
+2. **Authentication.** `UnimplementedAuthProvider` fails explicitly with 501 until a real provider replaces it. Never add an allow-all guard, a fabricated identity or a fake login. A seeded demo operator exists only through an explicit seed command, authenticates through a real credential check (mechanism: decision 7 in `docs/product/README.md`) and is labelled as a development demonstration. Health and diagnostics stay public in local development unless the team decides otherwise.
 3. **No startup side effects.** Nothing at application startup runs migrations, creates tables or loads seed data.
-4. **Truthful UI.** Diagnostics and health views show only real responses; never render a healthy state before one arrives. Data that is not real is labelled as sample data.
+4. **Go is the execution authority.** Every governed model request and tool effect goes through Go, which holds the provider and tool credentials. NestJS authenticates and forwards commands; it never performs agent effects and never writes runtime decisions, approval grants, execution states or budget balances.
+5. **Identity comes from verified context.** Organization, actor and reviewer authority come from the authenticated operator context and trusted records, never from model output, tool results or identifiers supplied by the browser. A record or action ID is a reference, not authorization.
+6. **Fail closed.** A missing policy, an unavailable authorization dependency, a transport error or a configuration error is never an allow decision.
+7. **Truthful UI and claims.** Health and diagnostics views show only real responses. The simulated outbox, deterministic replays, mocks, recordings and estimated cost are labelled as such. A missing protection becomes a documented limitation, not a mocked success. The report's example limits are illustrative values, not requirements.
 
 ## Repository map and ownership
 
-| Path                                                                         | Contents                                                                        | Owner role                               |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------- |
-| `apps/web`                                                                   | Next.js web app                                                                 | frontend                                 |
-| `packages/ui`                                                                | Shared UI primitives (`@workspace/ui`)                                          | frontend                                 |
-| `apps/api`                                                                   | NestJS API, generic database configuration                                      | nestjs                                   |
-| `db/migrations`                                                              | Pointer README only; real migrations live in `apps/api/src/database/migrations` | nestjs (ordering decided by integration) |
-| `services/gateway`                                                           | Go gateway                                                                      | go                                       |
-| `infra`                                                                      | Compose files and container definitions                                         | infrastructure                           |
-| `scripts`, including `scripts/lib`                                           | Setup and development helpers and their shared library                          | infrastructure                           |
-| `.env.example`, `.gitignore`, `.dockerignore`, `.nvmrc`, `.prettierignore`   | Environment template and root tool/ignore files                                 | infrastructure                           |
-| `packages/contracts`                                                         | Shared wire contracts (`@workspace/contracts`)                                  | integration                              |
-| `packages/config`                                                            | Shared TypeScript, ESLint and Prettier configuration                            | integration                              |
-| Root `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `pnpm-lock.yaml`   | Workspace wiring                                                                | integration                              |
-| `AGENTS.md`, `CLAUDE.md`, `.claude/agents`, `scripts/check-instructions.mjs` | Team instructions and project agents                                            | integration                              |
-| `scripts/verify.mjs`, `scripts/smoke.mjs`                                    | Integration checks (changed together with infrastructure)                       | integration                              |
-| `README.md`, `docs`                                                          | Project documentation (each role supplies the text for its own area)            | integration                              |
-| Everything (read-only)                                                       | Review of scope, correctness and verification evidence                          | reviewer                                 |
+| Path                                                                         | Contents                                                                                   | Owner role     |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------- |
+| `apps/web`                                                                   | Next.js web app                                                                            | frontend       |
+| `packages/ui`                                                                | Shared UI primitives (`@workspace/ui`)                                                     | frontend       |
+| `apps/api`                                                                   | NestJS API, its entities and the TypeORM migration tooling                                 | nestjs         |
+| `packages/contracts`                                                         | Shared wire contracts (`@workspace/contracts`)                                             | nestjs         |
+| `services/gateway`                                                           | Go gateway; one owner per Go package, recorded in `services/gateway/README.md`             | go             |
+| `apps/api/src/database/migrations`, `db/migrations`                          | Migration files and the pointer README                                                     | integration    |
+| `infra`                                                                      | Compose files and container definitions                                                    | infrastructure |
+| `scripts`, including `scripts/lib`                                           | Setup and development helpers and their shared library                                     | infrastructure |
+| `.env.example`, `.gitignore`, `.dockerignore`, `.nvmrc`, `.prettierignore`   | Environment template and root tool/ignore files                                            | infrastructure |
+| `packages/config`                                                            | Shared TypeScript, ESLint and Prettier configuration                                       | integration    |
+| Root `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `pnpm-lock.yaml`   | Workspace wiring                                                                           | integration    |
+| `AGENTS.md`, `CLAUDE.md`, `.claude/agents`, `scripts/check-instructions.mjs` | Team instructions and project agents                                                       | integration    |
+| `scripts/verify.mjs`, `scripts/smoke.mjs`                                    | Integration checks (changed together with infrastructure)                                  | integration    |
+| `README.md`, `docs` except `docs/product`                                    | Technical documentation (each role supplies the text for its own area)                     | integration    |
+| `docs/product`                                                               | Project report, diagrams, open decisions, requirements, storyboard and claim-to-proof list | researcher     |
+| Everything (read-only)                                                       | Review of scope, correctness and verification evidence                                     | reviewer       |
 
-Each role has a project agent in `.claude/agents`. The roles are a collaboration instruction, not filesystem isolation: nothing technically stops an edit outside your paths, so the discipline is yours.
+The agents in `.claude/agents` are organized by code area. The report organizes the six people by responsibility, so one person can drive more than one agent and three people share the go agent (Implementers 3 and 4, and Implementer 5 for the tool adapter packages):
+
+| Person (report role)                  | Responsibility in the report                                                                                                                      | Agents and paths                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Implementer 1: interface              | Task form, passport summary, run timeline, approval preview and terminal states                                                                   | frontend                                                         |
+| Implementer 2: application API        | NestJS authentication, membership checks, task configuration, runtime facade and authorized event feed; coordinates shared contracts              | nestjs, including `packages/contracts`                           |
+| Implementer 3: agent runtime          | Go worker, provider integration, bounded agent loop, model reservations, usage accounting and cancellation checks                                 | go, runtime packages                                             |
+| Implementer 4: enforcement            | Go admission, immutable passport, argument checks, exact-action approvals, execution claims and denial feedback                                   | go, enforcement packages                                         |
+| Implementer 5: data and integration   | Migrations, service database roles, the four tool adapters, synthetic fixtures, transactional effects, reset procedure and deployment integration | integration and infrastructure; go for the tool adapter packages |
+| Researcher, document owner, presenter | Official requirements, sponsor clarification, source register, demo specification, claim-to-proof tracking, presentation and submission checklist | `docs/product`; uses the reviewer agent                          |
+
+The roles are a collaboration instruction, not filesystem isolation: nothing technically stops an edit outside your paths, so the discipline is yours.
 
 ### Single owner for shared assets
 
-The **integration** role is the one owner of the three things that every service depends on:
+Each asset that every service depends on has exactly one owner:
 
-- **Shared contracts**: `packages/contracts` (TypeScript types, JSON Schemas, fixtures) and keeping the Go DTOs in `services/gateway` in sync with them. The go owner applies the Go side; integration decides the shape.
-- **Dependency lockfiles**: `pnpm-lock.yaml` and the `catalog` in `pnpm-workspace.yaml`. Changes to `services/gateway/go.sum` are coordinated with the go owner. Ask integration for a new shared version instead of editing the catalog.
-- **Migrations**: there is a single migration toolchain, TypeORM in `apps/api`, run through the `db:migration:*` commands. The nestjs owner maintains that tooling; integration decides when a migration is added and in which order. The Go service must not add a migration framework.
+- **Shared contracts** are coordinated by Implementer 2 through the **nestjs** role, which keeps `packages/contracts` (TypeScript types, JSON Schemas, fixtures) and lands every change. The report asks for one recorded owner per contract, listed in `docs/product/README.md`; that owner decides the contract's shape after a quick shared review with the affected owners. Go remains the authority for action canonicalization and execution. The go role mirrors each change in the Go DTOs.
+- **Migrations and database roles** belong to Implementer 5 through the **integration** role. There is a single migration toolchain, TypeORM in `apps/api`, run through the `db:migration:*` commands. The nestjs role maintains that tooling and the entities of the `app` schema. The Go service must not add a migration framework.
+- **Dependency lockfiles** belong to the **integration** role: `pnpm-lock.yaml` and the `catalog` in `pnpm-workspace.yaml`. Changes to `services/gateway/go.sum` are coordinated with the go role. Ask integration for a new shared version instead of editing the catalog.
 
 ## Commands
 
@@ -100,18 +137,18 @@ Always write `pnpm run setup`. Bare `pnpm setup` is a pnpm built-in that edits t
 
 One workspace at a time: `pnpm --filter <name> run lint|typecheck|test|build`, where `<name>` is `web`, `api`, `gateway` or `@workspace/contracts`. `@workspace/ui` has only `lint` and `typecheck`, and `@workspace/config` has no scripts.
 
-No migration exists yet. The first one is added together with the first entity (see `docs/team-workflow.md`). Nothing runs migrations or creates tables at application startup.
+No migration exists yet. The migration owner adds the first one with the first table (see `docs/team-workflow.md`). Nothing runs migrations or creates tables at application startup.
 
 ## Implementation workflow
 
 Every feature follows the same loop. `docs/team-workflow.md` has the details.
 
-1. **Place it.** Decide which service owns the responsibility. If several services are involved, agree the split with the integration owner before anyone writes code.
-2. **Contract first.** For a cross-service feature, integration lands the shared shape (types, schemas, fixtures), then the go owner mirrors it in the Go DTOs, then consumers follow.
+1. **Place it.** Decide which service owns the responsibility, using the ownership in the report. If several services are involved, agree the split with the owners involved before anyone writes code.
+2. **Contract first.** For a cross-service feature, the contract's recorded owner agrees the shape in a quick shared review, nestjs lands it in `packages/contracts` (types, schemas, fixtures), then the go owner mirrors it in the Go DTOs, then consumers follow. The report's first contracts to freeze are the start-run request, the passport representation, the action proposal, the approval decision, the run state and the safe event.
 3. **Build inside your paths.** Hand off anything outside them to the owner.
 4. **Test what can break silently:** failure mapping, rejection of bad input or credentials, persistence. Do not write tests that restate a constant.
 5. **Verify and quote.** Run your area's checks, then `pnpm verify`. Run `pnpm smoke` against the running stack before a merge that touches service wiring.
-6. **Record it.** Add the module to "Product modules" in `docs/architecture.md`. Add new environment variables to `.env.example` (names only), the Compose files and the README table through the infrastructure owner.
+6. **Record it.** Add the module to "Product modules" in `docs/architecture.md`. Add new environment variables to `.env.example` (names only), the Compose files and the README table through the infrastructure owner. When a design decision changes, tell the document owner so the report's decision record, contracts, demonstration and claim-to-proof list change together.
 
 ## Working rules
 
@@ -120,7 +157,7 @@ Every feature follows the same loop. `docs/team-workflow.md` has the details.
 3. **Integrate continuously.** Small merges, pull or rebase often, keep the default branch green. Do not let a long-lived branch drift.
 4. **Features go where the responsibility lives.** Every future feature belongs to the service that owns its responsibility. Do not put logic in a service because it is convenient to reach from there.
 5. **Report only what ran.** Do not claim a check passed unless it ran. Quote the exact command and its result; say plainly what was not verified and why.
-6. **Keep the phase current.** When the team's phase or scope changes, the integration owner updates "Current phase" and "Scope" first. Do not start work the current phase does not cover.
+6. **Keep the phase current.** When the team's phase or scope changes, the integration owner updates "Current phase" and "Scope" first, together with the document owner. Do not start work the current phase does not cover.
 7. **Nothing leaves the machine automatically.** No automatic pushing, publishing or deployment. Agents never push; a person pushes after checking the work.
 8. **No secrets in tracked files.** Secrets live in the untracked `.env` created by `pnpm run setup`. Never log or return them.
 9. **The service token never reaches the browser.** `GATEWAY_SERVICE_TOKEN` is held by the API and the gateway only: never in a `NEXT_PUBLIC_*` variable, a response, a log line or the web app.

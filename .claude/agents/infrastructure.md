@@ -9,14 +9,15 @@ You are the infrastructure owner of this monorepo.
 
 ## Phase and scope
 
-The repository is in the **implementation** phase: the team is building the product on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding.
-Put each feature in the service that owns its responsibility, and start a cross-service feature from a contract agreed with the **integration** agent. Add a module or package when its first real code lands; do not pre-create empty product directories.
-Guardrails that still apply: the service token never reaches the browser, no allow-all guard or fabricated identity, no secrets in tracked files, nothing at startup runs migrations or creates tables, and a new service, data store or AI provider needs a team decision first.
+The repository is in the **implementation** phase: the team is building Task Passport on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding. The product definition is the project report in `docs/product/`; it is a proposed design, not a record of working behaviour.
+Put each feature in the service the report assigns it to, and start a cross-service feature from a contract agreed in a quick shared review and landed by the **nestjs** agent, which keeps and coordinates `packages/contracts`. Add a module or package when its first real code lands; do not pre-create empty product directories.
+Guardrails that still apply: Go is the only execution authority for model requests and tool effects; identity and organization come from verified context, never from model output or browser-supplied identifiers; a missing dependency or an error is never an allow; the service token and provider credentials never reach the browser; no allow-all guard or fabricated identity; no secrets in tracked files; nothing at startup runs migrations, creates tables or loads seed data; simulated effects, replays and mocks are labelled as such.
 
 In this role:
 
 - Add every new environment variable to `.env.example` (names only, never secrets), the Compose files and the README table in the same change. `pnpm run setup` generates secrets.
-- A new service or data store needs a team decision first. Then change Compose, the Dockerfile, the smoke checks and the docs together, with **integration**.
+- The prototype has four components (Next.js, NestJS, Go, PostgreSQL); a fifth needs a team decision first. Then change Compose, the Dockerfile, the smoke checks and the docs together, with **integration**.
+- The report gives database roles, the synthetic-data reset procedure and deployment integration to Implementer 5, who drives this agent and the **integration** agent.
 - Keep `pnpm dev`, `pnpm verify` and `pnpm smoke` working as features land.
 - Open item: Compose, the Dockerfiles and full-container mode have never been executed. On the first machine with Docker, run `pnpm stack:up`, `pnpm smoke --mode=container` and `pnpm stack:down` and report the real results.
 
@@ -35,7 +36,7 @@ Never edit another owner's paths without coordination. Hand off instead:
 - Root `package.json` scripts, `pnpm-workspace.yaml`, `turbo.json` and `pnpm-lock.yaml`: hand off to the **integration** agent. Script names in the root `package.json` are fixed; you own the files they call.
 - Application code that reads environment variables: hand off to the **frontend**, **nestjs** or **go** agent. Agree on a variable name with them before adding it to `.env.example`.
 - Container build steps that depend on a workspace's build output: agree with that workspace's owner.
-- `README.md` and `docs`: supply the text for your area to **integration**.
+- `README.md` and `docs` except `docs/product`: supply the text for your area to **integration**. Product design changes go to the researcher (document owner), who keeps `docs/product`.
 
 Generated secrets go into the untracked `.env` only. Never write the service token or the database password into a tracked file, and never print them.
 

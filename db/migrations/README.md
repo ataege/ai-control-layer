@@ -4,7 +4,7 @@ This directory intentionally contains no migration files.
 
 ## Where migrations live
 
-TypeORM migrations are owned by the API and live in `apps/api/src/database/migrations`.
+TypeORM migrations live in the API package, in `apps/api/src/database/migrations`. The integration role writes and orders them; the nestjs role maintains the tooling (see `AGENTS.md`).
 They cannot live here: the TypeORM CLI and `tsc` cannot compile migration classes outside the API
 package (verified: `TS6059` "file is not under rootDir", and the `typeorm` import cannot be resolved
 from outside the package under pnpm's strict `node_modules`).
@@ -30,10 +30,13 @@ They need the root `.env` (`pnpm run setup`) and, except for `create`, a running
 
 ## Adding the first entity and migration
 
-1. Create the entity class in the API module that owns it (`apps/api/src/<module>/<name>.entity.ts`).
+1. Create the entity class in the API module that owns it (`apps/api/src/<module>/<name>.entity.ts`),
+   with `schema: "app"`. Only `app` tables become entities; `runtime` and `demo` tables get
+   hand-written migrations (`pnpm db:migration:create <Name>`) from the migration owner.
 2. Add the class to the `entities` array in `apps/api/src/database/typeorm-options.ts`. The Nest runtime
    and the CLI share this file.
 3. Run `pnpm db:migration:generate <Name>`. The file is written to `apps/api/src/database/migrations`.
+   `generate` never emits `CREATE SCHEMA`, so the first migration of each schema adds it by hand.
 4. Review the generated SQL, run `pnpm format`, then apply it with `pnpm db:migration:run`.
 5. Commit the entity and the migration together.
 

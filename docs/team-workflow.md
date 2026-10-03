@@ -6,23 +6,26 @@ in [AGENTS.md](../AGENTS.md); this document explains how to apply them. If the t
 
 ## Roles and ownership
 
-Six roles, one per person. Each role has a Claude Code project agent of the same name in
-`.claude/agents`.
+Six roles, each with a Claude Code project agent of the same name in `.claude/agents`. The roles
+are organized by code area. The project report organizes the six people by responsibility, so one
+person can drive more than one role and three people share the go role; the mapping of people to
+roles is in the "Repository map and ownership" section of [AGENTS.md](../AGENTS.md).
 
-| Role           | Owns                                                                                                                                                                                                                                                              | Checks before reporting                                                                                                              |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| frontend       | `apps/web`, `packages/ui`                                                                                                                                                                                                                                         | `pnpm --filter web run lint\|typecheck\|test\|build`, `pnpm --filter @workspace/ui run lint\|typecheck`                              |
-| nestjs         | `apps/api`, including the database configuration and the migration tooling; `db/migrations` (pointer README only)                                                                                                                                                 | `pnpm --filter api run lint\|typecheck\|test\|build`; `pnpm db:migration:show` when the tooling changed                              |
-| go             | `services/gateway`                                                                                                                                                                                                                                                | `pnpm --filter gateway run format:check\|lint\|typecheck\|test\|build`                                                               |
-| infrastructure | `infra`, `scripts` (`setup.mjs`, `compose.mjs`, `dev.mjs`, `with-env.mjs`, `lib`), `.env.example`, `.gitignore`, `.dockerignore`, `.nvmrc`, `.prettierignore`                                                                                                     | `pnpm run setup`; `pnpm infra:up` / `infra:down`, `pnpm stack:up` / `stack:down` and `pnpm smoke` where Docker exists                |
-| integration    | `packages/contracts`, `packages/config`, root `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `pnpm-lock.yaml`, `AGENTS.md`, `CLAUDE.md`, `.claude/agents`, `scripts/check-instructions.mjs`, `scripts/verify.mjs`, `scripts/smoke.mjs`, `README.md`, `docs` | `pnpm --filter @workspace/contracts run lint\|typecheck\|test\|build`, `pnpm check:instructions`, `pnpm format:check`, `pnpm verify` |
-| reviewer       | Nothing. Reads everything, edits nothing.                                                                                                                                                                                                                         | Confirms that every claimed check has a quoted command and real output                                                               |
+| Role           | Owns                                                                                                                                                                                                                                                                                                                                                                                                         | Checks before reporting                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| frontend       | `apps/web`, `packages/ui`                                                                                                                                                                                                                                                                                                                                                                                    | `pnpm --filter web run lint\|typecheck\|test\|build`, `pnpm --filter @workspace/ui run lint\|typecheck`                                             |
+| nestjs         | `apps/api`, including its entities and the migration tooling; `packages/contracts`                                                                                                                                                                                                                                                                                                                           | `pnpm --filter api run lint\|typecheck\|test\|build`; `pnpm --filter @workspace/contracts run lint\|typecheck\|test\|build` when a contract changed |
+| go             | `services/gateway`, with one owner per Go package recorded in its README                                                                                                                                                                                                                                                                                                                                     | `pnpm --filter gateway run format:check\|lint\|typecheck\|test\|build`                                                                              |
+| infrastructure | `infra`, `scripts` (`setup.mjs`, `compose.mjs`, `dev.mjs`, `with-env.mjs`, `lib`), `.env.example`, `.gitignore`, `.dockerignore`, `.nvmrc`, `.prettierignore`                                                                                                                                                                                                                                                | `pnpm run setup`; `pnpm infra:up` / `infra:down`, `pnpm stack:up` / `stack:down` and `pnpm smoke` where Docker exists                               |
+| integration    | Migration files (`apps/api/src/database/migrations`, `db/migrations`), service database roles, synthetic fixtures and the reset procedure, `packages/config`, root `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `pnpm-lock.yaml`, `AGENTS.md`, `CLAUDE.md`, `.claude/agents`, `scripts/check-instructions.mjs`, `scripts/verify.mjs`, `scripts/smoke.mjs`, `README.md`, `docs` except `docs/product` | `pnpm db:migration:show` when a migration changed, `pnpm check:instructions`, `pnpm format:check`, `pnpm verify`                                    |
+| reviewer       | Nothing. Reads everything, edits nothing.                                                                                                                                                                                                                                                                                                                                                                    | Confirms that every claimed check has a quoted command and real output                                                                              |
 
 The roles are a collaboration agreement, not filesystem isolation. Nothing technically prevents an
 edit outside your paths; staying inside them is your responsibility.
 
-`README.md` and `docs` have one owner, integration; every other role supplies the text for its own
-area. The frontend, nestjs and infrastructure roles also run `pnpm exec prettier --check` on their
+`README.md` and `docs` have one owner, integration, except `docs/product`, which belongs to the
+researcher (document owner) together with the project report. Every other role supplies the text
+for its own area. The frontend, nestjs and infrastructure roles also run `pnpm exec prettier --check` on their
 own paths; the full list of checks per role is in its agent file.
 
 A feature belongs to the service that owns its responsibility. Do not place logic in a service
@@ -30,24 +33,25 @@ because it is convenient to reach from there.
 
 ## Single owner for shared assets
 
-Three things affect everyone, so one role, **integration**, owns them:
+Three things affect everyone, so each has exactly one owner:
 
-| Shared asset         | What it covers                                                                                                                                     | Who does the work                                                                              |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Shared contracts     | `packages/contracts` (types, schemas, fixtures) and the matching Go DTOs                                                                           | integration decides the shape; go applies the Go side                                          |
-| Dependency lockfiles | `pnpm-lock.yaml`, the `catalog`, `allowBuilds` and `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`; `services/gateway/go.sum` together with go | integration runs the install and commits the lockfile                                          |
-| Migrations           | The single TypeORM toolchain in `apps/api`, used for every table, including tables the gateway reads                                               | nestjs maintains the tooling; integration decides when a migration is added and in which order |
+| Shared asset         | What it covers                                                                                                                                     | Who does the work                                                                                                                                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared contracts     | `packages/contracts` (types, schemas, fixtures) and the matching Go DTOs                                                                           | nestjs (Implementer 2) coordinates and lands every change; each contract's recorded owner decides its shape after a quick shared review; Go stays the authority for action canonicalization; go applies the Go side |
+| Dependency lockfiles | `pnpm-lock.yaml`, the `catalog`, `allowBuilds` and `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`; `services/gateway/go.sum` together with go | integration runs the install and commits the lockfile                                                                                                                                                               |
+| Migrations           | The single TypeORM toolchain in `apps/api`, used for every table, including tables the gateway reads                                               | integration (Implementer 5) writes and orders the migrations and owns the database roles; nestjs maintains the tooling and the `app` entities                                                                       |
 
 The reason is practical: lockfiles and migration order do not merge well. One person changing them
 in sequence avoids conflicts that cost more than the wait.
 
 ## Changing a shared contract
 
-1. The person who needs the change describes the new shape to the integration owner (field names,
-   optionality, which endpoint).
-2. Integration edits, together: the type in `packages/contracts/src/index.ts`, the schema in
+1. The person who needs the change agrees the new shape with the contract's recorded owner in a
+   quick shared review (field names, optionality, which endpoint). The owners are listed in
+   `docs/product/README.md`.
+2. The nestjs owner edits, together: the type in `packages/contracts/src/index.ts`, the schema in
    `packages/contracts/schemas`, and the fixtures in `packages/contracts/fixtures`.
-3. Integration runs `pnpm --filter @workspace/contracts run test` and
+3. The nestjs owner runs `pnpm --filter @workspace/contracts run test` and
    `pnpm --filter @workspace/contracts run build`.
 4. The go owner mirrors the shape in `services/gateway/internal/health/dto.go` and runs
    `pnpm --filter gateway run test`. The test decodes the shared fixtures with unknown fields
@@ -56,7 +60,7 @@ in sequence avoids conflicts that cost more than the wait.
 5. The nestjs owner updates the Swagger DTO classes (they implement the contract interfaces, so
    `pnpm --filter api run typecheck` fails until they match). The frontend owner updates the
    consumers in `apps/web`.
-6. Integration runs `pnpm verify`. The contract change and its consumers are merged together or in
+6. The nestjs owner runs `pnpm verify`. The contract change and its consumers are merged together or in
    direct succession, so the default branch never holds a half-applied contract.
 
 Never change a response shape on one side only.
@@ -128,10 +132,12 @@ data: the `down` scripts keep the database volume, and removing it with
 
 The project is in the implementation phase. Every feature follows the same loop.
 
-1. **Place it.** Decide which service owns the responsibility. If several services are involved,
-   agree the split with the integration owner before anyone writes code.
-2. **Contract first.** For a cross-service feature, integration lands the shared shape (types,
-   schemas, fixtures); the go owner mirrors it; consumers follow. See "Changing a shared contract".
+1. **Place it.** Decide which service owns the responsibility, using the ownership in the report.
+   If several services are involved, agree the split with the owners involved before anyone writes
+   code.
+2. **Contract first.** For a cross-service feature, the contract's recorded owner agrees the shape
+   in a quick shared review, nestjs lands it (types, schemas, fixtures), the go owner mirrors it and
+   consumers follow. See "Changing a shared contract".
 3. **Build inside your paths.** Add a module or package when its first real code lands; do not
    create empty product directories. Hand off anything outside your paths.
 4. **Test what can break silently:** failure mapping, rejection of bad input or credentials,
@@ -141,19 +147,21 @@ The project is in the implementation phase. Every feature follows the same loop.
    results.
 6. **Record it.** Add the module to "Product modules" in `docs/architecture.md`. Add new
    environment variables to `.env.example` (names only), the Compose files and the README table
-   through the infrastructure owner.
+   through the infrastructure owner. When a design decision changes, tell the document owner, so
+   the report's decision record, contracts, demonstration and claim-to-proof list change together.
 7. **A person pushes.** Agents never push. Merge small and often.
 
-Decisions that belong to the whole team, not to one role: a new service or data store, an AI
-provider (and which service holds its key), the shape of authentication, and demo data. Demo data
+The report settles several team-level decisions: four components and no message broker, one model
+provider called only by Go, organization-scoped authentication in NestJS with a seeded demo
+operator, and synthetic data in the `demo` schema. Still open for the whole team: which model
+provider, the authentication mechanism, and the other open decisions in
+[docs/product/README.md](product/README.md). Demo data
 is an explicit, documented command, never loaded at application startup, and labelled as sample
 data in the UI.
 
 ## Before implementation starts
 
-1. **Commit the baseline.** The integration owner commits the starter once and pushes it so that
-   everyone starts from the same tree. At the time of writing, the files were staged but nothing
-   was committed.
+1. **Commit the baseline.** Done: the starter baseline is on `main` in the team repository.
 2. **Each person, once:** install Go 1.27 or newer and Docker with the Compose plugin, then run the
    commands below. Report the real result of `pnpm verify`.
 
@@ -172,9 +180,16 @@ data in the UI.
    pnpm stack:down
    ```
 
-4. **Settle the open design decisions** listed in `docs/product/README.md` and write each outcome
-   down there. Start with the database schemas, the browser to API path and the service identity,
-   because the first migration and the first contract depend on them.
+4. **Settle the open design decisions** listed in `docs/product/README.md` and give each outcome
+   to the researcher (document owner), who records it there. Start with the browser to API path and the operator context sent to Go, because the
+   first contracts depend on them.
+5. **Record one owner per contract and per Go package.** The report asks for this before parallel
+   work starts. The nestjs owner gives contract owners to the researcher for `docs/product/README.md`; Go package owners go in
+   `services/gateway/README.md` when each package is created.
+6. **Confirm reuse with the organizers.** The report says not to presume that pre-event code or
+   prepared assets are eligible. The researcher confirms with the organizers whether this starter
+   may be used and how it must be disclosed. `docs/preparation-record.md` lists what was built
+   before the event and its third-party licenses.
 
 ## Using the Claude Code project agents
 
@@ -221,10 +236,12 @@ pnpm check:instructions
 The 2026-10-02 baseline has no entities, no migrations and no tables. When the team needs its first
 table:
 
-1. **Agree on it.** The owner of the feature and the integration owner agree that a migration is
-   added now and where it sits in the order.
+1. **Agree on it.** The owner of the feature and the migration owner (integration) agree that a
+   migration is added now and where it sits in the order.
 2. **Create the entity class** in the API module that owns the data:
-   `apps/api/src/<module>/<name>.entity.ts`.
+   `apps/api/src/<module>/<name>.entity.ts`. Only NestJS-owned `app` tables become entities; set
+   `schema: "app"` on them. Go-owned `runtime` and `demo` tables get no NestJS entity: the migration
+   owner writes them by hand with `pnpm db:migration:create <Name>`.
 3. **Register it** in the `entities` array of the shared options factory,
    `apps/api/src/database/typeorm-options.ts`. The NestJS runtime and the TypeORM CLI both use this
    file, so the entity is registered once.
@@ -235,7 +252,9 @@ table:
    ```
 
    `<Name>` is letters and digits, starting with a letter. The file is written to
-   `apps/api/src/database/migrations/<timestamp>-<Name>.ts`.
+   `apps/api/src/database/migrations/<timestamp>-<Name>.ts`. `generate` never emits
+   `CREATE SCHEMA`: the first migration that touches a schema creates it by hand (see decision 1 in
+   `docs/product/README.md`).
 
 5. **Review the generated SQL.** Check both `up` and `down`. Generated code is a proposal.
 6. **Format:**
@@ -251,7 +270,8 @@ table:
    pnpm db:migration:show
    ```
 
-8. **Commit the entity and the migration together**, in one change, through the integration owner.
+8. **Commit the entity and the migration together**, in one change, through the migration owner
+   (integration).
 
 Rules that stay in force:
 

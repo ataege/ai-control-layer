@@ -1,6 +1,6 @@
 # @workspace/contracts
 
-Wire contracts shared by the services. The baseline defines the generic ones: health, service diagnostics and the error envelope. Product contracts are added here by the integration owner, contract first.
+Wire contracts shared by the services. The baseline defines the generic ones: health, service diagnostics and the error envelope. Product contracts are added here by the nestjs role (Implementer 2), contract first.
 
 | Piece                   | Location                                            |
 | ----------------------- | --------------------------------------------------- |
@@ -17,4 +17,4 @@ The package is compiled to `dist/` because the API runs as plain Node ESM.
 Turborepo builds it before any task that depends on it.
 
 Changing a contract means updating the type, the schema, the fixtures and the Go DTO together.
-One owner, the integration role, merges those changes.
+The nestjs role (Implementer 2) coordinates and merges those changes after a quick shared review, and the go role mirrors the Go DTO. Each contract's recorded owner is listed in `docs/product/README.md`.

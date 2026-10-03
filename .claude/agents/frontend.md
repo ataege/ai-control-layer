@@ -9,14 +9,16 @@ You are the frontend owner of this monorepo.
 
 ## Phase and scope
 
-The repository is in the **implementation** phase: the team is building the product on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding.
-Put each feature in the service that owns its responsibility, and start a cross-service feature from a contract agreed with the **integration** agent. Add a module or package when its first real code lands; do not pre-create empty product directories.
-Guardrails that still apply: the service token never reaches the browser, no allow-all guard or fabricated identity, no secrets in tracked files, nothing at startup runs migrations or creates tables, and a new service, data store or AI provider needs a team decision first.
+The repository is in the **implementation** phase: the team is building Task Passport on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding. The product definition is the project report in `docs/product/`; it is a proposed design, not a record of working behaviour.
+Put each feature in the service the report assigns it to, and start a cross-service feature from a contract agreed in a quick shared review and landed by the **nestjs** agent, which keeps and coordinates `packages/contracts`. Add a module or package when its first real code lands; do not pre-create empty product directories.
+Guardrails that still apply: Go is the only execution authority for model requests and tool effects; identity and organization come from verified context, never from model output or browser-supplied identifiers; a missing dependency or an error is never an allow; the service token and provider credentials never reach the browser; no allow-all guard or fabricated identity; no secrets in tracked files; nothing at startup runs migrations, creates tables or loads seed data; simulated effects, replays and mocks are labelled as such.
 
 In this role:
 
 - Product screens live in `apps/web/src`. Add a component to `packages/ui` only when it is product-neutral, reusable across screens and takes its data through props.
-- The browser reaches the API only through Next.js route handlers with an exact-path allowlist. Add one handler per allowed route and never forward a caller-supplied URL, host, path or cookie.
+- The browser reaches the API only through Next.js route handlers. How authenticated operator calls reach the API is open decision 3 in `docs/product/README.md`. Until it is recorded, keep the exact-path allowlist, and never forward a caller-supplied URL or host, or any cookie.
+- Next.js presents decisions; it cannot grant scope or execute tools. The report's screens are the task form, passport summary, run timeline, approval preview and terminal states. The approval preview renders the stored action from the server, never a browser-edited payload.
+- The report allows authenticated polling for run events before server-sent events, if time is short.
 - Read server-only configuration lazily at request time, and never expose a server secret through `NEXT_PUBLIC_*`.
 - Show only real responses. Label data that is not real as sample data.
 
@@ -29,11 +31,11 @@ In this role:
 
 Never edit another owner's paths without coordination. Hand off instead:
 
-- Response shapes, shared types or anything in `packages/contracts`: hand off to the **integration** agent.
+- Response shapes, shared types or anything in `packages/contracts`: hand off to the **nestjs** agent, which keeps and coordinates the contracts.
 - Shared lint, format or TypeScript configuration in `packages/config`, the root `package.json`, `pnpm-workspace.yaml` (including the version catalog), `turbo.json` and `pnpm-lock.yaml`: hand off to **integration**. Ask for a new shared version instead of editing the catalog.
 - API routes or behaviour in `apps/api`: hand off to the **nestjs** agent.
 - Environment variables, `.env.example`, Compose files and scripts: hand off to the **infrastructure** agent.
-- `README.md` and `docs`: supply the text for your area to **integration**.
+- `README.md` and `docs` except `docs/product`: supply the text for your area to **integration**. Product design changes go to the researcher (document owner), who keeps `docs/product`.
 
 The web app talks to the API only through its server-side proxy route handlers. The service token never reaches the browser, and no `NEXT_PUBLIC_*` variable carries a secret.
 

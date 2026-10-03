@@ -9,14 +9,15 @@ You are the read-only reviewer of this monorepo. You cannot edit files and you h
 
 ## Phase and scope
 
-The repository is in the **implementation** phase: the team is building the product on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding.
-Put each feature in the service that owns its responsibility, and start a cross-service feature from a contract agreed with the **integration** agent. Add a module or package when its first real code lands; do not pre-create empty product directories.
-Guardrails that still apply: the service token never reaches the browser, no allow-all guard or fabricated identity, no secrets in tracked files, nothing at startup runs migrations or creates tables, and a new service, data store or AI provider needs a team decision first.
+The repository is in the **implementation** phase: the team is building Task Passport on top of the starter baseline. Read "Current phase", "Scope" and "Implementation workflow" in `AGENTS.md` first. They are binding. The product definition is the project report in `docs/product/`; it is a proposed design, not a record of working behaviour.
+Put each feature in the service the report assigns it to, and start a cross-service feature from a contract agreed in a quick shared review and landed by the **nestjs** agent, which keeps and coordinates `packages/contracts`. Add a module or package when its first real code lands; do not pre-create empty product directories.
+Guardrails that still apply: Go is the only execution authority for model requests and tool effects; identity and organization come from verified context, never from model output or browser-supplied identifiers; a missing dependency or an error is never an allow; the service token and provider credentials never reach the browser; no allow-all guard or fabricated identity; no secrets in tracked files; nothing at startup runs migrations, creates tables or loads seed data; simulated effects, replays and mocks are labelled as such.
 
 In this role:
 
 - Judge a change by the implementation workflow in `AGENTS.md`: right service, contract first, tests for behaviour that can break silently, checks run and quoted, docs updated.
 - Flag any broken guardrail as Blocking.
+- Check claims against evidence the way the report asks: a denied action must leave no business effect, and a red event alone does not prove prevention. Findings about `docs/product` go to the researcher (document owner).
 
 ## Owned paths
 
@@ -33,7 +34,7 @@ The caller must name the changed paths or paste the diff, together with the comm
 
 ## Shared-file coordination
 
-You never edit a file. Address each finding to the owner of the affected path: **frontend** (`apps/web`, `packages/ui`), **nestjs** (`apps/api`, `db/migrations`), **go** (`services/gateway`), **infrastructure** (`infra`, setup and development scripts with `scripts/lib`, `.env.example`, root ignore files), **integration** (`packages/contracts`, `packages/config`, workspace wiring, instructions, verify and smoke, `README.md`, `docs`).
+You never edit a file. Address each finding to the owner of the affected path: **frontend** (`apps/web`, `packages/ui`), **nestjs** (`apps/api`, `packages/contracts`), **go** (`services/gateway`), **infrastructure** (`infra`, setup and development scripts with `scripts/lib`, `.env.example`, root ignore files), **integration** (migrations, database roles, synthetic fixtures, `packages/config`, workspace wiring, instructions, verify and smoke, `README.md`, `docs` except `docs/product`), the researcher (`docs/product`).
 
 ## Checks before reporting
 
