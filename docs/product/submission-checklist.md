@@ -16,8 +16,17 @@ by the Jury." ([S9] §13)
 - [ ] Organizer answers recorded in [organizer-questions.md](organizer-questions.md), or their
       absence stated: decision 8 (pre-event work and disclosure), start and deadline, scoring
       weights, judge access, pitch length.
-- [ ] The five HackYeah FAQ answers read in a browser and recorded ([requirements.md](requirements.md),
-      "General HackYeah rules").
+- [x] The five HackYeah FAQ answers recorded ([requirements.md](requirements.md), "HackYeah FAQ";
+      read by the lead's session on 3 October 2026).
+- [ ] One project in this category only (FAQ F-4: "you can submit only one project in each
+      category"; F-5 strongly discourages one project in several categories).
+- [ ] Pre-event work disclosed in all three places FAQ F-13 names ("you must fairly cite or note
+      that in your presentation, code, etc."): the HackTribe description, slide 10 and the
+      repository (`docs/preparation-record.md`), with the true preparation dates from
+      `docs/preparation-record.md`, not git timestamps. Final wording follows the organizers' answer
+      to question 1.
+- [ ] External resources indicated in the submission (FAQ F-14: "Remember to fairly indicate it in
+      your submission"): the main libraries, Ollama and the model, from the RS-06 license list.
 - [ ] Rule 6 ([S9] §6, R-08): the lead confirms for each member that they are not "related to or
       affined with members of the "AI Control Layer" Competition Jury" or an employee "promising the
       prize". Members confirmed: \_\_\_ (G-4).
@@ -83,7 +92,8 @@ disclosed as the organizers require (decision 8). Skeleton:
    test suite, the adapter contract (CL-10 to CL-24), each only if verified.
 4. How to run it: setup, test command, reset command, judge client (from the handoff).
 5. Limitations: from the "Claims to avoid" and every failed or cut claim.
-6. Disclosure of pre-event work (text agreed with the lead, organizer-questions.md).
+6. Disclosure of pre-event work (text agreed with the lead, organizer-questions.md) and the
+   external resources used (FAQ F-13, F-14).
 
 ## 5. Submit
 

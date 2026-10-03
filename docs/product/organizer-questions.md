@@ -53,6 +53,20 @@ another track (RS-02).
 | 4   | Judge access and presentation | Criteria section 6 (page 4): judges "execute the automated test suite", use "spontaneous, ad-hoc prompts" and "may modify the configuration files/feeds". Criteria section 7 (page 4): local models, no paid subscriptions. Rules section 8 (page 2): phase 1 evaluates submissions on HackTribe, phase 2 is live pitching by finalists. Neither document gives the pitch length.                             | `judge access`; presentation length for RS-04, RS-08 and SH-33 |
 | 5   | Cross-track (optional)        | Neither the rules nor the criteria mention other tracks. Report: "If entering another track, confirm whether cross-track submission and reuse are permitted; this report establishes no such permission."                                                                                                                                                                                                     | RS-02 (dropped if no other track is considered)                |
 
+## HackYeah FAQ evidence, found after the message was drafted
+
+The general HackYeah FAQ (verbatim in [requirements.md](requirements.md), "HackYeah FAQ") bears on two
+questions. It is evidence, not an answer for this task:
+
+- Question 1: F-13 says "If you wish to use any previously completed or external resources, tools,
+  repositories, etc., you must fairly cite or note that in your presentation, code, etc." The AI
+  Control Layer rules' "started solving the competition task no earlier than" wording is stricter, so
+  the question stays: the organizers confirm for this task. Whatever they answer, the starter and the
+  design documents are disclosed with their true preparation dates.
+- Question 5: F-4 and F-5 say a team may "submit only one project in each category" and "we strongly
+  discourage submitting one project to more than one category." If the message has not been sent,
+  question 5 can be deleted; the team submits this project to this category only.
+
 ## Answers
 
 Record each answer verbatim with its date, channel and the person who answered. Until an answer is

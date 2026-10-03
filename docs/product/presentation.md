@@ -149,7 +149,9 @@ practicality and scalability.
   email delivery; export protection covers the two templates and stored lineage only; the audit
   export is not tamper-proof; "Production readiness is a future validation effort". Plus every failed
   or cut claim **[replace with final-build evidence]**.
-- Pre-event work disclosure, as the organizers require (decision 8) **[replace with the agreed
+- Pre-event work and external resources, cited as HackYeah FAQ F-13 and F-14 require: the starter
+  and design documents with their true preparation dates, Ollama, the model and the main libraries
+  (decision 8) **[replace with the agreed
   text]**.
 - Links: repository https://github.com/ataege/ai-control-layer, submitted commit **[replace with
   final-build evidence]**, demo recording if allowed.
