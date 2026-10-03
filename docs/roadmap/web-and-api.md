@@ -541,7 +541,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-06 · Authenticate the operator through a real credential check**
+- [x] **API-06 · Authenticate the operator through a real credential check**
+  - **Done (2026-10-03, api-impl-n):** Completed the explicit development operator seed (SH-19) through `pnpm db:seed`, using the fixture organization and `.env` password, preserving credentials and operator/reviewer membership on reruns and refusing drift. Fixed the cookie provider to look up the stored SHA-256 session hash. PostgreSQL tests exercise idempotence, real sign-in, HttpOnly cookie access, wrong/missing credentials, logout and role drift. `pnpm --filter api run lint`, `typecheck`, `test` and `build`: exit 0 (`test`: "109 passed (109)"); `pnpm test:db api`: "18 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; `pnpm smoke`: "28 passed, 0 failed, 5 skipped" (host mode does not capture service logs). An isolated local PostgreSQL cluster was used; Docker/container checks were not run (Docker unavailable). No startup seed or migration.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 4-7 h)
   - Depends on: API-03, API-05, SH-01 · Needs: X-18, X-22, X-23, X-24 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,
@@ -609,7 +610,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     browser or agent"); "Data ownership and the transition from starter to product"
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-09 · Add a fail-closed command client toward Go**
+- [x] **API-09 · Add a fail-closed command client toward Go**
+  - Done (2026-10-03): shared authenticated GET/POST transport rejects missing or invalid X-14 context before dispatch, signs only verified context, preserves upstream HTTP status, validates responses and refuses redirects. Stub tests cover 404, 401, 500, 503, timeout, refused connection, malformed JSON and unknown fields; secrets and upstream messages are withheld. Checks: API lint, typecheck and build exited 0; API unit tests: "134 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Database schema and records are unchanged by this task.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: SH-11 · Needs: X-13 · Provides: nothing
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
@@ -632,7 +634,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     register and scope controls" (NestJS/Go contract drift)
   - Blocked by: `command timeout budget`
 
-- [ ] **API-10 · Carry the verified operator context on every runtime command**
+- [x] **API-10 · Carry the verified operator context on every runtime command**
+  - Done (2026-10-04): every runtime read/command signs validated X-14 context sourced only from the real session/current membership. Admission now propagates request.requestId instead of the nonexistent request.id, validates the shared StartRunResponse strictly and uses faithful gateway error mapping. Checks: API lint, typecheck and build exited 0; API unit tests: "333 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". Real Go returned 401 for missing and invalid operator JWTs; real API admission returned 201 and the gateway log carried verified-admission-context. Tests reject browser identity fields and missing/malformed context before dispatch; JWT tests verify issuer, audience, HS256 and ctx. No fallback identity.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-08, API-09, SH-03 · Needs: X-14, X-23, X-27 · Provides: X-26
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
@@ -706,7 +709,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     "Architecture and chart reading guide" (Interpreting the full architecture)
   - Blocked by: `form options`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
+- [x] **API-13 · Serve the run and usage view through `GET /api/runs/{id}`**
+  - Done (2026-10-04): per the lead's clarification, two separate routes relay X-11 RunState (including resultReference) and RunUsage unchanged after verified membership and Go object authorization. Shared schemas and run-reference matching fail closed; no combined contract or default usage. Checks: API lint, typecheck and build exited 0; API unit tests: "180 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". HTTP tests cover authentication, malformed ids, exact forwarding, 401/403/404/503, transport failures, unknown fields and mismatched run references. No database writes.
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-08, X-11, X-24, X-29 ·
@@ -732,7 +736,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     interface"); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
   - Blocked by: `read path`; `passport in the run view`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
+- [x] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
+  - Done (2026-10-04): authenticated Go read facade forwards only validated run and cursor references with verified session context. Shared X-12/X-30 schemas reject unknown fields; organization, run, strict event ordering and next-cursor consistency are checked before returning the unchanged page. Go 404/401/403/503 are preserved; malformed or unavailable reads fail closed with 503. Checks: API lint, typecheck and build exited 0; API unit tests: "156 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Tests cover missing session, invalid references/pagination, supplied identity, cross-organization/run pages, duplicate/reversed events, unknown fields, empty pages and invalid cursor. No database writes or schema changes.
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-12, X-24, X-30 ·
@@ -940,7 +945,8 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-16 · Check role and object access on every read and command**
+- [x] **API-16 · Check role and object access on every read and command**
+  - Done (2026-10-04): per the lead's facade split, NestJS verifies the session/current app membership and reviewer roles before Go; Go remains the authoritative organization/object check and its 404 is preserved. Database-backed tests seed two organizations in rollback-only app transactions and authenticate via real scrypt credentials and stored hashed sessions. They cover state, usage, events, report, review, approval, cancellation and judge forwarding, foreign-object 404, current-role revocation and deleted membership refusal before Go. The Go side in these database tests is explicitly a labelled contract fixture, not runtime execution. Checks: API lint, typecheck and build exited 0; API unit tests: "319 passed"; `pnpm test:db api`: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". No test writes runtime or demo state.
   - **Report 1.2 change:** Roles add the configuration operator (policy reload) and the security reader (audit export); the policy administrator edits "the validated central policy file".
   - **Report 1.1 change:** Roles: "approval cannot widen the passport or override a source restriction"; the policy administrator role is to "Maintain versioned policies, trusted source classifications, and the two permitted template manifests".
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -988,7 +994,8 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     isolation")
   - Blocked by: `decision 2 in docs/product/README.md`; `read path`
 
-- [ ] **API-18 · Serve the stored report and its registered template**
+- [x] **API-18 · Serve the stored report and its registered template**
+  - Done (2026-10-04): GET /api/runs/{id}/reports/{reportId} relays the shared ReportView unchanged through verified membership and Go's organization/content access boundary. Strict response validation preserves stored classifications, source lineage, template/projection versions and withheld content; mismatched run/report references or leaked withheld content fail closed. Checks: API lint, typecheck and build exited 0; API unit tests: "224 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Tests cover both report fixtures, unknown fields, incorrect lineage/projection, missing sessions, 401/403/404/503 and transport failures. The source-trail behavior required by API-30 is included; its separate evidence task remains open. No runtime/demo SQL writes or computed labels.
   - **Report 1.1 change:** Serves the classification, template and projection versions, content hash and destination class with the report.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-16 · Needs: X-64 · Provides: nothing
@@ -1039,7 +1046,8 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     classifications); "Users operating model and proposed user journeys" (Policy administrator)
   - Blocked by: `source classification storage`
 
-- [ ] **API-30 · Serve the report classification and trusted source trail to authorized users**
+- [x] **API-30 · Serve the report classification and trusted source trail to authorized users**
+  - Done (2026-10-04): API-18's single stored-report route already returns X-64 classification, lineage and exact template/projection metadata unchanged from Go, including Internal-only withholding. API-30 records its separate authorization/source-trail evidence: report.controller.spec.ts covers both shared report fixtures, missing authentication, upstream 404, mismatched run/report, unknown source fields, projection consistency and forbidden withheld content; product-access.db-spec.ts checks real authenticated memberships in two organizations and foreign-report denial propagation. Go fixtures are labelled; no new live-model report was rendered by this API task. Checks: API lint, typecheck and build exited 0; API unit tests: "366 passed"; `pnpm test:db api`: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". No duplicate endpoint, browser-derived labels or runtime/demo writes.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-16, API-18 · Needs: X-64, X-71 · Provides: nothing
   - Paths: `apps/api/src` (the module that serves API-18)
@@ -1248,7 +1256,8 @@ this side starts and reviews.
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-19 · Serve the exact review payload to authorized reviewers only**
+- [x] **API-19 · Serve the exact review payload to authorized reviewers only**
+  - Done (2026-10-04): GET /api/actions/{id}/review refuses a non-reviewer with 403 before Go, using roles only from verified membership. It relays the Go-owned ReviewView (commit 32b4a76) unchanged, including snake_case keys, frozen recipient, report and source manifest. Shared-schema validation restores queue_report conditionals; unknown fields, incomplete frozen material and mismatched action references are refused. Cache-Control: no-store. Checks: API lint, typecheck and build exited 0; API unit tests: "280 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". Tests use the shared fixture generated from real Go output; a new live model review was not exercised.
   - **Report 1.1 change:** The payload adds the report identifier, content hash, source manifest and digest, classification, template and projection versions; "Review payloads and source manifests need their own access rules". ActivityModule is the architecture's proposal.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-16 · Needs: X-09, X-41 · Provides: nothing
@@ -1267,7 +1276,8 @@ this side starts and reviews.
     necessary to make a decision")
   - Blocked by: `read path`; `review payload read`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-20 · Forward approval decisions through `POST /api/actions/{id}/approval`**
+- [x] **API-20 · Forward approval decisions through `POST /api/actions/{id}/approval`**
+  - Done (2026-10-04): reviewer-only POST /api/actions/{id}/approval accepts exactly the shared X-10 decision and forwards it to Go; NestJS creates no grant or runtime state. Go-owned ApprovalResponse from 32b4a76 is validated and relayed unchanged; action/decision mismatches fail closed, 401/403/404/409/503 remain upstream errors, and timeout is 504 outcome_unconfirmed. Checks: API lint, typecheck and build exited 0; API unit tests: "299 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". Tests cover approve/reject, non-reviewer refusal before Go, extra identity/payload fields, invalid decisions, transport failures and response mismatches. Full live approval/outbox execution was not exercised by this API task.
   - **Report 1.1 change:** A forbidden export never reaches approval, and an approval cannot override it.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-10, API-16 · Needs: X-10, X-13, X-40 · Provides: X-43 (part: approval)
@@ -1290,7 +1300,8 @@ this side starts and reviews.
     interface contracts" (Proposed browser and runtime operations)
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-21 · Forward cancellation through `POST /api/runs/{id}/cancel`**
+- [x] **API-21 · Forward cancellation through `POST /api/runs/{id}/cancel`**
+  - Done (2026-10-04): forwards cancellation with verified membership and no extra role, per product decision 30. Returns Go's X-11 state unchanged; browser command fields are refused; a timeout is 504 outcome_unconfirmed and never cancellation success. Swagger states that future dispatches stop and committed effects remain. Checks: API lint, typecheck and build exited 0; API unit tests: "192 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Real API/Go calls returned 200 for state, usage and cancel and persisted cancelRequestedAt; the current gateway returned the run.cancel_requested event. Host smoke: "28 passed, 0 failed, 5 skipped" (host logs unavailable). No database writes by NestJS.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: API-10, API-16 · Needs: X-42 · Provides: X-43 (part: cancel); X-55 (part: cancel
     command)
@@ -1538,7 +1549,8 @@ sit here, before the final build's evidence is captured, and are cut first.
     runtime operations)
   - Blocked by: `read path`; `decision 3 in docs/product/README.md`
 
-- [ ] **API-35 · Serve the security summary**
+- [x] **API-35 · Serve the security summary**
+  - Done (2026-10-04): verified organization members read GET /api/security/summary through the private Go route. The shared SecuritySummary is strictly validated and returned unchanged; a mismatched organization is refused with 503, and missing authentication is refused before Go. Live/fixture verdict labels, purpose usage and timings remain Go facts. Checks: API lint, typecheck and build exited 0; API unit tests: "235 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped" (host logs unavailable). Real authenticated API/Go summary returned 200 for the verified organization. Tests use labelled shared fixtures; aggregate reconciliation evidence remains API-37.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: API-16 · Needs: X-85, X-95 · Provides: X-93
   - Paths: `apps/api/src` (the activity module; the architecture proposes ActivityModule)
@@ -1548,7 +1560,8 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
-- [ ] **API-36 · Serve the sanitized audit export**
+- [x] **API-36 · Serve the sanitized audit export**
+  - Done (2026-10-04): lead-approved GET /api/security/export?kind=events|assessments&format=json|csv&after=...&limit=... checks reviewer from verified membership before any Go call. Browser after maps to Go cursor; maximum page size is 500. JSON returns exactly the shared Go page; CSV serializes only existing record fields and neutralizes formula triggers (including whitespace/control prefixes), with Go nextCursor in X-Next-Cursor. Invalid cursor ranges, ordering, foreign event organizations, unknown fields and transport errors fail closed. Checks: API lint, typecheck and build exited 0; API unit tests: "264 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; real authenticated API/Go event and assessment exports returned 200 in both JSON and CSV. Tests include missing session, non-reviewer refusal before Go and CSV formula cases. No added record fields or runtime/demo writes; full reconciliation evidence remains API-37.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: API-16 · Needs: X-79, X-85 · Provides: X-94
   - Paths: `apps/api/src` (the activity module)
@@ -1558,7 +1571,8 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
-- [ ] **API-37 · Prove the audit export and security summary**
+- [x] **API-37 · Prove the audit export and security summary**
+  - Done (2026-10-04): sanitized capture docs/evidence/api-audit-export-2026-10-04.json records real authenticated API/Go summary reconciliation with 14 event records and 2 deterministic assessment records. Every decision/assessment group count matches; cursor pages contain no duplicate ids; JSON and CSV counts match and CSV fields exactly match the shared record schemas. Counts were stable before/after capture (not an atomic snapshot). A real judge signature input was denied as signature_match and produced the deterministic assessments. Authorization and CSV-formula regressions run in the existing API unit/database suites, with the Go fixture limitation explicit in the evidence. Checks: API lint, typecheck and build exited 0; API unit tests: "366 passed"; latest `pnpm test:db api` on unchanged code: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Evidence contains counts/metadata only, no raw content or credentials. Live-model approval/outbox execution, semantic detection quality, Docker and browser consumption were not verified.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: API-35, API-36 · Needs: X-89 · Provides: X-104
   - Paths: none (tests run through the X-89 suite)
@@ -1568,7 +1582,8 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Report: "Validation plan and evidence matrix" (Audit export and security summary)
   - Blocked by: nothing
 
-- [ ] **API-38 · Serve the live test entry for judge input**
+- [x] **API-38 · Serve the live test entry for judge input**
+  - Done (2026-10-04): POST /api/control/evaluate validates all three X-91 boundary inputs and forwards with service identity and verified session context only. It returns Go's validated ControlEvaluationResponse unchanged; deny is a real 200 decision, never an issued grant. Unknown fields, malformed boundary combinations and mismatched run responses are refused. Checks: API lint, typecheck and build exited 0; API unit tests: "319 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". A real run admitted through the same session was evaluated by Go: out-of-scope invoice proposal denied, actionId null, control.evaluated event labelled judge. The draft scripts/judge-client.mjs still needs its owner's X-91 update; this API route is complete independently. Live semantic detection quality was not measured.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: API-11, API-16 · Needs: X-91 · Provides: X-106
   - Paths: `apps/api/src` (the runtime facade module from API-11)
@@ -1685,7 +1700,8 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-26 · Clean up the API's error states**
+- [x] **API-26 · Clean up the API's error states**
+  - Done (2026-10-04): error-code allowlist consumes all 31 shared X-13 codes; unknown upstream codes are never relayed. General 5xx logs contain only correlation/status metadata, not exception messages, untrusted exception names or stacks that can carry credentials/review content. Session lookup dependency errors now return 503 while invalid/expired credentials remain 401. All facades preserve Go status or return fail-closed transport errors; command timeouts remain unconfirmed. Checks: API lint, typecheck and build exited 0; API unit tests: "366 passed"; `pnpm test:db api`: "59 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Host log scan: service token, operator signing key, demo password and shared restricted-review fixture text absent. Tests cover every shared reason code and secret-bearing exceptions in both response/log output. Live model execution quality is outside this evidence.
   - **Report 1.2 change:** Uses the 20 proposed reason codes.
   - **Report 1.1 change:** Uses the 13 proposed reason codes.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2 h)

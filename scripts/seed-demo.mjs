@@ -10,9 +10,6 @@
 //    exists and the catalog is still empty; otherwise the step is reported as skipped, so a second
 //    run adds no duplicate revision and never replaces a judge's later policy edits.
 //
-// TODO: the app records (organizations, users, memberships) are not seeded here. They belong to
-// the identity tables (API-05 to API-08), and the demonstration operator (SH-19) needs their
-// password hashing; add them when those land.
 import { readFileSync } from "node:fs";
 
 import { runCommand } from "./lib/commands.mjs";
@@ -36,6 +33,22 @@ if (!fileFound) {
   process.exit(1);
 }
 if (!(await requireLocalReachableDatabase(environment, printStatus, "seed"))) process.exit(1);
+
+// Run the API-owned credential seed through its existing TypeScript loader. No startup hook.
+const operatorSeedExitCode = await runCommand(
+  process.execPath,
+  [
+    "--loader",
+    fromRepositoryRoot("apps/api/node_modules/ts-node/esm.mjs"),
+    "--no-warnings",
+    fromRepositoryRoot("apps/api/src/auth/seed-demo-operator.command.ts"),
+  ],
+  {
+    cwd: repositoryRoot,
+    env: { ...environment, TS_NODE_PROJECT: fromRepositoryRoot("apps/api/tsconfig.json") },
+  },
+);
+if (operatorSeedExitCode !== 0) process.exit(operatorSeedExitCode);
 
 const client = await connectToDatabase(environment);
 // The catalog state before the import step: the seed imports policy.yaml only into an empty
@@ -83,11 +96,6 @@ try {
 } finally {
   await client.end();
 }
-
-printStatus(
-  "info",
-  "app records (organizations, users, memberships) not seeded: TODO with API-05 to API-08 and SH-19",
-);
 
 const rootScripts =
   JSON.parse(readFileSync(fromRepositoryRoot("package.json"), "utf8")).scripts ?? {};

@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { Session } from "../identity/entities/session.entity.js";
+import { createHash } from "node:crypto";
 import { AuthProvider, AuthenticatedPrincipal } from "./auth.types.js";
 
 @Injectable()
@@ -13,7 +14,7 @@ export class CookieAuthProvider implements AuthProvider {
 
   async authenticate(credential: string): Promise<AuthenticatedPrincipal> {
     const session = await this.sessionRepository.findOne({
-      where: { id: credential },
+      where: { id: createHash("sha256").update(credential).digest("hex") },
     });
 
     if (!session) {

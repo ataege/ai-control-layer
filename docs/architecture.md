@@ -293,6 +293,10 @@ waiting on PostgreSQL answers 503 at once instead of holding up the drain.
 
 ## Product modules
 
+`apps/api/src/actions` (NestJS): reviewer-only frozen action review and approval forwarding through private Go routes, preserving the Go-owned review contract and writing no grants.
+
+`apps/api/src/security` (NestJS): authorized security summary and reviewer-only sanitized audit export through private Go reads; uses shared security read contracts and writes no runtime records.
+
 The first implemented product module is the Ollama transport below. The intended product design
 is the report (version 1.2) and the architecture specification,
 [docs/product/project-architecture.md](product/project-architecture.md) (overview in

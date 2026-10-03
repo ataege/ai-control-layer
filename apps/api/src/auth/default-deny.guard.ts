@@ -64,8 +64,11 @@ export class DefaultDenyGuard implements CanActivate {
     let principal;
     try {
       principal = await this.authProvider.authenticate(sessionCookie);
-    } catch {
-      throw new UnauthorizedException("Invalid or expired session");
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw new UnauthorizedException("Invalid or expired session");
+      }
+      throw new ServiceUnavailableException("Authentication unavailable");
     }
 
     let membership;
