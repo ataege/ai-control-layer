@@ -16,6 +16,28 @@ import (
 
 func pointer[Value any](value Value) *Value { return &value }
 
+// scanner is a pgx row or rows.
+type scanner interface {
+	Scan(destinations ...any) error
+}
+
+// mustScan reads one row of a test query and fails the test on any error, so a failed read never
+// passes as an empty or zero result.
+func mustScan(t *testing.T, row scanner, destinations ...any) {
+	t.Helper()
+	if err := row.Scan(destinations...); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+}
+
+// mustFinishRows fails the test when a rows loop ended on an error rather than after the last row.
+func mustFinishRows(t *testing.T, rows pgx.Rows) {
+	t.Helper()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+}
+
 // isolatedRepository opens the configured test database and returns a repository whose
 // transactions are savepoints of one outer transaction, rolled back when the test ends, so no
 // fixture row survives (passports reject DELETE by trigger).
@@ -401,9 +423,10 @@ func eventTypes(t *testing.T, outer pgx.Tx, runID string) []string {
 	var types []string
 	for rows.Next() {
 		var eventType string
-		_ = rows.Scan(&eventType)
+		mustScan(t, rows, &eventType)
 		types = append(types, eventType)
 	}
+	mustFinishRows(t, rows)
 	return types
 }
 
