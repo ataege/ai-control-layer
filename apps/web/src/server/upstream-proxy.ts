@@ -172,7 +172,7 @@ export async function proxyUpstream(
   if (request.method !== "GET" && request.method !== "HEAD") {
     fetchOptions.body = request.body;
     // Need to use duplex: "half" for streaming bodies in Node.js fetch
-    (fetchOptions as any).duplex = "half"; 
+    Object.assign(fetchOptions, { duplex: "half" }); 
   }
 
   let timeoutId: NodeJS.Timeout | undefined;

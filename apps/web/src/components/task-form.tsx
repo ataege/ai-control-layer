@@ -46,7 +46,7 @@ export function TaskForm() {
         } else {
           setError(getSafeMessage(result.error));
         }
-      } catch (err) {
+      } catch {
         setError("Failed to load task options.");
       } finally {
         setIsLoading(false);
@@ -90,7 +90,7 @@ export function TaskForm() {
       }
 
       router.push(`/runs/${encodeURIComponent(result.data.runId)}`);
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred while starting the task.");
     } finally {
       setIsSubmitting(false);

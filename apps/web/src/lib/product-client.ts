@@ -41,7 +41,7 @@ export function getSafeMessage(error: FetchJsonError | string): string {
     return REASON_CODE_MESSAGES[error] || "An unknown error occurred.";
   }
   if (error.kind === "http") {
-    const code = (error.body as any)?.error?.code;
+    const code = (error.body as { error?: { code?: string } })?.error?.code;
     if (code === "unauthorized") return "Invalid credentials.";
     if (code) return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
     if (error.status === 401) return "Invalid credentials.";

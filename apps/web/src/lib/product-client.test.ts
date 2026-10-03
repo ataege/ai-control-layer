@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { ProductClient, getSafeMessage } from "./product-client";
-import { fetchJson, postJson } from "./fetch-json";
+import { postJson } from "./fetch-json";
 
 vi.mock("./fetch-json", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./fetch-json")>();

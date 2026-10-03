@@ -56,8 +56,8 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
               // If polling fails, keep real events and show the failure
               setError(getSafeMessage(eventsResult.error));
             }
-          } catch (e: any) {
-            if (e.name !== 'AbortError' && isMounted) {
+          } catch (e: unknown) {
+            if (e instanceof Error && e.name !== 'AbortError' && isMounted) {
               setError("An error occurred while polling for updates.");
             }
           } finally {
@@ -68,8 +68,8 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
         }
         
         poll();
-      } catch (e: any) {
-        if (e.name !== 'AbortError' && isMounted) {
+      } catch (e: unknown) {
+        if (e instanceof Error && e.name !== 'AbortError' && isMounted) {
           setError("Failed to load run details.");
           setIsInitialLoading(false);
         }
