@@ -24,7 +24,7 @@ func AuthorizeExport(report StoredReport, destinationClass string, currentVersio
 		return deny(ReasonReportLineageMissing)
 	}
 	template, registered := LookupTemplate(report.TemplateName)
-	if !registered {
+	if !registered || !projectionPolicyMatches(template, report.ProjectionPolicy) {
 		return deny(ReasonTemplateNotAllowed)
 	}
 	if len(report.Lineage) == 0 {
@@ -61,6 +61,14 @@ func AuthorizeExport(report StoredReport, destinationClass string, currentVersio
 		}
 	}
 	return ExportDecision{Allowed: true}
+}
+
+// projectionPolicyMatches checks the projection policy version stored with the report itself.
+func projectionPolicyMatches(template Template, storedPolicy *string) bool {
+	if template.Projection == nil {
+		return storedPolicy == nil
+	}
+	return storedPolicy != nil && *storedPolicy == template.Projection.PolicyVersion
 }
 
 func projectionMatches(template Template, entry LineageEntry) bool {

@@ -125,11 +125,14 @@ func DeriveClassification(template Template, sources []Source) (string, error) {
 	if len(sources) == 0 {
 		return "", fmt.Errorf("%w: a report needs at least one trusted source", ErrLineage)
 	}
-	if _, registered := registeredTemplates[template.Name]; !registered {
+	// Only the registered definition counts; the caller's copy of its fields is ignored.
+	registeredTemplate, registered := registeredTemplates[template.Name]
+	if !registered {
 		return "", fmt.Errorf("%w: unregistered template", ErrLineage)
 	}
+	template = registeredTemplate
 	for _, source := range sources {
-		if source.ID == "" || source.Version <= 0 || len(source.ConsumedFields) == 0 {
+		if source.Kind != SourceInvoice || source.ID == "" || source.Version <= 0 || len(source.ConsumedFields) == 0 {
 			return "", fmt.Errorf("%w: unresolved source", ErrLineage)
 		}
 		if source.Classification != InternalOnly && source.Classification != VendorShareable {

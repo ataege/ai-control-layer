@@ -41,16 +41,17 @@ func (reader *PassportScopeReader) LoadScope(ctx context.Context, run RunIdentit
 		templates = append(templates, string(template))
 	}
 	return PassportScope{
-		OrganizationID:        passport.OrganizationID,
-		RunID:                 passport.RunID,
-		PassportID:            passport.PassportID,
-		AllowedTools:          passport.Scope.Tools,
-		AllowedInvoiceIDs:     passport.Scope.InvoiceIDs,
-		AllowedTemplates:      templates,
-		RecipientReferences:   passport.Scope.RecipientReferences,
-		ApprovalRequiredTools: passport.Scope.ApprovalRequiredTools,
-		ToolAttemptLimit:      int(passport.Limits.ToolAttempts),
-		ExpiresAt:             passport.ExpiresAt,
+		OrganizationID:             passport.OrganizationID,
+		RunID:                      passport.RunID,
+		PassportID:                 passport.PassportID,
+		AllowedTools:               passport.Scope.Tools,
+		AllowedInvoiceIDs:          passport.Scope.InvoiceIDs,
+		AllowedTemplates:           templates,
+		RecipientReferences:        passport.Scope.RecipientReferences,
+		ApprovalRequiredTools:      passport.Scope.ApprovalRequiredTools,
+		ToolAttemptLimit:           int(passport.Limits.ToolAttempts),
+		AdmissionCatalogRevisionID: passport.AdmissionCatalogRevisionID,
+		ExpiresAt:                  passport.ExpiresAt,
 	}, nil
 }
 

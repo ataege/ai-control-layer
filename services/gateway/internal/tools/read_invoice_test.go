@@ -90,13 +90,16 @@ func TestReadInvoiceRejectsUnknownArgumentsAndMismatchedRequests(t *testing.T) {
 		"other organization": func(request *EffectRequest) { request.OrganizationID = world.otherOrganizationID },
 		"changed digest":     func(request *EffectRequest) { request.ActionDigest[0] ^= 0xff },
 		"wrong tool":         func(request *EffectRequest) { request.Tool = ToolQueueReport },
+		"changed arguments": func(request *EffectRequest) {
+			request.CanonicalArguments = json.RawMessage(`{"invoice_id":"` + world.invoiceA02 + `"}`)
+		},
 	}
 	for name, change := range cases {
 		t.Run(name, func(t *testing.T) {
 			request := world.proposeAction(t, world.nextStep(), ToolReadInvoice, map[string]string{"invoice_id": world.invoiceA01})
 			change(&request)
 			if name == "unknown argument" {
-				// Store the changed arguments' digest so only the strict decoding can refuse it.
+				// The stored action holds the same arguments, so only the strict decoding can refuse it.
 				world.exec(t, `UPDATE runtime.actions SET canonical_arguments = $1 WHERE id = $2`, request.CanonicalArguments, request.ActionID)
 			}
 			_, err := Runner{}.RunEffect(context.Background(), world.tx, request)

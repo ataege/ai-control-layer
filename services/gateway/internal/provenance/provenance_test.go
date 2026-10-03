@@ -66,8 +66,9 @@ func storedVendorReport(lineageClassification string) StoredReport {
 	content := "vendor body"
 	projection := VendorInvoiceFieldsV1.Name
 	version := VendorInvoiceFieldsV1.Version
+	policy := VendorInvoiceFieldsV1.PolicyVersion
 	return StoredReport{
-		TemplateName: VendorReconciliationV1.Name, Classification: VendorShareable,
+		TemplateName: VendorReconciliationV1.Name, Classification: VendorShareable, ProjectionPolicy: &policy,
 		DestinationClass: DestinationRegisteredVendor, Title: "Vendor reconciliation",
 		Content: content, ContentHash: ContentHash(content),
 		Lineage: []LineageEntry{{
@@ -130,4 +131,23 @@ func assertDenied(t *testing.T, name string, decision ExportDecision, reasonCode
 	if decision.Allowed || decision.ReasonCode != reasonCode {
 		t.Errorf("%s: %+v, want denied with %s", name, decision, reasonCode)
 	}
+}
+
+func TestDerivationUsesTheRegisteredTemplateNotTheCallersCopy(t *testing.T) {
+	forged := Template{Name: InternalInvestigationV1.Name, Version: 1} // AlwaysInternalOnly cleared
+	classification, err := DeriveClassification(forged, []Source{invoiceSource("invoice_A01", VendorShareable, FieldCurrency)})
+	if err != nil || classification != InternalOnly {
+		t.Fatalf("classification = %q, %v; want the registered internal_only", classification, err)
+	}
+	vendorSource := Source{Kind: "vendor", ID: "vendor_Atlas", Version: 1, Classification: VendorShareable, ConsumedFields: []string{FieldCurrency}}
+	if _, err := DeriveClassification(InternalInvestigationV1, []Source{vendorSource}); !errors.Is(err, ErrLineage) {
+		t.Fatalf("a non-invoice source: err = %v, want ErrLineage", err)
+	}
+}
+
+func TestAuthorizeExportChecksTheStoredProjectionPolicyVersion(t *testing.T) {
+	stale := storedVendorReport(VendorShareable)
+	oldPolicy := "report_projection_policy_v0"
+	stale.ProjectionPolicy = &oldPolicy
+	assertDenied(t, "stale policy", AuthorizeExport(stale, DestinationRegisteredVendor, map[string]int{"invoice_A01": 1}), ReasonTemplateNotAllowed)
 }

@@ -90,6 +90,7 @@ func scenarioScope(world *testWorld, noteReadable bool) passportScope {
 		InvoiceIDs:           []string{world.invoiceA01, world.invoiceA02},
 		VendorIDs:            []string{world.atlasID},
 		ReportTemplates:      []string{"internal_investigation_v1", "vendor_reconciliation_v1"},
+		ProjectionRules:      []string{"vendor_invoice_fields_v1"},
 		RecipientReferences:  []string{recipientReference(world.runID, world.atlasID)},
 		InternalNoteReadable: noteReadable,
 	}
