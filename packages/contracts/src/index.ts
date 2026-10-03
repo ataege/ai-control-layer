@@ -387,6 +387,67 @@ export interface ApprovalDecision {
   decision: "approve" | "reject";
 }
 
+/**
+ * GO-44 (lane w3), the answer to an ApprovalDecision: the stored grant's references only. The grant,
+ * the action's status, the approval.decided event and the continuation job committed together.
+ */
+export interface ApprovalResponse {
+  approvalId: string;
+  actionId: string;
+  runId: string;
+  decision: "approve" | "reject";
+}
+
+/** The exact destination a reviewer approves: the registered reporting address of the vendor. */
+export interface ReviewedRecipient {
+  reference: string;
+  vendor_id: string;
+  address: string;
+}
+
+/** One lineage source of the reviewed report, with the version it was rendered from. */
+export interface ReviewedSource {
+  kind: "invoice";
+  id: string;
+  version: number;
+  classification: "internal_only" | "vendor_shareable";
+  consumed_fields: string[];
+}
+
+/** The stored, server-rendered report exactly as it would be queued, with its source manifest. */
+export interface ReviewedReport {
+  id: string;
+  version: number;
+  template: ReportTemplate;
+  template_version: number;
+  projection_rule: string | null;
+  projection_rule_version: number | null;
+  classification: "internal_only" | "vendor_shareable";
+  content_hash: string;
+  content: string;
+  sources: ReviewedSource[];
+  source_manifest_digest: string;
+}
+
+/**
+ * GO-43/GO-44 (lane w3), `GET /internal/actions/{actionId}/review`: the review material frozen before
+ * review (Go's policy.ReviewPayload), for a reviewer of the organization. Keys are snake_case because
+ * the stored SHA-256 digest of the frozen payload is computed over exactly this encoding. A
+ * queue_report review always has the recipient and the report; other tools have neither.
+ */
+export interface ReviewView {
+  canonicalization_version: number;
+  action_id: string;
+  run_id: string;
+  passport_id: string;
+  policy_revision_id: number;
+  tool: ToolName;
+  canonical_arguments: Record<string, unknown>;
+  recipient: ReviewedRecipient | null;
+  report: ReviewedReport | null;
+  expires_at: string;
+}
+
 /** X-91: the boundary an evaluated interaction is checked at. */
 export type ControlBoundary = "model_input" | "tool_result" | "action_proposal";
 

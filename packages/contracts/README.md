@@ -16,6 +16,37 @@ The gateway's Go tests decode the same fixtures with unknown fields disallowed.
 The package is compiled to `dist/` because the API runs as plain Node ESM.
 Turborepo builds it before any task that depends on it.
 
+## Go-owned review and approval contracts (lane w3); NestJS consumes
+
+The gateway's review and approval routes answer with these shapes; the request of the approval
+route is the X-10 `ApprovalDecision` above. The fixtures were generated from Go's own encoding of a
+real frozen review and real decisions, and `TestReviewContractFixturesMatchTheGoTypes`
+(`services/gateway/internal/policy`) decodes each strictly into its Go type, re-encodes it unchanged
+and recomputes the review payload's digest. A change starts in Go (lane w3) and lands here with its
+fixture; NestJS consumes the shapes and does not reshape them.
+
+| Contract           | Route                                                             | Schema                          | Go type                   | Owner                               |
+| ------------------ | ----------------------------------------------------------------- | ------------------------------- | ------------------------- | ----------------------------------- |
+| `ReviewView`       | `GET /internal/actions/{actionId}/review`                         | `review-view.schema.json`       | `policy.ReviewPayload`    | Go-owned (lane w3); NestJS consumes |
+| `ApprovalResponse` | `POST /internal/actions/{actionId}/approval` (`ApprovalDecision`) | `approval-response.schema.json` | `policy.approvalResponse` | Go-owned (lane w3); NestJS consumes |
+
+`ReviewView` keys are snake_case: the frozen payload's stored SHA-256 digest is computed over exactly
+this encoding, so they are not renamed. A `queue_report` review always carries the resolved
+`recipient` (reference, vendor id, registered address) and the stored `report` (content, hash,
+template and projection versions, classification, sorted source manifest and its digest); the
+review screen shows these, never values from the model. The review expires with the run's passport.
+
+Error statuses (shared `ErrorResponse` envelope, `error.code` in brackets):
+
+| Status | Review route                                                       | Approval route                                                                                                                                            |
+| ------ | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | malformed action id (`bad_request`)                                | body not a strict X-10 decision, any extra field, oversized (over 1 KiB), or a malformed id (`bad_request`)                                               |
+| 401    | missing service token or operator context (`unauthorized`)         | same (`unauthorized`)                                                                                                                                     |
+| 403    | the operator is not a reviewer of the organization (`forbidden`)   | same (`forbidden`); reviewer authority is read from `app.memberships`, not only from the token                                                            |
+| 404    | no frozen review for this action in the organization (`not_found`) | no action awaiting approval here, including another organization's (`not_found`)                                                                          |
+| 409    | none                                                               | `approval_expired`; `action_changed` (action or frozen material altered); `run_cancelled` (run stopped or cancel requested); `conflict` (already decided) |
+| 503    | review unavailable (`decision_unavailable`)                        | nothing stored (`decision_unavailable`)                                                                                                                   |
+
 ## Go-owned read contracts (lane w2); NestJS consumes
 
 The gateway's private read routes answer with these shapes. Their source is the Go type; the
