@@ -137,9 +137,22 @@ func TestPostgresHarnessRoundTripAndRollback(t *testing.T) {
 		defer cancel()
 		_ = transaction.Rollback(cleanupContext)
 	})
-	runID := "go20-" + ID(t)
-	if _, err = transaction.Exec(ctx, "INSERT INTO runtime.model_token_budgets(run_id,token_limit) VALUES($1,$2)", runID, 1000); err != nil {
-		t.Fatal("insert isolated runtime fixture; migrations must already be applied")
+	// A ledger row needs its run (alignment decision 1), so the round trip seeds a passport and run
+	// in the same rolled-back transaction.
+	organizationID, passportID, runID := ID(t), ID(t), ID(t)
+	for _, statement := range []struct {
+		sql       string
+		arguments []any
+	}{
+		{`INSERT INTO runtime.passports(id, organization_id, actor_id, task_version, admission_catalog_revision_id, scope, limits, expires_at)
+			VALUES ($1, $2, $3, 'go20_round_trip', 1, '{}', '{}', now() + interval '1 hour')`, []any{passportID, organizationID, ID(t)}},
+		{`INSERT INTO runtime.runs(id, organization_id, passport_id, status) VALUES ($1, $2, $3, 'queued')`, []any{runID, organizationID, passportID}},
+		{`INSERT INTO runtime.model_token_budgets(run_id, organization_id, token_limit, call_limit, agent_call_limit, security_call_limit,
+			request_timeout_ms, max_concurrent_calls) VALUES ($1, $2, 1000, 24, 12, 12, 20000, 2)`, []any{runID, organizationID}},
+	} {
+		if _, err = transaction.Exec(ctx, statement.sql, statement.arguments...); err != nil {
+			t.Fatal("insert isolated runtime fixture; migrations must already be applied")
+		}
 	}
 	var limit int64
 	if err = transaction.QueryRow(ctx, "SELECT token_limit FROM runtime.model_token_budgets WHERE run_id=$1", runID).Scan(&limit); err != nil || limit != 1000 {
