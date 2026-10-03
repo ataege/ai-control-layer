@@ -329,11 +329,24 @@ anything else is a decision, not an implemented behaviour.
     three fixtures printed the expected denial, exit 0, with no execution attempt). The 3-of-3 and
     0-of-3 counts and the live runs below are the lead's report, not yet recorded in the repository.
 
-Live end-to-end completions, as reported by the lead's session (3 October 2026): lane 3c's run
-`66cbb01a` and Worker 2's GO-47 live run both completed through approval with one outbox row on
-`qwen3.5:4b`, with the signature feed and the app records loaded by hand. They show that the path can
-work on one machine; they are not final-build evidence (X-59), and the by-hand loading is the gap the
-feed import (item 16) and the app seed (item 17) close.
+Live end-to-end completions (3 October 2026), with where each is recorded:
+
+- Worker 2's GO-47 live run is **on `main`**: `docs/roadmap/go.md`, GO-47 block, the "Completed
+  (2026-10-03)" line (commit `3aeade7`). `TestLiveStoryThroughTheProductionChain` on `qwen3.5:4b`,
+  labelled live: step 1 proposed several actions at once and was denied
+  (`multiple_actions_not_supported`); then `read_invoice` for A01 and A02, `create_report`
+  `vendor_reconciliation_v1`, `queue_report` awaiting approval; the reviewer approved; the run resumed,
+  one simulated outbox message was queued to the registered address and the run completed (6 agent
+  calls, 1 security call, outbox rows 1). That record says: "The model did not create the internal
+  report in this run; the scripted run covers that beat." The "Missing: the live run through the
+  approval" sentence above it is the superseded earlier progress line.
+- Lane 3c's run `66cbb01a` is cited in 3c's GO-26 tick (commit `711ece3` on `go/3c`), not yet on `main`.
+- The 3-of-3 internal-report and 0-of-3 export counts are lane f3's, to be recorded with GO-27; not
+  yet pushed.
+
+Both runs used the signature feed and app records loaded by hand, so they show that the path can work on
+one machine; they are not final-build evidence (X-59) until the feed import (item 16) and the app seed
+(item 17) replace the hand-loaded setup.
 
 The control evaluation adapter (X-91) is `POST /internal/control/evaluate` (GO-82); a `model_input`
 evaluation never dispatches the agent model. On `main`: the route is mounted by `api.Commands` and its
