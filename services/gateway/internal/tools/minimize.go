@@ -52,6 +52,17 @@ func MinimizeForModel(tool string, result EffectResult) (MinimizedResult, error)
 			minimized.UntrustedText = append(minimized.UntrustedText, invoice.InternalNote.Text)
 		}
 		return minimized, nil
+	case ToolReadVendor:
+		var vendor VendorResult
+		if err := reencode(result.ModelFacing, &vendor); err != nil {
+			return MinimizedResult{}, err
+		}
+		encoded, err := json.Marshal(vendor)
+		if err != nil {
+			return MinimizedResult{}, fmt.Errorf("tools: encode vendor result: %w", err)
+		}
+		// The vendor name is trusted demo data, not untrusted free text.
+		return MinimizedResult{JSON: encoded}, nil
 	default:
 		return MinimizedResult{}, fmt.Errorf("%w: %s", errUnknownTool, tool)
 	}
