@@ -90,6 +90,7 @@ func scenarioScope(world *testWorld, noteReadable bool) passportScope {
 		InvoiceIDs:           []string{world.invoiceA01, world.invoiceA02},
 		VendorIDs:            []string{world.atlasID},
 		ReportTemplates:      []string{"internal_investigation_v1", "vendor_reconciliation_v1"},
+		RecipientReferences:  []string{recipientReference(world.runID, world.atlasID)},
 		InternalNoteReadable: noteReadable,
 	}
 }
@@ -128,6 +129,15 @@ func (world *testWorld) proposeAction(t *testing.T, step int, tool string, argum
 	world.exec(t, `INSERT INTO runtime.execution_attempts (id, organization_id, action_id, attempt_number) VALUES ($1, $2, $3, 1)`,
 		request.AttemptID, world.organizationID, request.ActionID)
 	return request
+}
+
+// newAttempt adds another open attempt for an existing action, as a safe retry would.
+func (world *testWorld) newAttempt(t *testing.T, actionID string, number int) string {
+	t.Helper()
+	attemptID := testdb.ID(t)
+	world.exec(t, `INSERT INTO runtime.execution_attempts (id, organization_id, action_id, attempt_number) VALUES ($1, $2, $3, $4)`,
+		attemptID, world.organizationID, actionID, number)
+	return attemptID
 }
 
 // count returns a single integer from a query.

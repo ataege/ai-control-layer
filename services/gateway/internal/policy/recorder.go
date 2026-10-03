@@ -3,12 +3,13 @@ package policy
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/repository"
 )
 
 // Action status values the gate writes. Execution states follow with the executor (GO-16).
@@ -18,10 +19,6 @@ const (
 	actionStatusDenied           = "denied"
 	actionStatusAwaitingApproval = "awaiting_approval"
 )
-
-// decisionEventType is the safe event of one gate decision (X-12, provisional name). It switches
-// to 3c's GO-22 event writer once that lands.
-const decisionEventType = "action.decided"
 
 // ErrRecorderUnavailable means the gate's records could not be written; the gate then denies.
 var ErrRecorderUnavailable = errors.New("action records unavailable")
@@ -72,21 +69,17 @@ func (recorder *PostgresRecorder) confirmSameAction(ctx context.Context, action 
 	return nil
 }
 
-// RecordDecision sets the stored action's status and inserts the decision event in one
-// transaction. A proposal without an action row (malformed arguments) gets the event only.
+// RecordDecision sets the stored action's status and appends the decision's safe event (X-12)
+// through the runtime repository, in one transaction. A proposal without an action row
+// (malformed arguments) gets the event only.
 func (recorder *PostgresRecorder) RecordDecision(ctx context.Context, run RunIdentity, decision Decision) error {
 	if recorder.pool == nil {
 		return ErrRecorderUnavailable
 	}
-	summary, err := json.Marshal(decisionSummary(decision))
-	if err != nil {
-		return ErrRecorderUnavailable
-	}
-	err = pgx.BeginFunc(ctx, recorder.pool, func(tx pgx.Tx) error {
-		var eventActionID any // NULL without an action row: the event must not point at a missing action
-		var revisionID any
+	err := repository.New(recorder.pool).InTransaction(ctx, func(tx repository.Tx) error {
+		event := decisionEvent(run, decision)
 		if decision.ActionStored {
-			tag, err := tx.Exec(ctx,
+			tag, err := tx.Raw().Exec(ctx,
 				`UPDATE runtime.actions SET status = $1, updated_at = now()
 				  WHERE id = $2 AND organization_id = $3 AND run_id = $4 AND status = $5`,
 				actionStatusFor(decision.Outcome), decision.ActionID, run.OrganizationID, run.RunID, actionStatusProposed)
@@ -96,15 +89,8 @@ func (recorder *PostgresRecorder) RecordDecision(ctx context.Context, run RunIde
 			if tag.RowsAffected() != 1 {
 				return ErrRecorderUnavailable // already decided or not this run's action
 			}
-			eventActionID = decision.ActionID
-			revisionID = decision.EvaluatedRevisionID
 		}
-		_, err := tx.Exec(ctx,
-			`INSERT INTO runtime.audit_events
-			   (organization_id, run_id, action_id, event_type, decision, reason_code, catalog_revision_id, masked_summary)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			run.OrganizationID, run.RunID, eventActionID, decisionEventType, string(decision.Outcome),
-			nullableReason(decision.ReasonCode), revisionID, summary)
+		_, err := tx.AppendEvent(ctx, event)
 		return err
 	})
 	if err != nil {
@@ -113,13 +99,51 @@ func (recorder *PostgresRecorder) RecordDecision(ctx context.Context, run RunIde
 	return nil
 }
 
-// decisionSummary holds references only: never arguments, content or model text.
-func decisionSummary(decision Decision) map[string]any {
-	summary := map[string]any{"outcome": string(decision.Outcome), "action_stored": decision.ActionStored}
-	if decision.ReasonCode != "" {
-		summary["reason_code"] = string(decision.ReasonCode)
+// decisionEvent maps a decision to its closed X-12 event type, with references only: never
+// arguments, content or model text.
+func decisionEvent(run RunIdentity, decision Decision) repository.NewEvent {
+	runID := run.RunID
+	event := repository.NewEvent{OrganizationID: run.OrganizationID, RunID: &runID}
+	if decision.ActionStored {
+		actionID := decision.ActionID
+		revisionID := decision.EvaluatedRevisionID
+		event.ActionID, event.CatalogRevisionID = &actionID, &revisionID
 	}
-	return summary
+	var eventDecision contracts.EventDecision
+	switch decision.Outcome {
+	case OutcomeAllow:
+		event.EventType, eventDecision = contracts.EventActionAllowed, contracts.DecisionAllow
+	case OutcomeApprovalRequired:
+		event.EventType, eventDecision = contracts.EventApprovalRequested, contracts.DecisionApprovalRequired
+	default:
+		event.EventType, eventDecision = contracts.EventActionDenied, contracts.DecisionDeny
+		if isExportDenial(decision.ReasonCode) {
+			event.EventType = contracts.EventReportExportDenied
+			lineageCheck := "failed"
+			if decision.ReasonCode == ReasonReportLineageMissing {
+				lineageCheck = "missing"
+			}
+			event.MaskedSummary.LineageCheck = &lineageCheck
+		}
+	}
+	event.Decision = &eventDecision
+	if decision.ReasonCode != "" {
+		reason := decision.ReasonCode
+		event.ReasonCode = &reason
+	}
+	effect := "none"
+	event.MaskedSummary.Effect = &effect
+	if decision.AlternativeTemplate != "" {
+		alternative := contracts.ReportTemplate(decision.AlternativeTemplate)
+		event.MaskedSummary.AlternativeTemplate = &alternative
+	}
+	return event
+}
+
+// isExportDenial is true for the provenance reasons of a refused report export (GO-64).
+func isExportDenial(reason ReasonCode) bool {
+	return reason == ReasonReportExportRestricted || reason == ReasonReportLineageMissing ||
+		reason == contracts.ReasonResourceVersionChanged
 }
 
 func actionStatusFor(outcome Outcome) string {
@@ -131,11 +155,4 @@ func actionStatusFor(outcome Outcome) string {
 	default:
 		return actionStatusDenied
 	}
-}
-
-func nullableReason(reason ReasonCode) any {
-	if reason == "" {
-		return nil
-	}
-	return string(reason)
 }

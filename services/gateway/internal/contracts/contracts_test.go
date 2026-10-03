@@ -34,6 +34,7 @@ var fixtureTargets = map[string]func() any{
 	"run-state.stopped-cancelled.json":          func() any { return new(RunState) },
 	"safe-event.export-denied.json":             func() any { return new(SafeEvent) },
 	"safe-event.admission-rejected.json":        func() any { return new(SafeEvent) },
+	"operator-context.operator.json":            func() any { return new(OperatorContext) },
 }
 
 // Fixtures mirrored elsewhere in the gateway, or read only by the API and web app.

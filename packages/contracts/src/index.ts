@@ -100,7 +100,11 @@ export interface ErrorResponse {
   path?: string;
 }
 
-/** Resolved operator context sent to Go with every governed command. */
+/**
+ * X-14: resolved operator context sent to Go with every governed command, as claim `ctx` of the
+ * X-Operator-Context JWT (HS256, issuer gateway-client, audience gateway, short expiry, jti).
+ * userId and organizationId are the uuid ids of app.users and app.organizations.
+ */
 export interface OperatorContext {
   userId: string;
   organizationId: string;

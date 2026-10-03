@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 // resolvedRecipient is a recipient reference resolved inside an adapter after its checks. The
@@ -48,4 +50,23 @@ func resolveRecipient(ctx context.Context, tx pgx.Tx, current scope, reference s
 		return resolvedRecipient{}, "", fmt.Errorf("tools: resolve recipient: %w", err)
 	}
 	return resolvedRecipient{vendorID: vendorID, address: *address}, "", nil
+}
+
+// ResolveRecipientForReview resolves a recipient reference for the reviewer's frozen review
+// payload (GO-43), with exactly the checks queue_report applies (resolveRecipient): the reference
+// names this run, is listed in the passport's recipientReferences, and points to a vendor of the
+// organization in the passport's vendorIds that is linked to a passport-scoped invoice and has a
+// registered address. It only reads. The caller must pass the scope of the run's stored passport,
+// never one built from a request. The address is for the reviewer's payload only and must never
+// reach the model. A refusal returns reasonCode destination_not_allowed and empty values.
+func ResolveRecipientForReview(ctx context.Context, tx pgx.Tx, organizationID, runID string,
+	passport contracts.PassportScope, reference string) (vendorID, address, reasonCode string, err error) {
+	current := scope{organizationID: organizationID, runID: runID, passport: passportScope{
+		InvoiceIDs: passport.InvoiceIDs, VendorIDs: passport.VendorIDs, RecipientReferences: passport.RecipientReferences,
+	}}
+	recipient, reason, err := resolveRecipient(ctx, tx, current, reference)
+	if err != nil || reason != "" {
+		return "", "", reason, err
+	}
+	return recipient.vendorID, recipient.address, "", nil
 }
