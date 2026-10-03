@@ -48,6 +48,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-starter}
       DATABASE_TIMEOUT_MS: ${DATABASE_TIMEOUT_MS:-3000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # The local model runs in Ollama on the host, not as a Compose service; only the gateway calls it.
+      # Unverified: container mode has never been run (Docker was unavailable).
+      MODEL_BASE_URL: http://host.docker.internal:11434
+      MODEL_NAME: ${MODEL_NAME:-}
+    # Makes host.docker.internal resolve on Linux Docker Engine too (Docker Desktop provides it already).
+    # Resolution only: on Linux, Ollama listens on 127.0.0.1 by default and is not reachable from the bridge.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # No "ports": the gateway is reachable only inside the Compose network.
     # infra/compose.debug.yaml publishes it on localhost for debugging.
     depends_on:
@@ -107,7 +115,7 @@ services:
       context: .
       dockerfile: infra/docker/web.Dockerfile
     restart: unless-stopped
-    # Deliberately no GATEWAY_SERVICE_TOKEN and no POSTGRES_* here: the web app must never hold them.
+    # Deliberately no GATEWAY_SERVICE_TOKEN, no POSTGRES_* and no MODEL_* here: the web app must never hold them.
     environment:
       NODE_ENV: production
       PORT: "3000"

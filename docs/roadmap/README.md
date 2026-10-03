@@ -1026,6 +1026,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 8 in docs/product/README.md`
 
 - [ ] **SH-13 · Wire the model provider credential for Go only**
+  - **Progress (2026-10-03):** No credential exists for local Ollama, so no credential variable was added; this branch (`feat/local-model-setup`) named the variables `MODEL_BASE_URL` (default `http://localhost:11434`) and `MODEL_NAME` (empty until `ollama pull`), wired them for Go only in `.env.example`, `scripts/dev.mjs` (removed from the web and API children) and `infra/compose.yaml` (gateway service only), and documented the setup in `docs/setup.md`, section 7. Reading them in Go is GO-06's work. Open: the API still re-reads the root `.env` on the host (see Work below). Container mode is unverified (never run).
   - **Report 1.2 change:** With a local model there may be no provider credential; the model endpoint and alias are still Go-only variables (SH-45).
   - Owner: the lead (infrastructure) with the Go implementer and, for the API's own `.env` loading, the web + API implementer · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: SH-04 · Needs: X-01 · Provides: X-04
@@ -1081,6 +1082,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-37 · Wire the non-secret Go variables, if the Go owners add any**
+  - **Progress (2026-10-03):** For the model endpoint and alias, this branch (`feat/local-model-setup`) named the variables `MODEL_BASE_URL` (default `http://localhost:11434`) and `MODEL_NAME` (empty until `ollama pull`), wired them for Go only in `.env.example`, `scripts/dev.mjs` (removed from the web and API children) and `infra/compose.yaml` (gateway service only), and documented the setup in `docs/setup.md`, section 7. Reading them in Go is GO-06's work. Both are non-secret. Container mode is unverified (never run). Two deviations from Work: Compose sets `MODEL_BASE_URL` to `http://host.docker.internal:11434` directly instead of the `${NAME:-default}` pattern, because the host value `localhost` is wrong inside a container; and the variable table in `services/gateway/README.md` is left to GO-06, which owns that file.
   - Owner: the lead (infrastructure) with the Go implementer · Tier: A · Size: S (estimate 0.5-1.5 h over M0 and M1, this roadmap's estimate)
   - Depends on: SH-04 · Needs: X-01 · Provides: nothing
   - Paths: `.env.example`, `infra/compose.yaml`, `README.md`, `services/gateway/README.md`
@@ -1128,6 +1130,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-45 · Install the local model on every machine and the presentation machine**
+  - **Progress (2026-10-03):** This branch (`feat/local-model-setup`) named the variables `MODEL_BASE_URL` (default `http://localhost:11434`) and `MODEL_NAME` (empty until `ollama pull`), wired them for Go only in `.env.example`, `scripts/dev.mjs` (removed from the web and API children) and `infra/compose.yaml` (gateway service only), and documented the setup in `docs/setup.md`, section 7. Reading them in Go is GO-06's work. Done when (both machines answer an agent and a security request within the recorded limits) is not yet observed: the lead is installing Ollama, and no model is chosen or recorded. Container mode is unverified (never run).
   - Owner: the lead (infrastructure) with the Go implementer · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-04 · Needs: nothing · Provides: X-84
   - Paths: `docs/setup.md`, `.env.example`, `scripts/dev.mjs`, `infra/compose.yaml`
