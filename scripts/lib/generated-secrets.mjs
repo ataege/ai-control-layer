@@ -23,4 +23,9 @@ export const GENERATED_SECRETS = {
     label: "operator-context signing key",
     generate: () => randomBytes(48).toString("base64url"), // 64 characters, 384 bits
   },
+  // The labelled development-demonstration operator's sign-in password, read only by `pnpm db:seed`.
+  DEMO_OPERATOR_PASSWORD: {
+    label: "demo operator password",
+    generate: () => randomBytes(12).toString("base64url"), // 16 characters
+  },
 };
