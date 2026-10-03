@@ -2211,7 +2211,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     outcomes and retries)
   - Blocked by: nothing
 
-- [ ] **GO-54 · Prove approval replay under concurrent requests**
+- [x] **GO-54 · Prove approval replay under concurrent requests**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-44, GO-45 · Needs: X-24, X-34 · Provides: X-51
   - Paths: none (concurrency tests in the packages above)
@@ -2225,6 +2225,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (critical check Approval replay); "Threat model
     limits and unresolved design choices" (Verification priorities)
   - Blocked by: nothing
+  - Completed (2026-10-03): `TestConcurrentApprovalDecisionsStoreOneGrant` (6 concurrent approve/reject decisions -> 1 accepted, 5 refused; 1 grant, 1 continuation job) and `TestConcurrentExecutionsConsumeTheGrantOnce` (4 concurrent executions of one approved action -> 1 succeeded; 1 consumed grant; 1 outbox row), both against the database: `pnpm test:db gateway` 703 passed, 0 failed, 0 skipped, and `go test -race -count=5` on both PASS; `pnpm verify` 6/6.
 
 - [x] **GO-55 · Prove the database execution transaction with fault injection**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
