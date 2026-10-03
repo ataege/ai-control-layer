@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -13,7 +12,6 @@ import (
 
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/repository"
-	"starter/services/gateway/internal/security"
 )
 
 // Action status values the gate writes. Execution states follow with the executor (GO-16).
@@ -168,9 +166,9 @@ func actionStatusFor(outcome Outcome) string {
 	}
 }
 
-// insertControlRecords writes the decision's security evidence (GO-77) to
-// runtime.control_assessments: one evaluation id for the decision, the action when it was stored,
-// and never any inspected text.
+// insertControlRecords writes the decision's security evidence (GO-77) through 3c's single
+// runtime.control_assessments writer, in the decision's transaction: one evaluation id for the
+// decision, the action when it was stored, and never any inspected text.
 func insertControlRecords(ctx context.Context, tx repository.Tx, run RunIdentity, decision Decision) error {
 	if len(decision.ControlRecords) == 0 {
 		return nil
@@ -179,52 +177,15 @@ func insertControlRecords(ctx context.Context, tx repository.Tx, run RunIdentity
 	if err != nil {
 		return err
 	}
-	var actionID any
+	keys := repository.ControlKeys{
+		OrganizationID: run.OrganizationID, RunID: run.RunID, EvaluationID: evaluationID,
+		AdmissionCatalogRevisionID: decision.AdmissionCatalogRevisionID,
+		EvaluatedCatalogRevisionID: decision.EvaluatedRevisionID,
+	}
 	if decision.ActionStored {
-		actionID = decision.ActionID
+		keys.ActionID = decision.ActionID
 	}
-	for _, record := range decision.ControlRecords {
-		var verdict, verdictSource, modelCallID, matchedRule, feedRevision, reason any
-		if record.ControlClass == security.ClassSemantic {
-			verdictSource = string(record.VerdictSource)
-			if record.Verdict != nil {
-				encoded, err := json.Marshal(record.Verdict)
-				if err != nil {
-					return err
-				}
-				verdict = encoded
-			}
-			if record.SecurityModelCallID != "" {
-				modelCallID = record.SecurityModelCallID
-			}
-		}
-		if record.MatchedRuleID != "" {
-			matchedRule = record.MatchedRuleID
-		}
-		if record.FeedRevision != "" {
-			feedRevision = record.FeedRevision
-		}
-		if record.ReasonCode != "" {
-			reason = record.ReasonCode
-		}
-		evaluatedRevision := record.EvaluatedCatalogRevisionID
-		if evaluatedRevision <= 0 {
-			evaluatedRevision = decision.EvaluatedRevisionID
-		}
-		if _, err := tx.Raw().Exec(ctx,
-			`INSERT INTO runtime.control_assessments
-			   (organization_id, run_id, evaluation_id, action_id, security_model_call_id, boundary, control_class,
-			    control_id, outcome, reason_code, admission_catalog_revision_id, evaluated_catalog_revision_id,
-			    matched_rule_id, feed_revision, verdict_source, verdict)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-			run.OrganizationID, run.RunID, evaluationID, actionID, modelCallID, string(record.Boundary),
-			string(record.ControlClass), record.ControlID, string(record.Outcome), reason,
-			decision.AdmissionCatalogRevisionID, evaluatedRevision, matchedRule, feedRevision, verdictSource, verdict,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
+	return tx.InsertControlRecords(ctx, keys, decision.ControlRecords)
 }
 
 // newUUID returns a random version 4 UUID.
