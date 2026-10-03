@@ -74,6 +74,23 @@ values; the process then exits with code 1.
 
 ## Layout
 
+### Package ownership
+
+As directed by the user on 3 October 2026, the user is the sole owner and implementer of Go work.
+The report's Implementer 3/4/5 labels group responsibilities; they do not assign separate people
+to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` for planned modules.
+
+| Existing package      | Owner                      |
+| --------------------- | -------------------------- |
+| `cmd/gateway`         | User (sole Go implementer) |
+| `internal/config`     | User (sole Go implementer) |
+| `internal/logging`    | User (sole Go implementer) |
+| `internal/database`   | User (sole Go implementer) |
+| `internal/health`     | User (sole Go implementer) |
+| `internal/httpserver` | User (sole Go implementer) |
+
+New packages get their ownership row when their first real code lands.
+
 ```
 cmd/gateway/          wiring, signals, -healthcheck
 internal/config/      environment validation
@@ -83,6 +100,55 @@ internal/health/      handlers and wire DTOs
 internal/httpserver/  routes, middleware, error envelope, server lifecycle
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
+
+## Proposed tool results and idempotency (GO-07)
+
+**Draft, 3 October 2026; not a frozen contract or implemented behavior.** Owner: the user, sole Go
+implementer. Sources: report, "Illustrative passport and interface contracts" (Proposed tool
+argument boundaries; Concrete synthetic business example; Narrow final result and context
+boundary) and "Durable state idempotency audit and uncertain outcomes".
+
+SH-10 must freeze tool arguments and X-06 field rules before this draft is adopted. The lists below
+describe candidate result fields, not final JSON property names or database columns. No provider,
+limit value or shared wire contract is selected here.
+
+| Tool            | Proposed result field allowlist                                                                                                                                               | Protected values                                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `read_invoice`  | Invoice reference and version, associated vendor reference, external invoice reference, total in the agreed numeric format, status, synthetic untrusted note used in the demo | Raw fields outside the frozen allowlist are omitted; protected values required by the workflow remain run-scoped opaque references |
+| `read_vendor`   | Vendor reference and version, synthetic display name, trusted recipient reference                                                                                             | Recipient address remains an opaque reference; no raw contact or bank details reach the model                                      |
+| `create_report` | Stored report reference and version, authorized source invoice references, registered template reference, structured duplicate-reference finding                              | No unrestricted model prose or raw protected values; exact finding shape awaits the freeze                                         |
+| `queue_report`  | Report reference and version, simulated outbox entry reference and queued status                                                                                              | Raw recipient and rendered review content stay out of model-facing results and general events                                      |
+
+All four adapters verify organization and passport/resource relationships themselves. Opaque
+references resolve only after authorization inside the adapter, and do not resolve in another run
+or organization. A source version in a result is evidence for later precondition checks, not
+authority. SH-10 must decide versions, the numeric format, the note's inclusion and the registered
+template fields; this draft does not settle those open items.
+
+Idempotency and retries follow the stable action identity:
+
+- `read_invoice` and `read_vendor` have no business write. A completed action returns its persisted
+  minimized result on recovery rather than silently reading a newer version under the same
+  completed action. A known failed read may retry if fresh checks pass and allowance remains.
+- `create_report` produces at most one report per action. A retry uses the same action and
+  idempotency key, and verifies the original material and preconditions; it cannot replace the
+  report with new content. Changed material requires a new proposal.
+- `queue_report` produces at most one simulated outbox entry per action, using the frozen reviewed
+  content and trusted recipient. A completed action returns the stored result. A retry cannot
+  create a new action identifier to bypass uniqueness or obtain a broader approval.
+- For both write tools, effect, completion and event share the transaction selected by SH-06;
+  database uniqueness is tied to action identity. This guarantee is conditional on SH-06 and the
+  migration constraints, not supplied by this draft.
+- Known-safe failed attempts may retry only with the same frozen action, fresh authorization,
+  current run/precondition checks and available allowance; each retry is a counted attempt.
+  Where an approval was consumed, retries stay bound to that same action and grant.
+- A timeout or lost connection is not proof of no effect. Establish the transaction outcome and
+  former worker ownership as GO-02 requires; otherwise persist unknown outcome, pause for
+  attention and do not blindly retry.
+
+The simulated outbox creates a database record and sends no email. GO-17, GO-23, GO-31 to GO-35
+and GO-53 will test the adopted field rules, direct adapter authorization, stable identities,
+duplicate prevention and uncertain outcomes. GO-07 stays open until SH-10 and X-06 are settled.
 
 ## Commands
 

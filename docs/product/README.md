@@ -209,3 +209,168 @@ Each item is open until the document owner records the outcome here; the roadmap
   ("Configure these explicitly and record their tested limits").
 - `judge access`: how judges reach the running layer, the test suite and the configuration files.
 - `researcher role` and `shared-track assignment`: the two staffing items above.
+
+## Go runtime decisions
+
+### Go ownership update (SH-07, Go part)
+
+**Recorded at the user's direction on 3 October 2026.** The user is the sole implementer and owner
+of all Go work. The report's Implementer 3, Implementer 4 and Implementer 5 labels remain as
+responsibility groups, not separate people assigned to the current Go plan. Earlier Go decision
+owner labels in this document resolve to the user through this update. The report's multi-person
+effort and capacity estimates do not describe the current staffing.
+
+The user owns admission and passports, the worker and model gateway, enforcement and approvals,
+allowance accounting, execution claims and the executor, all four tool adapters, data minimization,
+the runtime repository and events, the internal API, the Go DTO mirrors and labelled replay.
+Transactional runtime/demo effects are placed in the Go executor with the runtime repository and
+adapters sharing the transaction boundary selected in SH-06. The user also owns conditional Go
+endpoints for form options, stored reports, run/usage/event reads, review payloads and event streams
+if their respective open decisions select Go.
+
+All existing Go packages (`cmd/gateway`, `internal/config`, `internal/logging`, `internal/database`,
+`internal/health`, `internal/httpserver`) have that same owner, recorded in the gateway README.
+Future packages inherit this responsibility assignment and receive their package row when real
+code lands. No empty packages are created by this update.
+
+This records the Go ownership portion of SH-07 only. Shared contract owners are still unrecorded,
+so SH-07 as a whole remains open. NestJS contract coordination and shared migration, database-role,
+infrastructure and document responsibilities remain with their recorded roles; owning Go adapters
+does not automatically transfer that shared work to the user.
+
+### GO-01: multiple-action model responses
+
+**Decided with the user on 3 October 2026; implementation pending.** Owner: go
+(Implementer 3). Source: report, "The enforcement loop and data minimization" and
+"Design decision record" (one action per model step).
+
+If a model response proposes more than one tool action, Go rejects the entire response as a
+denied proposal before any adapter executes. It never selects or executes a subset. The rejection
+is recorded as a safe event without raw arguments or protected values. The dispatched model call
+still counts toward its limits, and its usage follows the accounting rule adopted in decision 6;
+rejecting the response does not release an unresolved reservation.
+
+If correction allowance remains, Go returns safe feedback asking for exactly one action and counts
+that correction against the passport's correction limit. The next model dispatch must pass the
+usual run and allowance checks. If no correction remains, the run stops with the recorded reason.
+Until bounded correction is implemented in GO-29, the blocked-action path stops the run.
+
+Proposed reason code: `multiple_actions_not_supported`. SH-10 must freeze the code and safe message
+in X-13, and SH-11 must land their shared contract fixtures before consumers implement them.
+Provider-side single-action controls, if available after GO-03, supplement this runtime check.
+
+Implementation and evidence follow in GO-10, GO-11 and GO-29: a multiple-action response must call
+no adapter; correction and exhaustion scenarios must show their counted usage and recorded reason.
+
+### GO-02: durable attempts and worker recovery
+
+**Decided with the user on 3 October 2026; implementation pending.** Owner: go
+(Implementer 3). Source: report, "Durable state idempotency audit and uncertain outcomes" and
+"Threat model limits and unresolved design choices".
+
+Before each model or tool dispatch, Go commits a durable attempt record in `runtime`. Each attempt
+has its own stable identifier and belongs to a run; a tool attempt also references the immutable
+action's stable identifier. Safe retries create another attempt for the same action, preserving
+its idempotency key. Attempts link to their allowance reservation and record their outcome and
+known usage when available. SH-14 carries these requirements to the migration owner before SH-27
+defines the tables; table names and wire enums are not decided here.
+
+The pre-dispatch record proves intent to dispatch, not that the request reached the provider or
+adapter. A crash between committing the record and sending the request is therefore treated
+conservatively. Lease expiry alone never establishes failure or authorizes a retry. Recovery must
+establish that a former worker cannot still commit the attempt before treating an absent completion
+as final; the worker and execution-claim implementation must enforce this ownership check.
+
+Recovery follows the recorded outcome:
+
+- A successful action is not executed again. Resume from its persisted result and continuation.
+- An unsettled model attempt retains its unresolved reservation. It is not blindly resent or
+  treated as zero usage; any permitted new model attempt follows the separately agreed retry
+  policy, fresh run checks and a new reservation.
+- For local `create_report` and `queue_report` effects, absence of a completion record establishes
+  that the effect did not commit only after the old transaction has ended and only if SH-06 adopts
+  the shared transaction for effect, completion and event. A safe retry uses the same action and
+  idempotency key, with fresh authorization and allowance checks. Until that guarantee is in place,
+  absence of completion is insufficient proof of no effect.
+- A tool attempt whose outcome cannot otherwise be established enters the unknown-outcome path:
+  persist operator attention, pause the run and do not automatically requeue the operation.
+- An approval wait survives recovery and resumes the original stored action only after a valid
+  decision and execution rechecks; recovery creates no approval grant.
+
+Implementation and evidence follow in GO-08, GO-39, GO-45, GO-49 and GO-53. Crash checks cover the
+boundaries before dispatch, after dispatch, after a local effect commits and during approval waits,
+including an old worker still active after lease expiry. The prototype does not yet provide an
+operator reconciliation operation; GO-61 must record that limitation.
+
+### GO-04: canonical arguments and action digest
+
+**Decided with the user on 3 October 2026; implementation pending.** Owner: go
+(Implementer 4). Source: report, "Exact action approval versioning and execution rechecks",
+"Technical architecture and service ownership" and "Terminology for developers and presenters".
+
+Go defines a canonical encoding for each registered tool's typed arguments and computes a SHA-256
+digest over a versioned canonical action representation. The digest covers the action and run
+identifiers, tool, canonical arguments, passport reference, policy version, recipient, affected
+resources and their relevant versions, exact outbound content and expiry. Canonicalization version
+is included in the hashed representation. The digest itself and mutable execution status are not
+part of that representation.
+
+The encoding rules are:
+
+- Decode against the frozen typed contract. Reject unknown or duplicate object fields, missing
+  required fields, wrong types and unsupported or ambiguous values before canonicalization.
+- Encode typed fields in a fixed order with one compact JSON representation. Input object field
+  order and insignificant JSON whitespace do not affect the canonical bytes or digest. The
+  implementation must not hash the raw incoming JSON or depend on arbitrary map iteration.
+- Use no floating-point values. Numeric fields use the integer or decimal representation adopted
+  in the relevant contract, with explicit validation; money representation remains a contract
+  decision rather than being invented here.
+- Preserve decoded identifier and content values exactly: do not trim, case-fold, normalize
+  Unicode or rewrite line endings. Equivalent JSON escapes decode to the same value. Reject
+  invalid text encodings instead of silently replacing them.
+- Preserve list order unless the frozen contract explicitly defines a field as a set. For such
+  fields, the contract must define sorting and duplicate handling before implementation.
+- Give optional or inapplicable fields and timestamps one unambiguous representation, agreed in
+  X-09. Do not silently equate absent, null and empty values or round an expiry.
+
+Go hashes its authoritative stored action, including the material frozen for review, rather than a
+replacement payload supplied by a browser. Before execution, it recomputes the digest from that
+stored material and compares it with the recorded digest. Changed arguments, recipient, content,
+expiry or bound resource versions invalidate the previous approval. Current source record versions
+are also checked separately; a stored digest does not prove that a source record is unchanged.
+The digest detects changes only and never replaces identity, scope or reviewer authorization.
+
+SH-10 and the action contract owner carry these requirements into X-09; SH-11 lands types,
+schemas and fixtures before GO-12 implements the encoding. This decision does not settle the open
+`record versions` and `exact reviewed material` items. GO-12 tests equivalent representations,
+rejected inputs and a change to each material field; GO-43, GO-45 and GO-46 verify the approval
+and execution boundary. No canonicalization code or digest is implemented yet.
+
+### GO-05: replay entry and labels
+
+**Decided with the user on 3 October 2026; implementation pending.** Owner: the user, as the sole
+Go implementer recorded in the SH-07 Go ownership update above.
+Source: report, "Live demonstration storyboard and proof checks" (Reliable demonstrations without
+invented behavior) and "Illustrative invoice scenario and future domain adaptations" (Scene 2).
+Replay ownership and approach are recorded. SH-07's shared contract ownership remains incomplete;
+X-09 and X-12 still need their freeze before replay implementation.
+
+Chosen approach: a labelled Go runtime scenario test substitutes one stored prohibited proposal
+for the next model step of a named synthetic run. The proposal then follows the production action
+storage, gate and execution path, with no replay bypass of authorization. The replayed proposal and
+all events it produces carry an explicit replay source, whose field name and value must be frozen
+in X-09 and X-12. General events expose safe metadata only; fixture payloads are not copied into
+the activity feed.
+
+The run retains its original passport and allowance. A substituted proposal makes no provider call
+and must not invent provider usage. Gate checks and any correction consume the limits applicable
+to them, as the frozen policy defines. If a permitted correction follows, it completes useful work
+within that same run and allowance. A labelled provider test double used for repeatability remains
+distinct from a live model call, and its results are presented as test evidence.
+
+This chooses GO-05 option (1), without a NestJS replay trigger or X-65. GO-36 will
+implement the replay after its prerequisites land; no replay code exists yet.
+
+### GO-03: local provider direction
+
+On 3 October 2026, the user adopted report 1.2’s primary local-model path, replacing the earlier OpenAI `gpt-5.6-sol` choice. The exact local model and runtime remain open. GO-03 and SH-04 must record hardware fit, client choice, agent/security purpose accounting, reported token usage, call counts, request duration and reservation rules. No local-model integration or live call has been verified.

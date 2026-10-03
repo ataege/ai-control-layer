@@ -282,13 +282,22 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Work: Options: (1) reject the whole response as a denied proposal with a stable reason code and
     bounded correction feedback that counts toward the limits; (2) an explicitly defined policy that
     stores every proposed action and states which one is evaluated and what happens to the others.
-    No proposal is recorded. Either way "the worker should not silently execute an arbitrary
-    subset". What the decision 6 provider can constrain (GO-03) may narrow the options. Owner per
+    Outcome agreed with the user on 2026-10-03: option (1), recorded under "Go runtime decisions"
+    in `docs/product/README.md`. No adapter executes; safe rejection feedback is bounded by the
+    correction limit, and exhausted corrections stop the run. The proposed reason code
+    `multiple_actions_not_supported` waits for the X-13 freeze. Provider constraints (GO-03)
+    supplement the runtime rejection. "The worker should not silently execute an arbitrary
+    subset". Owner per
     the spine's open-items table (`multiple-action responses`): the Go implementer;
     `docs/product/README.md` records no numbered decision for it.
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner (document
     owner), by M1 at the latest.
   - Tests: none (a decision).
+  - Status: decision recorded and statically verified. On 2026-10-03, after installing the
+    pinned dependencies and selecting Node.js 24.18.0, `pnpm verify` passed all six steps
+    (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
+    blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
+    the decision-record review and completion requirements of this roadmap.
   - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
     should be rejected or handled by an explicitly defined policy"); "Design decision record" (One
     action per model step)
@@ -306,12 +315,22 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     without settled usage keeps its reservation; a local demo effect whose completion record is
     absent did not commit, if effect and completion share one transaction as SH-06 settles; an
     attempt with no recorded outcome otherwise is an unknown outcome); (2) another mechanism the
-    owner proposes. No proposal is recorded. The constraints the outcome needs reach SH-27 through
+    owner proposes. Outcome agreed with the user on 2026-10-03: option (1), recorded under
+    "GO-02: durable attempts and worker recovery" in `docs/product/README.md`. Pre-dispatch records
+    prove intent only; unresolved model reservations remain held, successful actions are not
+    replayed, and unknown tool outcomes pause for attention. Local no-effect recovery depends on
+    SH-06's shared transaction and establishing that the former worker can no longer commit.
+    The constraints the outcome needs reach SH-27 through
     the shared review in SH-14. Owner per the spine's open-items table (`dispatched attempts`):
     the Go implementer; `docs/product/README.md` records no numbered decision for it.
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner, by M3 at the
     latest and before SH-27 writes the tables.
   - Tests: none (a decision).
+  - Status: decision recorded and statically verified. On 2026-10-03, after installing the
+    pinned dependencies and selecting Node.js 24.18.0, `pnpm verify` passed all six steps
+    (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
+    blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
+    the decision-record review and completion requirements of this roadmap.
   - Report: "Threat model limits and unresolved design choices" ("Durable worker recovery requires
     identifiable dispatched attempts"); "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: nothing
@@ -335,6 +354,9 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Done when: these points are recorded with decision 6 in `docs/product/README.md` by the
     document owner, as part of SH-04's outcome.
   - Tests: none (a decision).
+  - Status: the user adopted report 1.2’s primary local-model path on 2026-10-03, replacing
+    the earlier OpenAI selection. The exact local model, hardware fit, client, reservation sizing
+    and agent/security usage accounting remain open. No provider integration or live call is implemented.
   - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
@@ -351,8 +373,13 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     arguments, recipient, affected resources, relevant versions, exact outbound content, passport
     reference, policy version and expiry"), and how a change is detected. Options: (1) one
     canonical encoding for every supported argument type, defined in Go, with a digest over the
-    encoded action; (2) a canonical form per tool's typed arguments, with a digest over each. No
-    proposal is recorded. Either option rejects inputs that have more than one representation, uses
+    encoded action; (2) a canonical form per tool's typed arguments, with a digest over each.
+    Outcome agreed with the user on 2026-10-03: typed canonical encoding per tool and SHA-256 over
+    the complete versioned canonical action, recorded under "GO-04: canonical arguments and action
+    digest" in `docs/product/README.md`. Input field order and insignificant JSON whitespace do
+    not affect the digest; strict decoding rejects unknown and duplicate fields. Content is
+    preserved, and lists keep their order unless X-09 explicitly defines a set. Either option
+    rejects inputs that have more than one representation, uses
     no floating-point values and treats the digest as change detection only: "hashing a request
     does not authenticate its author or make its contents authorized". The outcome feeds X-09 at
     the M0 freeze (SH-10). Owner per the spine's open-items table (`canonical arguments`):
@@ -362,6 +389,11 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner before the M0
     freeze, so X-09 can carry it.
   - Tests: none (a decision).
+  - Status: decision recorded and statically verified. On 2026-10-03, after installing the
+    pinned dependencies and selecting Node.js 24.18.0, `pnpm verify` passed all six steps
+    (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
+    blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
+    the decision-record review and completion requirements of this roadmap.
   - Report: "Exact action approval versioning and execution rechecks" ("Canonicalization must be
     defined deliberately"); "Technical architecture and service ownership" ("Go remains the
     authority for action canonicalization and execution"); "Terminology for developers and
@@ -383,12 +415,17 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     Options: (1) a Go-side command or labelled runtime test that substitutes one stored prohibited
     proposal for the next model step of a named run; (2) an operation the interface triggers
     through NestJS, which needs the conditional sync point X-65 (the replay trigger through NestJS)
-    and a facade operation on the other side. No proposal is recorded. Owner per the spine's
+    and a facade operation on the other side. The user chose a labelled Go runtime scenario test
+    (option 1) on 2026-10-03 and owns replay through the SH-07 Go ownership update. Owner per the spine's
     open-items table (`replay entry`): the Go implementer;
     `docs/product/README.md` records no numbered decision for it.
   - Done when: the outcome is recorded in `docs/product/README.md` by the document owner before the M0
     freeze, so X-12 carries the replay label.
   - Tests: none (a decision).
+  - Status: option (1), a labelled Go runtime scenario test, was chosen with the user on 2026-10-03
+    and recorded under "GO-05: replay entry and labels" in `docs/product/README.md`. The user is
+    the replay owner and sole Go implementer; SH-07 remains open for shared contract ownership.
+    No replay runtime code is implemented.
   - Report: "Live demonstration storyboard and proof checks" (Reliable demonstrations without
     invented behavior); "Illustrative invoice scenario and future domain adaptations" (Scene 2 a
     hostile instruction in a business document)
@@ -456,6 +493,9 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     ("Each tool returns an explicit field allowlist; protected values remain
     opaque references"; "Each action needs a stable identifier and a defined idempotency rule").
   - Tests: none at the record; GO-17, GO-23, GO-31 to GO-33 and GO-53 test it.
+  - Status: a proposed tool-result field allowlist and idempotency/retry rules are recorded in
+    `services/gateway/README.md`. This task remains open until SH-10 freezes typed arguments and
+    X-06 field rules, including which protected fields may appear in reviewed outbound content.
   - Report: "Relative implementation milestones and critical dependencies" (Critical path and
     sensible reductions); "Illustrative passport and interface contracts" (Narrow final result and
     context boundary); "Durable state idempotency audit and uncertain outcomes"
