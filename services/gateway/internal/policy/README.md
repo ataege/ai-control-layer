@@ -219,7 +219,8 @@ also checks that the active catalog revision is still the action's evaluated rev
 
 In the effect's transaction the grant is consumed by the attempt before `RunEffect` (the database
 guard allows one consumption of an approved, unexpired grant); nothing to consume means rollback
-and `approval_expired`. Attempts are counted under `FOR NO KEY UPDATE` on the run row: it
-serializes executions of the run without blocking the foreign-key checks of event and effect
-inserts (a `FOR UPDATE` lock deadlocked with a running effect in the concurrency test). A losing
+and `approval_expired`. `recordAttempt` claims the action first (allowed or approved to
+`executing`), so a concurrent execution of the same action returns at once holding no lock, and
+only then counts the run's attempts under `FOR NO KEY UPDATE` on the run row, the lock the event
+writer also takes; the earlier order (run lock first) deadlocked with a running effect. A losing
 concurrent execution is refused (`action_changed`).

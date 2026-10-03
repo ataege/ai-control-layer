@@ -241,14 +241,26 @@ var (
 	errActionNotExecutable = errors.New("action is no longer executable")
 )
 
-// recordAttempt counts the run's attempts against the passport's limit, then inserts and commits
-// the open attempt (GO-02: the record of intent exists before dispatch). The run's attempts are
-// counted under a FOR NO KEY UPDATE lock on the run row, so two executions cannot both take the
-// last attempt, while inserts that reference the run (events, effects) are not blocked: a FOR
-// UPDATE lock would block their foreign-key checks and could deadlock with a running effect.
+// recordAttempt claims the action, counts the run's attempts against the passport's limit, then
+// inserts and commits the open attempt (GO-02: the record of intent exists before dispatch).
+// Lock order matters: the action is claimed first (allowed or approved -> executing), so a
+// concurrent execution of the same action finds nothing to claim and returns at once, holding no
+// lock. Only then is the run row locked FOR NO KEY UPDATE, which serializes the attempt count
+// across the run's actions; it is the same lock the event writer takes, so a waiting attempt
+// insert never holds it while a running effect needs it.
 func (executor *Executor) recordAttempt(ctx context.Context, run RunIdentity, actionID string, attemptLimit int) (string, error) {
 	var attemptID string
 	err := pgx.BeginFunc(ctx, executor.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx,
+			`UPDATE runtime.actions SET status = $1, updated_at = now()
+			  WHERE id = $2 AND organization_id = $3 AND status IN ($4, $5)`,
+			actionStatusExecuting, actionID, run.OrganizationID, actionStatusAllowed, string(contracts.ActionApproved))
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return errActionNotExecutable // a concurrent execution claimed it first
+		}
 		if _, err := tx.Exec(ctx, `SELECT 1 FROM runtime.runs WHERE id = $1 AND organization_id = $2 FOR NO KEY UPDATE`,
 			run.RunID, run.OrganizationID); err != nil {
 			return err
@@ -262,7 +274,7 @@ func (executor *Executor) recordAttempt(ctx context.Context, run RunIdentity, ac
 			return err
 		}
 		if usedAttempts >= attemptLimit {
-			return errAttemptLimitReached
+			return errAttemptLimitReached // the rollback also returns the action to its status
 		}
 		if err := tx.QueryRow(ctx,
 			`INSERT INTO runtime.execution_attempts (organization_id, action_id, attempt_number)
@@ -275,16 +287,6 @@ func (executor *Executor) recordAttempt(ctx context.Context, run RunIdentity, ac
 				return errActionNotExecutable // another attempt of this action is open
 			}
 			return err
-		}
-		tag, err := tx.Exec(ctx,
-			`UPDATE runtime.actions SET status = $1, updated_at = now()
-			  WHERE id = $2 AND organization_id = $3 AND status IN ($4, $5)`,
-			actionStatusExecuting, actionID, run.OrganizationID, actionStatusAllowed, string(contracts.ActionApproved))
-		if err != nil {
-			return err
-		}
-		if tag.RowsAffected() != 1 {
-			return errActionNotExecutable // a concurrent execution moved it on
 		}
 		return nil
 	})
