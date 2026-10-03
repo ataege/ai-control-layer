@@ -33,6 +33,16 @@ func sourceStatusesFor(target contracts.RunStatus) []string {
 	return sources
 }
 
+// keepsRunGoing reports whether target lets a run continue or end as finished work; such a change
+// is refused once a cancellation was requested. Stopped and failed stay allowed.
+func keepsRunGoing(target contracts.RunStatus) bool {
+	switch target {
+	case contracts.RunRunning, contracts.RunAwaitingApproval, contracts.RunPaused, contracts.RunCompleted:
+		return true
+	}
+	return false
+}
+
 // NewJob is a durable job admission creates together with its passport and run.
 type NewJob struct {
 	ID   string
@@ -115,7 +125,8 @@ type RunTransition struct {
 }
 
 // TransitionRun applies a guarded status change and appends its event in this transaction.
-// A change the stored status does not allow returns ErrInvalidTransition and writes nothing.
+// A change the stored status does not allow returns ErrInvalidTransition and writes nothing; a
+// change that would keep a run going after a cancellation request returns ErrCancelRequested.
 func (tx Tx) TransitionRun(ctx context.Context, transition RunTransition) (contracts.RunState, error) {
 	var state contracts.RunState
 	if ctx == nil || !validUUID(transition.OrganizationID) || !validUUID(transition.RunID) ||
@@ -134,20 +145,27 @@ func (tx Tx) TransitionRun(ctx context.Context, transition RunTransition) (contr
 		reasonText := string(*transition.Reason)
 		reason = &reasonText
 	}
-	// One guarded statement: the status check and the update cannot interleave with another writer.
+	sources := sourceStatusesFor(transition.To)
+	refusedWhenCancelled := keepsRunGoing(transition.To)
+	// One guarded statement: the status and cancellation checks and the update cannot interleave
+	// with another writer, so a cancellation that lands during a step is never overwritten.
 	row := tx.transaction.QueryRow(ctx, `UPDATE runtime.runs
 		SET status = $3, terminal_reason = $4, result_reference = coalesce($6, result_reference), updated_at = now()
-		WHERE id = $1 AND organization_id = $2 AND status = ANY($5)
+		WHERE id = $1 AND organization_id = $2 AND status = ANY($5) AND (NOT $7 OR cancel_requested_at IS NULL)
 		RETURNING `+runStateColumns,
 		transition.RunID, transition.OrganizationID, string(transition.To), reason,
-		sourceStatusesFor(transition.To), transition.ResultReference)
+		sources, transition.ResultReference, refusedWhenCancelled)
 	state, err := scanRunState(row)
 	if errors.Is(err, ErrNotFound) {
 		// Distinguish a missing run from a refused transition without revealing other organizations.
-		if _, readErr := tx.readRunState(ctx, transition.OrganizationID, transition.RunID); readErr == nil {
-			return contracts.RunState{}, ErrInvalidTransition
+		stored, readErr := tx.readRunState(ctx, transition.OrganizationID, transition.RunID)
+		if readErr != nil {
+			return contracts.RunState{}, ErrNotFound
 		}
-		return contracts.RunState{}, ErrNotFound
+		if refusedWhenCancelled && stored.CancelRequestedAt != nil && slices.Contains(sources, string(stored.Status)) {
+			return contracts.RunState{}, ErrCancelRequested
+		}
+		return contracts.RunState{}, ErrInvalidTransition
 	}
 	if err != nil {
 		return contracts.RunState{}, err

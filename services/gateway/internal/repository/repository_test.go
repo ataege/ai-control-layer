@@ -458,6 +458,71 @@ func TestPostgresCancellationStopsIdleRunsAndStampsRunningOnes(t *testing.T) {
 	}
 }
 
+// A cancellation that lands while a step runs is never overwritten: the step's pause, review
+// request or completion is refused with ErrCancelRequested and writes nothing; stopping stays open.
+func TestPostgresCancelledRunCannotBeKeptGoing(t *testing.T) {
+	repository, outer := isolatedRepository(t)
+	organizationID := testdb.ID(t)
+	ctx := context.Background()
+	cancelledRun := func(status contracts.RunStatus) string {
+		passport := samplePassport(t, organizationID)
+		admit(t, repository, passport)
+		if _, err := outer.Exec(ctx, "UPDATE runtime.runs SET status = 'running' WHERE id = $1", passport.RunID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repository.CancelRun(ctx, organizationID, passport.RunID); err != nil {
+			t.Fatal(err)
+		}
+		// Other stored statuses with a pending cancellation are set directly, to cover every target.
+		if _, err := outer.Exec(ctx, "UPDATE runtime.runs SET status = $2 WHERE id = $1", passport.RunID, string(status)); err != nil {
+			t.Fatal(err)
+		}
+		return passport.RunID
+	}
+	refused := map[contracts.RunStatus]struct {
+		from   contracts.RunStatus
+		reason *contracts.ReasonCode
+		event  contracts.EventType
+	}{
+		contracts.RunPaused:           {contracts.RunRunning, pointer(contracts.ReasonOutcomeUnknown), contracts.EventRunPaused},
+		contracts.RunAwaitingApproval: {contracts.RunRunning, nil, contracts.EventApprovalRequested},
+		contracts.RunCompleted:        {contracts.RunRunning, nil, contracts.EventRunCompleted},
+		contracts.RunRunning:          {contracts.RunPaused, nil, contracts.EventRunResumed},
+	}
+	for target, step := range refused {
+		runID := cancelledRun(step.from)
+		_, err := transition(t, repository, organizationID, runID, target, step.reason, runEvent(organizationID, runID, step.event))
+		if !errors.Is(err, ErrCancelRequested) || errors.Is(err, ErrInvalidTransition) {
+			t.Errorf("%s -> %s after a cancel: %v, want only ErrCancelRequested", step.from, target, err)
+		}
+		state, err := repository.RunState(ctx, organizationID, runID)
+		if err != nil || state.Status != step.from || state.TerminalReason != nil {
+			t.Errorf("%s -> %s changed the run: %+v %v", step.from, target, state, err)
+		}
+		if types := eventTypes(t, outer, runID); !slices.Equal(types, []string{"run.cancel_requested"}) {
+			t.Errorf("%s -> %s wrote events: %v", step.from, target, types)
+		}
+	}
+
+	// The caller's answer: stop the run with run_cancelled. A failure may still be recorded.
+	runID := cancelledRun(contracts.RunRunning)
+	state, err := transition(t, repository, organizationID, runID, contracts.RunStopped, pointer(contracts.ReasonRunCancelled),
+		runEvent(organizationID, runID, contracts.EventRunStopped))
+	if err != nil || state.Status != contracts.RunStopped || *state.TerminalReason != contracts.ReasonRunCancelled {
+		t.Errorf("stop after a cancel: %+v %v", state, err)
+	}
+	failedID := cancelledRun(contracts.RunRunning)
+	if _, err := transition(t, repository, organizationID, failedID, contracts.RunFailed, pointer(contracts.ReasonDecisionUnavailable),
+		runEvent(organizationID, failedID, contracts.EventRunFailed)); err != nil {
+		t.Errorf("failure after a cancel: %v", err)
+	}
+	// A stopped run is terminal: a late pause is an ordinary refused transition, not a cancellation.
+	if _, err := transition(t, repository, organizationID, runID, contracts.RunPaused, pointer(contracts.ReasonOutcomeUnknown),
+		runEvent(organizationID, runID, contracts.EventRunPaused)); !errors.Is(err, ErrInvalidTransition) {
+		t.Errorf("pause of a stopped run: %v", err)
+	}
+}
+
 func TestPostgresCancellationOfAnotherOrganizationsRunChangesNothing(t *testing.T) {
 	repository, outer := isolatedRepository(t)
 	organizationID := testdb.ID(t)
