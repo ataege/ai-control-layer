@@ -43,8 +43,8 @@ if (
 if (selectedServiceNames.some((serviceName) => serviceName !== "gateway")) {
   console.error("[dev] building @workspace/contracts...");
   const contractsBuildExitCode = await runCommand(
-    "pnpm",
-    ["--filter", "@workspace/contracts", "run", "build"],
+    process.platform === "win32" ? "npx.cmd" : "npx",
+    ["pnpm", "--filter", "@workspace/contracts", "run", "build"],
     { env: environment, cwd: repositoryRoot },
   );
   if (contractsBuildExitCode !== 0) {
@@ -66,8 +66,8 @@ const webEnvironment = Object.fromEntries(
 
 const services = selectedServiceNames.map((serviceName) => ({
   name: serviceName,
-  command: "pnpm",
-  commandArguments: ["--filter", serviceName, "run", "dev"],
+  command: process.platform === "win32" ? "npx.cmd" : "npx",
+  commandArguments: ["pnpm", "--filter", serviceName, "run", "dev"],
   cwd: repositoryRoot,
   env: serviceName === "web" ? webEnvironment : environment,
 }));

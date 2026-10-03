@@ -1,6 +1,14 @@
 import { join } from "node:path";
 import type { DataSourceOptions } from "typeorm";
 import type { DatabaseEnvironment } from "../config/environment.js";
+import { PolicyVersion } from "../registry/entities/policy-version.entity.js";
+import { TaskTemplate } from "../registry/entities/task-template.entity.js";
+import { ToolDefinition } from "../registry/entities/tool-definition.entity.js";
+import { User } from "../identity/entities/user.entity.js";
+import { Organization } from "../identity/entities/organization.entity.js";
+import { Membership } from "../identity/entities/membership.entity.js";
+import { PasswordHash } from "../identity/entities/password-hash.entity.js";
+import { Session } from "../identity/entities/session.entity.js";
 
 // This file runs as .ts (TypeORM CLI loader, tests) or .js (compiled app); load only the matching copies.
 const migrationFileExtension = import.meta.filename.endsWith(".ts") ? "ts" : "js";
@@ -15,12 +23,14 @@ export function buildTypeOrmOptions(databaseEnvironment: DatabaseEnvironment): D
     password: databaseEnvironment.POSTGRES_PASSWORD,
     database: databaseEnvironment.POSTGRES_DB,
     // Register entity classes here once the first one exists.
-    entities: [],
+    entities: [TaskTemplate, PolicyVersion, ToolDefinition, User, Organization, Membership, PasswordHash, Session],
     migrations: [join(import.meta.dirname, "migrations", `*.${migrationFileExtension}`)],
     // Schema changes happen only through explicit migration commands.
     synchronize: false,
     migrationsRun: false,
     dropSchema: false,
     connectTimeoutMS: databaseEnvironment.DATABASE_TIMEOUT_MS,
+    uuidExtension: "pgcrypto",
+    installExtensions: false,
   };
 }

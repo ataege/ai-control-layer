@@ -29,7 +29,7 @@ async function bootstrap(): Promise<void> {
   });
   const config = app.get(AppConfigService);
 
-  configureApp(app, config.corsAllowedOrigins);
+  configureApp(app, config.corsAllowedOrigins, config.cookieSecret);
   setupOpenApi(app);
   // SIGTERM/SIGINT: stop accepting connections, drain in-flight requests, close the DataSource, exit 0.
   app.enableShutdownHooks(["SIGTERM", "SIGINT"], { useProcessExit: true });

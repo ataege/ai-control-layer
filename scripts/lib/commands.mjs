@@ -41,7 +41,7 @@ const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
  */
 export function runCommand(command, commandArguments, { env = process.env, cwd } = {}) {
   return new Promise((resolveExitCode) => {
-    const child = spawn(command, commandArguments, { env, cwd, stdio: "inherit" });
+    const child = spawn(command, commandArguments, { env, cwd, stdio: "inherit", shell: process.platform === "win32" });
     const signalForwarders = new Map();
 
     for (const signalName of FORWARDED_SIGNALS) {

@@ -3,7 +3,9 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createTestApp } from "../testing/create-test-app.js";
+import { Public } from "../auth/public.decorator.js";
 
+@Public()
 @Controller("failing")
 class FailingController {
   @Get("unexpected")

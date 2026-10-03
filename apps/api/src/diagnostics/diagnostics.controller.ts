@@ -11,6 +11,7 @@ import type { DiagnosticCheck, GatewayDiagnosticsResponse } from "@workspace/con
 import type { Request, Response } from "express";
 import { GatewayClientService } from "../gateway-client/gateway-client.service.js";
 import { GatewayDiagnosticsResponseDto } from "./diagnostics.dto.js";
+import { Public } from "../auth/public.decorator.js";
 
 interface DiagnosticsOutcome {
   status: GatewayDiagnosticsResponse["status"];
@@ -36,6 +37,7 @@ export function resolveDiagnosticsOutcome(
 }
 
 @ApiTags("diagnostics")
+@Public()
 @Controller("diagnostics")
 export class DiagnosticsController {
   constructor(private readonly gatewayClient: GatewayClientService) {}

@@ -35,6 +35,7 @@ export const environmentSchema = databaseEnvironmentSchema.extend({
   API_PORT: portSchema.default(3001),
   GATEWAY_URL: httpUrlSchema,
   GATEWAY_SERVICE_TOKEN: z.string().min(32),
+  COOKIE_SECRET: z.string().min(32),
   GATEWAY_TIMEOUT_MS: timeoutMsSchema.default(3000),
   CORS_ALLOWED_ORIGINS: corsOriginsSchema,
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

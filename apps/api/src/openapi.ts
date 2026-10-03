@@ -8,6 +8,7 @@ export function setupOpenApi(app: INestApplication): void {
     .setTitle("Starter API")
     .setDescription("Health and diagnostics endpoints of the starter.")
     .setVersion("0.0.0")
+    .addCookieAuth("session")
     .build();
   const document = SwaggerModule.createDocument(app, documentConfig);
   SwaggerModule.setup(`${GLOBAL_PREFIX}/docs`, app, document, {
