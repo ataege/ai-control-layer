@@ -25,6 +25,7 @@
     "verify": "node scripts/verify.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test:db": "node scripts/test-db.mjs",
+    "db:roles": "node scripts/db-roles.mjs",
     "db:seed": "node scripts/seed-demo.mjs",
     "reset:demo": "node scripts/reset-demo.mjs",
     "judge": "node scripts/judge-client.mjs",
