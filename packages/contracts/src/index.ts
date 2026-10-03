@@ -284,6 +284,8 @@ export interface StoredAction {
   status: ActionStatus;
   expiresAt: string | null;
   createdAt: string;
+  /** labelled_replay:<fixture id> for a labelled replay (GO-36); null for a model proposal. */
+  replaySource: string | null;
 }
 
 /** X-11: run status. */

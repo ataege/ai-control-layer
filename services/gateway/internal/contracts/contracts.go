@@ -237,6 +237,9 @@ type StoredAction struct {
 	Status                     ActionStatus `json:"status"`
 	ExpiresAt                  *time.Time   `json:"expiresAt"`
 	CreatedAt                  time.Time    `json:"createdAt"`
+	// ReplaySource is labelled_replay:<fixture id> for a labelled replay (GO-36); nil for a model
+	// proposal.
+	ReplaySource *string `json:"replaySource"`
 }
 
 // RunStatus is the state of a run (X-11).
