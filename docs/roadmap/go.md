@@ -2361,6 +2361,13 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     `semantic_on_live` 5, 0 errors, p50 16,204,307 µs, provider p50 15,456,473 µs. The full table
     is in the gateway README. `go test ./cmd/benchmark`: ok. GO-80's recorded spans were empty
     (its writer is on go/f3, not `main`).
+  - Rerun (2026-10-03, quiet machine, at the lead's request):
+    `MODEL_NAME=qwen3.5:4b pnpm benchmark --live` at 3aeade7, load average 12.03 at the start
+    and 10.11 at the end (below 15 throughout): `semantic_off` 300 samples, total p50 1,311 µs,
+    p95 3,452 µs (deterministic p50 77 µs); `semantic_on_fixture` 300, p50 1,288 µs (semantic
+    13 µs); `semantic_on_live` 10, p50 1,930,552 µs, provider p50 1,919,761 µs, gateway overhead
+    p50 5,367 µs; 0 errors. The gateway README holds the table; it replaces the loaded-machine
+    numbers for the slides.
   - Report: "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: `measurement method`
 

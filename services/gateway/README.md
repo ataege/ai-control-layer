@@ -1034,27 +1034,28 @@ It needs an enforceable active catalog with its signature feed; without one it f
 the feed import (API-34) is on `main`, load `config/attack-signatures.json` into
 `app.signature_feed_revisions` and the pointer's `active_feed_revision_id` by hand.
 
-### Result on the developer machine (2026-10-03)
+### Result on the developer machine (2026-10-03, quiet)
 
-Apple M1 Pro, 10 CPUs, macOS arm64, go1.27.1, Ollama `qwen3.5:4b`; private `postgres:18-alpine`
-on 127.0.0.1:55540, database `starter_bench` (migrated, `pnpm db:seed`, feed `feed_v1` loaded by
-hand); catalog revision 1; base commit 9f29b28 plus the uncommitted benchmark code. The machine was
-heavily loaded by other work (load average 108.88 100.60 76.30 on 10 CPUs), so these numbers
-describe that state, not an idle machine. Payload 421 bytes, note 172 bytes. Every sample passed;
-0 errors.
+`MODEL_NAME=qwen3.5:4b pnpm benchmark --live` at commit 3aeade7 (clean tree). Apple M1 Pro, 10
+CPUs, macOS arm64, go1.27.1, Ollama `qwen3.5:4b`; private `postgres:18-alpine` on 127.0.0.1:55540,
+database `starter_bench` (19 migrations, `pnpm db:seed`, feed `feed_v1` loaded by hand); catalog
+revision 1, feed `feed_v1`. Load average (1, 5, 15 minutes) 12.03 14.37 23.15 at the start
+(23:02:06) and 10.11 13.75 22.68 at the end (23:02:30); the 1-minute load stayed below 15.
+Payload 421 bytes, note 172 bytes. Every sample passed; 0 errors.
 
-| Configuration         | Samples | Total p50 µs | Total p95 µs | Policy lookup p50 µs | Deterministic p50 µs | Semantic p50 µs | Provider p50 µs | Samples/s |
-| --------------------- | ------- | ------------ | ------------ | -------------------- | -------------------- | --------------- | --------------- | --------- |
-| `semantic_off`        | 300     | 45,021       | 284,823      | 44,719               | 294                  | null            | null            | 12.4      |
-| `semantic_on_fixture` | 300     | 38,802       | 279,920      | 38,545               | 315                  | 39              | null            | 12.8      |
-| `semantic_on_live`    | 5       | 16,204,307   | 17,407,975   | 530,094              | 5,338                | 15,507,691      | 15,456,473      | 0.1       |
+| Configuration         | Samples | Total p50 µs | Total p95 µs | Policy lookup p50 µs | Deterministic p50 µs | Semantic p50 µs | Provider p50 µs | Overhead p50 µs | Samples/s |
+| --------------------- | ------- | ------------ | ------------ | -------------------- | -------------------- | --------------- | --------------- | --------------- | --------- |
+| `semantic_off`        | 300     | 1,311        | 3,452        | 1,240                | 77                   | null            | null            | 1,311           | 575.8     |
+| `semantic_on_fixture` | 300     | 1,288        | 3,566        | 1,197                | 78                   | 13              | null            | 1,288           | 569.0     |
+| `semantic_on_live`    | 10      | 1,930,552    | 1,983,987    | 4,070                | 161                  | 1,920,902       | 1,919,761       | 5,367           | 0.5       |
 
-Reading: the in-process controls take well under a millisecond at the median, the fixture
-semantic path adds about 40 µs, and the live semantic check is dominated by the model (provider
-p50 about 15.5 s under this load; gateway overhead p50 616,328 µs). Under this load the policy
-lookup, two database reads plus settings validation, is the largest gateway cost. No timing
-records existed in `runtime.timing_records` (GO-80's writer is not on `main`). Five live samples
-are an observation, not a stable distribution.
+Reading: the deterministic controls take under 0.1 ms at the median and the fixture semantic path
+adds about 13 µs, so the gateway's own cost is dominated by the policy lookup (about 1.2 ms: two
+database reads and settings validation per inspection). The live semantic check is about 1.9 s,
+almost all of it model time; the gateway overhead around it is about 5 ms. Ten live samples are
+an observation, not a stable distribution. No spans were recorded in `runtime.timing_records` in
+this database (no real run). An earlier run under heavy load (load average 108 on 10 CPUs) gave
+totals of about 40 ms and a live p50 of 16 s; those numbers describe that state only.
 
 ## Worker and job lease (GO-08)
 
