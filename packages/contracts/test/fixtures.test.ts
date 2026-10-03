@@ -36,6 +36,7 @@ import type {
   StartRunRequest,
   StartRunResponse,
   StoredAction,
+  TaskFormOptions,
 } from "../src/index.ts";
 
 const packageRoot = join(import.meta.dirname, "..");
@@ -795,6 +796,23 @@ export const typedSamples = {
     },
     expires_at: "2026-10-03T22:23:29.02559Z",
   } satisfies ReviewView,
+  taskFormOptions: {
+    templates: [{ id: "reconcile_atlas_v1", name: "Reconcile Atlas invoices" }],
+    vendors: [{ id: "vendor_Atlas", name: "Atlas" }],
+    invoices: [
+      { id: "invoice_A01", number: "INV104", date: "2026-09-01", amount: 125000 },
+      { id: "invoice_A02", number: "INV104", date: "2026-09-08", amount: 125000 },
+    ],
+    destinations: [{ id: "vendor_Atlas", name: "Atlas" }],
+    approvalRequirements: [
+      {
+        id: "review_queue_report",
+        description:
+          "A reviewer approves the exact report and recipient before the report is queued.",
+      },
+    ],
+    limits: { maxModelCalls: 24, maxTimeoutSeconds: 900 },
+  } satisfies TaskFormOptions,
 };
 
 // Fixture file that each typed literal must equal, one per schema.
@@ -826,6 +844,7 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   reportView: "report-view.vendor.json",
   approvalResponse: "approval-response.approve.json",
   reviewView: "review-view.queue-report.json",
+  taskFormOptions: "task-form-options.atlas.json",
 };
 
 test("typed samples are identical to their fixtures", () => {
