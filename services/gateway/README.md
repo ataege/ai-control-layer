@@ -441,6 +441,12 @@ references plus the stored steps; then, by result:
   unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
   `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
 
+**Active catalog (GO-72).** Before every model request the loop reads the active snapshot
+(`catalog.Loader.Active` through `agent.PoolCatalog`) and narrows the passport with
+`catalog.EffectiveFor`: the allowed models, the agent step limit and the correction limit are the
+smaller of passport and catalog, and the snapshot's security settings drive that step's inspection.
+No active catalog dispatches nothing and leaves the job for a later claim.
+
 Run changes go through `repository.Tx.TransitionRun` with their event; a change another writer
 already made (a cancellation) is accepted. A cancelled claim context returns an error and leaves
 the job for lease expiry.
@@ -455,8 +461,8 @@ Corrections are stored as `correction` entries (migration `1791100000000-AllowCo
 so a restarted worker sends the same feedback.
 
 **Tool-result inspection (GO-76 at the worker).** `agent.SecurityInspector` sends every minimized
-result through c1's `security.Inspector.InspectToolResult` with the active settings (a
-`SettingsSource`; production uses the catalog reader). The invoice note is marked as an untrusted
+result through c1's `security.Inspector.InspectToolResult` with the settings of the catalog snapshot read for this
+step. The invoice note is marked as an untrusted
 path with its trusted source (invoice id, version, classification); untrusted text the adapter cannot
 place pauses the run. Only the inspection's `ResultJSON` enters the context; a result withheld whole
 becomes `{"withheld":true,"reason_code":...}`; a paused inspection pauses the run and releases

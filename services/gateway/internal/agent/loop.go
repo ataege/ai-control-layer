@@ -12,10 +12,12 @@ import (
 	"time"
 
 	"starter/services/gateway/internal/budget"
+	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/model"
 	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/repository"
+	"starter/services/gateway/internal/security"
 	"starter/services/gateway/internal/worker"
 )
 
@@ -48,6 +50,26 @@ type CorrectionCounter interface {
 	CorrectionsUsed(ctx context.Context, run policy.RunIdentity) (int, error)
 }
 
+// CatalogSource returns the active control catalog snapshot (catalog.Loader.Active), read before
+// every model request; it fails closed.
+type CatalogSource interface {
+	Active(ctx context.Context) (catalog.Snapshot, error)
+}
+
+// PoolCatalog reads the active snapshot through the shared loader on the gateway pool.
+type PoolCatalog struct {
+	Loader *catalog.Loader
+	Pool   catalog.Querier
+}
+
+// Active returns the active snapshot or catalog.ErrUnavailable.
+func (source PoolCatalog) Active(ctx context.Context) (catalog.Snapshot, error) {
+	if source.Loader == nil || source.Pool == nil {
+		return catalog.Snapshot{}, catalog.ErrUnavailable
+	}
+	return source.Loader.Active(ctx, source.Pool)
+}
+
 // LoopDependencies are the components the loop drives. Every one is required.
 type LoopDependencies struct {
 	Runs        *repository.Repository
@@ -55,6 +77,7 @@ type LoopDependencies struct {
 	Gate        ActionGate
 	Executor    ActionExecutor
 	Inspector   ResultInspector
+	Catalog     CatalogSource
 	Scopes      policy.ScopeReader
 	Corrections CorrectionCounter
 	Steps       StepCounter
@@ -72,7 +95,7 @@ type Loop struct {
 // NewLoop validates its dependencies.
 func NewLoop(dependencies LoopDependencies) (*Loop, error) {
 	if dependencies.Runs == nil || dependencies.Stepper == nil || dependencies.Gate == nil || dependencies.Executor == nil ||
-		dependencies.Inspector == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
+		dependencies.Inspector == nil || dependencies.Catalog == nil || dependencies.Scopes == nil || dependencies.Corrections == nil ||
 		dependencies.Steps == nil || dependencies.Contexts == nil || dependencies.Telemetry == nil || dependencies.Logger == nil {
 		return nil, ErrInvalid
 	}
@@ -146,11 +169,18 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	if !loop.now().Before(passport.ExpiresAt) {
 		return runEnd{status: contracts.RunStopped, reason: contracts.ReasonRunExpired}, false, nil
 	}
+	// GO-72: the active catalog narrows the immutable passport before every model request. A
+	// missing or invalid catalog dispatches nothing and leaves the job for a later claim.
+	snapshot, err := loop.dependencies.Catalog.Active(ctx)
+	if err != nil {
+		return runEnd{}, false, err
+	}
+	effective := catalog.EffectiveFor(passport, snapshot)
 	stepsTaken, err := loop.dependencies.Steps.CountAgentCalls(ctx, run.OrganizationID, run.RunID)
 	if err != nil {
 		return runEnd{}, false, err
 	}
-	if int64(stepsTaken) >= passport.Limits.CallsAgent {
+	if int64(stepsTaken) >= effective.CallsAgent {
 		// Alignment decision 7: an exhausted allowance pauses the run.
 		return runEnd{status: contracts.RunPaused, reason: contracts.ReasonAllowanceExhausted}, false, nil
 	}
@@ -161,7 +191,7 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 	if err != nil {
 		return runEnd{}, false, err
 	}
-	agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: passport.Scope.AllowedModels}
+	agentRun := Run{OrganizationID: run.OrganizationID, RunID: run.RunID, AllowedModels: effective.AllowedModels}
 	result, err := loop.dependencies.Stepper.Step(ctx, agentRun, buildTaskContext(passport, entries))
 	if result.CallID != "" {
 		loop.recordSpans(ctx, run, Span{Phase: PhaseProvider, Duration: result.Duration, Failed: err != nil, ModelCallID: result.CallID})
@@ -181,12 +211,12 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 			return runEnd{}, false, err
 		}
 		rejection := policy.Decision{Outcome: policy.OutcomeDeny, ReasonCode: policy.ReasonCode(result.RejectReason)}
-		return loop.correct(ctx, run, passport, stepNumber, nil, rejection)
+		return loop.correct(ctx, run, effective, stepNumber, nil, rejection)
 	case StepFinal:
 		// GO-26 adds the narrow final-result validation.
 		return runEnd{status: contracts.RunCompleted}, false, nil
 	case StepAction:
-		return loop.act(ctx, run, agentRun, passport, stepNumber, result.Proposal)
+		return loop.act(ctx, run, agentRun, passport, effective, snapshot.Security, stepNumber, result.Proposal)
 	default:
 		return runEnd{status: contracts.RunFailed, reason: contracts.ReasonDecisionUnavailable}, false, nil
 	}
@@ -194,8 +224,8 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 
 // act sends one proposal through the gate, executes an allowed one, inspects its result and
 // stores the step's context.
-func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run, passport contracts.Passport, stepNumber int,
-	proposal contracts.ActionProposal) (runEnd, bool, error) {
+func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run, passport contracts.Passport, effective catalog.Effective,
+	settings security.Settings, stepNumber int, proposal contracts.ActionProposal) (runEnd, bool, error) {
 	actionID, err := newUUID()
 	if err != nil {
 		return runEnd{}, false, err
@@ -221,7 +251,7 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return runEnd{status: contracts.RunAwaitingApproval, actionID: actionID}, false, nil
 	default:
 		// A denied action executes nothing (GO-29: bounded feedback while corrections remain).
-		return loop.correct(ctx, run, passport, stepNumber, proposedCall(proposal), decision)
+		return loop.correct(ctx, run, effective, stepNumber, proposedCall(proposal), decision)
 	}
 
 	executionStarted := time.Now()
@@ -239,7 +269,7 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 		return runEnd{status: contracts.RunStopped, reason: contractReason(execution.ReasonCode)}, false, nil
 	}
 
-	inspection, err := loop.dependencies.Inspector.Inspect(ctx, agentRun, string(proposal.Tool), execution.Result)
+	inspection, err := loop.dependencies.Inspector.Inspect(ctx, agentRun, string(proposal.Tool), execution.Result, settings)
 	evaluationID, idErr := newUUID()
 	if idErr != nil {
 		return runEnd{}, false, idErr
@@ -274,14 +304,14 @@ func (loop *Loop) act(ctx context.Context, run policy.RunIdentity, agentRun Run,
 // the run's durable denial events, so it survives a restart. While corrections remain, the
 // denied call (if any) and the fixed denial feedback join the context and the loop continues;
 // a permitted alternative in the feedback grants nothing, the next proposal is checked again.
-func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, passport contracts.Passport, stepNumber int,
+func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, effective catalog.Effective, stepNumber int,
 	call json.RawMessage, decision policy.Decision) (runEnd, bool, error) {
 	denialReason := contractReason(decision.ReasonCode)
 	used, err := loop.dependencies.Corrections.CorrectionsUsed(ctx, run)
 	if err != nil {
 		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
 	}
-	verdict := policy.CheckCorrections(used, int(passport.Limits.Corrections))
+	verdict := policy.CheckCorrections(used, int(effective.Corrections))
 	if !verdict.Continue {
 		return runEnd{status: contracts.RunStopped, reason: contractReason(verdict.StopReason)}, false, nil
 	}

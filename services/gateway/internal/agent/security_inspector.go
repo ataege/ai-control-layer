@@ -10,11 +10,6 @@ import (
 	"starter/services/gateway/internal/tools"
 )
 
-// SettingsSource returns the active security settings (CatalogSecuritySettings).
-type SettingsSource interface {
-	Load(ctx context.Context) (security.Settings, error)
-}
-
 // ToolResultInspector is the hybrid tool-result check (*security.Inspector).
 type ToolResultInspector interface {
 	InspectToolResult(ctx context.Context, input security.ToolResultInput, settings security.Settings) (security.ToolResultInspection, error)
@@ -24,16 +19,15 @@ type ToolResultInspector interface {
 // active catalog's deterministic content and signature rules, then the metered semantic check on
 // the untrusted note. Only the inspection's permitted JSON enters the model context.
 type SecurityInspector struct {
-	settings  SettingsSource
 	inspector ToolResultInspector
 }
 
 // NewSecurityInspector returns the production inspector.
-func NewSecurityInspector(settings SettingsSource, inspector ToolResultInspector) (*SecurityInspector, error) {
-	if settings == nil || inspector == nil {
+func NewSecurityInspector(inspector ToolResultInspector) (*SecurityInspector, error) {
+	if inspector == nil {
 		return nil, ErrInvalid
 	}
-	return &SecurityInspector{settings: settings, inspector: inspector}, nil
+	return &SecurityInspector{inspector: inspector}, nil
 }
 
 // resultSource holds the trusted identity fields of a minimized result.
@@ -47,9 +41,9 @@ type resultSource struct {
 	} `json:"internal_note"`
 }
 
-// Inspect builds the tool-result input with the trusted source of every untrusted value and maps
+// Inspect, with the settings of the catalog snapshot read for this step, builds the tool-result input with the trusted source of every untrusted value and maps
 // the outcome. Any untrusted text it cannot place, any settings or guard failure pauses the run.
-func (inspector *SecurityInspector) Inspect(ctx context.Context, run Run, tool string, result tools.MinimizedResult) (Inspection, error) {
+func (inspector *SecurityInspector) Inspect(ctx context.Context, run Run, tool string, result tools.MinimizedResult, settings security.Settings) (Inspection, error) {
 	pause := Inspection{Outcome: InspectionPause, Reason: contracts.ReasonSecurityEvaluatorUnavailable}
 	var source resultSource
 	if json.Unmarshal(result.JSON, &source) != nil {
@@ -72,10 +66,6 @@ func (inspector *SecurityInspector) Inspect(ctx context.Context, run Run, tool s
 	}
 	// Every untrusted text the minimizer reported must be on a path the semantic check covers.
 	if len(input.Untrusted) != len(result.UntrustedText) {
-		return pause, nil
-	}
-	settings, err := inspector.settings.Load(ctx)
-	if err != nil {
 		return pause, nil
 	}
 	inspection, err := inspector.inspector.InspectToolResult(ctx, input, settings)
