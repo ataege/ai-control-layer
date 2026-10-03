@@ -1203,7 +1203,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     proof checks" (Reliable demonstrations without invented behavior)
   - Blocked by: nothing
 
-- [ ] **WEB-27 · Show the report classification and source trail on the run page**
+- [x] **WEB-27 · Show the report classification and source trail on the run page**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: WEB-12, API-30 · Needs: X-64, X-71 · Provides: nothing
   - Paths: `apps/web`
@@ -1215,6 +1215,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Tests: `pnpm --filter web run test` with the contract fixtures.
   - Report: "Live demonstration storyboard and proof checks" (beat 4)
   - Blocked by: `stored report read`
+  - Completed (2026-10-04): lane web/reports. `components/report/classification-badge.tsx` shows the stored classification ("Internal only" / "Vendor shareable") as a lookup of the stored field, never derived from the title, content or sources; `components/report/source-trail.tsx` shows the template and its version, the projection rule and version (or that the internal template has none), the destination class, the content hash with a copy button, and per source its kind and id, version, stored classification and consumed fields. Both are mounted in the report page's `ReportContent` (title beside the badge). Tests (54 in the web package, 5 new, with the report-view fixtures): the badge and label of a vendor report and of a withheld Internal only one; every source with version, classification and fields; template, projection, destination and hash; and a title that claims "Internal only" with a disagreeing source trail still shows the stored "Vendor shareable". `lint`, `typecheck` and `test` exit 0. Browser check, quoted: the Internal only report of a live run showed the "Internal only" badge beside "Internal investigation", template `internal_investigation_v1 (version 1)`, projection "None (the internal template reads sources directly)", destination "Internal reviewers", its content hash, and the trail `invoice_A01` version 1 Internal only (fields including `internal_note`) and `invoice_A02` version 1 Vendor shareable. Not here: the mount of the link on the run page (Batın's page), and the "renamed title beside the unchanged label", which waits on the open item `rename operation`; the page already shows the stored title next to the stored label.
 
 - [ ] **WEB-28 · Explain the export denial and the safe continuation**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-4 h)
