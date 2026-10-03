@@ -43,11 +43,14 @@ next to the policy file; the feed half of API-34), and then, in one transaction:
   runs that activation once (the test database and `pnpm reset:demo` do). Until GO-73's activation is on `main`, nothing
   activates a requested revision, so a fresh database has no active catalog and the gateway stays
   not ready.
-- **Invalid file or feed:** stores nothing. It records the reason (`policy_reload_rejected`), the file
-  digest and up to 20 issues on the pointer (`app.control_catalog_pointer`); the active revision
-  stays. Exit code 1. A feed is refused when Go would refuse it (`ParseFeed` grammar), when its
+- **Invalid file or feed:** stores nothing. The issues are always printed (and returned) and the
+  command exits 1; it also records the reason (`policy_reload_rejected`), the file digest and up to 20
+  issues on the pointer (`app.control_catalog_pointer`), except when the gateway's own rejection of
+  the still-requested revision is pending there: that record stays, because the gateway only
+  recognizes its own and would otherwise validate and reject the same revision again. The active
+  revision stays. A feed is refused when Go would refuse it (`ParseFeed` grammar), when its
   revision differs from `signatures.revision`, when a `disabled_rules` ID is not in it, when the same
-  feed revision is already stored with different bytes, or when it is missing while
+  feed revision is already stored with different bytes (the message names the usual cause, a feed loaded by hand: recreate the database, or bump the revision if the rules really changed), or when it is missing while
   `signature_match` is enabled.
 
 Before the schema is checked, the file must be at most 64 KiB of valid UTF-8 without control

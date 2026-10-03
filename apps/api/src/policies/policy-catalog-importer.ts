@@ -8,7 +8,11 @@ import {
   type PolicyFileIssue,
 } from "./policy-file.js";
 import { SignatureFeedRevision } from "./signature-feed-revision.entity.js";
-import { validateSignatureFeed, type SignatureFeed } from "./signature-feed.js";
+import {
+  TRUSTED_FEED_ISSUER,
+  validateSignatureFeed,
+  type SignatureFeed,
+} from "./signature-feed.js";
 
 /** The single pointer row (CHECK id = 1 in the migration). */
 const CATALOG_POINTER_ID = 1;
@@ -75,14 +79,21 @@ export async function importPolicyFile(
     fileDigest: string,
     issues: PolicyFileIssue[],
   ): Promise<PolicyImportOutcome> => {
-    pointer.lastError = {
-      reason: POLICY_REJECTION_REASON,
-      source_file_name: request.sourceFileName,
-      file_digest: fileDigest,
-      issues,
-    };
-    pointer.lastErrorAt = new Date();
-    await transactionManager.save(pointer);
+    // The gateway's rejection of the revision that is still requested stays: it is the truth about
+    // that request, and the gateway only recognizes its own record, so overwriting it would make the
+    // next check validate and reject the same revision again and replace this record within a second.
+    // The import's issues are always returned (the command prints them and exits 1); they are stored
+    // on the pointer only when no such gateway rejection is pending.
+    if (!holdsPendingGatewayRejection(pointer)) {
+      pointer.lastError = {
+        reason: POLICY_REJECTION_REASON,
+        source_file_name: request.sourceFileName,
+        file_digest: fileDigest,
+        issues,
+      };
+      pointer.lastErrorAt = new Date();
+      await transactionManager.save(pointer);
+    }
     return { accepted: false, fileDigest, issues, activeRevisionId: pointer.activeRevisionId };
   };
 
@@ -133,13 +144,24 @@ export async function importPolicyFile(
   };
 }
 
+/** True when last_error is the gateway's own rejection (stage gateway_validation) of the requested revision. */
+function holdsPendingGatewayRejection(pointer: ControlCatalogPointer): boolean {
+  const record = pointer.lastError;
+  return (
+    record !== null &&
+    pointer.requestedRevisionId !== null &&
+    record.stage === "gateway_validation" &&
+    String(record.revision_id) === pointer.requestedRevisionId
+  );
+}
+
 type FeedStoreResult =
   { stored: true; revision: SignatureFeedRevision } | { stored: false; issues: PolicyFileIssue[] };
 
 /**
  * Validates the feed against the Go grammar and the policy that names it, then stores its exact
- * bytes, or reuses the stored row when the same revision already holds the same bytes. The same
- * revision with different bytes (from any issuer) is refused: changed rules need a new revision.
+ * bytes, or reuses the stored row of the trusted issuer when that revision already holds the same
+ * bytes. The same revision with different bytes is refused: changed rules need a new revision.
  */
 async function storeSignatureFeed(
   transactionManager: EntityManager,
@@ -158,25 +180,28 @@ async function storeSignatureFeed(
     return { stored: false, issues: [mismatch] };
   }
   const { feed, sourceText, fileDigest } = feedValidation;
-  // Go finds the feed by revision alone (two rows with one revision are ambiguous there), so a
-  // revision is stored once across all issuers: equal bytes reuse the row, other bytes are refused.
-  const existing = await transactionManager.findBy(SignatureFeedRevision, {
+  // Go's activation binds the feed by (trusted issuer, revision) (catalog/activation.go), so reuse is
+  // looked up the same way: a row of another issuer with the same revision is a different feed. The
+  // table's unique (issuer, revision) makes this at most one row; equal bytes reuse it, other bytes
+  // under the same revision are refused (changed rules need a new revision).
+  const existing = await transactionManager.findOneBy(SignatureFeedRevision, {
+    issuer: TRUSTED_FEED_ISSUER,
     revision: feed.revision,
   });
-  const sameBytes = existing.find((row) => row.fileDigest === fileDigest);
-  if (existing.length > 0 && (sameBytes === undefined || existing.length > 1)) {
-    return {
-      stored: false,
-      issues: [
-        {
-          path: "feed.revision",
-          message: "this feed revision is already stored with different bytes; bump the revision",
-        },
-      ],
-    };
-  }
-  if (sameBytes !== undefined) {
-    return { stored: true, revision: sameBytes };
+  if (existing !== null) {
+    if (existing.fileDigest !== fileDigest) {
+      return {
+        stored: false,
+        issues: [
+          {
+            path: "feed.revision",
+            message:
+              "a different feed is stored under this revision (for example from a manual load); recreate the database, or bump the revision if the rules really changed",
+          },
+        ],
+      };
+    }
+    return { stored: true, revision: existing };
   }
   const revision = await transactionManager.save(
     transactionManager.create(SignatureFeedRevision, {

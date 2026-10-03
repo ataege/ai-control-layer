@@ -363,7 +363,8 @@ What it does, in order:
    piece prints its fix command.
 2. **Isolation:** recreates the dedicated test database `<POSTGRES_DB>_test`, migrates and seeds it
    with the same helpers as `pnpm test:db` (`scripts/lib/test-database.mjs`). The demo database is
-   never written. `--reuse` keeps the existing test database instead of recreating it.
+   never written: every part, the live-model part included, runs with `POSTGRES_DB` set to the test
+   database. `--reuse` keeps the existing test database instead of recreating it.
 3. **Deterministic part:** `go test -json ./...` (unit and database tests), the API's vitest unit
    tests and `*.db-spec.ts` tests (JSON reporter) and the fixture self-checks (`node --test` with a
    JSON-lines reporter).
