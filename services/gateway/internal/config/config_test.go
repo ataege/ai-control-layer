@@ -8,6 +8,8 @@ import (
 
 const validServiceToken = "config-test-token-0123456789abcdefghij"
 
+const validSigningKey = "config-test-signing-key-0123456789abcdef"
+
 func lookupFromMap(environment map[string]string) LookupFunc {
 	return func(name string) (string, bool) {
 		value, isSet := environment[name]
@@ -17,10 +19,11 @@ func lookupFromMap(environment map[string]string) LookupFunc {
 
 func validEnvironment() map[string]string {
 	return map[string]string{
-		"GATEWAY_SERVICE_TOKEN": validServiceToken,
-		"POSTGRES_USER":         "starter",
-		"POSTGRES_PASSWORD":     "database-password-value",
-		"POSTGRES_DB":           "starter",
+		"GATEWAY_SERVICE_TOKEN":        validServiceToken,
+		"OPERATOR_CONTEXT_SIGNING_KEY": validSigningKey,
+		"POSTGRES_USER":                "starter",
+		"POSTGRES_PASSWORD":            "database-password-value",
+		"POSTGRES_DB":                  "starter",
 	}
 }
 
@@ -36,7 +39,29 @@ func TestLoadFromAcceptsMinimalEnvironment(t *testing.T) {
 	if loadedConfig.Postgres.Password.Reveal() != "database-password-value" {
 		t.Error("database password was not loaded")
 	}
+	if loadedConfig.OperatorContextSigningKey.Reveal() != validSigningKey {
+		t.Error("operator context signing key was not loaded")
+	}
 }
+
+func TestLoadFromRejectsMissingOrShortSigningKey(t *testing.T) {
+	for name, signingKey := range map[string]*string{"unset": nil, "31 characters": pointerTo(strings.Repeat("k", 31))} {
+		environment := validEnvironment()
+		delete(environment, "OPERATOR_CONTEXT_SIGNING_KEY")
+		if signingKey != nil {
+			environment["OPERATOR_CONTEXT_SIGNING_KEY"] = *signingKey
+		}
+		_, err := LoadFrom(lookupFromMap(environment))
+		if err == nil || !strings.Contains(err.Error(), "OPERATOR_CONTEXT_SIGNING_KEY") {
+			t.Errorf("%s: error = %v", name, err)
+		}
+		if signingKey != nil && strings.Contains(err.Error(), *signingKey) {
+			t.Errorf("%s: error echoes the key", name)
+		}
+	}
+}
+
+func pointerTo(value string) *string { return &value }
 
 func TestLoadFromReportsEveryProblemWithoutValues(t *testing.T) {
 	const shortToken = "short-token-value"
@@ -62,7 +87,7 @@ func TestLoadFromReportsEveryProblemWithoutValues(t *testing.T) {
 	errorText := err.Error()
 
 	expectedVariables := []string{
-		"GATEWAY_SERVICE_TOKEN", "GATEWAY_PORT", "POSTGRES_PORT",
+		"GATEWAY_SERVICE_TOKEN", "OPERATOR_CONTEXT_SIGNING_KEY", "GATEWAY_PORT", "POSTGRES_PORT",
 		"POSTGRES_PASSWORD", "DATABASE_TIMEOUT_MS", "LOG_LEVEL",
 	}
 	for _, variableName := range expectedVariables {

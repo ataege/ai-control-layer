@@ -14,6 +14,8 @@ import (
 
 const minimumServiceTokenLength = 32
 
+const minimumSigningKeyLength = 32
+
 // Kept below the HTTP write timeout so a slow readiness ping can still answer.
 const (
 	minimumDatabaseTimeoutMilliseconds = 100
@@ -22,12 +24,14 @@ const (
 
 // Config holds every runtime setting of the gateway.
 type Config struct {
-	Host            string
-	Port            int
-	ServiceToken    logging.Secret
-	Postgres        Postgres
-	DatabaseTimeout time.Duration
-	LogLevel        slog.Level
+	Host         string
+	Port         int
+	ServiceToken logging.Secret
+	// OperatorContextSigningKey verifies the X-Operator-Context token NestJS signs (decision 4).
+	OperatorContextSigningKey logging.Secret
+	Postgres                  Postgres
+	DatabaseTimeout           time.Duration
+	LogLevel                  slog.Level
 }
 
 // Postgres holds the discrete connection settings shared with the API.
@@ -84,6 +88,13 @@ func LoadFrom(lookup LookupFunc) (Config, error) {
 		reader.addProblem("GATEWAY_SERVICE_TOKEN must not start or end with whitespace")
 	}
 	loadedConfig.ServiceToken = logging.NewSecret(serviceToken)
+
+	// Same rule as the API, which signs with this key.
+	signingKey := reader.required("OPERATOR_CONTEXT_SIGNING_KEY")
+	if signingKey != "" && len(signingKey) < minimumSigningKeyLength {
+		reader.addProblem(fmt.Sprintf("OPERATOR_CONTEXT_SIGNING_KEY must be at least %d characters", minimumSigningKeyLength))
+	}
+	loadedConfig.OperatorContextSigningKey = logging.NewSecret(signingKey)
 
 	if len(reader.problems) > 0 {
 		return Config{}, &ValidationError{Problems: reader.problems}

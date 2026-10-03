@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ type NewJob struct {
 // InsertAdmission stores the passport, its run in status queued and the first queued job.
 // It is called inside the admission transaction so all three commit together (Figure 4).
 func (tx Tx) InsertAdmission(ctx context.Context, passport contracts.Passport, job NewJob) error {
-	if ctx == nil || !validPassport(passport) || !validUUID(job.ID) || strings.TrimSpace(job.Kind) == "" {
+	if ctx == nil || !validPassport(passport) || !validUUID(job.ID) || !slices.Contains(jobKinds, job.Kind) {
 		return ErrInvalid
 	}
 	scope, scopeErr := json.Marshal(passport.Scope)
@@ -69,6 +70,27 @@ func (tx Tx) InsertAdmission(ctx context.Context, passport contracts.Passport, j
 		}
 	}
 	return nil
+}
+
+// jobKinds lists the runtime.jobs kinds the worker claims.
+var jobKinds = []string{contracts.JobKindAgentStep}
+
+// EnqueueJob inserts a queued job for an existing run of the organization in this transaction,
+// for example the continuation an approval grant commits with (GO-44). It returns the job id.
+func (tx Tx) EnqueueJob(ctx context.Context, organizationID, runID, kind string) (string, error) {
+	if ctx == nil || !validUUID(organizationID) || !validUUID(runID) || !slices.Contains(jobKinds, kind) {
+		return "", ErrInvalid
+	}
+	var jobID string
+	// The run must belong to the organization; the insert finds no row otherwise.
+	err := tx.transaction.QueryRow(ctx, `INSERT INTO runtime.jobs (organization_id, run_id, kind, status)
+		SELECT run.organization_id, run.id, $3, 'queued'
+		FROM runtime.runs AS run WHERE run.id = $1 AND run.organization_id = $2
+		RETURNING id::text`, runID, organizationID, kind).Scan(&jobID)
+	if err != nil {
+		return "", storageError(err)
+	}
+	return jobID, nil
 }
 
 // validPassport checks the identity and lifetime fields the database cannot check itself.

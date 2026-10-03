@@ -229,7 +229,7 @@ func newTestLoop(t *testing.T, world *loopWorld, stepper ModelStepper) *Loop {
 	loop, err := NewLoop(LoopDependencies{
 		Runs:      world.repository,
 		Stepper:   stepper,
-		Gate:      policy.NewGate(scopes, policy.NewPostgresRecorder(world.pool), nil),
+		Gate:      policy.NewGate(scopes, policy.NewPostgresRecorder(world.pool), policy.NewPostgresRelationships(world.pool), nil),
 		Executor:  policy.NewExecutor(world.pool, scopes, tools.Runner{}),
 		Inspector: InterimUntrustedTextGuard{},
 		Steps:     budget.NewCallLog(world.pool),

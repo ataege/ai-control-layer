@@ -10,3 +10,6 @@ services/gateway/go.sum
 
 # Design source kept verbatim as delivered by the document owner
 docs/product/project-architecture.md
+
+# The signature feed is pinned by the SHA-256 of its exact bytes; formatting would break the pin
+config/attack-signatures.json

@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 // Classifications: the prototype's two trusted labels (demo.reports.classification values).
@@ -94,13 +96,14 @@ func LookupTemplate(name string) (Template, bool) {
 	return template, found
 }
 
-// Reason codes from the proposed vocabulary (docs/product/README.md).
+// Reason codes of the export decision, from the shared X-13 vocabulary (contracts.ReasonCode),
+// as plain strings so callers can convert them to their own types.
 const (
-	ReasonReportExportRestricted = "report_export_restricted"
-	ReasonReportLineageMissing   = "report_lineage_missing"
-	ReasonTemplateNotAllowed     = "template_not_allowed"
-	ReasonResourceVersionChanged = "resource_version_changed"
-	ReasonDestinationNotAllowed  = "destination_not_allowed"
+	ReasonReportExportRestricted = string(contracts.ReasonReportExportRestricted)
+	ReasonReportLineageMissing   = string(contracts.ReasonReportLineageMissing)
+	ReasonTemplateNotAllowed     = string(contracts.ReasonTemplateNotAllowed)
+	ReasonResourceVersionChanged = string(contracts.ReasonResourceVersionChanged)
+	ReasonDestinationNotAllowed  = string(contracts.ReasonDestinationNotAllowed)
 )
 
 // ErrLineage marks sources from which no trusted classification can be derived.

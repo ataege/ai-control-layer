@@ -82,7 +82,7 @@ func mustExec(t *testing.T, pool *pgxpool.Pool, sql string, arguments ...any) {
 func (world *executorWorld) allowRead(t *testing.T, invoiceID string) string {
 	t.Helper()
 	world.nextStep++
-	gate := NewGate(&fakeScopes{scope: world.scope, revision: 1}, NewPostgresRecorder(world.pool), nil)
+	gate := NewGate(&fakeScopes{scope: world.scope, revision: 1}, NewPostgresRecorder(world.pool), nil, nil)
 	actionID := testdb.ID(t)
 	decision := gate.Evaluate(context.Background(), world.run, Proposal{
 		ActionID: actionID, StepNumber: world.nextStep, IdempotencyKey: testdb.ID(t),
@@ -180,7 +180,7 @@ func TestChangedArgumentsAreNotExecuted(t *testing.T) {
 func TestDeniedActionReachesNoAdapter(t *testing.T) {
 	world := openExecutorWorld(t, 12)
 	world.nextStep++
-	gate := NewGate(&fakeScopes{scope: world.scope, revision: 1}, NewPostgresRecorder(world.pool), nil)
+	gate := NewGate(&fakeScopes{scope: world.scope, revision: 1}, NewPostgresRecorder(world.pool), nil, nil)
 	actionID := testdb.ID(t)
 	decision := gate.Evaluate(context.Background(), world.run, Proposal{
 		ActionID: actionID, StepNumber: world.nextStep, IdempotencyKey: testdb.ID(t),

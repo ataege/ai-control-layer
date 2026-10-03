@@ -107,7 +107,7 @@ func newTestEvaluator(t *testing.T, provider *providerDouble, ledger *ledgerDoub
 	if err != nil {
 		t.Fatal(err)
 	}
-	evaluator, err := NewSemanticEvaluator(caller, EvaluatorOptions{Model: "qwen3.5:4b", ContextTokens: 4096, Source: VerdictFixture})
+	evaluator, err := NewSemanticEvaluator(caller, EvaluatorOptions{Model: "qwen3.5:4b", ContextTokens: MinEvaluatorContextTokens, Source: VerdictFixture})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,9 +332,10 @@ func TestNewSemanticEvaluatorRequiresLabelledSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, options := range map[string]EvaluatorOptions{
-		"no source":  {Model: "qwen3.5:4b", ContextTokens: 4096},
-		"no model":   {ContextTokens: 4096, Source: VerdictLive},
-		"no context": {Model: "qwen3.5:4b", Source: VerdictLive},
+		"no source":     {Model: "qwen3.5:4b", ContextTokens: MinEvaluatorContextTokens},
+		"no model":      {ContextTokens: MinEvaluatorContextTokens, Source: VerdictLive},
+		"no context":    {Model: "qwen3.5:4b", Source: VerdictLive},
+		"small context": {Model: "qwen3.5:4b", ContextTokens: MinEvaluatorContextTokens - 1, Source: VerdictLive},
 	} {
 		if _, err := NewSemanticEvaluator(caller, options); !errors.Is(err, ErrSettings) {
 			t.Fatalf("%s: err = %v", name, err)
@@ -342,5 +343,18 @@ func TestNewSemanticEvaluatorRequiresLabelledSource(t *testing.T) {
 	}
 	if _, err := NewSemanticEvaluator(nil, EvaluatorOptions{Model: "m", ContextTokens: 1, Source: VerdictLive}); !errors.Is(err, ErrSettings) {
 		t.Fatalf("nil caller accepted")
+	}
+}
+
+// The field limit holds even when the guard is disabled, and no call is made.
+func TestEvaluateFieldLimitBeforeGuardSettings(t *testing.T) {
+	disabled := semanticSettings(ModeBlock)
+	disabled.SemanticInjection.Enabled = false
+	for name, text := range map[string]string{"oversized": strings.Repeat("a", MaxFieldBytes+1), "invalid utf8": "\xff"} {
+		provider := &providerDouble{answer: `{}`}
+		result, err := newTestEvaluator(t, provider, &ledgerDouble{limit: 20000}).Evaluate(context.Background(), testRunID, BoundaryToolResult, noteField(text), disabled)
+		if err != nil || result.Record.Outcome != OutcomeBlock || result.Record.ControlID != ControlFieldLimit || result.Text != "" || provider.calls() != 0 {
+			t.Fatalf("%s: result = %+v, err = %v", name, result, err)
+		}
 	}
 }
