@@ -1,0 +1,108 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import type { AssessmentRecord, SafeEvent } from "@workspace/contracts";
+import eventsPage from "@workspace/contracts/fixtures/run-events-page.export-denied.json";
+import semanticJudge from "@workspace/contracts/fixtures/assessment-record.semantic-judge.json";
+import { RunEventTimeline } from "./run-event-timeline";
+
+const pageEvents = (eventsPage as unknown as { events: SafeEvent[] }).events;
+const first = pageEvents[0];
+if (first === undefined) {
+  throw new Error("the events page fixture is empty");
+}
+
+function render(
+  events: readonly SafeEvent[],
+  assessments: readonly AssessmentRecord[] = [],
+): string {
+  return renderToStaticMarkup(createElement(RunEventTimeline, { events, assessments }));
+}
+
+describe("RunEventTimeline", () => {
+  it("shows the export denial as an attempt that changed nothing, with its reason and the alternative", () => {
+    const html = render(pageEvents);
+    expect(html).toContain('data-event-type="report.export_denied"');
+    expect(html).toContain('data-kind="attempt"');
+    expect(html).toContain("report_export_restricted");
+    expect(html).toContain("No change was made.");
+    expect(html).toContain("vendor reconciliation report");
+    // No effect row exists in this page, so nothing is marked as a completed effect.
+    expect(html).not.toContain('data-effect="completed"');
+    expect(html).toContain('data-summary="effects"');
+    expect(html).toContain("0 reads · 0 reports stored · 0 messages queued (simulated outbox)");
+  });
+
+  it("shows a completed effect on its own row, apart from the attempt that led to it", () => {
+    const base = first;
+    const effect: SafeEvent = {
+      ...base,
+      eventId: "100",
+      eventType: "action.succeeded",
+      decision: "allow",
+      reasonCode: null,
+      maskedSummary: {
+        ...base.maskedSummary,
+        effect: "outbox_message_queued",
+        alternativeTemplate: null,
+        safeMessage: null,
+      },
+    };
+    const attempt: SafeEvent = {
+      ...effect,
+      eventId: "99",
+      eventType: "action.allowed",
+      maskedSummary: { ...effect.maskedSummary, effect: null },
+    };
+    const html = render([attempt, effect]);
+    expect(html).toContain('data-kind="attempt"');
+    expect(html).toContain('data-kind="effect"');
+    expect(html).toContain('data-effect="completed"');
+    expect(html).toContain("simulated outbox");
+    expect(html).toContain("1 messages queued (simulated outbox)");
+  });
+
+  it("shows an unknown event type instead of dropping it", () => {
+    const html = render([{ ...first, eventType: "action.teleported" as SafeEvent["eventType"] }]);
+    expect(html).toContain("Unknown event (action.teleported)");
+    expect(html).toContain('data-kind="unknown"');
+  });
+
+  it("always shows the replay label of a replayed proposal", () => {
+    const replayed: SafeEvent = {
+      ...first,
+      maskedSummary: {
+        ...first.maskedSummary,
+        replaySource: "labelled_replay:hostile_note_redirect_recipient_v1",
+      },
+    };
+    const html = render([replayed]);
+    expect(html).toContain("Labelled replay");
+    expect(html).toContain("not an action the model generated");
+  });
+
+  it("shows the control badges of an event from its stored assessments", () => {
+    const assessment = semanticJudge as unknown as AssessmentRecord;
+    const evaluated: SafeEvent = {
+      ...first,
+      eventType: "control.evaluated",
+      decision: "deny",
+      reasonCode: "semantic_injection_detected",
+      maskedSummary: {
+        ...first.maskedSummary,
+        evaluationId: assessment.evaluationId,
+        alternativeTemplate: null,
+        safeMessage: null,
+      },
+    };
+    const html = render([evaluated], [assessment]);
+    expect(html).toContain('data-family="semantic"');
+    expect(html).toContain('data-result="blocked"');
+    expect(html).toContain("Semantic: blocked (live model)");
+    expect(html).toContain("never shown to the agent");
+  });
+
+  it("says plainly when there are no events", () => {
+    expect(render([])).toContain("No events have been recorded for this run yet.");
+  });
+});

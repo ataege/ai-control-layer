@@ -1118,6 +1118,16 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Tests: specs over the safe event fixtures: a denied attempt never renders as an effect; an event
     marked as replay always shows the label; an unknown event kind is shown as unknown, not dropped:
     `pnpm --filter web run test`; a browser check of the labelled replay (X-36), quoted.
+  - Progress (2026-10-04): the display component is on web/run-panels (lane f3):
+    `RunEventTimeline` in `apps/web/src/components/run/run-event-timeline.tsx` takes the run's
+    `SafeEvent[]` (and optional `AssessmentRecord[]`) and does no fetching; the pure model is
+    `event-model.ts` (`describeEvent`, `summarizeEvents`). An attempt, its decision and a completed
+    effect are different rows (kind from the event type alone: a denied attempt is never an effect,
+    an unknown type is shown as unknown); a denial shows its reason code and sentence, the rule and
+    the permitted alternative; denied proposals and completed effects (reads, reports stored,
+    messages queued in the simulated outbox) are counted apart; a replay always carries its label.
+    Specs (`event-model.test.ts`, `run-event-timeline.test.ts`, contract fixtures) pass. Not done:
+    mounting on the run page (WEB-06, Batın's) and the browser check of the labelled replay.
   - Report: "Live demonstration storyboard and proof checks" (Proposed demo sequence, beats 5 and 6);
     "Users operating model and proposed user journeys" (Journey 3 recover cancel or investigate);
     "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second
@@ -1235,6 +1245,16 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Work: Show allowed, blocked and redacted decisions with their rule, reason code, revision and model purpose. Blocked text is withheld and never shown as consumed by the agent; a guard failure is a visible pause.
   - Done when: the hostile-note run shows the block before context and the clean run shows its allow.
   - Tests: `pnpm --filter web run test` with the contract fixtures.
+  - Progress (2026-10-04): `DecisionBadges` (`decision-badges.tsx`) is part of the WEB-09 timeline:
+    each event shows the controls that decided it as deterministic, signature or semantic badges
+    with the result, rule and revisions; a semantic verdict says live or fixture ("fixture verdict,
+    not detection quality"), a semantic check with nothing to classify shows not applicable, and a
+    blocked or redacted text is shown as withheld, never as consumed by the agent; a guard failure
+    shows "Nothing was released and the run is paused". Exact controls come from stored
+    `AssessmentRecord`s joined on the evaluation id; without them only a reason code that names
+    one control (signature_match, semantic_injection_detected, ...) produces a badge, never a
+    guessed one (no run-scoped assessment read exists in the API yet). Specs pass. Not done: the
+    hostile-note and clean runs on the page (WEB-06, Batın's).
   - Report: "Live demonstration storyboard and proof checks" (beat 10); "Users operating model and proposed user journeys" (Journey 3)
   - Blocked by: nothing
 
