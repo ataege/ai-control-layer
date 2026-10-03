@@ -293,7 +293,8 @@ waiting on PostgreSQL answers 503 at once instead of holding up the drain.
 
 ## Product modules
 
-None yet. The intended product design is the report (version 1.2) and the architecture specification,
+The first implemented product module is the Ollama transport below. The intended product design
+is the report (version 1.2) and the architecture specification,
 [docs/product/project-architecture.md](product/project-architecture.md) (overview in
 [docs/product](product/README.md)); it is a design, not implemented code. The specification's
 repository structure differs from this repository: migrations stay in
@@ -302,8 +303,9 @@ repository structure differs from this repository: migrations stay in
 `deployment network`, and it predates report 1.2's hybrid controls, catalog, feed, reporting and
 telemetry (`architecture specification version`). When the first code of a product module lands, add a row here in the same change.
 
-| Module | Owner service | Responsibility | Contracts | Tables |
-| ------ | ------------- | -------------- | --------- | ------ |
+| Module                            | Owner service | Responsibility                                                                                                                                             | Contracts                                                                 | Tables |
+| --------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| `services/gateway/internal/model` | Go            | Bounded Ollama HTTP transport; not wired to startup or runtime dispatch. Passport checks, durable reservations and concurrency enforcement remain pending. | Native Ollama `/api/chat`; internal Go types, no new shared wire contract | None   |
 
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"

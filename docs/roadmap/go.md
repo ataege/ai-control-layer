@@ -356,10 +356,10 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: none (a decision).
   - Status: the user adopted report 1.2’s primary local-model path on 2026-10-03, replacing
     the earlier OpenAI selection. The user selected Ollama on a separate M1 Pro MacBook with
-    16 GB RAM; `qwen2.5:3b` is a provisional candidate and may change after testing.
+    16 GB RAM; `qwen3.5:4b` is a provisional candidate and may change after testing.
     A Go client and accounting proposal is recorded under GO-03 in the product README.
     The final model freeze, measured hardware fit, endpoint, reservation strategy and SH-04 adoption
-    remain open. No provider integration or live call is implemented.
+    remain open. Runtime integration and live calls are not yet verified.
   - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
@@ -473,6 +473,14 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     become a failure, never a model output; neither the credential nor a request body appears in
     log or error text. `pnpm --filter gateway run test`; the live request run by hand, with its
     result quoted and the credential not printed.
+  - Progress (2026-10-03): the bounded native Ollama HTTP transport and labelled provider-double
+    tests are implemented in `internal/model`. It is not wired to startup or a public/internal route.
+    Model authority, durable shared/purpose reservations and concurrency checks remain pending.
+    GO-06 stays open: GO-03/SH-04 adoption, infrastructure integration, the remote endpoint and
+    real agent/security requests on the presentation machine are not yet verified.
+    Verification: `pnpm --filter gateway run test` passed, including the model package;
+    `pnpm verify` passed all six steps (6 passed, 0 failed, 0 skipped). No live model or smoke
+    check ran; startup/service wiring is not changed in this transport-only step.
   - Report: "Relative implementation milestones and critical dependencies" (Proposed 24-hour
     implementation sequence, Hours 0-2); "Technical architecture and service ownership";
     "Architecture and chart reading guide" (Figure 1)

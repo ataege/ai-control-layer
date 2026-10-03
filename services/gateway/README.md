@@ -88,6 +88,7 @@ to this Go plan. See the SH-07 Go ownership update in `docs/product/README.md` f
 | `internal/database`   | User (sole Go implementer) |
 | `internal/health`     | User (sole Go implementer) |
 | `internal/httpserver` | User (sole Go implementer) |
+| `internal/model`      | User (sole Go implementer) |
 
 New packages get their ownership row when their first real code lands.
 
@@ -98,8 +99,34 @@ internal/logging/     JSON slog logger, Secret
 internal/database/    pgxpool construction
 internal/health/      handlers and wire DTOs
 internal/httpserver/  routes, middleware, error envelope, server lifecycle
+internal/model/       bounded Ollama HTTP transport (GO-06, not wired to startup)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
+
+## Ollama transport (GO-06 progress)
+
+`internal/model` implements the native Ollama `POST /api/chat` transport using Go's standard
+HTTP client. A caller supplies a trusted base URL, a fixed model identifier, a positive timeout
+and explicit request/response byte limits. Each request has an agent or security purpose and
+explicit context/output ceilings; purposes remain Go metadata rather than being copied into the
+provider body. The model is configured per client, so the provisional `qwen3.5:4b` candidate is
+not hard-coded.
+
+The client sends non-streaming JSON, follows no redirects and performs no application retries.
+It returns safe errors without URLs, raw provider errors, prompts or tool arguments. Tool calls
+are proposed data only; the client executes none. Usage preserves missing counts as unknown and
+explicit zero as zero, including parseable usage on a rejected response. Go measures request wall
+time separately from provider time. A timeout does not establish that remote inference stopped.
+
+This is transport code, not a completed governed model gateway. The worker must still check
+identity/passport and active model authority, reserve shared and purpose allowances, persist
+attempts and apply the concurrency cap before using it. The client is not called by startup or
+an HTTP route. Environment loading, authenticated remote access and live agent/security checks
+remain pending GO-03, SH-04 and the infrastructure handoff; existing startup behavior is unchanged.
+No provider credential mechanism is invented for the selected local Ollama setup.
+
+Unit tests use a labelled local HTTP provider test double; they are not live model evidence.
+API reference: [Ollama chat](https://docs.ollama.com/api/chat).
 
 ## Proposed tool results and idempotency (GO-07)
 

@@ -148,7 +148,7 @@ writes each outcome down here when it is settled.
 6. **Model provider. Provider type settled by report 1.2, model open.** "The primary self-contained
    model path would be a locally hosted model, for example through Ollama; one provider may serve agent
    and security requests under separate metered purposes." Go calls it and holds any credential. The
-   criteria provide no paid subscriptions. The user selected Ollama on a separate MacBook with an M1 Pro and 16 GB RAM. The current model candidate is `qwen2.5:3b`, selected by the user as provisional and
+   criteria provide no paid subscriptions. The user selected Ollama on a separate MacBook with an M1 Pro and 16 GB RAM. The current model candidate is `qwen3.5:4b`, selected by the user as provisional and
    subject to change. Measured hardware fit, network endpoint and accounting rule remain open
    ("Choose a local model that runs on the actual machine"). Owner:
    the Go implementer with the lead (infrastructure).
@@ -373,7 +373,7 @@ implement the replay after its prerequisites land; no replay code exists yet.
 
 ### GO-03: local provider direction
 
-On 3 October 2026, the user adopted report 1.2’s primary local-model path, replacing the earlier OpenAI `gpt-5.6-sol` choice. The user selected Ollama on a separate MacBook with an M1 Pro and 16 GB RAM. The user selected `qwen2.5:3b` as the current provisional model candidate; it may change after testing. It is not a frozen model contract. The hardware information is user-reported, not a measured performance result. GO-03 and SH-04 must record hardware fit, client choice, agent/security purpose accounting, reported token usage, call counts, request duration and reservation rules. No local-model integration or live call has been verified.
+On 3 October 2026, the user adopted report 1.2’s primary local-model path, replacing the earlier OpenAI `gpt-5.6-sol` choice. The user selected Ollama on a separate MacBook with an M1 Pro and 16 GB RAM. The user selected `qwen3.5:4b` as the current provisional model candidate; it may change after testing. It is not a frozen model contract. The hardware information is user-reported, not a measured performance result. GO-03 and SH-04 must record hardware fit, client choice, agent/security purpose accounting, reported token usage, call counts, request duration and reservation rules. No local-model integration or live call has been verified.
 
 #### GO-03 implementation input (proposal, pending SH-04)
 
@@ -390,4 +390,4 @@ Official references checked on 3 October 2026: [chat API](https://docs.ollama.co
 
 Before GO-06: record the installed Ollama version, exact model identifier and digest, context/output settings, reachable endpoint and authenticated transport arrangement through infrastructure. Run an agent-response and semantic-verdict fixture on the M1 Pro machine, recording latency and memory fit. Ollama on the other machine is a network dependency of Go; do not assume this developer machine's localhost reaches it. GO-03, SH-04 and X-04 remain incomplete.
 
-Model candidate reference: [Ollama qwen2.5:3b](https://ollama.com/library/qwen2.5:3b), checked on 3 October 2026. The installed model digest and agent/security suitability must be verified on the presentation machine. A model change before the freeze updates this decision and its checks; after admission it must obey the immutable passport and active model allowlist rather than silently substitute another model.
+Model candidate reference: [Ollama qwen3.5:4b](https://ollama.com/library/qwen3.5:4b), checked on 3 October 2026. The installed model digest and agent/security suitability must be verified on the presentation machine. A model change before the freeze updates this decision and its checks; after admission it must obey the immutable passport and active model allowlist rather than silently substitute another model.
