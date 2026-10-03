@@ -1148,7 +1148,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Report: "Relative implementation milestones and critical dependencies" (Hours 0-2); "Atomic allowances hard limits and estimated cost"
   - Blocked by: `decision 6 in docs/product/README.md`
 
-- [ ] **SH-47 · Build the one-command control test suite**
+- [x] **SH-47 · Build the one-command control test suite**
   - **Progress (2026-10-03):** `test command` is settled: thin root `Makefile` targets over the pnpm scripts `verify:controls` and `reset:demo`.
   - Owner: the lead by default (`shared-track assignment`; report role: Implementer 5, integration) · Tier: A · Size: M (estimate 4-8 h over M0 to M4, this roadmap's estimate)
   - Depends on: SH-12 · Needs: nothing · Provides: X-89
@@ -1158,6 +1158,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Tests: the command itself, with its output quoted; one deliberately failing case shows a nonzero exit.
   - Report: "Validation plan and evidence matrix" (One command test contract)
   - Blocked by: `test command`
+  - Completed (2026-10-03): `pnpm verify:controls` (`scripts/verify-controls.mjs`, helpers shared with `pnpm test:db` in `scripts/lib/test-database.mjs`, node:test JSON reporter `scripts/lib/node-test-json-reporter.mjs`), root `Makefile` aliases, `.verify-controls/` results gitignored, README section. Preflight (Node, pnpm, Go, `.env`, loopback PostgreSQL, Ollama and model) with fix commands; fresh `<POSTGRES_DB>_test`; Go, API unit, API database and fixture tests as JSON; the live-model part labelled and separate; results JSON with commit, versions, model and digest, and every case's category, source, outcome and duration. Lead's decisions: a live mismatch is recorded, not a failure (`--strict-live` fails it); a guard failure or a missing model without `--no-live` fails. Observed: final full run PASS, exit 0, 878 cases (Go 682, API unit 124, API database 27, fixtures 17, all passed; live 23 of 24 matched, 0 false positives, 1 false negative `indirect_disclose_internal_v1`, 0 guard failures; an earlier run 22 of 24); `VERIFY_CONTROLS_INJECT_FAILURE=1` FAIL, exit 1; `--no-live` INCOMPLETE, exit 0; uninstalled model INCOMPLETE, exit 1; `pnpm test:db` after the helper move 4 passed. Three evidence reruns after merging main 855ae20 (README.md has the table): run 1 FAIL (two scenario tests, no active catalog; fixed by `cmd/catalogactivate`), run 2 FAIL (a live sanity test stricter than the mismatch rule; fixed), run 3 `6bbaac1` PASS exit 0, 1100 cases, Go 897, API unit 125, API database 27, fixtures 18, live 27 of 29 matched, 0 false positives, 2 false negatives, 0 guard failures. Rerun on the merged tree a2e7abd with `classifier_v2` and fixture version 3: PASS, exit 0, 986 cases (Go 784, API unit 124, API database 27, fixtures 18 passed; live 28 of 29 matched, 0 false positives, 1 false negative `direct_other_recipient_v1` at score 0.6, 0 guard failures). Not verified: a run on a second machine or a truly clean checkout (this run used the existing worktree).
 
 ### M1 (hours 2-6)
 

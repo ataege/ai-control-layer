@@ -123,25 +123,62 @@
       }
     }
   },
-  "if": {
-    "properties": {
-      "contentWithheld": {
-        "const": true
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "contentWithheld": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "content": {
+            "type": "null"
+          },
+          "classification": {
+            "const": "internal_only"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "template": {
+            "const": "vendor_reconciliation_v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "projectionRule": {
+            "const": "vendor_invoice_fields_v1"
+          },
+          "projectionRuleVersion": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "projectionRule": {
+            "type": "null"
+          },
+          "projectionRuleVersion": {
+            "type": "null"
+          }
+        }
       }
     }
-  },
-  "then": {
-    "properties": {
-      "content": {
-        "type": "null"
-      }
-    }
-  },
-  "else": {
-    "properties": {
-      "content": {
-        "type": "string"
-      }
-    }
-  }
+  ]
 }
