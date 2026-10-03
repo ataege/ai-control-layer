@@ -445,7 +445,7 @@ stopping.
   approved action with an open grant executes as the original stored action (same id and digest;
   never a new proposal), through the executor's recheck.
 - **Rejection or expiry.** Nothing executes. The run continues on the blocked-action path: a denial
-  with `approval_required` (rejected; `approval_rejected` once 3c's reason reaches main) or
+  with `approval_rejected` (rejected) or
   `approval_expired`, counted as a correction, with fixed feedback to the model.
 - **Undecided approvals.** `agent.ApprovalExpiry`, started by `cmd/gateway`, calls
   `policy.Approvals.ExpireOverdue` every 5 s. Each closure, its event and the continuation job commit
@@ -453,6 +453,24 @@ stopping.
   run.
 - **Corrections exhausted.** When the correction limit stops a run, the stop carries the fixed
   message "The task used up its corrections after repeated denials, so the run is stopped."
+- **Order on resume.** A cancelled or expired run stops straight from the wait (no `run.resumed`).
+  An approved action whose fresh check fails (an expired grant, a changed record, action or catalog
+  revision, an out-of-scope resource or destination) executes nothing and is a counted denial with
+  bounded feedback, like a rejection; only run-level refusals stop, pause or fail the run.
+
+## Cancellation during a step (Worker 3's review)
+
+The loop re-reads the run just before and just after each model request: a cancel stamped since
+the step began dispatches no further request and does not act on the response (a final answer does
+not complete the run). A cancel that lands later in the step is caught by `TransitionRun`'s guard
+(3c): moving a cancel-stamped run to running, awaiting approval, paused or completed returns
+`repository.ErrCancelRequested`, and the loop writes `stopped` / `run_cancelled` instead. Recovery
+matches an executed action under both the executor's `executed` and X-09's `succeeded` status.
+
+**Limitation: one gateway process per database.** Job leases and the executor's claim prevent a
+double effect, and the ledger's row lock a double reservation, but two gateway processes on the same
+database (for example `pnpm dev` next to `pnpm stack:up`) can each claim a job of the same run and
+send two model requests for it. The demonstration runs one gateway.
 
 ## Production chain and gateway wiring (GO-11, GO-09)
 
