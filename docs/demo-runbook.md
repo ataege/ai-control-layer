@@ -1,13 +1,14 @@
 # Go demo runbook
 
-The presenter's step-by-step for the beats the Go gateway carries, written against `main` 1dad371 (3
+The presenter's step-by-step for the beats the Go gateway carries, written against `main` 93e1c96 (3
 October 2026). It follows the researcher's [storyboard](product/storyboard.md) (beat numbers, labels
 and the replay rule come from there) and does not change it. Owner of this file: the lead (docs
 outside `docs/product`); written by lane w3.
 
 Status: **not rehearsed on the final build.** Commands and expected output below were taken from the
 code and from recorded test runs; timings are observations from one developer machine, not targets.
-SH-33 sets the pitch timing from the rehearsal.
+SH-33 sets the pitch timing from the rehearsal. The steps marked "checked" were run once on lane w3's
+machine at `main` 93e1c96 (load average 15 to 18, not idle).
 
 ## What exists today
 
@@ -36,26 +37,33 @@ print it: it holds the generated secrets).
    pnpm infra:up
    pnpm db:migration:run
    pnpm db:roles
-   pnpm db:seed          # synthetic vendors and invoices; imports config/policy.yaml if the catalog is empty
-   pnpm reset:demo       # truncates demo and runtime data, reseeds; keeps catalog revisions
+   pnpm db:seed          # synthetic vendors and invoices; imports policy.yaml and the feed if the catalog is empty
+   pnpm reset:demo       # truncates demo and runtime data, reseeds; keeps catalog revisions, then activates
    ```
 
-   Expected: each command exits 0. `reset:demo` refuses a non-loopback database.
+   Expected (checked): each command exits 0. `db:seed` prints `requested revision 1` and the stored
+   feed revision; `reset:demo` ends with `[OK] control catalog active (pnpm catalog:activate)`. It
+   refuses a non-loopback database.
 
-2. **Control catalog and signature feed.** The gateway activates a requested catalog revision within
-   about one second (`catalog.WatchRequested`). The feed import and the one-shot activation command
-   are on lane c1's branch, held for the user's clearance; until they land, load
-   `config/attack-signatures.json` into `app.signature_feed_revisions` and set the pointer's
-   `active_feed_revision_id` by hand, as `services/gateway/README.md` ("Performance benchmark")
-   describes. Once c1's branch is on `main`, use its documented command instead (expected name
-   `pnpm catalog:activate`; confirm when it lands). Check:
+2. **Control catalog and signature feed.** `pnpm policy:import` stores `config/policy.yaml` and the
+   signature feed it names and only requests the revision; `pnpm catalog:activate` (or a running
+   gateway's watcher, within a second or two) validates and activates it. No feed is loaded by hand.
+   After a judge or the presenter edits the policy or the feed:
 
    ```sh
+   pnpm policy:import      # "requested revision N"; the active one stays until activation
+   pnpm catalog:activate   # "catalog activation: activated revision N with signature feed revision M"
    docker exec -e PGPASSWORD <postgres container> psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc \
      "SELECT active_revision_id, active_feed_revision_id FROM app.control_catalog_pointer"
    ```
 
-   Expected: two non-null ids. **Without an active feed every governed decision fails closed with
+   Expected (checked): both commands exit 0 and the query shows two non-null ids. A database set up by
+   the older import makes `catalog:activate` stop and ask for one more `pnpm policy:import`; that is
+   intended. If `policy:import` refuses with "this feed revision is already stored with different
+   bytes; bump the revision", the feed was once loaded by hand into that database: do not bump the
+   revision; recreate the database (`pnpm db:migration:run`, `pnpm db:roles`, `pnpm db:seed`,
+   `pnpm catalog:activate` on a fresh volume). **Without an active catalog and feed every governed
+   decision fails closed with
    `decision_unavailable`**, including `cmd/replay` (beat 5).
 
 3. **Ollama warm-up.** The first `qwen3.5:4b` call loads the model (11.7 s observed); later calls take
@@ -79,9 +87,13 @@ print it: it holds the generated secrets).
    Expected: `200`, and no `model not configured` line in the gateway log.
 
 5. **Evidence windows to keep open.**
-   - The control test suite. `pnpm verify:controls` (SH-47) is not on `main` yet; until it is, run
-     `GOFLAGS=-p=3 pnpm test:db --fresh gateway` (expected: `gateway PASS ... 0 failed, 0 skipped`). It
-     uses the separate test database and never touches the demo data.
+   - The control test suite: `MODEL_NAME=qwen3.5:4b pnpm verify:controls` (or `make verify-controls`).
+     It recreates the separate test database and never writes the demo data, runs the Go, API and
+     fixture tests and the live semantic cases labelled "live model", and writes
+     `.verify-controls/results-<timestamp>.json`. Checked at 93e1c96: exit 0 in 115 s, 1130 cases, Go
+     927, API unit 125, API database 27 and fixtures 18 passed, none failed or skipped; live model
+     28/29 matched, 1 false positive, 0 false negatives, 0 guard failures. A label mismatch is recorded,
+     not failed; an unavailable model makes the run INCOMPLETE and exit nonzero (`--no-live` says so).
    - The benchmark: the quiet result table in `services/gateway/README.md` ("Result on the developer
      machine (2026-10-03, quiet)"), or a fresh `pnpm benchmark` (add `--live` for the model).
    - A `psql` session on the demo database for the before-and-after counts below.
@@ -93,7 +105,10 @@ and what to say. "Live" means the local `qwen3.5:4b` chooses the steps; the mode
 deterministic, so a live run can take a different path.
 
 The live story (beats 1, 3, 4, 7, 8) is one command. It writes its run into the demo database, so
-beat 5 can replay against it afterwards:
+beat 5 can replay against it afterwards. Checked at 93e1c96: exit 0 in 25 s; the model read A01 and
+A02, created the internal and the vendor report, read the vendor, queued the vendor report (approved
+by the test), and the run completed with 7 agent calls, 1 security call and one outbox row. Another
+run may take other steps.
 
 ```sh
 GO_STORY_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
@@ -127,16 +142,19 @@ GOFLAGS=-p=3 pnpm test:db gateway   # includes TestStoryThroughTheProductionChai
 
 - Audience sees: `action.allowed` then `action.succeeded` for `read_invoice` A01 and A02, the hybrid
   checks recorded per step, then `report.created` for an `internal_investigation_v1` report with
-  classification `internal_only` and its source trail. The lead's session saw the live model create
-  the internal report in 3 of 3 runs with the storyboard instruction.
+  classification `internal_only` and its source trail. Lane f3's GO-27 live runs (a9f8004,
+  `docs/roadmap/go.md`) created the internal report in 3 of 3 runs in each of two run sets, and the
+  run checked for this runbook created it too.
 - Timing: each agent step is one model call, about 2 s quiet and up to the 20 s request timeout under
   memory pressure; no end-to-end time has been measured yet.
 - Fallback: the scripted story, which always creates it. Say "scripted provider" when using it.
 
 ### Beat 5: attempt the apparently valid send (always the labelled replay)
 
-Decision 28: the live model created the internal report but tried to queue it in 0 of 3 runs, so this
-beat always uses the labelled replay against that genuinely created report. `cmd/replay` accepts only
+Decision 28: in lane f3's GO-27 live runs (a9f8004) the model created the internal report every time
+but proposed queueing it in 0 of 3 runs in the first set and 1 of 3 in the second (run `8b812e16`,
+denied `report_export_restricted`), so this beat always uses the labelled replay against the
+genuinely created report. The live attempt is never presented as part of the demonstration. `cmd/replay` accepts only
 a finished run (completed, failed or stopped), so it never takes a step a live loop is about to use;
 run it after the live story ends.
 
@@ -149,6 +167,9 @@ docker exec -e PGPASSWORD <postgres container> psql -U "$POSTGRES_USER" -d "$POS
 node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> -fixture hostile_note_internal_disclosure_v1
 ```
 
+- Checked at 93e1c96 against the live story's run in the demo database: all three replay fixtures
+  printed the expected denial (`report_export_restricted`, `resource_out_of_scope`,
+  `destination_not_allowed`), nothing executed, and the run's outbox kept its one approved row.
 - Audience sees: `LABELLED REPLAY (deterministic rehearsal, not a model-generated action)`, decision
   `deny`, reason `report_export_restricted`, `nothing executed`, exit 0. The stored action and its
   `report.export_denied` event carry `labelled_replay:hostile_note_internal_disclosure_v1`; the outbox
@@ -218,16 +239,17 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
 
 ### Beat 11: change the configuration
 
-- Edit `config/policy.yaml` (for example lower a threshold), then `pnpm policy:import`; the gateway
-  activates the requested revision within about a second. An invalid file is rejected at import and
-  the last accepted revision stays active. Feed edits need c1's feed import (see step 2).
+- Edit `config/policy.yaml` (for example lower a threshold) or the signature feed
+  `config/attack-signatures.json` (with a new feed revision), then `pnpm policy:import` and
+  `pnpm catalog:activate`, or let the running gateway activate the requested revision within a second
+  or two. An invalid file is rejected and the last accepted revision stays active.
 - Show the same input before and after (the judge input path once the API lands; until then a test
   or replay against the new revision). **[API pending]** the revision view (WEB-29).
 
 ### Beat 12: test and reporting evidence
 
-- The suite: `pnpm verify:controls` once SH-47 lands; until then
-  `GOFLAGS=-p=3 pnpm test:db --fresh gateway`.
+- The suite: `MODEL_NAME=qwen3.5:4b pnpm verify:controls` (about two minutes, checked; see "Evidence
+  windows" above for the result). Open the results file it names.
 - Summary and export: `GET /internal/security/summary`, `/internal/security/assessments` and
   `/internal/security/events` on the gateway (contracts in `packages/contracts`); **[API pending]**
   the dashboard and export file (API-20, WEB-30, WEB-31).
@@ -239,8 +261,12 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
 Point to these limitations in `services/gateway/README.md` instead of claiming more:
 
 - One gateway process per database (job leases, the in-memory `jti` replay cache).
-- The live semantic results are two runs of a 24-case synthetic sample, not a detection rate; the
-  model missed some cases (GO-84 evidence).
+- The live semantic results are not a detection rate. The current evidence is the root `README.md`
+  record for `classifier_v2` (fixture version 3): three runs, the first two failed on setup and test
+  strictness, the third passed with 1100 cases and live 27 of 29 matched, 0 false positives and 2 false
+  negatives, at load 9.0 to 12.5, not an idle machine; the lane's variance sentence there applies. The
+  `verify:controls` run checked for this runbook gave 28 of 29 with 1 false positive. The 24-case runs
+  in the gateway README are the older `classifier_v1` history.
 - Benchmark numbers are observations on one machine under stated load, not a distribution.
 - Live agent runs on an 8 GiB machine paused on request timeouts; a 4B model's choices vary.
 - The outbox is simulated, the replay is scripted, fixture verdicts test handling only, and usage
@@ -252,6 +278,7 @@ Point to these limitations in `services/gateway/README.md` instead of claiming m
 
 - A way to start and approve a run in the demo database without the test harness (the API, or a
   documented presenter command that signs the operator context).
-- c1's feed import and catalog activation on `main`, so step 2 needs no manual SQL.
-- `pnpm verify:controls` (SH-47).
 - A rehearsal on the final build with recorded timings (SH-33), and a run kept for beat 5.
+
+Done on `main` since the first version: the feed import in `pnpm policy:import` with
+`pnpm catalog:activate` (no hand load anywhere), and `pnpm verify:controls` (SH-47).

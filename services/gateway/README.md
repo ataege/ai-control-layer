@@ -1361,11 +1361,13 @@ Fixtures: `hostile_note_redirect_record_v1` (reads `invoice_B01`), `hostile_note
   `UNEXPECTED` (for example `decision_unavailable` when the active catalog cannot be loaded). Exit 2:
   not run (usage, unknown run or fixture, live run, or a report the fixture needs is missing).
 
-It needs an enforceable active catalog with its signature feed, like the gateway itself. Until the
-feed import is on `main`, load `config/attack-signatures.json` into `app.signature_feed_revisions`
-and the pointer's `active_feed_revision_id` by hand. Checked on 2026-10-03 on a private test
-database that way: all three fixtures printed the expected denial, exit 0, with every action and
-event labelled and no execution attempt.
+It needs an enforceable active catalog with its signature feed, like the gateway itself:
+`pnpm policy:import` stores the policy and the feed and requests the revision, and
+`pnpm catalog:activate` (or a running gateway's watcher) activates it. No feed is loaded by hand.
+Checked on 2026-10-03 at `main` 93e1c96 that way, against the finished run of a live
+`TestLiveStoryThroughTheProductionChain` in the demo database: all three fixtures printed the
+expected denial, exit 0, nothing executed, and the run's outbox kept its one approved row. The
+presenter's steps are in `docs/demo-runbook.md`.
 
 ## Performance benchmark (GO-81)
 
