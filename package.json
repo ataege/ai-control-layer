@@ -31,7 +31,8 @@
     "db:migration:generate": "node scripts/with-env.mjs pnpm --filter api run migration:generate",
     "db:migration:show": "node scripts/with-env.mjs pnpm --filter api run migration:show",
     "db:migration:run": "node scripts/with-env.mjs pnpm --filter api run migration:run",
-    "db:migration:revert": "node scripts/with-env.mjs pnpm --filter api run migration:revert"
+    "db:migration:revert": "node scripts/with-env.mjs pnpm --filter api run migration:revert",
+    "policy:import": "node scripts/with-env.mjs pnpm --filter api run policy:import"
   },
   "prettier": "@workspace/config/prettier",
   "devDependencies": {

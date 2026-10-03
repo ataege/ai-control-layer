@@ -29,7 +29,7 @@ flowchart LR
         gatewayLive["GET /health/live"]
     end
 
-    postgres[("PostgreSQL 18<br/>one instance, no tables")]
+    postgres[("PostgreSQL 18<br/>one instance; tables only through explicit migrations")]
 
     browser -->|"page requests"| pages
     browser -->|"relative fetch, same origin"| proxy
@@ -303,9 +303,11 @@ repository structure differs from this repository: migrations stay in
 `deployment network`, and it predates report 1.2's hybrid controls, catalog, feed, reporting and
 telemetry (`architecture specification version`). When the first code of a product module lands, add a row here in the same change.
 
-| Module                            | Owner service | Responsibility                                                                                                                                                                                                                            | Contracts                                                                 | Tables |
-| --------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
-| `services/gateway/internal/model` | Go            | Bounded Ollama HTTP transport and explicit `cmd/modelcheck` diagnostic using model environment configuration; not wired to startup or runtime dispatch. Passport checks, durable reservations and concurrency enforcement remain pending. | Native Ollama `/api/chat`; internal Go types, no new shared wire contract | None   |
+| Module | Owner service | Responsibility | Contracts | Tables |
+| --- | --- | --- | --- | --- |
+| `services/gateway/internal/model` | Go | Bounded Ollama transport, reservation estimation and accounted calls; explicit diagnostics only, not a worker or admission route. | Native Ollama `/api/chat`; internal Go types | Uses the model token ledger |
+| `services/gateway/internal/budget` | Go | Atomic shared reservations, durable unknown usage, one-time reconciliation and overrun pause. | Internal Go store API | `runtime.model_token_budgets`, `runtime.model_token_reservations` |
+| Policies (control catalog), `apps/api/src/policies` | NestJS | Immutable policy and feed revisions, active pointer and explicit `pnpm policy:import`; authenticated reload and feed import remain pending. | Policy activation and catalog revision, draft in `config/README.md` | `app.control_catalog_revisions`, `app.signature_feed_revisions`, `app.control_catalog_pointer` |
 
 Record any decision that changes the wiring above in this section and update the diagram: a new
 service, a new data store or an AI provider. Each of those needs a team decision first; see "Scope"

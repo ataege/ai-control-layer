@@ -1,6 +1,9 @@
 import { join } from "node:path";
 import type { DataSourceOptions } from "typeorm";
 import type { DatabaseEnvironment } from "../config/environment.js";
+import { ControlCatalogPointer } from "../policies/control-catalog-pointer.entity.js";
+import { ControlCatalogRevision } from "../policies/control-catalog-revision.entity.js";
+import { SignatureFeedRevision } from "../policies/signature-feed-revision.entity.js";
 
 // This file runs as .ts (TypeORM CLI loader, tests) or .js (compiled app); load only the matching copies.
 const migrationFileExtension = import.meta.filename.endsWith(".ts") ? "ts" : "js";
@@ -14,8 +17,8 @@ export function buildTypeOrmOptions(databaseEnvironment: DatabaseEnvironment): D
     username: databaseEnvironment.POSTGRES_USER,
     password: databaseEnvironment.POSTGRES_PASSWORD,
     database: databaseEnvironment.POSTGRES_DB,
-    // Register entity classes here once the first one exists.
-    entities: [],
+    // Every NestJS-owned `app` entity; runtime and demo tables have hand-written migrations only.
+    entities: [ControlCatalogRevision, SignatureFeedRevision, ControlCatalogPointer],
     migrations: [join(import.meta.dirname, "migrations", `*.${migrationFileExtension}`)],
     // Schema changes happen only through explicit migration commands.
     synchronize: false,

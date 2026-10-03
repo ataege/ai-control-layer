@@ -1,0 +1,53 @@
+# Task Passport control policy: the operator-editable sample.
+#
+# This file is an import input, not a runtime authority. An explicit import validates the whole file
+# and stores it as one immutable control-catalog revision; Go evaluates against the active revision only.
+# An invalid file never partially activates: the last accepted revision stays active and the error is shown.
+#
+# Every number below is an illustrative value from the project report (version 1.2), not a requirement
+# and not a measured result. The team fixes the real values at the M0 freeze.
+#
+# No setting here can remove the passport, organization, report-provenance or exact-review boundaries.
+# The schema, every setting and its allowed values are documented in config/README.md.
+
+schema_version: 1
+
+# Models and budgets. The model is provisional (decision 6): qwen3.5:4b through Ollama, probed on the
+# presentation machine on 2026-10-03 (docs/setup.md, section 7). It serves both metered purposes.
+allowed_models: ["qwen3.5:4b"]
+
+budgets:
+  calls_total: 24
+  calls_agent: 12
+  calls_security: 12
+  tokens_total: 20000
+  request_timeout_seconds: 20
+  local_max_concurrency: 2
+  run_expiry_minutes: 15
+  tool_attempts: 12
+  corrections: 2
+
+# Controls: the registered guards, whether each is enabled, its response and where it runs.
+controls:
+  secret_pattern:
+    enabled: true
+    mode: redact
+    boundaries: [model_input, tool_result]
+  semantic_injection:
+    enabled: true
+    mode: block
+    threshold: 0.75
+    boundaries: [model_input, tool_result, action_proposal]
+  signature_match:
+    enabled: true
+    boundaries: [model_input, tool_result, action_proposal]
+
+# Attack feed: the trusted, versioned signature feed this revision binds to (the feed itself is SH-46).
+signatures:
+  path: attack-signatures.json
+  revision: feed_v1
+  disabled_rules: []
+
+# Reports: a setting that can only narrow which fixed templates may be used.
+reports:
+  enabled_templates: [internal_investigation_v1, vendor_reconciliation_v1]
