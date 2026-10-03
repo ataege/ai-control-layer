@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -110,6 +111,16 @@ type ActionRecorder interface {
 	RecordDecision(ctx context.Context, run RunIdentity, decision Decision) error
 }
 
+// RelationshipReader answers the argument relationships the passport's lists cannot (GO-28),
+// from trusted records of the verified organization.
+type RelationshipReader interface {
+	// VendorLinkedToInvoices reports whether the vendor belongs to the organization and is the
+	// vendor of at least one of the given (passport-scoped) invoices.
+	VendorLinkedToInvoices(ctx context.Context, organizationID, vendorID string, invoiceIDs []string) (bool, error)
+	// ReportOfRun reports whether the report exists in the organization and was created in the run.
+	ReportOfRun(ctx context.Context, organizationID, runID, reportID string) (bool, error)
+}
+
 // ActionEvaluator is the semantic action check of GO-77, called only for a proposal the
 // deterministic checks already allow or send to review. It may restrict, never grant.
 type ActionEvaluator interface {
@@ -118,15 +129,17 @@ type ActionEvaluator interface {
 
 // Gate decides allow, deny or approval required for one proposed action at a time.
 type Gate struct {
-	scopes    ScopeReader
-	recorder  ActionRecorder
-	evaluator ActionEvaluator // nil until GO-77 is wired
-	now       func() time.Time
+	scopes        ScopeReader
+	recorder      ActionRecorder
+	relationships RelationshipReader
+	evaluator     ActionEvaluator // nil until GO-77 is wired
+	now           func() time.Time
 }
 
-// NewGate returns a gate. A nil evaluator means no semantic action check is configured yet.
-func NewGate(scopes ScopeReader, recorder ActionRecorder, evaluator ActionEvaluator) *Gate {
-	return &Gate{scopes: scopes, recorder: recorder, evaluator: evaluator, now: time.Now}
+// NewGate returns a gate. A nil evaluator means no semantic action check is configured yet; a nil
+// relationship reader denies every action that needs a relationship check.
+func NewGate(scopes ScopeReader, recorder ActionRecorder, relationships RelationshipReader, evaluator ActionEvaluator) *Gate {
+	return &Gate{scopes: scopes, recorder: recorder, relationships: relationships, evaluator: evaluator, now: time.Now}
 }
 
 // Evaluate checks one proposal in the order of Figure 6: registered tool and strict arguments,
@@ -217,7 +230,7 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 	if !containsTool(scope.AllowedTools, arguments.Tool()) {
 		return stored(OutcomeDeny, ReasonToolNotAllowed)
 	}
-	if reason, permitted := checkResources(scope, arguments); !permitted {
+	if reason, permitted := gate.checkResources(ctx, run, scope, arguments); !permitted {
 		return stored(OutcomeDeny, reason)
 	}
 
@@ -251,12 +264,26 @@ func (gate *Gate) restrictSemantically(ctx context.Context, run RunIdentity, act
 	return decision
 }
 
-// checkResources checks the passport's resources for each tool. Deeper relationships (vendor to
-// invoice, report to run, recipient directory) follow in GO-28, the export restriction in GO-64.
-func checkResources(scope PassportScope, arguments Arguments) (ReasonCode, bool) {
+// checkResources checks every argument relationship of "Proposed tool argument boundaries" at the
+// gate, so a denied proposal never reaches an adapter. Read access and outbound access are checked
+// independently; the export restriction itself is GO-64. A relationship that cannot be read denies.
+func (gate *Gate) checkResources(ctx context.Context, run RunIdentity, scope PassportScope, arguments Arguments) (ReasonCode, bool) {
 	switch typedArguments := arguments.(type) {
 	case ReadInvoiceArguments:
 		if !containsString(scope.AllowedInvoiceIDs, typedArguments.InvoiceID) {
+			return ReasonResourceOutOfScope, false
+		}
+	case ReadVendorArguments:
+		// Not any vendor id because the tool is allowed: a vendor of the organization that is the
+		// vendor of a passport-scoped invoice.
+		if gate.relationships == nil || len(scope.AllowedInvoiceIDs) == 0 {
+			return ReasonResourceOutOfScope, false
+		}
+		linked, err := gate.relationships.VendorLinkedToInvoices(ctx, run.OrganizationID, typedArguments.VendorID, scope.AllowedInvoiceIDs)
+		if err != nil {
+			return ReasonDecisionUnavailable, false
+		}
+		if !linked {
 			return ReasonResourceOutOfScope, false
 		}
 	case CreateReportArguments:
@@ -269,11 +296,22 @@ func checkResources(scope PassportScope, arguments Arguments) (ReasonCode, bool)
 			}
 		}
 	case QueueReportArguments:
-		if !containsString(scope.RecipientReferences, typedArguments.RecipientReference) {
+		// Only the trusted reference the passport resolved for this run, never a destination found
+		// in content; references name their run (recipient:<run_id>:<vendor_id>).
+		if !containsString(scope.RecipientReferences, typedArguments.RecipientReference) ||
+			!strings.HasPrefix(typedArguments.RecipientReference, "recipient:"+run.RunID+":") {
 			return ReasonDestinationNotAllowed, false
 		}
-	case ReadVendorArguments:
-		// The vendor-to-passport-invoice relationship needs the demo records (GO-28).
+		if gate.relationships == nil {
+			return ReasonResourceOutOfScope, false
+		}
+		ofRun, err := gate.relationships.ReportOfRun(ctx, run.OrganizationID, run.RunID, typedArguments.ReportID)
+		if err != nil {
+			return ReasonDecisionUnavailable, false
+		}
+		if !ofRun {
+			return ReasonResourceOutOfScope, false
+		}
 	default:
 		return ReasonToolNotRegistered, false
 	}

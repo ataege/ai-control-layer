@@ -85,3 +85,20 @@ second attempt for the action until it is reconciled. Nothing is retried here.
 The worker receives `tools.MinimizeForModel` output only; its untrusted text must still pass the
 tool-result inspection (GO-76) before it becomes model context. GO-45 replaces step 2 with the
 atomic tool reservation, attempt claim and approval consumption.
+
+## Resource relationships and destinations (GO-28)
+
+The gate checks every argument relationship of "Proposed tool argument boundaries" before an
+adapter is reached; the adapters check again themselves.
+
+| Tool            | Gate check                                                                                                                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read_invoice`  | The invoice is in the passport.                                                                                                                                   |
+| `read_vendor`   | The vendor belongs to the organization and is the vendor of a passport invoice (`RelationshipReader.VendorLinkedToInvoices`), not any vendor id.                  |
+| `create_report` | The template is one of the two registered templates and in the passport; every source invoice is in the passport.                                                 |
+| `queue_report`  | The report was created in this run of this organization (`ReportOfRun`); the recipient is a passport recipient reference that names this run, never content text. |
+
+A relationship that cannot be read denies (`decision_unavailable`), and a gate without a
+relationship reader denies every action that needs one. `PostgresRelationships` reads the demo
+records, always scoped by the verified organization. Whether a readable field may leave in
+outbound content is the report's own restriction (GO-64), checked separately from read access.
