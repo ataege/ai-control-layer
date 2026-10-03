@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { OperatorContext } from "@workspace/contracts";
 import state from "@workspace/contracts/fixtures/run-state.completed.json" with { type: "json" };
 import usage from "@workspace/contracts/fixtures/run-usage.ledger.json" with { type: "json" };
+import options from "@workspace/contracts/fixtures/task-form-options.atlas.json" with { type: "json" };
 import events from "@workspace/contracts/fixtures/run-events-page.export-denied.json" with { type: "json" };
 import report from "@workspace/contracts/fixtures/report-view.vendor.json" with { type: "json" };
 import review from "@workspace/contracts/fixtures/review-view.queue-report.json" with { type: "json" };
@@ -247,4 +248,37 @@ it("ignores browser organization and forwarded identity claims with a real store
     organizationId: ownerOrganization,
     roles: ["operator", "reviewer"],
   });
+});
+
+it("scopes task options to each real session's organization through the labelled Go fixture", async () => {
+  const foreignOptions = {
+    ...options,
+    vendors: [],
+    invoices: [],
+    destinations: [],
+  };
+  for (const [index, fixture] of [options, foreignOptions].entries()) {
+    getRead.mockImplementationOnce((_path, _id, schema) => {
+      const parsed = schema.safeParse(fixture);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false, reason: "invalid_response" };
+    });
+    const response = await request(app.getHttpServer())
+      .get(`/api/runs/options?organizationId=${ownerOrganization}`)
+      .set("Cookie", cookies[index]!)
+      .expect(200);
+    expect(response.body).toEqual(fixture);
+    const operator = getRead.mock.calls.at(-1)?.at(-1) as OperatorContext;
+    expect(operator.userId).toBe(index === 0 ? ownUser.id : foreignUser.id);
+    expect(operator.organizationId === ownerOrganization).toBe(index === 0);
+  }
+});
+it("refuses task options after current membership is removed", async () => {
+  await transaction.manager.getRepository(Membership).delete({ userId: ownUser.id });
+  await request(app.getHttpServer())
+    .get("/api/runs/options")
+    .set("Cookie", cookies[0]!)
+    .expect(401);
+  expect(getRead).not.toHaveBeenCalled();
 });

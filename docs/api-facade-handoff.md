@@ -12,6 +12,7 @@ HTTP check returned 200/200/200/401. See the API README for setup and current ch
 | Public route                                                                       | Response contract                                                        | Additional access check                                                           |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `POST /api/runs`                                                                   | `StartRunResponse`                                                       | Go admission                                                                      |
+| `GET /api/runs/options`                                                            | `TaskFormOptions`                                                        | Verified organization; private Go task-options read, no extra role                |
 | `GET /api/runs/{id}`                                                               | `RunState`, including `resultReference`                                  | Go object scope                                                                   |
 | `GET /api/runs/{id}/usage`                                                         | `RunUsage`                                                               | Go object scope                                                                   |
 | `GET /api/runs/{id}/events?after=&limit=`                                          | `RunEventsPage`                                                          | Go object scope; event organization/run and ordering checked                      |
@@ -52,8 +53,11 @@ worker field. Decision 11 explicitly retains that shape: worker/catalog unavaila
 by upstream HTTP 503, even when its database check is up. The API preserves this as degraded;
 API-15's browser presentation remains the web owner's verification task, with no invented worker field.
 
-Open integration decisions: the user left API-12 form options and API-33 authenticated policy
-reload with the lead. The merged web still expects draft combined RunView and cursor query naming;
+API-12 is implemented against the lead-approved private Go GET /internal/task-options route;
+the shared schema is validated and the response is returned unchanged. Real Go/API/web proxy
+reads returned identical 200 responses; source failures never return default choices.
+API-33 authenticated policy reload is awaiting implementation against the lead's supplied flow.
+The merged web still expects draft combined RunView and cursor query naming;
 its owner must adopt the separate shared RunState/RunUsage and events after parameter.
 Host smoke after the web merge reports 22 passed, 8 failed, 6 skipped: / and /components redirect
 to login, whereas smoke expects 200 and therefore cannot scan those pages' assets. The API routes

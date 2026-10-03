@@ -127,7 +127,7 @@ repository-root `.env` itself, and real environment variables win over the file.
 
 ## Verification and handoff limits
 
-API lint, typecheck and build passed; unit tests: 370 passed; database tests: 67 passed,
+API lint, typecheck and build passed; unit tests: 384 passed; database tests: 69 passed,
 0 failed, 0 skipped; `pnpm verify`: 6 passed, 0 failed, 0 skipped. The real web/API
 sign-in → profile → sign-out → revoked-profile check returned 200/200/200/401. These results
 cover this branch's current code, not a frozen submission build. The sanitized audit evidence
@@ -136,7 +136,9 @@ and its build identifier are linked in the handoff.
 The merged web middleware redirects `/` and `/components` to login. Current host smoke still
 expects 200 there and reported 22 passed, 8 failed, 6 skipped after restarting the stack.
 The web/script owners must settle that expectation; it is not recorded as passing.
-API-12 form options and API-33 authenticated reload remain for the lead's contract decision.
+API-12 form options now forward GET /internal/task-options unchanged through the shared schema;
+real Go/API/web-proxy reads returned 200 with identical bodies. API-33 authenticated reload
+remains to be implemented against the lead's supplied flow.
 The draft judge CLI needs the lead's X-91 update. Activity uses polling, not SSE.
 API-15 browser presentation, teammate clean-checkout setup, Docker, and a new live-model
 approval/outbox rehearsal were not verified in this API work. Fixtures prove contract and

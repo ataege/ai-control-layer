@@ -688,7 +688,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     and deferred scope" (Trusted admission)
   - Blocked by: `decision 7 in docs/product/README.md`; `command timeout budget`
 
-- [ ] **API-12 · Serve the task form's options**
+- [x] **API-12 · Serve the task form's options**
+  - Done (2026-10-04): lead-approved GET /api/runs/options forwards only the verified session's current membership to GET /internal/task-options, with no reviewer requirement and no NestJS demo reads. The shared TaskFormOptions schema from 422fbfc validates the unchanged Go response; malformed/unknown fields, missing catalog, timeout and transport failures return errors without default data. The static options route is registered before :id. Tests include exact pass-through, forged browser identity, missing session/membership, operator-only access, 401/403/404/503 mapping and two real database/session organizations using labelled Go fixtures. Checks: API lint/typecheck/build exited 0; API unit tests: "384 passed"; `pnpm test:db api`: "69 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Real Go/API/web-proxy options returned 200/200/200 with identical bodies (3 synthetic invoices); no session returned 401. Overall smoke remains "22 passed, 8 failed, 6 skipped" due the previously reported web login redirects; per user keep this commit local pending lead/web fix. No Docker/browser interaction or live-model evidence claimed. The lead's Go-source decision supersedes the earlier app-source dependency.
   - **Report 1.2 change:** Model choices come only from the active catalog allowlist.
   - **Report 1.1 change:** The options add which internal evidence may be consulted and which report types may be created.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3.5 h)
