@@ -1227,7 +1227,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     boundary)
   - Blocked by: nothing
 
-- [ ] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
+- [x] **GO-24 · Serve the run, usage and event reads, if the read path chooses Go endpoints**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-3 h)
   - Depends on: SH-05, GO-21, GO-22 · Needs: X-11, X-12 · Provides: X-29, X-30
   - Paths: `services/gateway/internal/httpserver/server.go`,
@@ -1257,6 +1257,15 @@ typecheck` PASS; `pnpm verify` 6 passed.
     fixtures) and PostgreSQL cases (usage values, other organization, gapless event paging,
     reads as `task_passport_gateway`). Missing: the mount in `internal/api` (3c), the usage view in
     `packages/contracts`, and `passport in the run view` (no passport is served).
+  - Completed (2026-10-03): 3c mounted the routes in `internal/api` (da44d15, merged into go/w2).
+    `TestPostgresReadRoutesThroughTheGatewayHandler` calls them through the production handler
+    tree (`httpserver.NewHandler` with `api.Commands`, service token and signed operator
+    context): the owner gets 200 with the run state (strict X-11), events (strict X-12) and usage
+    (now with the GO-39 ledger); another organization gets 404; no service token gets 401. 3c's
+    GO-57 test adds every cross-organization case. The organization-wide event check now uses
+    `repository.ValidStoredEvent`. `go test ./internal/reads` against `starter_test`: ok. Not
+    served: the passport (`passport in the run view` is still open); the usage view is a Go draft
+    until nestjs lands it in `packages/contracts`.
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository
     strategy); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
@@ -2561,7 +2570,7 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
   - Report: "Technical architecture and service ownership" (Small integration boundary); "Illustrative passport and interface contracts" (Proposed browser and runtime operations)
   - Blocked by: nothing
 
-- [ ] **GO-83 · Serve the security decision records, if the read path chooses Go endpoints**
+- [x] **GO-83 · Serve the security decision records, if the read path chooses Go endpoints**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: GO-21, GO-80 · Needs: X-85 · Provides: nothing
   - Paths: the internal API package from GO-21
@@ -2580,6 +2589,11 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     shared lock; the test commits a lower event id after a higher one and reads both, once each
     (10 of 10 race runs). Timing rows were inserted by the test, since GO-80's writer is not on
     main. Missing: the mount in `internal/api` (3c) and the record shapes in `packages/contracts`.
+  - Completed (2026-10-03): mounted by 3c (da44d15). Through the production handler tree the
+    owner reads the summary, assessments and organization events (the committed run event
+    appears once its transaction is final); another organization gets only its own empty
+    records (this test and 3c's GO-57). The record shapes are Go drafts until nestjs lands them
+    in `packages/contracts` for API-35 and API-36.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
