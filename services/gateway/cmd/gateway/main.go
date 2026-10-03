@@ -21,6 +21,7 @@ import (
 	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/config"
 	"starter/services/gateway/internal/database"
+	"starter/services/gateway/internal/evaluation"
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/logging"
@@ -135,6 +136,13 @@ func run() error {
 			Approvals: policy.NewApprovals(pool),
 			Runs:      runtimeRepository,
 			Database:  pool,
+			// GO-82: the same controls as the agent path, on the chain built above.
+			Evaluator: evaluation.New(evaluation.Dependencies{
+				Repository: runtimeRepository, Catalog: catalogLoader, Database: pool,
+				Semantic: chain.Evaluator, Inspector: chain.Inspector,
+				Gates: evaluation.JudgeGates(chain.Scopes, policy.NewPostgresRelationships(pool),
+					policy.NewSecurityActionEvaluator(chain.Inspector, chain.Settings)),
+			}),
 		}),
 	})
 	listenAddress := net.JoinHostPort(loadedConfig.Host, strconv.Itoa(loadedConfig.Port))

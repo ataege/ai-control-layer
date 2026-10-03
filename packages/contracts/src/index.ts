@@ -301,6 +301,8 @@ export interface RunState {
   cancelRequestedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** GO-26: the validated final result of a completed run; render the named stored reports. */
+  resultReference: { reportIds: string[] } | null;
 }
 
 /** X-12: event names. */

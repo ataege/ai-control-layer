@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -103,8 +104,10 @@ func TestPostgresRunUsageCountsRecordedUsageOnly(t *testing.T) {
 		               VALUES ($1, $2, $3, $4, 'local-model', $5)`, callIDs[index], organizationID, runID, call.purpose, outcome)
 	}
 	insert(t, tx, `INSERT INTO runtime.model_token_budgets (run_id, organization_id, token_limit, reserved_tokens, used_tokens,
-	                 call_limit, agent_call_limit, security_call_limit, request_timeout_ms, max_concurrent_calls)
-	               VALUES ($1, $2, 4000, 50, 300, 24, 12, 12, 20000, 2)`, runID, organizationID)
+	                 agent_token_limit, agent_reserved_tokens, agent_used_tokens, security_reserved_tokens,
+	                 call_limit, agent_call_limit, security_call_limit, agent_calls, security_calls,
+	                 request_timeout_ms, max_concurrent_calls, calls_in_flight)
+	               VALUES ($1, $2, 4000, 50, 300, 3000, 40, 300, 10, 24, 12, 12, 3, 1, 20000, 2, 2)`, runID, organizationID)
 	insert(t, tx, `INSERT INTO runtime.model_token_reservations (run_id, organization_id, call_id, purpose, token_reservation, status, input_tokens, output_tokens, actual_tokens)
 	               VALUES ($1, $6, $2, 'agent', 400, 'settled', 100, 50, 150), ($1, $6, $3, 'agent', 400, 'settled', 120, 30, 150),
 	                      ($1, $6, $4, 'agent', 40, 'usage_unknown', NULL, NULL, NULL), ($1, $6, $5, 'security', 10, 'reserved', NULL, NULL, NULL)`,
@@ -128,17 +131,24 @@ func TestPostgresRunUsageCountsRecordedUsageOnly(t *testing.T) {
 			{Purpose: "agent", Dispatched: 3, Completed: 2, UsageUnknown: 1, SettledTokens: 300, HeldTokens: 40, UsageUnknownReservations: 1},
 			{Purpose: "security", Dispatched: 1, InFlight: 1, HeldTokens: 10},
 		},
-		Tokens:       &TokenLedger{Limit: 4000, Reserved: 50, Used: 300},
+		Ledger: &ModelLedger{
+			Tokens:      LedgerTokens{Limit: pointer(int64(4000)), Reserved: 50, Used: 300},
+			AgentTokens: LedgerTokens{Limit: pointer(int64(3000)), Reserved: 40, Used: 300},
+			// No security sub-limit: only the shared total applies.
+			SecurityTokens:             LedgerTokens{Reserved: 10},
+			Calls:                      LedgerCalls{Limit: 24, AgentLimit: 12, SecurityLimit: 12, Agent: 3, Security: 1},
+			RequestTimeoutMilliseconds: 20000, MaxConcurrentCalls: 2, CallsInFlight: 2,
+		},
 		ToolAttempts: ToolAttemptUsage{Total: 4, Succeeded: 1, Failed: 1, Aborted: 1, Open: 1},
 	}
-	if !slices.Equal(usage.ModelCalls, want.ModelCalls) || *usage.Tokens != *want.Tokens || usage.ToolAttempts != want.ToolAttempts || usage.RunID != runID {
+	if !slices.Equal(usage.ModelCalls, want.ModelCalls) || !reflect.DeepEqual(usage.Ledger, want.Ledger) || usage.ToolAttempts != want.ToolAttempts || usage.RunID != runID {
 		t.Fatalf("usage %+v\nwant  %+v", usage, want)
 	}
 	t.Logf("evidence GO-24: usage view %s", recorder.Body.String())
 
 	// A run without a ledger has null tokens and zero counts, never made-up values.
 	recorder = serve(t, RunUsageRoutePattern, RunUsageHandler(tx), "/internal/runs/"+ledgerlessRunID+"/usage", operatorOf(organizationID))
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"tokens":null`) {
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"ledger":null`) {
 		t.Fatalf("ledgerless run: %d %s", recorder.Code, recorder.Body.String())
 	}
 
