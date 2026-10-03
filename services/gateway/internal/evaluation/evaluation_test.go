@@ -300,7 +300,7 @@ func TestPostgresEvaluateRecordsEvidenceAndStoresNoAction(t *testing.T) {
 
 // c1's review finding: an inactive run spends nothing. A cancelled run, an expired passport and a
 // completed run are each denied before any model call, with no ledger reservation, for model
-// input and tool results alike; the evidence still records the judge input and its actor.
+// input, tool results and action proposals alike; the evidence still records the judge input and its actor.
 func TestPostgresInactiveRunsAreDeniedBeforeAnyModelCall(t *testing.T) {
 	pool := testdb.Open(t)
 	outer, err := pool.Begin(context.Background())
@@ -334,15 +334,22 @@ func TestPostgresInactiveRunsAreDeniedBeforeAnyModelCall(t *testing.T) {
 	}
 
 	caller := &fixtureCaller{verdict: benignVerdict}
+	gatesBuilt := 0
 	evaluator := New(Dependencies{Repository: runtimeRepository, Catalog: catalog.NewLoader(), Database: outer,
-		Semantic: semanticEvaluator(t, caller), Inspector: security.NewInspector(semanticEvaluator(t, caller))})
+		Semantic: semanticEvaluator(t, caller), Inspector: security.NewInspector(semanticEvaluator(t, caller)),
+		Gates: func(recorder policy.ActionRecorder, _ policy.ReviewFreezer) ActionGate {
+			gatesBuilt++
+			return &fakeGate{recorder: recorder, decision: policy.Decision{Outcome: policy.OutcomeAllow}}
+		}})
 	text, tool := "Investigation note: amounts reconciled.", contracts.ToolReadInvoice
+	arguments := json.RawMessage(`{"invoice_id":"invoice_A01"}`)
 	for runID, wantReason := range map[string]contracts.ReasonCode{
 		cancelledRun: contracts.ReasonRunCancelled, expiredRun: contracts.ReasonRunExpired, completedRun: contracts.ReasonRunNotActive,
 	} {
 		for _, request := range []contracts.ControlEvaluationRequest{
 			{RunID: runID, Kind: contracts.BoundaryModelInput, Text: &text},
 			{RunID: runID, Kind: contracts.BoundaryToolResult, Text: &text, Tool: &tool},
+			{RunID: runID, Kind: contracts.BoundaryActionProposal, Tool: &tool, Arguments: arguments},
 		} {
 			response, err := evaluator.Evaluate(context.Background(), operator, request)
 			if err != nil || response.Decision != contracts.EvaluationDeny || response.ReasonCode == nil || *response.ReasonCode != wantReason {
@@ -350,14 +357,19 @@ func TestPostgresInactiveRunsAreDeniedBeforeAnyModelCall(t *testing.T) {
 			}
 		}
 		var reservations, judged int
-		_ = outer.QueryRow(context.Background(), `SELECT count(*) FROM runtime.model_token_reservations WHERE run_id::text = $1`, runID).Scan(&reservations)
-		_ = outer.QueryRow(context.Background(), `SELECT count(*) FROM runtime.audit_events WHERE run_id = $1 AND event_type = 'control.evaluated'
-			AND masked_summary->>'inputSource' = 'judge' AND masked_summary->>'actorId' = $2`, runID, operator.UserID).Scan(&judged)
-		if reservations != 0 || judged != 2 {
+		if err := outer.QueryRow(context.Background(), `SELECT count(*) FROM runtime.model_token_reservations WHERE run_id::text = $1`,
+			runID).Scan(&reservations); err != nil {
+			t.Fatalf("count reservations: %v", err)
+		}
+		if err := outer.QueryRow(context.Background(), `SELECT count(*) FROM runtime.audit_events WHERE run_id = $1 AND event_type = 'control.evaluated'
+			AND masked_summary->>'inputSource' = 'judge' AND masked_summary->>'actorId' = $2`, runID, operator.UserID).Scan(&judged); err != nil {
+			t.Fatalf("count judge events: %v", err)
+		}
+		if reservations != 0 || judged != 3 {
 			t.Errorf("%s: %d reservations, %d labelled judge events", wantReason, reservations, judged)
 		}
 	}
-	if caller.calls != 0 {
-		t.Errorf("inactive runs made %d model calls", caller.calls)
+	if caller.calls != 0 || gatesBuilt != 0 {
+		t.Errorf("inactive runs made %d model calls and built %d gates", caller.calls, gatesBuilt)
 	}
 }
