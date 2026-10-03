@@ -734,7 +734,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     interface"); "Functional requirements MVP boundary and deferred scope" (Authorized visibility)
   - Blocked by: `read path`; `passport in the run view`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
+- [x] **API-14 · Serve sanitized events by cursor through `GET /api/runs/{id}/events`**
+  - Done (2026-10-04): authenticated Go read facade forwards only validated run and cursor references with verified session context. Shared X-12/X-30 schemas reject unknown fields; organization, run, strict event ordering and next-cursor consistency are checked before returning the unchanged page. Go 404/401/403/503 are preserved; malformed or unavailable reads fail closed with 503. Checks: API lint, typecheck and build exited 0; API unit tests: "156 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Tests cover missing session, invalid references/pagination, supplied identity, cross-organization/run pages, duplicate/reversed events, unknown fields, empty pages and invalid cursor. No database writes or schema changes.
   - **Report 1.1 change:** The architecture places runtime read views in ActivityModule, as a proposal; reads stay per `read path`.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: API-08; API-10 if the read path uses Go endpoints · Needs: X-12, X-24, X-30 ·
