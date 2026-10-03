@@ -2284,7 +2284,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     deferred scope" (Durable execution)
   - Blocked by: `dispatched attempts`
 
-- [ ] **GO-50 · Prove budget concurrency**
+- [x] **GO-50 · Prove budget concurrency**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-39, GO-45 · Needs: X-24, X-34, X-39 · Provides: X-52
   - Paths: none (concurrency tests in the packages above)
@@ -2296,6 +2296,17 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Tests: concurrent reservation tests with `go test -race ./...` through the X-24 command: of the
     competing requests only those the allowance covers succeed, the others are denied, and the
     totals reconcile.
+  - Completed (2026-10-03): W2 lane (taken over from the agent-runtime list), branch go/w2.
+    Model reservations (`internal/budget`, `TestPostgresCompetingReservationsCannotSpendTheSameAllowance`):
+    12 overlapping reservations of 1000 tokens, both purposes, for an allowance of 3000: 3
+    granted, 9 refused `ErrExhausted` before any dispatch with no reservation row; after two
+    settle (600 tokens each) and one stays usage-unknown, the ledger's used 1200 equals the
+    settled rows and its reserved 1000 equals the held row, 3 calls counted.
+    `TestPostgresCompetingCallsCannotExceedTheCallLimit`: 10 calls for a limit of 4: 4 granted.
+    Tool attempts (`internal/policy`, `TestPostgresCompetingExecutionsCannotSpendTheSameToolAttempts`):
+    6 allowed actions executed at once through the real executor against 2 remaining attempts: 2
+    succeeded (one attempt each, two adapter calls), 4 refused `allowance_exhausted` with no attempt
+    and still allowed. `go test -race -count=5` against `starter_test`: 5 of 5 for each.
   - Report: "Validation plan and evidence matrix" (critical check Budget concurrency); "Atomic
     allowances hard limits and estimated cost"; "Threat model limits and unresolved design choices"
     ("Verify that two concurrent attempts cannot consume one approval or allowance twice")
