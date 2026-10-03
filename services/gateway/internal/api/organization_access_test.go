@@ -14,6 +14,7 @@ import (
 	"starter/services/gateway/internal/admission"
 	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/contracts"
+	"starter/services/gateway/internal/evaluation"
 	"starter/services/gateway/internal/policy"
 	"starter/services/gateway/internal/repository"
 	"starter/services/gateway/internal/testdb"
@@ -103,6 +104,7 @@ func openCrossOrganizationWorld(t *testing.T) *crossOrganizationWorld {
 		Approvals: policy.NewApprovals(pool),
 		Runs:      runtimeRepository,
 		Database:  pool,
+		Evaluator: evaluation.New(evaluation.Dependencies{Repository: runtimeRepository, Catalog: catalog.NewLoader(), Database: pool}),
 	})
 	return world
 }
@@ -204,6 +206,9 @@ func TestPostgresAnotherOrganizationCannotReachTheRunOrItsResources(t *testing.T
 		{"read A's run state", http.MethodGet, "/internal/runs/" + world.runID, "", []int{http.StatusNotFound}},
 		{"read A's run events", http.MethodGet, "/internal/runs/" + world.runID + "/events", "", []int{http.StatusNotFound}},
 		{"read A's run usage", http.MethodGet, "/internal/runs/" + world.runID + "/usage", "", []int{http.StatusNotFound}},
+		{"evaluate input against A's run", http.MethodPost, "/internal/control/evaluate",
+			`{"runId":"` + world.runID + `","kind":"model_input","text":"Summarize the invoices.","tool":null,"arguments":null}`,
+			[]int{http.StatusNotFound}},
 	}
 	for index, attempt := range attempts {
 		recorder := world.call(t, world.intruder, attempt.method, attempt.path, attempt.body, "intruder-"+string(rune('a'+index)))

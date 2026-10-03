@@ -2816,6 +2816,10 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
 gateway` and `pnpm verify` as quoted in the commit. On the seeded test database the
     cross-organization start-run answers 503 (its catalog binds no feed), so the scope rejection of
     that call is shown by GO-13's tests.
+  - Audit 2026-10-03: the route matrix had left out `POST /internal/control/evaluate`, so "every mounted
+    route" overstated it. It now includes it: another organization's operator evaluating input against
+    the run gets 404, and the organization fingerprints are unchanged
+    (`TestPostgresAnotherOrganizationCannotReachTheRunOrItsResources`).
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
