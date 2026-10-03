@@ -4,11 +4,19 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"runtime/debug"
 	"strings"
 	"time"
 )
 
+var (
+	errHandlerPanicked = errors.New("job handler panicked")
+	errNoOutcome       = errors.New("job handler returned no outcome")
+)
+
 const (
+	// finishTimeout bounds the write of a job outcome.
+	finishTimeout = 2 * time.Second
 	// DefaultLeaseDuration bounds how long a crashed worker keeps a job before it can be claimed again.
 	DefaultLeaseDuration = 30 * time.Second
 	// DefaultPollInterval is the wait between claim attempts when no job is available.
@@ -120,40 +128,51 @@ func newWorker(queue jobQueue, handler Handler, options Options) (*Worker, error
 	return worker, nil
 }
 
-// Run claims and processes jobs until ctx is cancelled. Storage errors are logged and retried
-// after the poll interval; they never count as a processed job.
+// Run claims and processes jobs until ctx is cancelled. Cancelling ctx also cancels a running
+// handler; Service stops claiming first and lets the current step finish. Storage errors are
+// logged and retried after the poll interval; they never count as a processed job.
 func (worker *Worker) Run(ctx context.Context) error {
-	for ctx.Err() == nil {
-		processed, err := worker.RunOnce(ctx)
-		if err != nil && ctx.Err() == nil {
-			worker.logger.Warn("worker claim failed", "worker_id", worker.workerID, "error", err.Error())
+	worker.run(ctx, ctx)
+	return nil
+}
+
+// run claims while claimContext is live; handlers run under handlerParent, so a shutdown can stop
+// claiming without interrupting the step in progress.
+func (worker *Worker) run(claimContext, handlerParent context.Context) {
+	for claimContext.Err() == nil {
+		processed, err := worker.runOnce(claimContext, handlerParent)
+		if err != nil && claimContext.Err() == nil {
+			worker.logger.Warn("worker step failed", "worker_id", worker.workerID, "error", err.Error())
 		}
 		if processed && err == nil {
 			continue
 		}
 		timer := time.NewTimer(worker.pollInterval)
 		select {
-		case <-ctx.Done():
+		case <-claimContext.Done():
 			timer.Stop()
 		case <-timer.C:
 		}
 	}
-	return nil
 }
 
 // RunOnce claims at most one job and processes it. It reports whether a job was claimed.
 func (worker *Worker) RunOnce(ctx context.Context) (bool, error) {
-	job, claimed, err := worker.queue.Claim(ctx, worker.workerID, worker.kinds, worker.leaseDuration)
+	return worker.runOnce(ctx, ctx)
+}
+
+func (worker *Worker) runOnce(claimContext, handlerParent context.Context) (bool, error) {
+	job, claimed, err := worker.queue.Claim(claimContext, worker.workerID, worker.kinds, worker.leaseDuration)
 	if err != nil || !claimed {
 		return false, err
 	}
 	jobLogger := worker.logger.With("worker_id", worker.workerID, "job_id", job.ID, "run_id", job.RunID, "kind", job.Kind)
 
-	handlerContext, cancelHandler := context.WithCancelCause(ctx)
+	handlerContext, cancelHandler := context.WithCancelCause(handlerParent)
 	renewalDone := make(chan struct{})
 	go worker.keepLease(handlerContext, cancelHandler, job, jobLogger, renewalDone)
 
-	outcome, handlerErr := worker.handler.Handle(handlerContext, job)
+	outcome, handlerErr := worker.handle(handlerContext, job)
 	cancelHandler(nil)
 	<-renewalDone
 
@@ -162,8 +181,9 @@ func (worker *Worker) RunOnce(ctx context.Context) (bool, error) {
 		jobLogger.Warn("job handler failed; the lease will expire", "error", handlerErr.Error())
 		return true, nil
 	}
-	// The outcome is written even during shutdown: a short write is better than a redundant replay.
-	finishContext, cancelFinish := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	// The outcome is written even during shutdown: a short write is better than a redundant
+	// replay. The bound keeps it inside the gateway's shutdown budget.
+	finishContext, cancelFinish := context.WithTimeout(context.WithoutCancel(handlerParent), finishTimeout)
 	defer cancelFinish()
 	var finishErr error
 	if outcome.status == JobQueued {
@@ -176,6 +196,22 @@ func (worker *Worker) RunOnce(ctx context.Context) (bool, error) {
 		return true, finishErr
 	}
 	return true, nil
+}
+
+// handle runs the handler and turns a panic into a handler error, so one bad job cannot stop
+// the gateway process; the job is then left for lease expiry like any other handler error.
+func (worker *Worker) handle(ctx context.Context, job Job) (outcome Outcome, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			worker.logger.Error("job handler panicked", "worker_id", worker.workerID, "job_id", job.ID, "stack", string(debug.Stack()))
+			outcome, err = Outcome{}, errHandlerPanicked
+		}
+	}()
+	if outcome, err = worker.handler.Handle(ctx, job); err == nil && outcome.status == "" {
+		// The zero Outcome is not a decision; treat it like an error rather than guessing.
+		err = errNoOutcome
+	}
+	return outcome, err
 }
 
 // keepLease renews the lease until the handler returns. Any renewal failure cancels the handler:

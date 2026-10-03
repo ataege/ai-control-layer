@@ -393,8 +393,19 @@ runtime repository (`internal/repository`) exists; it moves there if that fits.
 - `attempt_count` counts claims. It is not a dispatch attempt: `model_calls` and
   `execution_attempts` are the dispatch records (GO-02).
 
-The worker is not started by the gateway process yet; GO-09 wires it with graceful shutdown and
-readiness, and GO-11 supplies the handler. Tests use a unique job kind per test, so no test claims
+**Shutdown and readiness (GO-09).** `worker.Service` runs the loop in the background. `Stop(drain)`
+stops claiming at once, lets the step in progress finish until the drain deadline, then cancels
+its handler (`ErrDrainTimeout`); an interrupted job keeps its lease and is claimed again after the
+lease expires, so nothing it committed is lost. The outcome write is bounded to 2 s. Call `Stop`
+before `pool.Close()` and inside the 8 s shutdown budget. A handler panic is contained and treated
+like a handler error; a zero `Outcome` is not a decision and records nothing.
+`health.Handler.Worker` takes the service's `Ready()`: while the loop is not running, readiness
+answers `503` with `status: "unavailable"` and the real database check, and logs
+`worker loop not running`. The readiness schema stays unchanged (open item `worker readiness`,
+option chosen with the lead: no contract change). The gateway process does not start the worker
+yet: GO-11 adds the agent-loop handler and wires the service into `cmd/gateway/main.go`.
+
+Tests use a unique job kind per test, so no test claims
 another test's job. Their fixtures need a passport, which rejects `DELETE` by trigger: cleanup
 removes it with `SET LOCAL session_replication_role = replica`, which needs a superuser test
 database, and otherwise leaves the synthetic row and logs it.
