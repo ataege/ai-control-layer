@@ -199,8 +199,8 @@ writes each outcome down here when it is settled.
 ## Decisions recorded by the lead's delegate (3 October 2026)
 
 Each item below was **decided by the lead's delegate** on 3 October 2026 and recorded by the
-researcher. "On `main`" names what is merged at 44e925f; anything else is a decision, not an
-implemented behaviour.
+researcher. "On `main`" names what is merged at 44e925f (items 1 to 14) or 55d9522 (items 15 to 20);
+anything else is a decision, not an implemented behaviour.
 
 1. **Read path (`read path`).** Operator reads go through private Go `/internal` endpoints, mounted
    behind the service token and the verified `X-Operator-Context`. On `main`: not yet; the gateway
@@ -251,6 +251,40 @@ implemented behaviour.
     holds tool attempts only (`docs/contracts/runtime-schema-alignment.md`). On `main`: yes
     (`services/gateway/internal/budget`, the alignment document).
 14. **Model.** Recorded as decision 6 above.
+15. **Catalog activation protocol (`catalog activation protocol`).** `pnpm policy:import` validates and
+    stores the immutable catalog revision and the feed row, then sets only `requested_revision_id`. Go
+    validates the requested revision with its own parsers. On success it sets the validated and active
+    revisions to the requested one, plus `active_feed_revision_id`, in one transaction: that is its
+    acknowledgement. On failure it records `last_error` and keeps the last good revision; with no good
+    revision the gateway is not ready and admission refuses. Runs keep the revision on their passport.
+    On `main`: the pointer table `app.control_catalog_pointer` with `requested_revision_id`,
+    `validated_revision_id`, `active_revision_id`, `active_feed_revision_id` and `last_error`
+    (migration `1791038985994-AddControlCatalog`) and the `pnpm policy:import` script. Not on `main`:
+    Go's validation and acknowledgement (GO-73, lane 3c) and the import change (lane c1).
+16. **Feed import (API-34).** Lane c1 builds the feed half of API-34 inside `pnpm policy:import`.
+    Pending the user's clearance with the web + API implementers. On `main`: not yet.
+17. **Reviewer authority.** A reviewer is a verified user whose `app.memberships` role list holds
+    `reviewer` for that organization; a signed claim alone never suffices. The demonstration seed gives
+    the demo operator the roles `operator` and `reviewer`. On `main`: the memberships `roles` column
+    exists; the reviewer check is not merged, and `scripts/seed-demo.mjs` does not seed memberships
+    yet (its own TODO, SH-19).
+18. **Approval contract (X-10).** `POST /internal/actions/{actionId}/approval` with exactly
+    `{"decision": "approve" | "reject"}`, and `GET /internal/actions/{actionId}/review` for the frozen
+    review payload. On `main`: not yet; the contract is commit `1c12eb9` on branch `go/3c`, and the
+    handlers are GO-44 (lane w3).
+19. **Frozen review payload.** It may contain the exact registered reporting address, for the
+    authorized reviewer only; never in model context, events, logs or the audit export. GO-45 rechecks
+    at execution that the address is unchanged. This amends the GO-07 rule that the address leaves the
+    database only as the outbox recipient (`docs/roadmap/go.md`, GO-07 completion note: "only as a
+    run-scoped reference, resolved inside queue_report"). On `main`: not yet.
+20. **Gateway database role (GO-38).** The gateway connects as `task_passport_gateway` with a
+    generated `POSTGRES_GATEWAY_PASSWORD` and refuses to start without it; `pnpm db:roles` sets the
+    login password, and `pnpm reset:demo` runs it too. On `main`: the role is created by migration
+    `1791050000000-CreateServiceRoles`, whose password wiring is still a comment; the change is on
+    branch `go/w2`, not merged.
+
+Known limitations recorded with these decisions: `command idempotency keys` is open, so two
+identical start-run requests create two runs; the signature feed has no signing key (item 9).
 
 ## Open items between the report and the architecture specification
 
@@ -275,6 +309,7 @@ Each item is open until the document owner records the outcome here; the roadmap
   renames one.
 - `list reads`: `/runs` and `/approvals` need list reads that neither source defines.
 - `command idempotency keys`: the architecture puts idempotency keys on commands; the report on actions.
+  Still open; until it is settled, two identical start-run requests create two runs (a known limitation).
 - `repository layout`: the architecture shows `db/migrations`, `db/seeds`, `infra/docker-compose.yml`
   and `docs/diagrams`; this repository keeps migrations in `apps/api/src/database/migrations` (verified
   technical reason in `db/migrations/README.md`), Compose in `infra/compose.yaml` and design files here.
@@ -296,8 +331,8 @@ Each item is open until the document owner records the outcome here; the roadmap
   `feed grammar and trust` and `measurement method`: implementation choices report 1.2 leaves open
   ("Configure these explicitly and record their tested limits"). **Decided by the lead's delegate**:
   the verdict schema (item 7 above), `redaction rules` (item 8) and `feed grammar and trust` (item 9).
-  Still open: `catalog activation protocol`, the classifier prompt's tested limits and `measurement
-method`.
+  `catalog activation protocol` is decided too (item 15). Still open: the classifier prompt's tested
+  limits and `measurement method`.
 - `judge access`: how judges reach the running layer, the test suite and the configuration files.
 - `researcher role` and `shared-track assignment`: the two staffing items above.
 
