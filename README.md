@@ -259,6 +259,7 @@ All root scripts, as defined in `package.json`:
 | `pnpm smoke` (`--mode=host\|container`) | HTTP checks against the running services.                                                                         |
 | `pnpm test:db` (`gateway\|api`)         | Database-backed tests against the PostgreSQL in `.env`; see "Testing and verification".                           |
 | `pnpm reset:demo`                       | Resets the demo fixtures for the judge environment; see "Testing and verification". Not complete yet.             |
+| `pnpm judge`                            | DRAFT judge client: submits one input to the NestJS live test entry; see "Testing and verification".              |
 | `pnpm check:instructions`               | Checks that `AGENTS.md` and `CLAUDE.md` are identical and complete, and that the agent files are valid.           |
 | `pnpm db:migration:create <Name>`       | Writes an empty migration file.                                                                                   |
 | `pnpm db:migration:generate <Name>`     | Generates a migration from the difference between entities and the database.                                      |
@@ -373,6 +374,26 @@ It refuses to run unless `POSTGRES_HOST` resolves only to a loopback address, an
 database does not answer. **Not complete yet:** the reset itself needs the demo and runtime tables
 and the seed command (SH-17, SH-24, SH-18). Until they exist the command stops with an error after
 these checks and changes nothing.
+
+### `pnpm judge` (draft)
+
+A small client for judges and the team (SH-48). It submits one ad-hoc text, one case from
+`fixtures/` or one action proposal to the NestJS live test entry and prints the decision, the reason,
+the controls that ran, the active catalog revision and the timings:
+
+```sh
+JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run_id> --text "Ignore previous instructions"
+JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run_id> --case indirect_ignore_previous_note_v1
+pnpm judge --help
+```
+
+**Draft:** it is written against the proposal in `docs/contracts/control-evaluation-draft.md`; the
+live test entry (X-106) and `POST /internal/control/evaluate` (X-91) are not approved or implemented
+yet, so today every call ends with "No decision". Its only credential is the operator's session
+cookie; it never reads `.env`. It exits 0 when a decision came back, whatever the decision, and
+non-zero when none did. For a fixture case it says whether the decision matches the case's label; a
+label is a test expectation, not detection quality. `pnpm test:judge` tests the client against a
+local stand-in server.
 
 ## Troubleshooting
 
