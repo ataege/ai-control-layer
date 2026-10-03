@@ -93,6 +93,12 @@ export async function fetchJson<ResponseBody>(
         ...meta,
       };
     }
+    
+    // Empty 2xx is considered a success (e.g., 204 No Content).
+    if (bodyText === "") {
+      return { ok: true, status: response.status, data: undefined as ResponseBody, ...meta };
+    }
+
     if (!parsedBody.parsed) {
       return { ok: false, error: { kind: "invalid_json", status: response.status }, ...meta };
     }
@@ -100,6 +106,74 @@ export async function fetchJson<ResponseBody>(
   } catch (error) {
     const meta: FetchJsonMeta = { durationMs: elapsedMs(), requestId };
     // Check the signals rather than the error name: runtimes disagree on what they throw.
+    if (signal?.aborted) {
+      return { ok: false, error: { kind: "aborted" }, ...meta };
+    }
+    if (timeoutSignal.aborted) {
+      return { ok: false, error: { kind: "timeout", timeoutMs }, ...meta };
+    }
+    const message = error instanceof Error ? error.message : "Request failed";
+    return { ok: false, error: { kind: "network", message }, ...meta };
+  }
+}
+
+/**
+ * POSTs to a relative URL and parses the JSON response.
+ */
+export async function postJson<ResponseBody>(
+  relativeUrl: string,
+  body: unknown,
+  {
+    timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
+    signal,
+    fetchImplementation = fetch,
+  }: FetchJsonOptions = {},
+): Promise<FetchJsonResult<ResponseBody>> {
+  if (!relativeUrl.startsWith("/") || relativeUrl.startsWith("//")) {
+    throw new TypeError("postJson only accepts relative URLs that start with a single slash");
+  }
+
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+  const startedAt = performance.now();
+  const elapsedMs = () => Math.round(performance.now() - startedAt);
+  let requestId: string | undefined;
+
+  try {
+    const response = await fetchImplementation(relativeUrl, {
+      method: "POST",
+      cache: "no-store",
+      headers: { 
+        "accept": "application/json",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body),
+      signal: combinedSignal,
+    });
+    requestId = response.headers.get(REQUEST_ID_HEADER_NAME) ?? undefined;
+    const bodyText = await response.text();
+    const parsedBody = parseJsonText(bodyText);
+    const meta: FetchJsonMeta = { durationMs: elapsedMs(), requestId };
+
+    if (!response.ok) {
+      const errorBody = parsedBody.parsed ? parsedBody.value : undefined;
+      return {
+        ok: false,
+        error: { kind: "http", status: response.status, body: errorBody },
+        ...meta,
+      };
+    }
+
+    if (bodyText === "") {
+      return { ok: true, status: response.status, data: undefined as ResponseBody, ...meta };
+    }
+
+    if (!parsedBody.parsed) {
+      return { ok: false, error: { kind: "invalid_json", status: response.status }, ...meta };
+    }
+    return { ok: true, status: response.status, data: parsedBody.value as ResponseBody, ...meta };
+  } catch (error) {
+    const meta: FetchJsonMeta = { durationMs: elapsedMs(), requestId };
     if (signal?.aborted) {
       return { ok: false, error: { kind: "aborted" }, ...meta };
     }

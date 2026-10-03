@@ -1,3 +1,4 @@
+import { jwtVerify } from "jose";
 import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Logger } from "@nestjs/common";
@@ -7,12 +8,13 @@ import { GatewayClientService } from "./gateway-client.service.js";
 
 const SERVICE_TOKEN = "test-service-token-0123456789abcdef";
 const GATEWAY_TIMEOUT_MS = 150;
+const COMMAND_TIMEOUT_MS = 150;
 
-type StubBehaviour = "healthy" | "unauthorized" | "server-error" | "not-ready" | "slow" | "garbage";
+type StubBehaviour = "healthy" | "unauthorized" | "server-error" | "bad-request" | "not-ready" | "slow" | "garbage" | "redirect";
 
 function createClient(gatewayUrl: string): GatewayClientService {
-  const config: Pick<AppConfigService, "gatewayUrl" | "gatewayServiceToken" | "gatewayTimeoutMs"> =
-    { gatewayUrl, gatewayServiceToken: SERVICE_TOKEN, gatewayTimeoutMs: GATEWAY_TIMEOUT_MS };
+  const config: Pick<AppConfigService, "gatewayUrl" | "gatewayServiceToken" | "operatorContextSigningKey" | "gatewayTimeoutMs" | "commandTimeoutMs"> =
+    { gatewayUrl, gatewayServiceToken: SERVICE_TOKEN, operatorContextSigningKey: "test-signing-key-0123456789abcdef", gatewayTimeoutMs: GATEWAY_TIMEOUT_MS, commandTimeoutMs: COMMAND_TIMEOUT_MS };
   return new GatewayClientService(config as AppConfigService);
 }
 
@@ -43,11 +45,17 @@ describe("GatewayClientService", () => {
         case "server-error":
           sendJson(500, { error: { code: "internal_error", message: "upstream-secret-detail" } });
           break;
+        case "bad-request":
+          sendJson(400, { error: { code: "invalid_input", message: "upstream-secret-detail" } });
+          break;
         case "not-ready":
           sendJson(503, { status: "unavailable", service: "gateway" });
           break;
         case "garbage":
           serverResponse.writeHead(200, { "content-type": "text/plain" }).end("not json");
+          break;
+        case "redirect":
+          serverResponse.writeHead(302, { location: "http://example.com" }).end();
           break;
         case "slow":
           // Never answers within the client deadline.
@@ -81,7 +89,7 @@ describe("GatewayClientService", () => {
     expect(check.reason).toBeUndefined();
     expect(check.latencyMs).toBeGreaterThanOrEqual(0);
     expect(receivedPath).toBe("/internal/ping");
-    expect(receivedHeaders.authorization).toBe(`Bearer ${SERVICE_TOKEN}`);
+          expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
     expect(receivedHeaders["x-request-id"]).toBe("req-ping-1");
   });
 
@@ -155,6 +163,67 @@ describe("GatewayClientService", () => {
       status: "down",
       upstreamStatus: 503,
       reason: "not_ready",
+    });
+  });
+
+  describe("postCommand", () => {
+    const { z } = require("zod");
+    const testSchema = z.object({ result: z.string() });
+
+    it("posts a command and parses a successful response", async () => {
+      stubBehaviour = "healthy";
+      const payload = { input: "test" };
+      const outcome = await client.postCommand("/internal/runs", "req-cmd-1", payload, z.object({ status: z.string(), service: z.string() }));
+      
+      expect(outcome).toEqual({ success: true, data: { status: "ok", service: "gateway" } });
+      expect(receivedPath).toBe("/internal/runs");
+            expect(receivedHeaders.authorization).toBe("Bearer " + SERVICE_TOKEN);
+      expect(receivedHeaders["x-operator-context"]).toMatch(/^eyJ/);
+      const token = receivedHeaders["x-operator-context"] as string;
+      const secret = new TextEncoder().encode("test-signing-key-0123456789abcdef");
+      const { payload: jwtPayload } = await jwtVerify(token, secret, { issuer: "gateway-client" });
+      expect(jwtPayload).toBeDefined();
+      expect(receivedHeaders["x-request-id"]).toBe("req-cmd-1");
+    });
+
+    it("handles an unauthorized response and does not expose the token", async () => {
+      stubBehaviour = "unauthorized";
+      const outcome = await client.postCommand("/internal/runs", "req-cmd-2", {}, testSchema);
+      expect(outcome).toEqual({ success: false, reason: "unauthorized" });
+      const exposedText = JSON.stringify([outcome, loggedWarnings.mock.calls]);
+      expect(exposedText).not.toContain(SERVICE_TOKEN);
+      expect(exposedText).not.toContain("upstream-secret-detail");
+    });
+
+    it("handles a bad request response with a code", async () => {
+      stubBehaviour = "bad-request";
+      const outcome = await client.postCommand("/internal/runs", "req-cmd-3", {}, testSchema);
+      expect(outcome).toEqual({ success: false, reason: "bad_request", code: "invalid_input" });
+    });
+
+    it("handles a server error response with a code", async () => {
+      stubBehaviour = "server-error";
+      const outcome = await client.postCommand("/internal/runs", "req-cmd-4", {}, testSchema);
+      expect(outcome).toEqual({ success: false, reason: "server_error", code: "internal_error" });
+    });
+
+    it("handles a body that is not JSON", async () => {
+      stubBehaviour = "garbage";
+      const outcome = await client.postCommand("/internal/runs", "req-cmd-5", {}, testSchema);
+      expect(outcome).toEqual({ success: false, reason: "invalid_response" });
+    });
+
+    it("does not follow redirects", async () => {
+      stubBehaviour = "redirect";
+      const outcome = await client.postCommand("/internal/runs", "req-cmd-6", {}, testSchema);
+      // Fetch with redirect: "manual" returns 302 directly. It matches unexpected_status if we don't handle it
+      expect(outcome).toEqual({ success: false, reason: "unexpected_status" });
+    });
+
+    it("handles a timeout", async () => {
+      stubBehaviour = "slow";
+      const outcome = await client.postCommand("/internal/runs", "req-cmd-7", {}, testSchema);
+      expect(outcome).toEqual({ success: false, reason: "timeout" });
     });
   });
 });

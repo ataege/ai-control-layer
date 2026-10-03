@@ -86,6 +86,7 @@ export function superviseServices(
         env: { ...(service.env ?? env), FORCE_COLOR: useColor ? "1" : "0" },
         detached: true, // own process group; Ctrl+C reaches it only through shutdown()
         stdio: ["ignore", "pipe", "pipe"],
+        shell: process.platform === "win32",
       });
       runningChildren.set(service.name, child);
       pipeWithPrefix(child.stdout, service.name, serviceIndex, process.stdout);

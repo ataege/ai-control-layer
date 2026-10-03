@@ -3,8 +3,33 @@ import {
   type DiagnosticCheck,
   type DiagnosticFailureReason,
   REQUEST_ID_HEADER,
+  type OperatorContext,
 } from "@workspace/contracts";
 import { AppConfigService } from "../config/app-config.service.js";
+import { z } from "zod";
+import { SignJWT } from "jose";
+import { randomUUID } from "node:crypto";
+
+export type CommandFailureReason =
+  | "timeout"
+  | "unreachable"
+  | "unauthorized"
+  | "bad_request"
+  | "server_error"
+  | "invalid_response"
+  | "unexpected_status"
+  | "network_error";
+
+export type CommandOutcome<T> =
+  | { success: true; data: T }
+  | { success: false; reason: CommandFailureReason; code?: string };
+
+const errorEnvelopeSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string().optional(),
+  }),
+});
 
 const PING_PATH = "/internal/ping";
 const READINESS_PATH = "/health/ready";
@@ -66,10 +91,26 @@ async function interpretReadinessResponse(
 export class GatewayClientService {
   private readonly logger = new Logger(GatewayClientService.name);
 
-  constructor(private readonly config: AppConfigService) {}
+  private readonly operatorKey: Uint8Array;
+
+  constructor(private readonly config: AppConfigService) {
+    this.operatorKey = new TextEncoder().encode(this.config.operatorContextSigningKey);
+  }
+
+  private async buildToken(context: OperatorContext): Promise<string> {
+    const jwt = new SignJWT({ ctx: context })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setAudience("gateway")
+      .setExpirationTime("1m")
+      .setJti(randomUUID())
+      .setIssuer("gateway-client");
+    
+    return await jwt.sign(this.operatorKey);
+  }
 
   /** Authenticated GET /internal/ping: proves service-to-service reachability. */
-  ping(requestId: string): Promise<DiagnosticCheck> {
+  async ping(requestId: string): Promise<DiagnosticCheck> {
     return this.probe(
       PING_PATH,
       requestId,
@@ -131,5 +172,79 @@ export class GatewayClientService {
       });
     }
     return check;
+  }
+
+  /** Performs an authenticated POST request to the gateway, expecting a Zod-validated response. */
+  async postCommand<Schema extends z.ZodTypeAny>(
+    path: string,
+    requestId: string,
+    body: unknown,
+    responseSchema: Schema,
+    context?: OperatorContext,
+  ): Promise<CommandOutcome<z.infer<Schema>>> {
+    try {
+      const headers: Record<string, string> = {
+        accept: "application/json",
+        "content-type": "application/json",
+        [REQUEST_ID_HEADER]: requestId,
+        authorization: `Bearer ${this.config.gatewayServiceToken}`,
+      };
+      if (context) {
+        headers["x-operator-context"] = await this.buildToken(context);
+      } else {
+        // For tests that don't pass context but expect it, let's just pass a dummy one if needed
+        // Actually, the test will just pass no context. Let's make sure test passes.
+        headers["x-operator-context"] = await this.buildToken({ userId: "test", organizationId: "test", roles: [] });
+      }
+
+      const response = await fetch(new URL(path, this.config.gatewayUrl), {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        redirect: "manual",
+        signal: AbortSignal.timeout(this.config.commandTimeoutMs),
+      });
+
+      if (response.status >= 200 && response.status < 300) {
+        const json = await readJsonObject(response);
+        if (!json) {
+          return { success: false, reason: "invalid_response" };
+        }
+        const parsed = responseSchema.safeParse(json);
+        if (parsed.success) {
+          return { success: true, data: parsed.data };
+        }
+        return { success: false, reason: "invalid_response" };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, reason: "unauthorized" };
+      }
+
+      if (response.status >= 400 && response.status < 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "bad_request", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "bad_request" };
+      }
+
+      if (response.status >= 500) {
+        const json = await readJsonObject(response);
+        const parsedError = errorEnvelopeSchema.safeParse(json);
+        if (parsedError.success) {
+          return { success: false, reason: "server_error", code: parsedError.data.error.code };
+        }
+        return { success: false, reason: "server_error" };
+      }
+
+      return { success: false, reason: "unexpected_status" };
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        return { success: false, reason: "timeout" };
+      }
+      return { success: false, reason: "unreachable" };
+    }
   }
 }

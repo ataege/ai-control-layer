@@ -33,6 +33,14 @@ export class AppConfigService {
     return this.environment.GATEWAY_TIMEOUT_MS;
   }
 
+  get commandTimeoutMs(): number {
+    return this.environment.COMMAND_TIMEOUT_MS;
+  }
+
+  get operatorContextSigningKey(): string {
+    return this.environment.OPERATOR_CONTEXT_SIGNING_KEY;
+  }
+
   get databaseTimeoutMs(): number {
     return this.environment.DATABASE_TIMEOUT_MS;
   }

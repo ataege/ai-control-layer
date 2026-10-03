@@ -125,7 +125,7 @@ describe("upstream proxy", () => {
     expect(response.headers.get("x-request-id")).toBe("client-request.42");
   });
 
-  it("replaces a missing or malformed request ID and does not forward caller headers", async () => {
+  it("replaces a missing or malformed request ID and forwards the session cookie but not authorization", async () => {
     stubUpstream = await startStubUpstream((_request, response) => {
       sendJson(response, 200, { status: "ok" });
     });
@@ -135,7 +135,7 @@ describe("upstream proxy", () => {
       incomingRequest("/api/health/live", {
         "x-request-id": "bad id with spaces",
         authorization: "Bearer caller-token",
-        cookie: "session=caller",
+        cookie: "other=123; session=caller; foo=bar",
       }),
     );
 
@@ -145,7 +145,7 @@ describe("upstream proxy", () => {
     expect(generatedRequestId).not.toBe("bad id with spaces");
     expect(response.headers.get("x-request-id")).toBe(generatedRequestId);
     expect(upstreamHeaders?.authorization).toBeUndefined();
-    expect(upstreamHeaders?.cookie).toBeUndefined();
+    expect(upstreamHeaders?.cookie).toBe("session=caller");
   });
 
   it("returns a 502 envelope when the upstream is down", async () => {

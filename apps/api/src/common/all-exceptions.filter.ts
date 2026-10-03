@@ -22,7 +22,32 @@ const ERROR_CODES_BY_STATUS: Record<number, string> = {
   501: "not_implemented",
 };
 
-function resolveErrorCode(statusCode: number): string {
+const KNOWN_ERROR_CODES = new Set([
+  "bad_request", "unauthorized", "forbidden", "not_found", 
+  "method_not_allowed", "internal_error", "not_implemented",
+  "resource_out_of_scope", "destination_not_allowed", 
+  "report_export_restricted", "report_lineage_missing", 
+  "source_policy_changed", "template_not_allowed", 
+  "approval_required", "approval_expired", "action_changed", 
+  "resource_version_changed", "allowance_exhausted", 
+  "run_cancelled", "outcome_unknown", "semantic_injection_detected", 
+  "security_evaluator_unavailable", "security_allowance_exhausted", 
+  "content_redacted", "signature_match", "policy_reload_rejected", 
+  "model_not_allowed", "upstream_unreachable", "upstream_timeout", 
+  "invalid_json", "configuration_error", "timeout", "network_error", "server_error", "unexpected_status"
+]);
+
+function resolveErrorCode(statusCode: number, exception: unknown): string {
+  if (exception instanceof HttpException) {
+    const payload = exception.getResponse();
+    if (typeof payload === "object" && payload !== null && "code" in payload && typeof (payload as any).code === "string") {
+      const code = (payload as any).code;
+      if (KNOWN_ERROR_CODES.has(code)) {
+        return code;
+      }
+    }
+  }
+
   const knownCode = ERROR_CODES_BY_STATUS[statusCode];
   if (knownCode !== undefined) {
     return knownCode;
@@ -96,7 +121,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const body: ErrorResponse = {
       error: {
-        code: resolveErrorCode(statusCode),
+        code: resolveErrorCode(statusCode, exception),
         message: resolveSafeMessage(exception, statusCode),
       },
       statusCode,

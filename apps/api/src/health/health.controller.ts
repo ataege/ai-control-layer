@@ -10,6 +10,7 @@ import type { ApiHealthIndicator, ApiReadinessResponse } from "@workspace/contra
 import type { Response } from "express";
 import { DatabaseHealthIndicator } from "./database.health-indicator.js";
 import { ApiReadinessResponseDto, LivenessResponseDto } from "./health.dto.js";
+import { Public } from "../auth/public.decorator.js";
 
 type IndicatorMap = HealthCheckResult["info"];
 
@@ -41,6 +42,7 @@ function toReadinessResponse(report: HealthCheckResult): ApiReadinessResponse {
 }
 
 @ApiTags("health")
+@Public()
 @Controller("health")
 export class HealthController {
   constructor(
