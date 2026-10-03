@@ -1,0 +1,35 @@
+{
+  "runId": "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "modelCalls": [
+    {
+      "purpose": "agent",
+      "dispatched": 0,
+      "completed": 0,
+      "failed": 0,
+      "usageUnknown": 0,
+      "inFlight": 0,
+      "settledTokens": 0,
+      "heldTokens": 0,
+      "usageUnknownReservations": 0
+    },
+    {
+      "purpose": "security",
+      "dispatched": 0,
+      "completed": 0,
+      "failed": 0,
+      "usageUnknown": 0,
+      "inFlight": 0,
+      "settledTokens": 0,
+      "heldTokens": 0,
+      "usageUnknownReservations": 0
+    }
+  ],
+  "ledger": null,
+  "toolAttempts": {
+    "total": 0,
+    "succeeded": 0,
+    "failed": 0,
+    "aborted": 0,
+    "open": 0
+  }
+}
