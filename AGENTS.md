@@ -124,7 +124,7 @@ Each asset that every service depends on has exactly one owner:
 
 ## Commands
 
-**Starter baseline verification status (2026-10-02, macOS arm64).** Work added during implementation is not covered by it. `pnpm install`, `pnpm run setup`, `pnpm dev`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm verify`, `pnpm smoke` (host mode), `pnpm check:instructions` and the `db:migration:*` commands were run and behaved as documented. `pnpm infra:*`, `pnpm stack:*` and `pnpm smoke --mode=container` were NOT run, because Docker was unavailable on the preparation machine; treat them as unverified until they run on a machine with Docker. Details are in `README.md`, section "Verification status".
+**Starter baseline verification status (2026-10-02, macOS arm64).** Work added during implementation is not covered by it. `pnpm install`, `pnpm run setup`, `pnpm dev`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm verify`, `pnpm smoke` (host mode), `pnpm check:instructions` and the `db:migration:*` commands were run and behaved as documented. `pnpm infra:*`, `pnpm stack:*` (with and without `--debug`) and `pnpm smoke --mode=container` were not run then (no Docker); they ran on 2026-10-03 on macOS with Docker Desktop (SH-09), see `README.md`, "Verification status". Linux and WSL remain unverified. Details are in `README.md`, section "Verification status".
 
 Run everything from the repository root. The commands below are the scripts in the root `package.json`.
 
