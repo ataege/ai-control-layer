@@ -347,3 +347,45 @@ func TestTerminalStatusesHaveNoOutgoingTransitions(t *testing.T) {
 		t.Error("a run must resume after an approval wait")
 	}
 }
+
+func TestPostgresEnqueueJobStaysInsideTheOrganization(t *testing.T) {
+	repository, outer := isolatedRepository(t)
+	organizationID := testdb.ID(t)
+	passport := samplePassport(t, organizationID)
+	admit(t, repository, passport)
+
+	var jobID string
+	err := repository.InTransaction(context.Background(), func(tx Tx) error {
+		var enqueueErr error
+		jobID, enqueueErr = tx.EnqueueJob(context.Background(), organizationID, passport.RunID, contracts.JobKindAgentStep)
+		return enqueueErr
+	})
+	if err != nil || !validUUID(jobID) {
+		t.Fatalf("enqueue: id %q err %v", jobID, err)
+	}
+	var status, kind string
+	if err := outer.QueryRow(context.Background(), "SELECT status, kind FROM runtime.jobs WHERE id = $1", jobID).Scan(&status, &kind); err != nil ||
+		status != "queued" || kind != contracts.JobKindAgentStep {
+		t.Errorf("job row: %q %q %v", status, kind, err)
+	}
+
+	otherOrganizationID := testdb.ID(t)
+	err = repository.InTransaction(context.Background(), func(tx Tx) error {
+		_, enqueueErr := tx.EnqueueJob(context.Background(), otherOrganizationID, passport.RunID, contracts.JobKindAgentStep)
+		return enqueueErr
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("enqueue for another organization's run: %v", err)
+	}
+	if count := countRows(t, outer, "SELECT count(*) FROM runtime.jobs WHERE run_id = $1", passport.RunID); count != 2 {
+		t.Errorf("expected the admission job and one continuation, found %d", count)
+	}
+}
+
+func TestEnqueueJobRejectsUnknownKinds(t *testing.T) {
+	var tx Tx
+	_, err := tx.EnqueueJob(context.Background(), "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01", "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b", "shell")
+	if !errors.Is(err, ErrInvalid) {
+		t.Errorf("unknown kind: %v", err)
+	}
+}
