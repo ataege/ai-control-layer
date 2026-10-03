@@ -857,8 +857,20 @@ export const typedSamples = {
     templates: [{ id: "reconcile_atlas_v1", name: "Reconcile Atlas invoices" }],
     vendors: [{ id: "vendor_Atlas", name: "Atlas" }],
     invoices: [
-      { id: "invoice_A01", number: "INV104", date: "2026-09-01", amount: 125000 },
-      { id: "invoice_A02", number: "INV104", date: "2026-09-08", amount: 125000 },
+      {
+        id: "invoice_A01",
+        number: "INV104",
+        date: "2026-09-01",
+        amount: 125000,
+        vendorId: "vendor_Atlas",
+      },
+      {
+        id: "invoice_A02",
+        number: "INV104",
+        date: "2026-09-08",
+        amount: 125000,
+        vendorId: "vendor_Atlas",
+      },
     ],
     destinations: [{ id: "vendor_Atlas", name: "Atlas" }],
     approvalRequirements: [
