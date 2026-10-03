@@ -95,6 +95,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/testdb`     | Shared Go lanes; the lead coordinates edits                   |
 | `internal/contracts`  | Go lane 3c (repository, admission, passport, API)             |
 | `internal/tools`      | Go lane w2 (tools and provenance)                             |
+| `internal/policy`     | Go lane w3 (action gate and approvals)                        |
 
 New packages get their ownership row when their first real code lands.
 
@@ -112,6 +113,7 @@ internal/budget/      durable atomic shared token reservations
 internal/testdb/      shared explicit PostgreSQL test harness (GO-20)
 internal/contracts/   Go mirrors of the runtime wire contracts and strict decoding (GO-18)
 internal/tools/       the four tool adapters and the effect runner the executor calls (GO-17 on)
+internal/policy/      action gate: canonical arguments and digest (GO-12), decisions, approvals
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
