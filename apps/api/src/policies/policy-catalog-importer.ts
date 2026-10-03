@@ -138,8 +138,8 @@ type FeedStoreResult =
 
 /**
  * Validates the feed against the Go grammar and the policy that names it, then stores its exact
- * bytes, or reuses the stored row when the same issuer and revision already hold the same bytes.
- * The same revision with different bytes is refused: changed rules need a new revision.
+ * bytes, or reuses the stored row when the same revision already holds the same bytes. The same
+ * revision with different bytes (from any issuer) is refused: changed rules need a new revision.
  */
 async function storeSignatureFeed(
   transactionManager: EntityManager,
@@ -158,23 +158,25 @@ async function storeSignatureFeed(
     return { stored: false, issues: [mismatch] };
   }
   const { feed, sourceText, fileDigest } = feedValidation;
-  const existing = await transactionManager.findOneBy(SignatureFeedRevision, {
-    issuer: feed.issuer,
+  // Go finds the feed by revision alone (two rows with one revision are ambiguous there), so a
+  // revision is stored once across all issuers: equal bytes reuse the row, other bytes are refused.
+  const existing = await transactionManager.findBy(SignatureFeedRevision, {
     revision: feed.revision,
   });
-  if (existing !== null) {
-    if (existing.fileDigest !== fileDigest) {
-      return {
-        stored: false,
-        issues: [
-          {
-            path: "feed.revision",
-            message: "this feed revision is already stored with different bytes; bump the revision",
-          },
-        ],
-      };
-    }
-    return { stored: true, revision: existing };
+  const sameBytes = existing.find((row) => row.fileDigest === fileDigest);
+  if (existing.length > 0 && (sameBytes === undefined || existing.length > 1)) {
+    return {
+      stored: false,
+      issues: [
+        {
+          path: "feed.revision",
+          message: "this feed revision is already stored with different bytes; bump the revision",
+        },
+      ],
+    };
+  }
+  if (sameBytes !== undefined) {
+    return { stored: true, revision: sameBytes };
   }
   const revision = await transactionManager.save(
     transactionManager.create(SignatureFeedRevision, {

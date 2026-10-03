@@ -117,6 +117,12 @@ describe("importPolicyFile with the signature feed", () => {
       feedText.replace("Sample managed", "Changed managed"),
       "feed.revision",
     ],
+    [
+      "the same revision from another issuer",
+      policyText,
+      feedText.replace('"issuer": "task-passport-security"', '"issuer": "other-publisher"'),
+      "feed.revision",
+    ],
     ["a policy naming another feed revision", policyNamingFeedV2, feedText, "signatures.revision"],
     [
       "a disabled rule the feed does not have",
