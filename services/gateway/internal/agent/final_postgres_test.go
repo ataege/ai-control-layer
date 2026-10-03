@@ -63,6 +63,9 @@ func TestFinalAnswerWithoutACreatedReportIsDeniedAndCounted(t *testing.T) {
 		}
 		causes = append(causes, cause)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read rows: %v", err)
+	}
 	if strings.Join(causes, ",") != "not_json,unknown_report,not_json" {
 		t.Fatalf("rejection causes %v, want not_json, unknown_report, not_json", causes)
 	}

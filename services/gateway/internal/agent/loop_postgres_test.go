@@ -568,6 +568,9 @@ func TestPermittedReadReachesTheNextModelRequest(t *testing.T) {
 		mustScan(t, rows, &eventType)
 		runEvents = append(runEvents, eventType)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read rows: %v", err)
+	}
 	rows.Close()
 	if strings.Join(runEvents, ",") != "run.started,run.completed" {
 		t.Fatalf("run events: %v", runEvents)
@@ -733,6 +736,9 @@ func TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText(t *testing.T) 
 		var count int
 		mustScan(t, rows, &phase, &count)
 		phases[phase] = count
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read rows: %v", err)
 	}
 	rows.Close()
 	// Two steps: two lookups, two agent provider calls plus one security call, one gate decision,
