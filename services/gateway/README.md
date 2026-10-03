@@ -134,6 +134,7 @@ internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (
 internal/provenance/  registered templates and projection, classification, lineage, export decision (GO-63)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
+internal/admission/   start-run admission: passport, run and job in one transaction (GO-13)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 

@@ -49,6 +49,8 @@ const (
 	ReasonDecisionUnavailable          ReasonCode = "decision_unavailable"
 	ReasonContentBlocked               ReasonCode = "content_blocked"
 	ReasonContentTooLarge              ReasonCode = "content_too_large"
+	// ReasonLimitNotAllowed: a requested limit exceeds the active catalog; admission never narrows it.
+	ReasonLimitNotAllowed ReasonCode = "limit_not_allowed"
 )
 
 // ReasonCodes lists every reason code in contract order.
@@ -61,7 +63,7 @@ var ReasonCodes = []ReasonCode{
 	ReasonSecurityAllowanceExhausted, ReasonContentRedacted, ReasonSignatureMatch,
 	ReasonPolicyReloadRejected, ReasonModelNotAllowed, ReasonMultipleActionsNotSupported,
 	ReasonRunExpired, ReasonToolNotRegistered, ReasonInvalidArguments, ReasonToolNotAllowed,
-	ReasonDecisionUnavailable, ReasonContentBlocked, ReasonContentTooLarge,
+	ReasonDecisionUnavailable, ReasonContentBlocked, ReasonContentTooLarge, ReasonLimitNotAllowed,
 }
 
 // Valid reports whether the code is part of the contract.
