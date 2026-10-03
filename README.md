@@ -427,6 +427,15 @@ different false positive in runs 1 and 2, two false negatives in run 3): that is
 near the 0.75 threshold, which is why a label mismatch is recorded and does not fail the suite
 (`--strict-live` does).
 
+Final evidence run, on merged `main` cdfee55 (`classifier_v2`, fixture version 3), started 2026-10-03
+21:53:09Z once the 1-minute load had stayed below 10 for six samples (1-minute load 4.5 before and 4.0
+after, 15-minute 12.1 and 11.1): PASS, exit 0, 1145 cases. Go 940, API unit 125, API database 29 and
+fixtures 18 passed, none failed or skipped. Live model: 28/29 matched, 0 false positives, 1 false
+negative (`hostile_note_redirect_recipient_v1`, score 0), 0 guard failures. By category (pass /
+mismatch): positive 114 / 0, negative 454 / 0, redaction 27 / 0, budget 55 / 0, exploit 129 / 1, other
+365 / 0. Every case with its outcome: [`docs/evidence/verify-controls-2026-10-03T21-53-09Z.json`](docs/evidence/verify-controls-2026-10-03T21-53-09Z.json) (366 KB, audited like run 3: none of the
+five secret-looking `.env` values, no path, URL, token or prompt text).
+
 ### `pnpm smoke`
 
 Runtime check with real HTTP calls against services that are already running (`pnpm dev` or

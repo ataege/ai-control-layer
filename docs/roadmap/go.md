@@ -301,9 +301,12 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Completed (2026-10-03): the outcome is recorded in `docs/product/README.md` ("GO-01: multiple-
     action model responses"). Implemented on go/f3: `agent.Stepper` (GO-10, 19d710e) rejects a
     response with several tool calls as `multiple_actions_not_supported` and never runs a subset
-    (`TestSeveralToolCallsRejectTheWholeResponse`); the loop (GO-11, faac792) stops the run with
-    that reason and stores no action (`TestSeveralActionsInOneResponseStopTheRun`). Bounded
-    correction instead of the stop comes with the GO-29 wiring.
+    (`TestSeveralToolCallsRejectTheWholeResponse`). Since the GO-29 wiring (fdd8ca6) the loop
+    denies such a response as `multiple_actions_not_supported`, stores no action, records one
+    `action.denied` event counted as a correction and returns bounded feedback to the model
+    (`TestSeveralActionsInOneResponseAreDeniedAndCounted`, renamed from
+    `TestSeveralActionsInOneResponseStopTheRun` when the stop became a correction); the correction
+    limit still stops the run. Both tests pass on go/f3 (2026-10-03, `go test -run` on PostgreSQL).
   - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
     should be rejected or handled by an explicitly defined policy"); "Design decision record" (One
     action per model step)
@@ -760,6 +763,11 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     entries. No inspected text is stored. Test
     `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` passes on PostgreSQL. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; `pnpm test:db` gateway "612 passed, 0 failed, 0 skipped", api "16 passed"; `go test -race ./...` with PostgreSQL 20 packages ok; `pnpm verify` 6 passed. Not covered here: `approval_wait` (GO-40), the concurrency slot (GO-79); queue
     depth is read from `runtime.jobs` by the summary.
+  - Completed, `approval_wait` (2026-10-03, 3c's roadmap audit): the resume of a review wait writes
+    an `approval_wait` span from the awaiting transition (the run's last update) to the resume, on
+    the loop's clock, with the waited-for action id. `TestResumeRecordsTheApprovalWaitSpan` (fake
+    loop clock 90 s after the awaiting transition: one span of exactly 90 s with the action id)
+    passes on PostgreSQL.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Performance telemetry and measurement); "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: nothing
 
@@ -832,7 +840,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     relationships matter); "Functional requirements MVP boundary and deferred scope" (Trusted
     admission); "Threat model limits and unresolved design choices" (Verification priorities);
     "Illustrative passport and interface contracts" (Illustrative passport fields)
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md` (which `app` records carry the operator's authority); `passport report fields`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03) (which `app` records carry the operator's authority); `passport report fields`
 
 - [x] **GO-14 · Serve `POST /internal/runs`**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
@@ -871,10 +879,12 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     invoice_C01 and 400 `limit_not_allowed` for 25 model calls; the key never appeared in the log.
     Not verified: the call from NestJS itself (no seeded app users; SH-19), and the `command timeout
 budget` item stays open (admission is one short transaction).
+  - Commits (audit 2026-10-03): d83f92e (route), a8d412b (the failed admission stage logged behind `503
+decision_unavailable`).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations; Decision and error semantics); "Technical architecture and service ownership"
     (Interfaces and repository strategy)
-  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `command timeout budget`; `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-15 · Store each proposed action and decide allow, deny or approval required**
   - **Report 1.2 change:** Order per Figure 6: deterministic scope and provenance first, then the semantic check of GO-77 for otherwise permitted proposals.
@@ -951,7 +961,7 @@ budget` item stays open (admission is one short transaction).
   - Blocked by: `classifier prompt and verdict schema`; `decision 6 in docs/product/README.md`
   - Completed (2026-10-03): `SemanticEvaluator` (5883988, context 8192 in a0672e9): one security-purpose call through `model.AccountedCaller` (reserved before dispatch), fixed instruction, untrusted text between nonce markers, strict `ParseVerdict` ({risk_category, score 0 to 1, reason_code}), `score >= threshold` applied in Go, one attempt and no retry; refused reservation is `security_allowance_exhausted`, timeout, transport, unknown usage and malformed verdict are `security_evaluator_unavailable`, both pause with no text. Checks: gateway checks all exit 0 with stub verdicts labelled as fixtures; live opt-in `GO_SECURITY_LIVE=1 ... go test -tags=model_live ./internal/security -run '^TestLiveSemanticEvaluator$'` PASS on Ollama 0.35.1, `qwen3.5:4b` (2a654d98e6fb): hostile note blocked (score 1), clean note passed (score 0). Not verified here: the latency rows in `runtime.timing_records` and the assessment rows, which the caller persists (GO-80, f3); the ledger usage row is written by `AccountedCaller`.
 
-- [ ] **GO-76 · Inspect tool results before they enter the agent context**
+- [x] **GO-76 · Inspect tool results before they enter the agent context**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
   - Depends on: GO-23, GO-74, GO-75 · Needs: X-86 · Provides: nothing
   - Paths: the worker package from GO-08; the enforcement package from GO-12
@@ -961,6 +971,18 @@ budget` item stays open (admission is one short transaction).
   - Report: "Architecture and chart reading guide" (Figure 10); "The enforcement loop and data minimization" (Minimize information before it enters the model)
   - Blocked by: nothing
   - Progress (2026-10-03): the pipeline function is done (91d15c7): `Inspector.InspectToolResult` runs the field limit and secret rules, signatures, then the semantic check on `internal_note.text` only (redacted text) over every string of the minimized result; blocked values become `[WITHHELD:<reason>]` while permitted values return, a guard failure withholds everything (`paused`); classification and sources unchanged. Checks: gateway checks all exit 0 (clean note unchanged, hostile note withheld, signature before semantic, secrets masked before the classifier, guard failures pause); `pnpm verify` 6 passed. Missing half (f3): calling it from the worker loop, pausing the run, persisting the records, and the worker test of the next model request's contents.
+  - Completed (2026-10-03): the worker half is on go/f3 (fdd8ca6, telemetry in GO-80). The loop
+    calls c1's `InspectToolResult` on every executed result before the context append; only the
+    inspected content enters the context, a pause (guard failure or exhausted security allowance)
+    releases nothing and pauses the run, and the decisions are stored as `runtime.control_assessments`
+    in the same transaction as the context entry, which with the action events is GO-76's safe
+    evidence (lead's decision; no extra X-12 event type). `TestToolResultInspectionBeforeAgentContext`
+    asserts the next model request's contents: the clean note passes with `internal_only`, a
+    signature match and a semantic verdict each withhold a hostile note (`[WITHHELD:...]`, stored
+    outcome `blocked`), and a guard failure pauses with no context entry and the security call held
+    `usage_unknown`; `TestUnusableInspectionsAreNeverReleased` and
+    `TestTelemetryRecordsPhasesAndAssessmentsWithoutInspectedText` cover invalid inspections and the
+    stored records. All pass on PostgreSQL (2026-10-03).
 
 ### Tool adapters, provenance and rendering (report role: Implementer 5)
 
@@ -1048,7 +1070,7 @@ budget` item stays open (admission is one short transaction).
 typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-19 · Build the runtime repository with guarded state transitions**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 4-8 h)
@@ -1120,6 +1142,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     `pnpm test:db` passes Go and API with no skips; after stopping test PostgreSQL, `pnpm test:db gateway`
     correctly exits 1. `pnpm verify` passes all six steps. No service wiring is changed, so no
     additional smoke was run for GO-20.
+  - Commit (audit 2026-10-03): 3cfa292.
   - Report: "Atomic allowances hard limits and estimated cost" ("the application must choose and
     verify the appropriate transaction boundaries"); "Validation plan and evidence matrix"
     (Interpreting results honestly)
@@ -1175,7 +1198,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Validation plan and evidence
     matrix" ("a hidden URL is not a protection")
-  - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 4 in docs/product/README.md` (settled by the lead on 2026-10-03); `decision 7 in docs/product/README.md` (settled by the lead on 2026-10-03)
 
 - [x] **GO-22 · Write safe decision events with every state change**
   - **Report 1.2 change:** Events add the metered purpose, admission and active catalog revisions, matched rule and feed revision; safe summaries omit raw notes, secrets, model requests and classifier reasoning.
@@ -1210,9 +1233,9 @@ typecheck` PASS; `pnpm verify` 6 passed.
     check, effect, replay source, alternative template, safe message); another organization reads
     and writes nothing; a row with an extra summary key fails closed; a failed state change leaves
     no event (GO-19 test). Checks: gateway five checks PASS; `go test -race -count=3
-./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Waits on other lanes:
-    decision, approval and execution events are written by lanes w3, w2 and f3, which must switch
-    their raw inserts to `repository.Join(tx).AppendEvent` for the ordering guarantee.
+./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Commit: 47f3dca. Audit
+    2026-10-03 on main cdfee55: the only `INSERT INTO runtime.audit_events` in the gateway is
+    `repository/events.go`, so every lane's events go through `AppendEvent` and its run lock.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
     semantics)
@@ -2108,6 +2131,13 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
 ./internal/api` with PostgreSQL ok; contracts `test` PASS; `pnpm verify` 6 passed. Not covered
     here: interrupting an in-flight model request (the loop stops at its next check), and the
     approval command refusing a decision on a stopped run, which is lane w3's GO-44 check.
+  - Audit 2026-10-03: (1) the right to cancel is a verified operator of the run's organization; no
+    per-run or role-specific management right exists, so the Tests line's "actor without the right" case
+    is covered only as another organization's operator (404). Lead decision (2026-10-03): any verified operator of the organization may cancel its runs; cancelling only restricts and never grants, so no extra role is needed. (2)
+    Since 025a339 (lane f3 maps it, edb712c) a cancellation that lands during a step is never
+    overwritten: `TransitionRun` refuses running, awaiting_approval, paused and completed once
+    `cancel_requested_at` is set (`ErrCancelRequested`), and the loop stops the run with `run_cancelled`
+    (`TestPostgresCancelledRunCannotBeKeptGoing`, `TestApprovedActionOfACancelledRunDoesNotResume`).
   - Report: "Atomic allowances hard limits and estimated cost" (Cancellation and time limits);
     "Illustrative passport and interface contracts" (Proposed browser and runtime operations);
     "Exact action approval versioning and execution rechecks" (Versioned policy and current
@@ -2546,6 +2576,16 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     240, before fd67778) had still reserved that call.
     Calls, tokens and time exhaustion are covered by lane f3's GO-39/GO-79 tests and not repeated
     live here.
+  - Audit 2026-10-03, the automated tests behind the cases not repeated live (all on main cdfee55):
+    calls `TestPostgresCallLimitsSubBudgetsAndConcurrency` and
+    `TestModelLimitStopsTheRunBeforeTheNextDispatch`; tokens `TestPostgresConcurrentSharedBudget` and
+    `TestPostgresOverrunPausesWithoutClipping`; request time
+    `TestModelGatewayDeadlineRetainsTheReservationAndSlot`; run expiry
+    `TestRunsThatMayNotContinueSendNoModelRequest` (expired passport); concurrency cap
+    `TestModelGatewayHoldsAThirdConcurrentRequestOverACapOfTwo`; removed model
+    `TestModelGatewayRefusesModelsOutsideCatalogOrPassport`; lowered catalog limit on a running passport
+    `TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport`; threshold in the next snapshot
+    `TestPostgresActiveSnapshotFollowsThePointer`. The live runs above remain one-off evidence.
   - Report: "Validation plan and evidence matrix" (Policy reload and rollback safety, Model allowlist and current reductions, Local model resources)
   - Blocked by: nothing
 
@@ -2824,6 +2864,10 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
 gateway` and `pnpm verify` as quoted in the commit. On the seeded test database the
     cross-organization start-run answers 503 (its catalog binds no feed), so the scope rejection of
     that call is shown by GO-13's tests.
+  - Audit 2026-10-03: the route matrix had left out `POST /internal/control/evaluate`, so "every mounted
+    route" overstated it. It now includes it: another organization's operator evaluating input against
+    the run gets 404, and the organization fingerprints are unchanged
+    (`TestPostgresAnotherOrganizationCannotReachTheRunOrItsResources`).
   - Report: "Validation plan and evidence matrix" (critical check Organization access; "Test identity
     and authorization through the public path and the internal service boundary")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
