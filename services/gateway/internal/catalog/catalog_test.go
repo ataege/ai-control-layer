@@ -2,37 +2,19 @@ package catalog
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
+	"starter/services/gateway/internal/catalog/catalogtest"
 	"starter/services/gateway/internal/contracts"
 	"starter/services/gateway/internal/testdb"
 )
 
-// policyContent is config/policy.yaml as the importer stores it (control_catalog_revisions.content).
-const policyContent = `{
-	"schema_version": 1,
-	"allowed_models": ["qwen3.5:4b"],
-	"budgets": {"calls_total": 24, "calls_agent": 12, "calls_security": 12, "tokens_total": 20000,
-		"agent_output_tokens": 512, "security_output_tokens": 256, "input_template_tokens": 1024,
-		"request_timeout_seconds": 20, "local_max_concurrency": 2, "run_expiry_minutes": 15,
-		"tool_attempts": 12, "corrections": 2},
-	"controls": {
-		"secret_pattern": {"enabled": true, "mode": "redact", "boundaries": ["model_input", "tool_result"]},
-		"semantic_injection": {"enabled": true, "mode": "block", "threshold": 0.75,
-			"boundaries": ["model_input", "tool_result", "action_proposal"]},
-		"signature_match": {"enabled": true, "boundaries": ["model_input", "tool_result", "action_proposal"]}
-	},
-	"signatures": {"path": "attack-signatures.json", "revision": "feed_v1", "disabled_rules": []},
-	"reports": {"enabled_templates": ["internal_investigation_v1", "vendor_reconciliation_v1"]}
-}`
+const policyContent = catalogtest.PolicyContent
 
 // catalogWorld is an isolated catalog state inside one outer transaction, rolled back at the end.
 type catalogWorld struct {
@@ -48,39 +30,12 @@ func newCatalogWorld(t *testing.T) *catalogWorld {
 		t.Fatalf("begin: %v", err)
 	}
 	t.Cleanup(func() { _ = outer.Rollback(context.Background()) })
-	feedBytes, err := os.ReadFile("../../../../config/attack-signatures.json")
-	if err != nil {
-		t.Fatalf("read feed: %v", err)
-	}
-	digest := sha256.Sum256(feedBytes)
-	world := &catalogWorld{outer: outer}
-	// The issuer/revision pair is unique, so the test feed gets its own issuer name.
-	err = outer.QueryRow(context.Background(), `INSERT INTO app.signature_feed_revisions
-		(issuer, revision, source_file_name, source_text, file_digest, content, import_source)
-		VALUES ($1, 'feed_v1', 'attack-signatures.json', $2, $3, '{}', 'command') RETURNING id`,
-		"catalog-test-"+testdb.ID(t), string(feedBytes), hex.EncodeToString(digest[:])).Scan(&world.feedID)
-	if err != nil {
-		t.Fatalf("insert feed: %v", err)
-	}
-	return world
+	return &catalogWorld{outer: outer, feedID: catalogtest.InsertFeed(t, outer)}
 }
 
 func (world *catalogWorld) activate(t *testing.T, content string, feedID *int64) int64 {
 	t.Helper()
-	var revisionID int64
-	err := world.outer.QueryRow(context.Background(), `INSERT INTO app.control_catalog_revisions
-		(schema_version, source_file_name, source_text, file_digest, content, import_source)
-		VALUES (1, 'policy.yaml', 'catalog test', repeat('c', 64), $1, 'command') RETURNING id`, content).Scan(&revisionID)
-	if err != nil {
-		t.Fatalf("insert revision: %v", err)
-	}
-	if _, err := world.outer.Exec(context.Background(), `INSERT INTO app.control_catalog_pointer (id, active_revision_id, active_feed_revision_id)
-		VALUES (1, $1, $2) ON CONFLICT (id) DO UPDATE
-		SET active_revision_id = EXCLUDED.active_revision_id, active_feed_revision_id = EXCLUDED.active_feed_revision_id`,
-		revisionID, feedID); err != nil {
-		t.Fatalf("move pointer: %v", err)
-	}
-	return revisionID
+	return catalogtest.Activate(t, world.outer, content, feedID)
 }
 
 func TestPostgresActiveSnapshotFollowsThePointer(t *testing.T) {
