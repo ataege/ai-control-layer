@@ -1206,7 +1206,8 @@ estimates. Every size is a planning estimate, never a schedule.
     "Design decision record" (TypeORM migration toolchain)
   - Blocked by: `decision 7 in docs/product/README.md` for user records
 
-- [ ] **SH-16 · Write the first runtime-schema migration**
+- [x] **SH-16 · Write the first runtime-schema migration**
+  - **Done (2026-10-03):** Approved by the lead on 2026-10-03 (decisions in `docs/contracts/runtime-schema-alignment.md`). On `main` since 13cae61; on a fresh database all 11 migrations run, revert to an empty database and run again; `pnpm test:db api` 16 passed (draft-schemas 10).
   - **Report 1.1 change:** Table names: the architecture's proposal (passports, runs, jobs, model_calls, actions and the others in "Schema ownership"); the Go implementer supplies the definitions.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data); the Go implementer supplies the table definitions · Tier: A · Size: S (estimate 2-5 h)
   - Depends on: SH-10 · Needs: X-24 · Provides: X-19; X-29 and X-30 if the read path uses views
@@ -1226,7 +1227,8 @@ estimates. Every size is a planning estimate, never a schedule.
     audit and uncertain outcomes"; "Architecture and chart reading guide" (Figure 4)
   - Blocked by: `read path` (the views only)
 
-- [ ] **SH-17 · Write the first demo-schema migration**
+- [x] **SH-17 · Write the first demo-schema migration**
+  - **Done (2026-10-03):** Approved by the lead on 2026-10-03 (decisions in `docs/contracts/runtime-schema-alignment.md`). On `main` since 13cae61; on a fresh database all 11 migrations run, revert to an empty database and run again; `pnpm test:db api` 16 passed (draft-schemas 10). The internal-note classification column stays a follow-up (`source classification storage`).
   - **Report 1.1 change:** Work adds versioned invoices and the internal investigation note as an authorized field of a synthetic invoice, with its classification field if `source classification storage` chooses `demo`; in that case it provides X-70 (part).
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: SH-10 · Needs: X-01 · Provides: X-20
@@ -1357,7 +1359,8 @@ estimates. Every size is a planning estimate, never a schedule.
     scope controls" (Data leakage through secondary views)
   - Blocked by: `smoke under login`
 
-- [ ] **SH-44 · Write the runtime-schema migration for control assessments, model purposes and timing**
+- [x] **SH-44 · Write the runtime-schema migration for control assessments, model purposes and timing**
+  - **Done (2026-10-03):** Approved by the lead on 2026-10-03 (decisions in `docs/contracts/runtime-schema-alignment.md`). On `main` since 13cae61; on a fresh database all 11 migrations run, revert to an empty database and run again; `pnpm test:db api` 16 passed (draft-schemas 10).
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data); the Go implementer supplies the definitions · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: SH-16 · Needs: X-24 · Provides: X-85
   - Paths: `apps/api/src/database/migrations`
@@ -1521,7 +1524,8 @@ estimates. Every size is a planning estimate, never a schedule.
 
 ### M3 (hours 10-14)
 
-- [ ] **SH-27 · Write the runtime-schema migration for approvals, reservations and usage**
+- [x] **SH-27 · Write the runtime-schema migration for approvals, reservations and usage**
+  - **Done (2026-10-03):** Approved by the lead on 2026-10-03 (decisions in `docs/contracts/runtime-schema-alignment.md`). On `main` since 13cae61; on a fresh database all 11 migrations run, revert to an empty database and run again; `pnpm test:db api` 16 passed (draft-schemas 10). `budget_reservations` keeps only tool attempts (alignment decision 5).
   - **Report 1.1 change:** The review view adds the report identifier, content hash, source manifest and digest, classification, template and projection versions, exact recipient and exact outbound content; table names: the architecture's proposal.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: SH-16 · Needs: X-24 · Provides: X-39; X-41 if the read path uses views

@@ -1,5 +1,8 @@
-# DRAFT: runtime schema alignment with the GO-06 token ledger
+# Runtime schema alignment with the GO-06 token ledger
 
+> **Decided by the lead on 2026-10-03** (the Go side is now built by the lead's Claude sessions);
+> see "Decisions" at the end. The original text follows.
+>
 > **For the Go implementer to decide.** Nothing here changes the GO-06 migration
 > (`origin/feat/go-roadmap`, commit `0e683b6`,
 > `apps/api/src/database/migrations/1791043000000-AddModelTokenBudgets.ts`). It lists every
@@ -76,3 +79,27 @@ which is safe but blocks the revert until the ledger is reverted. Item 8 removes
    policy reload); no placeholder run is created. An event that names an action must name its run,
    and `(organization_id, id)` is indexed for organization-wide reads.
 5. Database tests: `apps/api/src/database/draft-schemas.db-spec.ts`, run by `pnpm test:db api`.
+
+## Decisions (lead, 2026-10-03)
+
+The five schema drafts (SH-16, SH-17, SH-44, SH-27, SH-24 table part) and the service roles (SH-26
+draft) are approved as the base; the changes below land as new migrations, never as edits of
+migrations already on `main`.
+
+1. **Run identifier:** (a). The ledger's `run_id` becomes `uuid` referencing `runtime.runs`.
+2. **Organization:** (a). Both ledger tables get `organization_id` with the organization-safe
+   composite reference to `runs`.
+3. **Model call identity:** (a). The ledger's `call_id` is `model_calls.id` with a foreign key;
+   `model_calls` stays GO-02's pre-dispatch record.
+4. **Per-purpose sub-budgets:** on the ledger: per-purpose token limits and counters (agent and
+   security) inside the shared `token_limit`.
+5. **Call, time and concurrency limits:** the ledger is the single authority for model calls,
+   tokens, request time and the concurrency slot. `budget_reservations` keeps only tool attempts.
+6. **Token limit source:** copied from the passport at admission and never raised afterwards.
+7. **Paused budget:** the run moves to status `paused`, with terminal reason `allowance_exhausted` for an
+   overrun or exhausted allowance and `outcome_unknown` for unresolved usage.
+8. **Schema ownership:** SH-16 owns creating and dropping `runtime`.
+9. and 10. Nothing to change.
+
+Database tests: the team suite (SH-47) runs `pnpm db:migration:run` first; the Go tests use the
+configured database, and the API draft-schema tests their own temporary database.

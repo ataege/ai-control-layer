@@ -1,5 +1,8 @@
 # DRAFT: control evaluation contract (X-91) and live test entry (X-106)
 
+> **X-91 (the Go part) approved as the base by the lead on 2026-10-03; X-106 waits on its owner,
+> the web + API implementer.**
+
 > **DRAFT proposal, not frozen.** Nothing here is implemented. X-91 is owned by the Go implementer
 > and X-106 by the web + API implementer (`docs/product/README.md`, "Contracts to freeze first"); each
 > owner decides the shape after a quick shared review, and a contract is frozen only when its owner
