@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "passport.schema.json",
+  "title": "Passport",
+  "description": "X-08: the immutable grant of one run (runtime.passports).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "passportId",
+    "runId",
+    "organizationId",
+    "actorId",
+    "taskVersion",
+    "admissionCatalogRevisionId",
+    "issuedAt",
+    "expiresAt",
+    "scope",
+    "limits"
+  ],
+  "properties": {
+    "passportId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "organizationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "actorId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "taskVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "admissionCatalogRevisionId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "issuedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tools",
+        "invoiceIds",
+        "vendorIds",
+        "reportTemplates",
+        "projectionRules",
+        "recipientReferences",
+        "allowedModels",
+        "internalNoteReadable",
+        "approvalRequiredTools"
+      ],
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "enum": ["read_invoice", "read_vendor", "create_report", "queue_report"]
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "invoiceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "vendorIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "reportTemplates": {
+          "type": "array",
+          "items": {
+            "enum": ["internal_investigation_v1", "vendor_reconciliation_v1"]
+          },
+          "uniqueItems": true,
+          "minItems": 0
+        },
+        "projectionRules": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "uniqueItems": true,
+          "minItems": 0
+        },
+        "recipientReferences": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "uniqueItems": true,
+          "minItems": 0
+        },
+        "allowedModels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "internalNoteReadable": {
+          "type": "boolean"
+        },
+        "approvalRequiredTools": {
+          "type": "array",
+          "items": {
+            "enum": ["read_invoice", "read_vendor", "create_report", "queue_report"]
+          },
+          "uniqueItems": true,
+          "minItems": 0
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "callsTotal",
+        "callsAgent",
+        "callsSecurity",
+        "tokensTotal",
+        "tokensAgent",
+        "tokensSecurity",
+        "requestTimeoutSeconds",
+        "localMaxConcurrency",
+        "toolAttempts",
+        "corrections",
+        "runExpiryMinutes"
+      ],
+      "properties": {
+        "callsTotal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "callsAgent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "callsSecurity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "tokensTotal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "tokensAgent": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tokensSecurity": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requestTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "localMaxConcurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "toolAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "corrections": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "runExpiryMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  }
+}

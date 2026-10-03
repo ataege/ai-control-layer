@@ -2,12 +2,12 @@
 
 Wire contracts shared by the services. The baseline defines the generic ones: health, service diagnostics and the error envelope. Product contracts are added here by the nestjs role (the web + API implementer), contract first.
 
-| Piece                   | Location                                            |
-| ----------------------- | --------------------------------------------------- |
-| TypeScript types        | `src/index.ts`                                      |
-| Language-neutral schema | `schemas/*.schema.json` (JSON Schema draft 2020-12) |
-| Shared sample payloads  | `fixtures/<schema>.<case>.json`                     |
-| Go DTOs                 | `services/gateway/internal/health/dto.go`           |
+| Piece                   | Location                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript types        | `src/index.ts`                                                                                                                                     |
+| Language-neutral schema | `schemas/*.schema.json` (JSON Schema draft 2020-12)                                                                                                |
+| Shared sample payloads  | `fixtures/<schema>.<case>.json`                                                                                                                    |
+| Go DTOs                 | `services/gateway/internal/health/dto.go` (generic) and `services/gateway/internal/contracts` (runtime: X-07 mirror, X-08, X-09, X-11, X-12, X-13) |
 
 `pnpm --filter @workspace/contracts test` validates every fixture against its schema and compares
 the typed samples with the fixture files.
