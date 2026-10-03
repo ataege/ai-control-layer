@@ -1092,7 +1092,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     1 create and delegate a task)
   - Blocked by: `passport in the run view`
 
-- [ ] **WEB-09 · Build the run timeline with attempts apart from effects**
+- [x] **WEB-09 · Build the run timeline with attempts apart from effects**
   - **Report 1.1 change:** The export denial is WEB-28's; Report beats 5, 6 and 9.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: WEB-06 · Needs: X-12, X-36 · Provides: nothing

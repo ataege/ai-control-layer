@@ -170,5 +170,16 @@ export interface SanitizedEvent {
   id: string;
   type: string;
   timestamp: string;
-  details: Record<string, unknown>;
+  details: {
+    message?: string;
+    tool?: string;
+    action?: string;
+    decision?: 'allowed' | 'denied' | 'pending';
+    reasonCode?: string;
+    rule?: string;
+    correctionRoute?: string;
+    correctionCount?: number;
+    isReplay?: boolean;
+    [key: string]: unknown;
+  };
 }

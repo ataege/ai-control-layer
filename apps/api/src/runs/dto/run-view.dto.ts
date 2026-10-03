@@ -37,8 +37,13 @@ export const SanitizedEventSchema = z.object({
     message: z.string().max(2000).optional(),
     tool: z.string().max(256).optional(),
     action: z.string().max(256).optional(),
-    decision: z.string().max(256).optional(),
-  }).strict(),
+    decision: z.enum(['allowed', 'denied', 'pending']).optional(),
+    reasonCode: z.string().max(256).optional(),
+    rule: z.string().max(256).optional(),
+    correctionRoute: z.string().max(256).optional(),
+    correctionCount: z.number().int().min(0).optional(),
+    isReplay: z.boolean().optional(),
+  }).passthrough(),
 }) satisfies z.ZodType<SanitizedEvent>;
 
 export const SanitizedEventsResponseSchema = z.object({
