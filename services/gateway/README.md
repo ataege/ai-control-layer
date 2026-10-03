@@ -376,6 +376,49 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Bounded agent loop (GO-11)
+
+`agent.Loop` is the `worker.Handler` for `contracts.JobKindAgentStep` jobs. Per claim it runs up
+to 64 steps (a safety bound; the passport's agent call limit is the real step limit) and, before
+every model request, rereads the run and passport:
+
+- queued → `running` (`run.started`); terminal, awaiting approval or paused → nothing to do;
+- a cancellation request → `stopped` / `run_cancelled`; an expired passport → `stopped` /
+  `run_expired`; agent steps used up (`model_calls` with purpose `agent` ≥ `callsAgent`) →
+  `paused` / `allowance_exhausted` (alignment decision 7). None of these sends a model request.
+
+Each step: `Stepper.Step` (GO-10) with the fixed task message built from the passport's opaque
+references plus the stored steps; then, by result:
+
+- one proposal → `policy.Gate.Evaluate` with a fresh action id and idempotency key. A denial stops
+  the run with the gate's reason (GO-29 adds bounded correction); approval required →
+  `awaiting_approval` (`approval.requested`, GO-40 resumes); allow → `policy.Executor.Execute`,
+  then the tool-result inspection, then the step's call and inspected result are appended to
+  `runtime.context_entries` and the loop continues;
+- several tool calls → `stopped` / `multiple_actions_not_supported` (GO-01);
+- a final answer → `completed` (GO-26 adds the narrow result validation);
+- a model failure: exhausted or paused allowance and overspend → `paused` / `allowance_exhausted`;
+  unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
+  `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
+
+Run changes go through `repository.Tx.TransitionRun` with their event; a change another writer
+already made (a cancellation) is accepted. A cancelled claim context returns an error and leaves
+the job for lease expiry.
+
+**Stored context (`runtime.context_entries`, migration `1791070000000-AddAgentContextEntries`).**
+Append-only (gateway `SELECT, INSERT`): per executed step one `assistant_call` (tool and the gate's
+canonical arguments) and one `tool_result` holding only the inspected content. A restarted worker
+rebuilds the same request from these rows and never re-executes a completed action (GO-02, GO-07).
+jsonb re-renders stored JSON; the loop compacts it, and jsonb key order is deterministic.
+
+**Interim inspector.** Until c1's `InspectToolResult` (GO-76) is wired, `InterimUntrustedTextGuard`
+pauses the run (`security_evaluator_unavailable`) for any result carrying untrusted text and passes
+results without any. It is not a protection.
+
+Not wired into the gateway process yet: the production scope reader and admission (GO-13) are
+needed for a live run; the wiring commit adds `worker.Service`, this handler and the readiness
+reporter to `cmd/gateway/main.go`.
+
 ## Agent model step (GO-10)
 
 `agent.Stepper.Step` performs one agent-purpose model request for a run:
