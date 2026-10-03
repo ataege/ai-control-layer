@@ -2355,14 +2355,14 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Report: "Validation plan and evidence matrix" (Performance measurement method)
   - Blocked by: `measurement method`
 
-- [ ] **GO-86 · Prove policy reload, the model allowlist and local model resources**
+- [x] **GO-86 · Prove policy reload, the model allowlist and local model resources**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: GO-39, GO-73, GO-79 · Needs: X-83, X-89 · Provides: X-101, X-102, X-103
   - Paths: none (scenario tests run through the X-89 suite)
   - Work: Change a threshold and a rule and show the before and after revision and decisions; submit an invalid file and show the rejected activation and the retained revision; remove a model and lower a budget on an admitted run; exhaust calls, tokens, time and the concurrency cap.
   - Done when: the evidence of X-101, X-102 and X-103 is captured, and no case widens the stored passport.
   - Tests: the scenario tests in the suite, with the results quoted.
-  - Progress (2026-10-03): live evidence, run once on the 3c private database with the gateway binary
+  - Completed (2026-10-03): live evidence, run once on the 3c private database with the gateway binary
     (go/3c at c8d0e64 with lane f3's chain and GO-79), local qwen3.5:4b, every edit through `pnpm
 policy:import` and the gateway's activation (GO-73), every decision through `POST
 /internal/control/evaluate` (GO-82). The signature feed was loaded by hand (c1's import not on
@@ -2379,9 +2379,12 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     reservation (reservations 3 before, 3 after; denied `security_evaluator_unavailable`). X-103
     local resources: local_max_concurrency 1 (revision 241) serialized three parallel evaluations
     (dispatch records within 12 ms, completions at 07.2, 09.0 and 10.9 s). The original policy was
-    restored (revision 242, same digest). Missing: lowering calls_security to 1 (revision 240) did
-    not restrict the admitted run, whose 4th security call was still reserved; the ledger keeps the
-    passport's limits, so current reductions do not reach security calls (lane f3, reported).
+    restored (revision 242, same digest). Current reduction (rerun on go/3c 7fb3009, main 4443272 with
+    lane f3's fd67778): after 3 security calls on an admitted run, lowering calls_security to 1
+    (revision 289, active after 5.2 s) refused the 4th call before any reservation
+    (`security_allowance_exhausted`, reservations 3 before and after) while the run's stored limit
+    stayed 12; restoring the policy (revision 290) allowed the next call again. The first run (revision
+    240, before fd67778) had still reserved that call.
     Calls, tokens and time exhaustion are covered by lane f3's GO-39/GO-79 tests and not repeated
     live here.
   - Report: "Validation plan and evidence matrix" (Policy reload and rollback safety, Model allowlist and current reductions, Local model resources)
