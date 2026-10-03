@@ -85,8 +85,9 @@ type StatusCount struct {
 	Count  int64               `json:"count"`
 }
 
-// DecisionCount counts events per type, decision, reason and input source, so the summary
-// reconciles with the event records (X-104) and counts judge probes apart from agent decisions.
+// DecisionCount counts events per type, decision, reason, input source and rejection cause, so the
+// summary reconciles with the event records (X-104), counts judge probes apart from agent decisions
+// and rejected final answers by kind.
 type DecisionCount struct {
 	EventType  contracts.EventType      `json:"eventType"`
 	Decision   *contracts.EventDecision `json:"decision"`
@@ -94,7 +95,10 @@ type DecisionCount struct {
 	// InputSource is "judge" for a control evaluation of submitted judge input (GO-82), null for
 	// everything the run itself produced.
 	InputSource *string `json:"inputSource"`
-	Count       int64   `json:"count"`
+	// RejectionCause is the fixed kind of a rejected final answer (one of
+	// contracts.RejectionCauses), null on every other event; never model text.
+	RejectionCause *string `json:"rejectionCause"`
+	Count          int64   `json:"count"`
 }
 
 // AssessmentCount counts control assessments per control, outcome and verdict source.
@@ -354,35 +358,37 @@ func readSecuritySummary(ctx context.Context, tx pgx.Tx, organizationID string) 
 		return SecuritySummary{}, err
 	}
 
-	err = collect(ctx, tx, `SELECT event_type, decision, reason_code, masked_summary->>'inputSource' AS input_source, count(*)
+	err = collect(ctx, tx, `SELECT event_type, decision, reason_code, masked_summary->>'inputSource' AS input_source,
+			masked_summary->>'rejectionCause' AS rejection_cause, count(*)
 		FROM runtime.audit_events WHERE organization_id = $1
-		GROUP BY event_type, decision, reason_code, input_source
-		ORDER BY event_type, decision NULLS FIRST, reason_code NULLS FIRST, input_source NULLS FIRST`, organizationID, func(rows pgx.Rows) error {
-		var count DecisionCount
-		var decision, reason *string
-		if err := rows.Scan(&count.EventType, &decision, &reason, &count.InputSource, &count.Count); err != nil {
-			return err
-		}
-		if !optionalOneOf(count.InputSource, inputSources) {
-			return errMalformedRecord
-		}
-		if decision != nil {
-			value := contracts.EventDecision(*decision)
-			if !value.Valid() {
+		GROUP BY event_type, decision, reason_code, input_source, rejection_cause
+		ORDER BY event_type, decision NULLS FIRST, reason_code NULLS FIRST, input_source NULLS FIRST, rejection_cause NULLS FIRST`,
+		organizationID, func(rows pgx.Rows) error {
+			var count DecisionCount
+			var decision, reason *string
+			if err := rows.Scan(&count.EventType, &decision, &reason, &count.InputSource, &count.RejectionCause, &count.Count); err != nil {
+				return err
+			}
+			if !optionalOneOf(count.InputSource, inputSources) || !optionalOneOf(count.RejectionCause, contracts.RejectionCauses) {
 				return errMalformedRecord
 			}
-			count.Decision = &value
-		}
-		var err error
-		if count.ReasonCode, err = optionalReasonCode(reason); err != nil {
-			return err
-		}
-		if !count.EventType.Valid() {
-			return errMalformedRecord
-		}
-		summary.Decisions = append(summary.Decisions, count)
-		return nil
-	})
+			if decision != nil {
+				value := contracts.EventDecision(*decision)
+				if !value.Valid() {
+					return errMalformedRecord
+				}
+				count.Decision = &value
+			}
+			var err error
+			if count.ReasonCode, err = optionalReasonCode(reason); err != nil {
+				return err
+			}
+			if !count.EventType.Valid() {
+				return errMalformedRecord
+			}
+			summary.Decisions = append(summary.Decisions, count)
+			return nil
+		})
 	if err != nil {
 		return SecuritySummary{}, err
 	}

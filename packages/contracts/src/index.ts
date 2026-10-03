@@ -563,6 +563,15 @@ export interface DecisionCount {
   decision: SafeEventDecision | null;
   reasonCode: ReasonCode | null;
   inputSource: "judge" | null;
+  /** The fixed kind of a rejected final answer (GO-26), null on every other event; never model text. */
+  rejectionCause:
+    | "not_json"
+    | "extra_text"
+    | "code_fence"
+    | "wrong_status"
+    | "wrong_fields"
+    | "unknown_report"
+    | null;
   count: number;
 }
 
