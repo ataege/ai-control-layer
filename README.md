@@ -81,7 +81,7 @@ pnpm run setup          # report prerequisites, create .env with generated local
 pnpm infra:up           # start PostgreSQL in Docker and wait until it is healthy
 pnpm db:migration:run   # apply the migrations (app, runtime and demo schemas, service roles)
 pnpm db:roles           # give the gateway's database role its password from .env
-pnpm db:seed            # load the synthetic demo records and import config/policy.yaml
+pnpm db:seed            # load the synthetic demo records and import config/policy.yaml with its feed
 pnpm dev                # run web, api and gateway on the host (Ctrl+C stops all three)
 ```
 

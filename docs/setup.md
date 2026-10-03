@@ -122,10 +122,13 @@ pnpm db:seed
 
 An explicit command (SH-18, still a draft); nothing seeds at startup. It loads the synthetic vendors
 and invoices of `fixtures/demo-records.json` into the `demo` tables, then runs `pnpm policy:import`
-to import `config/policy.yaml` as the first control-catalog revision when the catalog is still
-empty. It is idempotent: a second run inserts nothing and never replaces a later catalog revision.
-It does not import the signature feed and does not seed organizations, users or memberships (see
-"Known gaps on a clean checkout" below). Details: the README, "`pnpm db:seed`".
+to import `config/policy.yaml` together with its signature feed `config/attack-signatures.json`
+as the requested control-catalog revision when the catalog is still empty. The import only
+requests the revision: the gateway validates and activates it within a second or two of starting,
+or run `pnpm catalog:activate` once to activate it without a gateway. It is idempotent: a second
+run inserts nothing and never replaces a later catalog revision. It does not seed organizations,
+users or memberships (see "Known gaps on a clean checkout" below). Details: the README,
+"`pnpm db:seed`".
 
 Later, `pnpm reset:demo` restores the demo data: it empties every `demo` and `runtime` table,
 reseeds the synthetic records in the same transaction and keeps the `app` data, including the
@@ -181,14 +184,13 @@ The volume, and therefore the data, is kept.
 
 ### Known gaps on a clean checkout
 
-After the steps above the three services start, but a task run cannot start or complete yet. These
-gaps are open roadmap work on `main`:
+After the steps above the three services start. These gaps remain on `main`:
 
-- **Admission fails closed until the signature feed is imported.** `pnpm db:seed` imports
-  `config/policy.yaml` but not `config/attack-signatures.json`, and the gateway treats a catalog
-  without its bound feed as no decision: a start-run command answers 503 `decision_unavailable`.
-  The feed import (the feed part of API-34) is not on `main` yet. That import is the supported way
-  to load the feed; there is no supported manual load.
+- **Admission fails closed until the catalog is active.** The seed and `pnpm policy:import` only
+  request a revision; until the gateway (or `pnpm catalog:activate`) validates and activates it,
+  a start-run command answers 503 `decision_unavailable`. A database first seeded by the older
+  import needs one more `pnpm policy:import` before `pnpm catalog:activate` succeeds. There is no
+  supported manual feed load.
 - **Approving needs a reviewer membership that nothing seeds yet.** The gateway accepts an
   approval only from an operator whose membership in `app.memberships` has the `reviewer` role. The
   seed of the demonstration operator, organization and membership (SH-19) does not exist yet.
