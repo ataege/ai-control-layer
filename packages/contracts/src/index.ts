@@ -196,7 +196,8 @@ export type ReasonCode =
   | "tool_not_allowed"
   | "decision_unavailable"
   | "content_blocked"
-  | "content_too_large";
+  | "content_too_large"
+  | "limit_not_allowed";
 
 /** The four registered tools. */
 export type ToolName = "read_invoice" | "read_vendor" | "create_report" | "queue_report";

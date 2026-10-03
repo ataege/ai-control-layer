@@ -5,11 +5,13 @@ authenticated ping route and a PostgreSQL connection pool. It contains infrastru
 
 ## Routes
 
-| Route                | Purpose                                                                                |
-| -------------------- | -------------------------------------------------------------------------------------- |
-| `GET /health/live`   | Process liveness. Never touches PostgreSQL.                                            |
-| `GET /health/ready`  | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.        |
-| `GET /internal/ping` | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database. |
+| Route                                           | Purpose                                                                                                           |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `GET /health/live`                              | Process liveness. Never touches PostgreSQL.                                                                       |
+| `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, else `503`.                                   |
+| `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                            |
+| `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable`. |
+| `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                |
 
 Internal product commands are registered through `httpserver.Options.InternalCommands`, which
 always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
@@ -108,6 +110,8 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `internal/contracts`       | Go lane 3c (repository, admission, passport, API)             |
 | `internal/repository`      | Go lane 3c (repository, admission, passport, API)             |
 | `internal/operatorcontext` | Go lane 3c (repository, admission, passport, API)             |
+| `internal/admission`       | Go lane 3c (repository, admission, passport, API)             |
+| `internal/api`             | Go lane 3c (repository, admission, passport, API)             |
 | `internal/tools`           | Go lane w2 (tools and provenance)                             |
 | `internal/policy`          | Go lane w3 (action gate and approvals)                        |
 | `internal/security`        | Go lane c1 (hybrid security controls)                         |
@@ -136,6 +140,8 @@ internal/worker/      durable runtime.jobs claims with a fenced, renewed lease (
 internal/agent/       one governed agent model step: one action, a final answer or a rejection (GO-10)
 internal/repository/  runtime passports, runs, jobs and events; guarded run transitions (GO-19)
 internal/operatorcontext/ X-Operator-Context HS256 verification and the verified operator (GO-21)
+internal/admission/   start-run admission: passport, run, job and token ledger in one transaction (GO-13)
+internal/api/         internal product routes and their mounting (GO-14; GO-37 mount)
 scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of the build)
 ```
 
@@ -387,6 +393,49 @@ Idempotency and retries follow the stable action identity:
   GO-02 requires, otherwise persist an unknown outcome and pause; never retry blindly.
 
 The simulated outbox creates a database record and sends no email.
+
+## Bounded agent loop (GO-11)
+
+`agent.Loop` is the `worker.Handler` for `contracts.JobKindAgentStep` jobs. Per claim it runs up
+to 64 steps (a safety bound; the passport's agent call limit is the real step limit) and, before
+every model request, rereads the run and passport:
+
+- queued → `running` (`run.started`); terminal, awaiting approval or paused → nothing to do;
+- a cancellation request → `stopped` / `run_cancelled`; an expired passport → `stopped` /
+  `run_expired`; agent steps used up (`model_calls` with purpose `agent` ≥ `callsAgent`) →
+  `paused` / `allowance_exhausted` (alignment decision 7). None of these sends a model request.
+
+Each step: `Stepper.Step` (GO-10) with the fixed task message built from the passport's opaque
+references plus the stored steps; then, by result:
+
+- one proposal → `policy.Gate.Evaluate` with a fresh action id and idempotency key. A denial stops
+  the run with the gate's reason (GO-29 adds bounded correction); approval required →
+  `awaiting_approval` (`approval.requested`, GO-40 resumes); allow → `policy.Executor.Execute`,
+  then the tool-result inspection, then the step's call and inspected result are appended to
+  `runtime.context_entries` and the loop continues;
+- several tool calls → `stopped` / `multiple_actions_not_supported` (GO-01);
+- a final answer → `completed` (GO-26 adds the narrow result validation);
+- a model failure: exhausted or paused allowance and overspend → `paused` / `allowance_exhausted`;
+  unknown usage or timeout → `paused` / `outcome_unknown`; model outside the passport → `stopped` /
+  `model_not_allowed`; anything else → `failed` / `decision_unavailable`. Nothing retries.
+
+Run changes go through `repository.Tx.TransitionRun` with their event; a change another writer
+already made (a cancellation) is accepted. A cancelled claim context returns an error and leaves
+the job for lease expiry.
+
+**Stored context (`runtime.context_entries`, migration `1791070000000-AddAgentContextEntries`).**
+Append-only (gateway `SELECT, INSERT`): per executed step one `assistant_call` (tool and the gate's
+canonical arguments) and one `tool_result` holding only the inspected content. A restarted worker
+rebuilds the same request from these rows and never re-executes a completed action (GO-02, GO-07).
+jsonb re-renders stored JSON; the loop compacts it, and jsonb key order is deterministic.
+
+**Interim inspector.** Until c1's `InspectToolResult` (GO-76) is wired, `InterimUntrustedTextGuard`
+pauses the run (`security_evaluator_unavailable`) for any result carrying untrusted text and passes
+results without any. It is not a protection.
+
+Not wired into the gateway process yet: the production scope reader and admission (GO-13) are
+needed for a live run; the wiring commit adds `worker.Service`, this handler and the readiness
+reporter to `cmd/gateway/main.go`.
 
 ## Deterministic content controls (GO-74)
 

@@ -15,12 +15,15 @@ import (
 	"syscall"
 	"time"
 
+	"starter/services/gateway/internal/admission"
+	"starter/services/gateway/internal/api"
 	"starter/services/gateway/internal/config"
 	"starter/services/gateway/internal/database"
 	"starter/services/gateway/internal/health"
 	"starter/services/gateway/internal/httpserver"
 	"starter/services/gateway/internal/logging"
 	"starter/services/gateway/internal/operatorcontext"
+	"starter/services/gateway/internal/repository"
 )
 
 const (
@@ -82,6 +85,10 @@ func run() error {
 		Health:          health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger},
 		ServiceToken:    loadedConfig.ServiceToken,
 		OperatorContext: operatorContextVerifier,
+		InternalCommands: api.Commands(api.Dependencies{
+			Admitter: admission.New(repository.New(pool)),
+			Database: pool,
+		}),
 	})
 	listenAddress := net.JoinHostPort(loadedConfig.Host, strconv.Itoa(loadedConfig.Port))
 	server := httpserver.NewServer(listenAddress, handler, logger)
