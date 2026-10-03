@@ -343,10 +343,20 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 		EventType: contracts.EventControlEvaluated, Decision: pointer(contracts.DecisionDeny), ReasonCode: pointer(contracts.ReasonSignatureMatch)}); err != nil {
 		t.Fatal(err)
 	}
-	// The same decision from a judge's probe (GO-82) is counted apart from the run's own.
+	// The same decision from a judge's probe (GO-82) is counted apart from the run's own: its
+	// event, its assessment (linked by the evaluation id) and its security call.
+	judgeEvaluationID, judgeCallID := testdb.ID(t), testdb.ID(t)
+	insert(t, tx, `INSERT INTO runtime.model_calls (id, organization_id, run_id, purpose, model, outcome)
+	               VALUES ($1, $2, $3, 'security', 'local-model', 'completed')`, judgeCallID, organizationID, runID)
+	insert(t, tx, `INSERT INTO runtime.control_assessments (organization_id, run_id, evaluation_id, security_model_call_id,
+	                 boundary, control_class, control_id, outcome, reason_code, admission_catalog_revision_id,
+	                 evaluated_catalog_revision_id, verdict_source, verdict)
+	               VALUES ($1, $2, $3, $4, 'model_input', 'semantic', 'semantic_injection', 'block', 'semantic_injection_detected', 1, 1, 'live',
+	                       '{"risk_category":"instruction_injection","score":0.97,"reason_code":"instruction_override"}')`,
+		organizationID, runID, judgeEvaluationID, judgeCallID)
 	if _, err := repository.Join(tx).AppendEvent(ctx, repository.NewEvent{OrganizationID: organizationID, RunID: &runID,
 		EventType: contracts.EventControlEvaluated, Decision: pointer(contracts.DecisionDeny), ReasonCode: pointer(contracts.ReasonSignatureMatch),
-		MaskedSummary: contracts.MaskedSummary{InputSource: pointer("judge"), ActorID: pointer(testdb.ID(t))}}); err != nil {
+		MaskedSummary: contracts.MaskedSummary{InputSource: pointer("judge"), ActorID: pointer(testdb.ID(t)), EvaluationID: &judgeEvaluationID}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -369,11 +379,13 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 		rawPages = append(rawPages, recorder.Body.String())
 		records = append(records, page.Records...)
 		cursor = page.NextCursor
-		return len(records) >= 3
+		return len(records) >= 4
 	})
-	if len(records) != 3 || records[0].ControlClass != "deterministic" || records[0].VerdictSource != nil ||
+	if len(records) != 4 || records[0].ControlClass != "deterministic" || records[0].VerdictSource != nil ||
 		*records[0].MatchedRuleID != "sig_override_001" || *records[1].VerdictSource != "live" || records[1].Verdict.Score != 0.93 ||
-		*records[1].SecurityModelCallID != securityCallID || *records[2].VerdictSource != "fixture" {
+		*records[1].SecurityModelCallID != securityCallID || *records[2].VerdictSource != "fixture" ||
+		records[0].InputSource != nil || records[3].InputSource == nil || *records[3].InputSource != "judge" ||
+		*records[3].SecurityModelCallID != judgeCallID {
 		t.Fatalf("records %+v", records)
 	}
 	t.Logf("evidence GO-83: assessment pages %s", strings.Join(rawPages, " | "))
@@ -383,10 +395,11 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 	if recorder.Code != http.StatusOK || contracts.DecodeStrict(recorder.Body.Bytes(), &summary) != nil {
 		t.Fatalf("summary %d: %s", recorder.Code, recorder.Body.String())
 	}
-	live, fixture := "live", "fixture"
+	live, fixture, judge := "live", "fixture", "judge"
 	wantAssessments := []AssessmentCount{
 		{ControlClass: "deterministic", ControlID: "signature_match", Outcome: "block", Count: 1},
 		{ControlClass: "semantic", ControlID: "semantic_injection", Outcome: "block", VerdictSource: &live, Count: 1},
+		{ControlClass: "semantic", ControlID: "semantic_injection", Outcome: "block", VerdictSource: &live, InputSource: &judge, Count: 1},
 		{ControlClass: "semantic", ControlID: "semantic_injection", Outcome: "pass", VerdictSource: &fixture, Count: 1},
 	}
 	if len(summary.Assessments) != len(wantAssessments) {
@@ -396,7 +409,8 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 		got := summary.Assessments[index]
 		if got.ControlClass != want.ControlClass || got.ControlID != want.ControlID || got.Outcome != want.Outcome ||
 			got.Count != want.Count || (got.VerdictSource == nil) != (want.VerdictSource == nil) ||
-			(got.VerdictSource != nil && *got.VerdictSource != *want.VerdictSource) {
+			(got.VerdictSource != nil && *got.VerdictSource != *want.VerdictSource) ||
+			(got.InputSource == nil) != (want.InputSource == nil) {
 			t.Fatalf("assessment count %d: %+v, want %+v", index, got, want)
 		}
 	}
@@ -405,7 +419,7 @@ func TestPostgresSecurityRecordsAndSummary(t *testing.T) {
 		len(summary.Runs) != 1 || summary.Runs[0] != (StatusCount{Status: contracts.RunRunning, Count: 1}) ||
 		len(summary.Decisions) != 2 || summary.Decisions[0].Count != 1 || *summary.Decisions[0].ReasonCode != contracts.ReasonSignatureMatch ||
 		summary.Decisions[0].InputSource != nil || summary.Decisions[1].InputSource == nil || *summary.Decisions[1].InputSource != "judge" ||
-		summary.ModelUsage[1].Completed != 1 || summary.OrganizationID != organizationID {
+		summary.ModelUsage[1].Completed != 2 || summary.JudgeSecurityCalls != 1 || summary.OrganizationID != organizationID {
 		t.Fatalf("summary %s", recorder.Body.String())
 	}
 	t.Logf("evidence GO-83: summary %s", recorder.Body.String())
