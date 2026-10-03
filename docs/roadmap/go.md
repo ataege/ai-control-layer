@@ -2967,6 +2967,13 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     appears once its transaction is final); another organization gets only its own empty
     records (this test and 3c's GO-57). The record shapes are Go drafts until nestjs lands them
     in `packages/contracts` for API-35 and API-36.
+  - Completed (2026-10-04): `judgeSecurityCalls` counts every judge security call that the
+    semantic evaluator linked to its assessment, errored ones included (timeout and transport
+    failures keep unknown usage and are linked): `TestPostgresSecuritySummaryCountsErroredJudgeSecurityCalls`
+    PASS, `pnpm test:db gateway` 961 passed, 0 failed, 0 skipped. Known limit: a judge security call
+    refused before dispatch (allowance exhausted or paused) is counted in `modelUsage`, not in
+    `judgeSecurityCalls`, because the evaluator links only dispatched calls and `model_calls` has no
+    evaluation id; the lead decided to document it instead of changing the evaluator.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 
