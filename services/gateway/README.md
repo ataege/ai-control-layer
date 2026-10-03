@@ -575,7 +575,9 @@ required while `signature_match` is enabled.
 `config/attack-signatures.json` is the sample feed: issuer `task-passport-security`, revision
 `feed_v1`, SHA-256 `c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244` (of the
 committed bytes). The import (API-34) stores these bytes as `source_text` with
-this digest as `file_digest`; any other bytes fail `ParseFeed`. There is no signing key: the trust
+this digest as `file_digest`; any other bytes fail `ParseFeed`. The revision is the lookup key: GO-73 finds the
+feed by `signatures.revision` alone, so the import stores each revision once across issuers, and
+`issuer` is audit metadata. There is no signing key: the trust
 decision is the digest pin plus the authenticated import, so the roadmap's "broken signature"
 acceptance case is a copy whose bytes differ from the pinned digest.
 
@@ -713,8 +715,8 @@ Three tests in `internal/security` produce the evidence lines (`evidence X-96`, 
 GO_SECURITY_LIVE=1 GO_SECURITY_EVIDENCE_FILE=/tmp/x96.json MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway test -tags=model_live ./internal/security -run '^TestLiveSemanticCorpus$' -count=1 -v -timeout 20m
 ```
 
-It sends the 21 benign and attack cases of `fixtures/semantic-corpus.json` (version 2; the six
-secret cases belong to X-99) and the three hostile notes through the real evaluator, records each
+It sends the 21 benign and attack cases of `fixtures/semantic-corpus.json` (version 2: 27 cases,
+less the six secret cases, which belong to X-99) and the three hostile notes through the real evaluator, records each
 verdict, outcome, usage and provider time, writes the JSON results file, and runs each hostile note
 through `InspectToolResult` to check that a non-passing note never appears in the would-be agent
 context. Guard failures fail the test; `GO_SECURITY_LIVE_STRICT=1` also fails it on any label
@@ -736,6 +738,9 @@ detection rate. The model is not deterministic, so the runs differ:
   Internal only report, which the gate denies (X-97).
 - Run 2 also missed `signature_code_exec_import_v1` (score 0.05). The `code_exec_python_import_v1`
   signature rule blocks that text deterministically before the semantic check (GO-78).
+- Run 1 used the first version of the test, which did not record pipeline verdicts; its pipeline
+  count comes from the written results file (`context_withheld: false` for one note), not a logged
+  verdict. Run 2 logs both evaluations of each hostile note.
 - `hostile_note_internal_disclosure_v1` scored exactly 0.75 in run 1's direct check (blocked, `>=`),
   but its independent pipeline evaluation in the same run let it pass, so that note would have
   reached the agent context; in run 2 both evaluations blocked it. The deterministic export denial

@@ -39,7 +39,9 @@ next to the policy file; the feed half of API-34), and then, in one transaction:
   and bytes reuse the stored row), and makes the revision the requested revision. It prints
   "requested revision N; the gateway validates and activates it" and exits 0. The import never
   activates: the gateway validates the requested revision and switches the active revision and feed
-  together (GO-73, `catalog activation protocol`).
+  together (GO-73, `catalog activation protocol`). Until GO-73's activation is on `main`, nothing
+  activates a requested revision, so a fresh database has no active catalog and the gateway stays
+  not ready.
 - **Invalid file or feed:** stores nothing. It records the reason (`policy_reload_rejected`), the file
   digest and up to 20 issues on the pointer (`app.control_catalog_pointer`); the active revision
   stays. Exit code 1. A feed is refused when Go would refuse it (`ParseFeed` grammar), when its
