@@ -67,3 +67,22 @@ func (callLog *CallLog) RecordOutcome(ctx context.Context, organizationID, callI
 	}
 	return nil
 }
+
+// CountAgentCalls returns how many agent-purpose calls the run has dispatched. The agent loop uses
+// it as the run's step count: one agent call per step, whatever the step produced.
+func (callLog *CallLog) CountAgentCalls(ctx context.Context, organizationID, runID string) (int, error) {
+	if callLog == nil || callLog.pool == nil {
+		return 0, ErrUnavailable
+	}
+	if organizationID == "" || runID == "" {
+		return 0, ErrInvalid
+	}
+	var count int
+	err := callLog.pool.QueryRow(ctx, `
+		SELECT count(*) FROM runtime.model_calls
+		WHERE organization_id = $1 AND run_id = $2 AND purpose = 'agent'`, organizationID, runID).Scan(&count)
+	if err != nil {
+		return 0, ErrUnavailable
+	}
+	return count, nil
+}

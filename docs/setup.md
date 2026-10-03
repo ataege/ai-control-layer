@@ -469,11 +469,24 @@ Open <http://localhost:3000>.
 
 ### Between rehearsals and before judging
 
-- Reset the demonstration data with `pnpm reset:demo` or `make reset-demo` (SH-29, not on `main`
-  yet). Do not remove the database volume as a reset: that deletes every table, and the migrations
+- Reset the demonstration data with `pnpm reset:demo` (SH-29; the `make reset-demo` target is not
+  on `main` yet). Do not remove the database volume as a reset: that deletes every table, and the migrations
   and seeds would have to run again.
 - Run the control suite with `pnpm verify:controls` or `make verify-controls` (SH-47, not on `main`
   yet) and keep its machine-readable result with the build's commit hash.
+
+### Attack-signature feed
+
+The feed `config/attack-signatures.json` (SH-46) is a closed JSON schema of data-only rules:
+pattern type `normalized_substring`, response `block`, and boundaries taken from the policy's
+three. The import stores the file bytes and their SHA-256 (`file_digest`). Go accepts only those
+bytes (`security.ParseFeed`) and requires the feed revision to equal `signatures.revision` in
+`config/policy.yaml`, and every `disabled_rules` ID to exist in the feed. There is no signing key:
+trust is the authenticated import plus the digest pin, which proves the integrity of the imported
+bytes, not who issued them. The file is listed in `.prettierignore`, so formatting never changes
+its digest. To change the feed, follow "Signature feed matching and catalog settings (GO-78)" in
+`services/gateway/README.md`: edit the file, bump its revision, recompute the digest and import
+it with the matching `signatures.revision`. The feed import itself (API-34) is not on `main` yet.
 
 ### Stop
 
