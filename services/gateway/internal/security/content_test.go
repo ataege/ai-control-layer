@@ -26,6 +26,7 @@ type corpusCase struct {
 	Text            string         `json:"text"`
 	ExpectedOutcome string         `json:"expected_outcome"`
 	Secrets         []corpusSecret `json:"secrets"`
+	SignatureRule   string         `json:"signature_rule"`
 }
 
 func loadCorpus(t *testing.T) []corpusCase {

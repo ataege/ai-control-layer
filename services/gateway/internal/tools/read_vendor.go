@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"starter/services/gateway/internal/contracts"
 )
 
 // readVendorArguments are the X-09 arguments of read_vendor.
@@ -35,7 +37,7 @@ func readVendor(ctx context.Context, tx pgx.Tx, current scope, rawArguments json
 		return adapterOutcome{}, fmt.Errorf("%w: vendor_id is required", errPrecondition)
 	}
 	if !current.allowsVendor(arguments.VendorID) {
-		return failed(ReasonResourceOutOfScope, "action.failed", arguments.VendorID), nil
+		return failed(ReasonResourceOutOfScope), nil
 	}
 
 	var result VendorResult
@@ -51,7 +53,7 @@ func readVendor(ctx context.Context, tx pgx.Tx, current scope, rawArguments json
 	).Scan(&result.VendorID, &result.Version, &result.Name, &hasRegisteredAddress)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Another organization's vendor, an unlinked vendor and a missing one look the same.
-		return failed(ReasonResourceOutOfScope, "action.failed", arguments.VendorID), nil
+		return failed(ReasonResourceOutOfScope), nil
 	}
 	if err != nil {
 		return adapterOutcome{}, fmt.Errorf("tools: read vendor: %w", err)
@@ -60,11 +62,7 @@ func readVendor(ctx context.Context, tx pgx.Tx, current scope, rawArguments json
 		reference := recipientReference(current.runID, result.VendorID)
 		result.RecipientReference = &reference
 	}
-	return adapterOutcome{
-		result:     EffectResult{Outcome: OutcomeSucceeded, ModelFacing: result},
-		eventType:  "action.succeeded",
-		resourceID: result.VendorID,
-	}, nil
+	return succeeded(result, contracts.EventActionSucceeded, contracts.MaskedSummary{Effect: text("read")}), nil
 }
 
 // recipientReference is the opaque, run-scoped reference for a vendor's registered reporting

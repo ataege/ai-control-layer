@@ -69,6 +69,61 @@ func (evaluator *fakeEvaluator) EvaluateAction(context.Context, RunIdentity, Sto
 	return evaluator.outcome, evaluator.reason, evaluator.err
 }
 
+// fakeRelationships answers from fixed sets: vendor -> linked invoices, and reports created in the
+// test run. err makes every lookup fail.
+type fakeRelationships struct {
+	vendorInvoices map[string][]string
+	runReports     map[string]ExportVerdict
+	err            error
+}
+
+func (relationships *fakeRelationships) VendorLinkedToInvoices(_ context.Context, organizationID, vendorID string, invoiceIDs []string) (bool, error) {
+	if relationships.err != nil {
+		return false, relationships.err
+	}
+	if organizationID != testOrganizationID {
+		return false, nil
+	}
+	for _, linkedInvoice := range relationships.vendorInvoices[vendorID] {
+		if containsString(invoiceIDs, linkedInvoice) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (relationships *fakeRelationships) ReportExport(_ context.Context, organizationID, runID, reportID string) (ExportVerdict, error) {
+	if relationships.err != nil {
+		return ExportVerdict{}, relationships.err
+	}
+	if organizationID != testOrganizationID || runID != testRunID {
+		return ExportVerdict{}, nil
+	}
+	verdict, found := relationships.runReports[reportID]
+	if !found {
+		return ExportVerdict{}, nil
+	}
+	verdict.Found = true
+	return verdict, nil
+}
+
+const (
+	testReportID     = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+	internalReportID = "12121212-1212-4121-8121-121212121212"
+	brokenReportID   = "34343434-3434-4343-8343-343434343434"
+)
+
+func atlasRelationships() *fakeRelationships {
+	return &fakeRelationships{
+		vendorInvoices: map[string][]string{"vendor_atlas": {"invoice_A01", "invoice_A02"}, "vendor_borealis": {"invoice_C01"}},
+		runReports: map[string]ExportVerdict{
+			testReportID:     {Allowed: true},
+			internalReportID: {ReasonCode: ReasonReportExportRestricted, AlternativeTemplate: TemplateVendorReconciliation},
+			brokenReportID:   {ReasonCode: ReasonReportLineageMissing},
+		},
+	}
+}
+
 func atlasScope() PassportScope {
 	return PassportScope{
 		OrganizationID:        testOrganizationID,
@@ -92,7 +147,7 @@ func proposal(tool, rawArguments string) Proposal {
 func newTestGate(scope PassportScope) (*Gate, *fakeScopes, *fakeRecorder) {
 	scopes := &fakeScopes{scope: scope, revision: 3}
 	recorder := &fakeRecorder{}
-	return NewGate(scopes, recorder, nil), scopes, recorder
+	return NewGate(scopes, recorder, atlasRelationships(), nil), scopes, recorder
 }
 
 func TestGateDecisions(t *testing.T) {
@@ -117,7 +172,7 @@ func TestGateDecisions(t *testing.T) {
 		{"report source outside the passport", "create_report", `{"template":"internal_investigation_v1","source_invoice_ids":["invoice_A01","invoice_B01"]}`, nil, OutcomeDeny, ReasonResourceOutOfScope, true},
 		{"template not in passport", "create_report", `{"template":"vendor_reconciliation_v1","source_invoice_ids":["invoice_A01"]}`, func(scope *PassportScope) { scope.AllowedTemplates = []string{TemplateInternalInvestigation} }, OutcomeDeny, ReasonTemplateNotAllowed, true},
 		{"recipient not in passport", "queue_report", `{"report_id":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","recipient_reference":"recipient:other"}`, nil, OutcomeDeny, ReasonDestinationNotAllowed, true},
-		{"expired passport", "read_invoice", `{"invoice_id":"invoice_A01"}`, func(scope *PassportScope) { scope.ExpiresAt = time.Now().Add(-time.Second) }, OutcomeDeny, ReasonRunCancelled, true},
+		{"expired passport", "read_invoice", `{"invoice_id":"invoice_A01"}`, func(scope *PassportScope) { scope.ExpiresAt = time.Now().Add(-time.Second) }, OutcomeDeny, ReasonRunExpired, true},
 		{"scope of another organization", "read_invoice", `{"invoice_id":"invoice_A01"}`, func(scope *PassportScope) { scope.OrganizationID = "ffffffff-ffff-4fff-8fff-ffffffffffff" }, OutcomeDeny, ReasonDecisionUnavailable, false},
 	}
 	for _, testCase := range cases {
@@ -217,13 +272,89 @@ func TestSemanticCheckRestrictsButNeverGrants(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, &fakeRecorder{}, testCase.evaluator)
+			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, &fakeRecorder{}, atlasRelationships(), testCase.evaluator)
 			decision := gate.Evaluate(context.Background(), testRun(), testCase.proposal)
 			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason {
 				t.Fatalf("decision = %s/%s, want %s/%s", decision.Outcome, decision.ReasonCode, testCase.wantOutcome, testCase.wantReason)
 			}
 			if testCase.evaluator.calls != testCase.wantCalls {
 				t.Fatalf("evaluator calls = %d, want %d", testCase.evaluator.calls, testCase.wantCalls)
+			}
+		})
+	}
+}
+
+func TestGateChecksArgumentRelationships(t *testing.T) {
+	otherRunRecipient := "recipient:ffffffff-ffff-4fff-8fff-ffffffffffff:vendor_atlas"
+	cases := []struct {
+		name          string
+		tool          string
+		arguments     string
+		adjustScope   func(*PassportScope)
+		relationships *fakeRelationships
+		wantOutcome   Outcome
+		wantReason    ReasonCode
+	}{
+		{"vendor of a passport invoice", "read_vendor", `{"vendor_id":"vendor_atlas"}`, nil, atlasRelationships(), OutcomeAllow, ""},
+		{"vendor not linked to a passport invoice", "read_vendor", `{"vendor_id":"vendor_borealis"}`, nil, atlasRelationships(), OutcomeDeny, ReasonResourceOutOfScope},
+		{"unknown vendor", "read_vendor", `{"vendor_id":"vendor_nobody"}`, nil, atlasRelationships(), OutcomeDeny, ReasonResourceOutOfScope},
+		{"vendor read without any passport invoice", "read_vendor", `{"vendor_id":"vendor_atlas"}`, func(scope *PassportScope) { scope.AllowedInvoiceIDs = nil }, atlasRelationships(), OutcomeDeny, ReasonResourceOutOfScope},
+		{"report created in this run", "queue_report", `{"report_id":"` + testReportID + `","recipient_reference":"` + testRecipient + `"}`, nil, atlasRelationships(), OutcomeApprovalRequired, ReasonApprovalRequired},
+		{"report of another run", "queue_report", `{"report_id":"99999999-9999-4999-8999-999999999999","recipient_reference":"` + testRecipient + `"}`, nil, atlasRelationships(), OutcomeDeny, ReasonResourceOutOfScope},
+		{"recipient taken from invoice text", "queue_report", `{"report_id":"` + testReportID + `","recipient_reference":"reports@atlas.example.com"}`, nil, atlasRelationships(), OutcomeDeny, ReasonDestinationNotAllowed},
+		{"recipient reference of another run, even if listed", "queue_report", `{"report_id":"` + testReportID + `","recipient_reference":"` + otherRunRecipient + `"}`, func(scope *PassportScope) {
+			scope.RecipientReferences = append(scope.RecipientReferences, otherRunRecipient)
+		}, atlasRelationships(), OutcomeDeny, ReasonDestinationNotAllowed},
+		{"unregistered template", "create_report", `{"template":"public_summary_v1","source_invoice_ids":["invoice_A01"]}`, nil, atlasRelationships(), OutcomeDeny, ReasonInvalidArguments},
+		{"unreadable vendor record denies", "read_vendor", `{"vendor_id":"vendor_atlas"}`, nil, &fakeRelationships{err: errors.New("database down")}, OutcomeDeny, ReasonDecisionUnavailable},
+		{"unreadable report record denies", "queue_report", `{"report_id":"` + testReportID + `","recipient_reference":"` + testRecipient + `"}`, nil, &fakeRelationships{err: errors.New("database down")}, OutcomeDeny, ReasonDecisionUnavailable},
+		{"no relationship reader denies", "read_vendor", `{"vendor_id":"vendor_atlas"}`, nil, nil, OutcomeDeny, ReasonResourceOutOfScope},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			scope := atlasScope()
+			if testCase.adjustScope != nil {
+				testCase.adjustScope(&scope)
+			}
+			var relationships RelationshipReader
+			if testCase.relationships != nil {
+				relationships = testCase.relationships
+			}
+			gate := NewGate(&fakeScopes{scope: scope, revision: 3}, &fakeRecorder{}, relationships, nil)
+			decision := gate.Evaluate(context.Background(), testRun(), proposal(testCase.tool, testCase.arguments))
+			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason {
+				t.Fatalf("decision = %s/%s, want %s/%s", decision.Outcome, decision.ReasonCode, testCase.wantOutcome, testCase.wantReason)
+			}
+		})
+	}
+}
+
+func TestRestrictedExportIsDeniedBeforeReview(t *testing.T) {
+	cases := []struct {
+		name            string
+		reportID        string
+		wantOutcome     Outcome
+		wantReason      ReasonCode
+		wantAlternative string
+	}{
+		{"vendor shareable report goes to review", testReportID, OutcomeApprovalRequired, ReasonApprovalRequired, ""},
+		{"internal only report is denied, not reviewed", internalReportID, OutcomeDeny, ReasonReportExportRestricted, TemplateVendorReconciliation},
+		{"report without trusted lineage is denied", brokenReportID, OutcomeDeny, ReasonReportLineageMissing, ""},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			evaluator := &fakeEvaluator{outcome: OutcomeAllow}
+			recorder := &fakeRecorder{}
+			gate := NewGate(&fakeScopes{scope: atlasScope(), revision: 3}, recorder, atlasRelationships(), evaluator)
+			decision := gate.Evaluate(context.Background(), testRun(),
+				proposal("queue_report", `{"report_id":"`+testCase.reportID+`","recipient_reference":"`+testRecipient+`"}`))
+			if decision.Outcome != testCase.wantOutcome || decision.ReasonCode != testCase.wantReason ||
+				decision.AlternativeTemplate != testCase.wantAlternative {
+				t.Fatalf("decision = %s/%s/%q, want %s/%s/%q", decision.Outcome, decision.ReasonCode, decision.AlternativeTemplate,
+					testCase.wantOutcome, testCase.wantReason, testCase.wantAlternative)
+			}
+			if testCase.wantOutcome == OutcomeDeny && evaluator.calls != 0 {
+				t.Fatal("a restricted export reached the semantic check")
 			}
 		})
 	}

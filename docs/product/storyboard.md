@@ -140,7 +140,14 @@ sets the timing from the rehearsal on the final build.
 
 ## Open items this storyboard depends on
 
-`rename operation` (beat 6), `replay entry` (X-65), `vendor projection fields` (beat 7),
-`redaction rules` (beat 10), `classifier prompt and verdict schema` (beat 10), `judge access`
+Open: `rename operation` (beat 6), the classifier prompt's tested limits (beat 10), `judge access`
 (judge interactions), `catalog activation protocol` (beat 11), `measurement method` (beat 12),
 `test command` (beat 12).
+
+Decided (see `docs/product/README.md`): the replay entry (GO-05: a labelled Go runtime scenario
+test, no interface trigger, so no X-65), and, by the lead's delegate on 3 October 2026, `vendor
+projection fields` (beat 7: invoice reference, external reference, duplicate-reference flag,
+currency, total, due date), `redaction rules` and the verdict schema (beat 10: semantic calls only
+on the internal note; a blocked field is withheld while the others return), and `feed grammar and
+trust` (beats 10 and 11: four normalized-substring rules in `config/attack-signatures.json`,
+trusted by authenticated import and SHA-256, not signed).

@@ -99,6 +99,33 @@ test("the report's sample signature phrase appears in a tool result", () => {
   }
 });
 
+// Feed rule patterns (config/attack-signatures.json, SH-46): a case labelled with a rule holds its
+// pattern after the feed's normalization (lowercase, collapsed whitespace).
+const FEED_PATTERNS = {
+  prompt_ignore_previous_v1: "ignore previous instructions",
+  code_exec_python_import_v1: "__import__(",
+  unsafe_deserialization_pickle_v1: "pickle.loads(",
+  model_repo_trust_remote_code_v1: "trust_remote_code=true",
+};
+
+test("signature cases: each names a feed rule, holds its pattern and expects a block", () => {
+  const signatureCases = semanticCorpus.cases.filter(
+    (corpusCase) => "signature_rule" in corpusCase,
+  );
+  const rules = new Set(signatureCases.map((corpusCase) => corpusCase.signature_rule));
+  for (const rule of Object.keys(FEED_PATTERNS).filter(
+    (rule) => rule !== "prompt_ignore_previous_v1",
+  )) {
+    assert.ok(rules.has(rule), `no positive case for ${rule}`);
+  }
+  for (const corpusCase of signatureCases) {
+    const pattern = FEED_PATTERNS[corpusCase.signature_rule];
+    assert.ok(pattern, `${corpusCase.id}: unknown rule ${corpusCase.signature_rule}`);
+    assert.equal(corpusCase.expected_outcome, "block", corpusCase.id);
+    assert.ok(corpusCase.text.toLowerCase().replace(/\s+/g, " ").includes(pattern), corpusCase.id);
+  }
+});
+
 // Demo records (SH-25 data): internal consistency, so the later seed loads a coherent scenario.
 const demoRecords = readFixture("./demo-records.json");
 // Column names of demo.vendors and demo.invoices (SH-17 plus 1791060000000's provenance columns).

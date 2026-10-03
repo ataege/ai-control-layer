@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "issuer": "task-passport-security",
+  "revision": "feed_v1",
+  "description": "Sample managed attack-signature feed for the Task Passport control layer. Every rule is inert data: a plain substring matched against normalized text at the inspected boundaries. Nothing in this file is executed.",
+  "scope": "Text matches at the control layer's inspected boundaries (model input, tool results, action proposals) only. Task Passport does not download models, load model files or deserialize data, so these rules do not protect model-loading, deserialization or supply-chain infrastructure, and a paraphrased or encoded attack is not matched. Legitimate text quoting a pattern is blocked and recorded as a false positive.",
+  "rules": [
+    {
+      "id": "prompt_ignore_previous_v1",
+      "attack_class": "instruction_redirection",
+      "description": "The report's harmless sample rule: a known instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "ignore previous instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "code_exec_python_import_v1",
+      "attack_class": "malicious_code_execution",
+      "description": "Text steering an LLM application towards evaluating Python that imports modules dynamically.",
+      "pattern_type": "normalized_substring",
+      "pattern": "__import__(",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "S16: CVE-2023-44467 (LangChain PALChain), execute arbitrary code via __import__ in Python code",
+        "S17: CVE-2023-36258 (os.system, exec, eval)"
+      ]
+    },
+    {
+      "id": "unsafe_deserialization_pickle_v1",
+      "attack_class": "unsafe_deserialization",
+      "description": "Text steering an agent or tool towards Python pickle loading, which runs code embedded in the data.",
+      "pattern_type": "normalized_substring",
+      "pattern": "pickle.loads(",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": ["Criteria section 4.4, unsafe deserialization; docs/product/requirements.md D-5"]
+    },
+    {
+      "id": "model_repo_trust_remote_code_v1",
+      "attack_class": "model_repository_supply_chain",
+      "description": "Text steering a loader towards running code shipped in a model repository.",
+      "pattern_type": "normalized_substring",
+      "pattern": "trust_remote_code=true",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "S15: Transformers documentation, trust_remote_code will execute code present on the Hub on your local machine"
+      ]
+    }
+  ]
+}
