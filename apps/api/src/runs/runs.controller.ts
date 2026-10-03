@@ -21,6 +21,7 @@ import type {
   RunEventsPage,
   RunState,
   RunUsage,
+  ReportView,
 } from "@workspace/contracts";
 import type { Request } from "express";
 import { z } from "zod";
@@ -29,6 +30,7 @@ import { GatewayClientService } from "../gateway-client/gateway-client.service.j
 import { StartRunSchema } from "./dto/start-run.dto.js";
 import { RunEventsSchema } from "./run-events.schema.js";
 import { RunStateSchema, RunUsageSchema } from "./run-read.schemas.js";
+import { ReportViewSchema } from "./report-view.schema.js";
 import {
   gatewayData,
   requireRecordId,
@@ -44,6 +46,30 @@ const StartRunResponseSchema = z.object({
 @Controller("runs")
 export class RunsController {
   constructor(private readonly gateway: GatewayClientService) {}
+
+  @Get(":id/reports/:reportId")
+  @ApiOperation({ summary: "Read a stored report with its server classification and source trail" })
+  async report(
+    @Param("id") runId: string,
+    @Param("reportId") reportId: string,
+    @Req() request: Request,
+  ): Promise<ReportView> {
+    const operator = verifiedOperator(request);
+    requireRecordId(runId);
+    requireRecordId(reportId);
+    const report = gatewayData(
+      await this.gateway.getRead(
+        `/internal/runs/${runId}/reports/${reportId}`,
+        request.requestId,
+        ReportViewSchema,
+        operator,
+      ),
+    ) as ReportView;
+    if (report.runId !== runId || report.reportId !== reportId) {
+      throw new ServiceUnavailableException("Invalid gateway report reference");
+    }
+    return report;
+  }
 
   @Get(":id")
   @ApiOperation({ summary: "Read the authorized run state, including stored result references" })

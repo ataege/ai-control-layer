@@ -992,7 +992,8 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     isolation")
   - Blocked by: `decision 2 in docs/product/README.md`; `read path`
 
-- [ ] **API-18 · Serve the stored report and its registered template**
+- [x] **API-18 · Serve the stored report and its registered template**
+  - Done (2026-10-04): GET /api/runs/{id}/reports/{reportId} relays the shared ReportView unchanged through verified membership and Go's organization/content access boundary. Strict response validation preserves stored classifications, source lineage, template/projection versions and withheld content; mismatched run/report references or leaked withheld content fail closed. Checks: API lint, typecheck and build exited 0; API unit tests: "224 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Tests cover both report fixtures, unknown fields, incorrect lineage/projection, missing sessions, 401/403/404/503 and transport failures. The source-trail behavior required by API-30 is included; its separate evidence task remains open. No runtime/demo SQL writes or computed labels.
   - **Report 1.1 change:** Serves the classification, template and projection versions, content hash and destination class with the report.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-16 · Needs: X-64 · Provides: nothing
