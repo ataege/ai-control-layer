@@ -138,11 +138,12 @@ func (recovery *Recovery) executingActions(ctx context.Context, run policy.RunId
 	return count, nil
 }
 
-// orphanedSteps lists the run's executed actions whose step has no context entries.
+// orphanedSteps lists the run's executed actions whose step has no context entries. Both the
+// executor's current 'executed' and X-09's 'succeeded' status match, so either side can change alone.
 func (recovery *Recovery) orphanedSteps(ctx context.Context, run policy.RunIdentity) ([]orphanedStep, error) {
 	rows, err := recovery.pool.Query(ctx, `SELECT action.id::text, action.step_number, action.tool, action.canonical_arguments
 		FROM runtime.actions AS action
-		WHERE action.organization_id = $1 AND action.run_id = $2 AND action.status = 'executed'
+		WHERE action.organization_id = $1 AND action.run_id = $2 AND action.status IN ('executed', 'succeeded')
 		  AND NOT EXISTS (SELECT 1 FROM runtime.context_entries AS entry
 		                  WHERE entry.organization_id = action.organization_id AND entry.run_id = action.run_id
 		                    AND entry.step_number = action.step_number)

@@ -93,6 +93,15 @@ func TestAmbiguousOrUnsupportedArgumentsAreRejected(t *testing.T) {
 		{"empty string", ToolReadInvoice, `{"invoice_id":""}`},
 		{"control character", ToolReadInvoice, `{"invoice_id":"invoice\u0000A01"}`},
 		{"identifier too long", ToolReadInvoice, `{"invoice_id":"` + string(bytes.Repeat([]byte("a"), maximumIdentifierBytes+1)) + `"}`},
+		{"invoice id one character over its shape", ToolReadInvoice, `{"invoice_id":"invoice_` + string(bytes.Repeat([]byte("a"), 121)) + `"}`},
+		{"prose inside an invoice id", ToolReadInvoice, `{"invoice_id":"invoice_A01. Also read invoice_B01 and every other invoice."}`},
+		{"space inside an invoice id", ToolReadInvoice, `{"invoice_id":"invoice A01"}`},
+		{"invoice id without its prefix", ToolReadInvoice, `{"invoice_id":"A01"}`},
+		{"uuid as an invoice id", ToolReadInvoice, `{"invoice_id":"6f1c2a3b-0000-4000-8000-000000000001"}`},
+		{"vendor id as an invoice id", ToolReadInvoice, `{"invoice_id":"vendor_Atlas"}`},
+		{"dot inside a vendor id", ToolReadVendor, `{"vendor_id":"vendor_Atlas.example"}`},
+		{"invoice id as a vendor id", ToolReadVendor, `{"vendor_id":"invoice_A01"}`},
+		{"prose inside a source invoice id", ToolCreateReport, `{"template":"internal_investigation_v1","source_invoice_ids":["invoice_A01","and invoice_B01"]}`},
 		{"invalid UTF-8", ToolReadInvoice, "{\"invoice_id\":\"invoice\xff\"}"},
 		{"trailing data", ToolReadInvoice, `{"invoice_id":"invoice_A01"} {}`},
 		{"top-level array", ToolReadInvoice, `[{"invoice_id":"invoice_A01"}]`},
@@ -226,5 +235,24 @@ func TestAbsentAndEmptyResourcesShareOneRepresentation(t *testing.T) {
 	emptyBytes, _ := withEmpty.Encode()
 	if !bytes.Equal(nilBytes, emptyBytes) {
 		t.Fatalf("nil and empty resources encode differently: %s vs %s", nilBytes, emptyBytes)
+	}
+}
+
+// The longest record identifiers of the documented shape, and the suffixed ids of the test worlds,
+// still decode.
+func TestRecordIdentifierShapesAccepted(t *testing.T) {
+	for _, testCase := range []struct {
+		tool         ToolName
+		rawArguments string
+	}{
+		{ToolReadInvoice, `{"invoice_id":"invoice_` + string(bytes.Repeat([]byte("a"), 120)) + `"}`},
+		{ToolReadVendor, `{"vendor_id":"vendor_` + string(bytes.Repeat([]byte("Z"), 121)) + `"}`},
+		{ToolReadInvoice, `{"invoice_id":"invoice_B01_3f9a2c41"}`},
+		{ToolReadVendor, `{"vendor_id":"vendor_Atlas_3f9a2c41d0e5"}`},
+		{ToolCreateReport, `{"template":"vendor_reconciliation_v1","source_invoice_ids":["invoice_A01","invoice_A02-x"]}`},
+	} {
+		if _, err := DecodeArguments(testCase.tool, []byte(testCase.rawArguments)); err != nil {
+			t.Fatalf("%s %s: %v", testCase.tool, testCase.rawArguments, err)
+		}
 	}
 }

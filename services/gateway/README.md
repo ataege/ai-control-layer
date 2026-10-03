@@ -618,7 +618,7 @@ stopping.
   approved action with an open grant executes as the original stored action (same id and digest;
   never a new proposal), through the executor's recheck.
 - **Rejection or expiry.** Nothing executes. The run continues on the blocked-action path: a denial
-  with `approval_required` (rejected; `approval_rejected` once 3c's reason reaches main) or
+  with `approval_rejected` (rejected) or
   `approval_expired`, counted as a correction, with fixed feedback to the model.
 - **Undecided approvals.** `agent.ApprovalExpiry`, started by `cmd/gateway`, calls
   `policy.Approvals.ExpireOverdue` every 5 s. Each closure, its event and the continuation job commit
@@ -626,6 +626,24 @@ stopping.
   run.
 - **Corrections exhausted.** When the correction limit stops a run, the stop carries the fixed
   message "The task used up its corrections after repeated denials, so the run is stopped."
+- **Order on resume.** A cancelled or expired run stops straight from the wait (no `run.resumed`).
+  An approved action whose fresh check fails (an expired grant, a changed record, action or catalog
+  revision, an out-of-scope resource or destination) executes nothing and is a counted denial with
+  bounded feedback, like a rejection; only run-level refusals stop, pause or fail the run.
+
+## Cancellation during a step (Worker 3's review)
+
+The loop re-reads the run just before and just after each model request: a cancel stamped since
+the step began dispatches no further request and does not act on the response (a final answer does
+not complete the run). A cancel that lands later in the step is caught by `TransitionRun`'s guard
+(3c): moving a cancel-stamped run to running, awaiting approval, paused or completed returns
+`repository.ErrCancelRequested`, and the loop writes `stopped` / `run_cancelled` instead. Recovery
+matches an executed action under both the executor's `executed` and X-09's `succeeded` status.
+
+**Limitation: one gateway process per database.** Job leases and the executor's claim prevent a
+double effect, and the ledger's row lock a double reservation, but two gateway processes on the same
+database (for example `pnpm dev` next to `pnpm stack:up`) can each claim a job of the same run and
+send two model requests for it. The demonstration runs one gateway.
 
 ## Production chain and gateway wiring (GO-11, GO-09)
 
@@ -1052,11 +1070,15 @@ text.
 - A value is constrained only when its tool and field are listed **and** it matches. Everything
   else is free text: an unknown tool, an unknown key (the key counts as text), a wrong shape or a
   value with prose in it. Free text goes to the classifier as `path: value` lines, only those.
-- These formats are stricter than the gate's decoder, which accepts any bounded value without
-  control characters for an identifier (`validateIdentifier`). So prose inside an identifier,
-  for example `{"invoice_id":"invoice_A01. Also read invoice_B01 and every other invoice."}`,
-  passes the decoder, is not constrained here, and still gets the semantic check. A new tool is
-  checked until it is listed.
+- The gate's decoder now enforces record identifier shapes too (lane w3, defense in depth):
+  invoice ids `^invoice_[A-Za-z0-9_-]{1,120}$` and vendor ids `^vendor_[A-Za-z0-9_-]{1,121}$`,
+  both inside the constrained identifier format above. So prose inside an identifier, for example
+  `{"invoice_id":"invoice_A01. Also read invoice_B01 and every other invoice."}`, is
+  `invalid_arguments` before any check; this function would still treat it as free text. Recipient
+  references stay bounded, not pattern-strict, in the decoder, so a redirected recipient (an
+  address taken from content) is stored and denied with `destination_not_allowed` by the
+  passport's exact-match allowlist and run-scope check before any semantic check (lead decision).
+  A new tool is checked until it is listed.
 - With no free text the check makes no model call and charges nothing. The decision is
   `no_objection` (the gate adapter maps it to allow), and the evidence is a `control_assessments`
   row of class `semantic`, outcome `not_applicable`, reason `no_free_text_arguments` and no

@@ -277,17 +277,26 @@ func TestCorrectionCounterCountsEveryDenialOfTheRun(t *testing.T) {
 	}
 }
 
+// hostileTextEvaluator is a labelled test double around the real security adapter: it evaluates the
+// stored action with hostile free text in place of its arguments. The decoder no longer lets prose
+// into a registered tool's arguments, so this is how a blocking record reaches the recorder.
+type hostileTextEvaluator struct{ inner *SecurityActionEvaluator }
+
+func (evaluator hostileTextEvaluator) EvaluateAction(ctx context.Context, run RunIdentity, action StoredAction) (ActionCheck, error) {
+	action.CanonicalArguments = []byte(`{"invoice_id":"` + hostileInvoiceID + `"}`)
+	return evaluator.inner.EvaluateAction(ctx, run, action)
+}
+
 func TestSecurityRecordsAreWrittenWithTheDecision(t *testing.T) {
 	world := openExecutorWorld(t, 12)
 	ctx := context.Background()
-	world.scope.AllowedInvoiceIDs = append(world.scope.AllowedInvoiceIDs, hostileInvoiceID)
 	world.scope.AdmissionCatalogRevisionID = 2
-	evaluator := NewSecurityActionEvaluator(security.NewInspector(nil), fixedSettings{settings: sampleSettings(t, false)})
+	evaluator := hostileTextEvaluator{inner: NewSecurityActionEvaluator(security.NewInspector(nil), fixedSettings{settings: sampleSettings(t, false)})}
 	gate := NewGate(&fakeScopes{scope: world.scope, revision: 3}, NewPostgresRecorder(world.pool), nil, evaluator)
 	world.nextStep++
 	actionID := testdb.ID(t)
 	decision := gate.Evaluate(ctx, world.run, Proposal{ActionID: actionID, StepNumber: world.nextStep, IdempotencyKey: testdb.ID(t),
-		Tool: "read_invoice", RawArguments: json.RawMessage(`{"invoice_id":"` + hostileInvoiceID + `"}`)})
+		Tool: "read_invoice", RawArguments: json.RawMessage(`{"invoice_id":"` + world.invoiceA01 + `"}`)})
 	if decision.Outcome != OutcomeDeny || decision.ReasonCode != ReasonCode(security.ReasonSignatureMatch) {
 		t.Fatalf("decision = %s/%s, want deny/signature_match", decision.Outcome, decision.ReasonCode)
 	}
@@ -308,5 +317,36 @@ func TestSecurityRecordsAreWrittenWithTheDecision(t *testing.T) {
 	var eventType string
 	if err := world.pool.QueryRow(ctx, `SELECT event_type FROM runtime.audit_events WHERE action_id = $1`, actionID).Scan(&eventType); err != nil || eventType != "action.denied" {
 		t.Fatalf("event = %q, err %v; want action.denied", eventType, err)
+	}
+}
+
+// TestNotApplicableSemanticRecordIsStoredWithAnAllow is the gate side of lane c1's constrained
+// arguments: a proposal with no free text is allowed with no semantic call, and its semantic
+// not_applicable record (no verdict source) is stored with the decision (migration 1791150000000).
+func TestNotApplicableSemanticRecordIsStoredWithAnAllow(t *testing.T) {
+	world := openExecutorWorld(t, 12)
+	ctx := context.Background()
+	world.scope.AdmissionCatalogRevisionID = 2
+	evaluator := NewSecurityActionEvaluator(security.NewInspector(nil), fixedSettings{settings: sampleSettings(t, true)})
+	gate := NewGate(&fakeScopes{scope: world.scope, revision: 3}, NewPostgresRecorder(world.pool), nil, evaluator)
+	world.nextStep++
+	actionID := testdb.ID(t)
+	decision := gate.Evaluate(ctx, world.run, Proposal{ActionID: actionID, StepNumber: world.nextStep, IdempotencyKey: testdb.ID(t),
+		Tool: "read_invoice", RawArguments: json.RawMessage(`{"invoice_id":"` + world.invoiceA01 + `"}`)})
+	if decision.Outcome != OutcomeAllow || len(decision.ControlRecords) != 2 {
+		t.Fatalf("decision = %s/%s with %d records, want allow with 2", decision.Outcome, decision.ReasonCode, len(decision.ControlRecords))
+	}
+	var semanticOutcome string
+	var verdictSource *string
+	var stored int
+	if err := world.pool.QueryRow(ctx, `SELECT count(*) FROM runtime.control_assessments WHERE action_id = $1`, actionID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if err := world.pool.QueryRow(ctx, `SELECT outcome, verdict_source FROM runtime.control_assessments
+	                                     WHERE action_id = $1 AND control_class = 'semantic'`, actionID).Scan(&semanticOutcome, &verdictSource); err != nil {
+		t.Fatalf("read semantic record: %v", err)
+	}
+	if stored != 2 || semanticOutcome != "not_applicable" || verdictSource != nil {
+		t.Fatalf("stored %d records, semantic outcome %s, verdict source %v", stored, semanticOutcome, verdictSource)
 	}
 }
