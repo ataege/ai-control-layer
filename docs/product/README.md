@@ -316,6 +316,25 @@ anything else is a decision, not an implemented behaviour.
 27. **Final result in the loop.** The final-result format of item 21 is hooked into the agent loop by
     lane f3 (commit `e03ab44` on branch `go/f3`). On `main`: not yet.
 
+28. **Beat 5 is shown with the labelled replay.** The internal report's export to the correct vendor
+    (demo beat 5) is shown with the labelled replay (`services/gateway/cmd/replay`), not as a
+    spontaneous live-model action. Reported by the lead's session: with the storyboard-faithful task
+    instruction, `qwen3.5:4b` created the internal investigation report live in 3 of 3 runs (beats 3 and
+    4 are live) but attempted to queue it 0 of 3 times. The replay goes through the real production
+    gate, prints `LABELLED REPLAY`, and its stored action and events carry the label
+    `labelled_replay:<fixture id>`; the scripted fixture story (`internal/scenario`, w2) proves the same
+    denial through the agent loop. The slide and the presenter text say "labelled replay" for that beat
+    and never imply that the live model tried the export. On `main`: yes, the replay command and its
+    documentation (`services/gateway/README.md`; the README records a check on 2026-10-03 where all
+    three fixtures printed the expected denial, exit 0, with no execution attempt). The 3-of-3 and
+    0-of-3 counts and the live runs below are the lead's report, not yet recorded in the repository.
+
+Live end-to-end completions, as reported by the lead's session (3 October 2026): lane 3c's run
+`66cbb01a` and Worker 2's GO-47 live run both completed through approval with one outbox row on
+`qwen3.5:4b`, with the signature feed and the app records loaded by hand. They show that the path can
+work on one machine; they are not final-build evidence (X-59), and the by-hand loading is the gap the
+feed import (item 16) and the app seed (item 17) close.
+
 The control evaluation adapter (X-91) is `POST /internal/control/evaluate` (GO-82); a `model_input`
 evaluation never dispatches the agent model. On `main`: the route is mounted by `api.Commands` and its
 request and response schemas are in `packages/contracts`; the `model_input` behaviour was not traced.
