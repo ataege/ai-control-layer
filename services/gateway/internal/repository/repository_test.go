@@ -389,3 +389,88 @@ func TestEnqueueJobRejectsUnknownKinds(t *testing.T) {
 		t.Errorf("unknown kind: %v", err)
 	}
 }
+
+func eventTypes(t *testing.T, outer pgx.Tx, runID string) []string {
+	t.Helper()
+	rows, err := outer.Query(context.Background(), "SELECT event_type FROM runtime.audit_events WHERE run_id = $1 ORDER BY id", runID)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	defer rows.Close()
+	var types []string
+	for rows.Next() {
+		var eventType string
+		_ = rows.Scan(&eventType)
+		types = append(types, eventType)
+	}
+	return types
+}
+
+func TestPostgresCancellationStopsIdleRunsAndStampsRunningOnes(t *testing.T) {
+	repository, outer := isolatedRepository(t)
+	organizationID := testdb.ID(t)
+	ctx := context.Background()
+	newRun := func(status contracts.RunStatus) string {
+		passport := samplePassport(t, organizationID)
+		admit(t, repository, passport)
+		if status != contracts.RunQueued {
+			if _, err := outer.Exec(ctx, "UPDATE runtime.runs SET status = $2 WHERE id = $1", passport.RunID, string(status)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return passport.RunID
+	}
+
+	for _, idle := range []contracts.RunStatus{contracts.RunQueued, contracts.RunAwaitingApproval} {
+		runID := newRun(idle)
+		state, err := repository.CancelRun(ctx, organizationID, runID)
+		if err != nil || state.Status != contracts.RunStopped || state.TerminalReason == nil ||
+			*state.TerminalReason != contracts.ReasonRunCancelled || state.CancelRequestedAt == nil {
+			t.Errorf("%s run: state %+v err %v", idle, state, err)
+		}
+		if types := eventTypes(t, outer, runID); !slices.Equal(types, []string{"run.cancel_requested", "run.stopped"}) {
+			t.Errorf("%s run events: %v", idle, types)
+		}
+	}
+
+	runningID := newRun(contracts.RunRunning)
+	state, err := repository.CancelRun(ctx, organizationID, runningID)
+	if err != nil || state.Status != contracts.RunRunning || state.CancelRequestedAt == nil || state.TerminalReason != nil {
+		t.Fatalf("running run: state %+v err %v", state, err)
+	}
+	firstStamp := *state.CancelRequestedAt
+	// A repeated request is harmless: the same stamp and no second event.
+	state, err = repository.CancelRun(ctx, organizationID, runningID)
+	if err != nil || state.CancelRequestedAt == nil || !state.CancelRequestedAt.Equal(firstStamp) {
+		t.Errorf("repeated cancel: state %+v err %v", state, err)
+	}
+	if types := eventTypes(t, outer, runningID); !slices.Equal(types, []string{"run.cancel_requested"}) {
+		t.Errorf("running run events: %v", types)
+	}
+
+	completedID := newRun(contracts.RunCompleted)
+	state, err = repository.CancelRun(ctx, organizationID, completedID)
+	if err != nil || state.Status != contracts.RunCompleted || state.CancelRequestedAt != nil {
+		t.Errorf("completed run changed: %+v %v", state, err)
+	}
+	if types := eventTypes(t, outer, completedID); len(types) != 0 {
+		t.Errorf("completed run got events: %v", types)
+	}
+}
+
+func TestPostgresCancellationOfAnotherOrganizationsRunChangesNothing(t *testing.T) {
+	repository, outer := isolatedRepository(t)
+	organizationID := testdb.ID(t)
+	passport := samplePassport(t, organizationID)
+	admit(t, repository, passport)
+	if _, err := repository.CancelRun(context.Background(), testdb.ID(t), passport.RunID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("got %v, want ErrNotFound", err)
+	}
+	state, err := repository.RunState(context.Background(), organizationID, passport.RunID)
+	if err != nil || state.Status != contracts.RunQueued || state.CancelRequestedAt != nil {
+		t.Errorf("the run changed: %+v %v", state, err)
+	}
+	if types := eventTypes(t, outer, passport.RunID); len(types) != 0 {
+		t.Errorf("events written: %v", types)
+	}
+}

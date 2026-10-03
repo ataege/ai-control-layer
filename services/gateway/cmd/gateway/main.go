@@ -95,14 +95,16 @@ func run() error {
 		return err
 	}
 
+	runtimeRepository := repository.New(pool)
 	handler := httpserver.NewHandler(httpserver.Options{
 		Logger:          logger,
 		Health:          health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger},
 		ServiceToken:    loadedConfig.ServiceToken,
 		OperatorContext: operatorContextVerifier,
 		InternalCommands: api.Commands(api.Dependencies{
-			Admitter: admission.New(repository.New(pool), catalog.NewLoader()),
-			Database: pool,
+			Admitter:  admission.New(runtimeRepository, catalog.NewLoader()),
+			Canceller: runtimeRepository,
+			Database:  pool,
 		}),
 	})
 	listenAddress := net.JoinHostPort(loadedConfig.Host, strconv.Itoa(loadedConfig.Port))

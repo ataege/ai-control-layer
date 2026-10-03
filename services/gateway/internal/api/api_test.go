@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -241,5 +242,111 @@ func TestPostgresStartRunAdmitsThroughTheRealBoundary(t *testing.T) {
 	handler.ServeHTTP(reportRecorder, reportRequest)
 	if reportRecorder.Code != http.StatusUnauthorized {
 		t.Errorf("stored report without credentials: status %d", reportRecorder.Code)
+	}
+}
+
+// fakeCanceller is a labelled test double for the repository's cancellation.
+type fakeCanceller struct {
+	state          contracts.RunState
+	err            error
+	calls          int
+	organizationID string
+	runID          string
+}
+
+func (canceller *fakeCanceller) CancelRun(_ context.Context, organizationID, runID string) (contracts.RunState, error) {
+	canceller.calls++
+	canceller.organizationID, canceller.runID = organizationID, runID
+	return canceller.state, canceller.err
+}
+
+func cancelRun(t *testing.T, handler http.Handler, runID, tokenID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/internal/runs/"+runID+"/cancel", strings.NewReader(body))
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	request.Header.Set("Authorization", "Bearer "+testServiceToken)
+	request.Header.Set(operatorcontext.HeaderName, signOperatorContext(t, testOperator, tokenID))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
+}
+
+func TestCancelRunAnswersTheRunStateForTheOperatorsOrganization(t *testing.T) {
+	reason := contracts.ReasonRunCancelled
+	canceller := &fakeCanceller{state: contracts.RunState{RunID: "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+		PassportID: "7a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d", Status: contracts.RunStopped, TerminalReason: &reason,
+		CreatedAt: time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 10, 3, 12, 1, 0, 0, time.UTC)}}
+	handler := newHandler(t, Dependencies{Canceller: canceller})
+	for index, body := range []string{"", "{}"} {
+		recorder := cancelRun(t, handler, "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b", "cancel-"+strconv.Itoa(index), body)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("body %q: status %d %q", body, recorder.Code, recorder.Body.String())
+		}
+		var state contracts.RunState
+		decodeStrict(t, recorder, &state)
+		if state.Status != contracts.RunStopped || state.TerminalReason == nil || *state.TerminalReason != contracts.ReasonRunCancelled {
+			t.Errorf("state %+v", state)
+		}
+	}
+	if canceller.organizationID != testOperator.OrganizationID || canceller.runID != "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b" {
+		t.Errorf("canceller got organization %q run %q", canceller.organizationID, canceller.runID)
+	}
+}
+
+func TestCancelRunMapsErrorsAndRefusesBodies(t *testing.T) {
+	notFound := &fakeCanceller{err: repository.ErrNotFound}
+	assertError(t, cancelRun(t, newHandler(t, Dependencies{Canceller: notFound}), "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b", "c-404", ""),
+		http.StatusNotFound, "not_found")
+	invalid := &fakeCanceller{err: repository.ErrInvalid}
+	assertError(t, cancelRun(t, newHandler(t, Dependencies{Canceller: invalid}), "not-a-uuid", "c-invalid", ""),
+		http.StatusNotFound, "not_found")
+	unavailable := &fakeCanceller{err: repository.ErrUnavailable}
+	assertError(t, cancelRun(t, newHandler(t, Dependencies{Canceller: unavailable}), "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b", "c-503", ""),
+		http.StatusServiceUnavailable, "decision_unavailable")
+	refused := &fakeCanceller{}
+	assertError(t, cancelRun(t, newHandler(t, Dependencies{Canceller: refused}), "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b", "c-body", `{"reason":"x"}`),
+		http.StatusBadRequest, "bad_request")
+	if refused.calls != 0 {
+		t.Error("a body with fields reached the canceller")
+	}
+}
+
+func TestPostgresCancelRunThroughTheRealBoundary(t *testing.T) {
+	pool := testdb.Open(t)
+	outer, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = outer.Rollback(context.Background()) })
+	runtimeRepository := repository.New(outer)
+	passport := contracts.Passport{PassportID: testdb.ID(t), RunID: testdb.ID(t), OrganizationID: testOperator.OrganizationID,
+		ActorID: testOperator.UserID, TaskVersion: "reconcile_atlas_v1", AdmissionCatalogRevisionID: 1,
+		IssuedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(time.Minute)}
+	if err := runtimeRepository.InTransaction(context.Background(), func(tx repository.Tx) error {
+		return tx.InsertAdmission(context.Background(), passport, repository.NewJob{ID: testdb.ID(t), Kind: contracts.JobKindAgentStep})
+	}); err != nil {
+		t.Fatalf("admission fixture: %v", err)
+	}
+	handler := newHandler(t, Dependencies{Canceller: runtimeRepository})
+
+	otherOperator := testOperator
+	otherOperator.OrganizationID = testdb.ID(t)
+	request := httptest.NewRequest(http.MethodPost, "/internal/runs/"+passport.RunID+"/cancel", nil)
+	request.Header.Set("Authorization", "Bearer "+testServiceToken)
+	request.Header.Set(operatorcontext.HeaderName, signOperatorContext(t, otherOperator, "pg-other"))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	assertError(t, recorder, http.StatusNotFound, "not_found")
+
+	recorder = cancelRun(t, handler, passport.RunID, "pg-own", "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status %d %q", recorder.Code, recorder.Body.String())
+	}
+	var state contracts.RunState
+	decodeStrict(t, recorder, &state)
+	if state.Status != contracts.RunStopped || state.CancelRequestedAt == nil {
+		t.Errorf("state %+v", state)
 	}
 }

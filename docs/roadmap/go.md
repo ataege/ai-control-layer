@@ -1823,7 +1823,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     versioning and execution rechecks"; "Architecture and chart reading guide" (Figure 6)
   - Blocked by: nothing
 
-- [ ] **GO-41 · Persist cancellation through the internal cancel command**
+- [x] **GO-41 · Persist cancellation through the internal cancel command**
   - **Report 1.1 change:** Figure 7; name proposal `POST /internal/runs/:id/cancel`.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-21 · Needs: X-11, X-13 · Provides: X-42
@@ -1842,6 +1842,22 @@ typecheck` PASS; `pnpm verify` 6 passed.
     changes nothing; after a cancel no model request or tool execution starts, including for a run
     waiting for approval; a repeated cancel is harmless. `pnpm --filter gateway run test`;
     database-backed cases through the X-24 command.
+  - Completed (2026-10-03): `POST /internal/runs/{runId}/cancel` in `internal/api`, behind the
+    service token and the verified operator context; body empty or `{}`; answers 200 with the X-11
+    run state, 404 for an unknown or another organization's run, 503 `decision_unavailable`
+    otherwise. `repository.Tx.RequestCancellation` locks the run, stamps `cancel_requested_at` once
+    with a `run.cancel_requested` event (additive X-12 type), and stops a run no worker is advancing
+    (queued, awaiting approval, paused) at once as `stopped` / `run_cancelled` with `run.stopped`; a
+    running run keeps its status and is stopped by the worker loop (lane f3), which, like the
+    executor (lane w3), refuses every dispatch once the stamp is set. A finished run and a repeated
+    cancel change nothing. No NestJS revocation record is written. Tests: repository (queued and
+    awaiting-approval runs stop with both events; a running run is stamped once and a repeat adds
+    nothing; a completed run is untouched; another organization's run changes nothing) and route
+    tests with a labelled double plus a PostgreSQL route test (another organization 404, own run
+    stopped). Checks: gateway five checks PASS; `go test -race ./internal/repository
+./internal/api` with PostgreSQL ok; contracts `test` PASS; `pnpm verify` 6 passed. Not covered
+    here: interrupting an in-flight model request (the loop stops at its next check), and the
+    approval command refusing a decision on a stopped run, which is lane w3's GO-44 check.
   - Report: "Atomic allowances hard limits and estimated cost" (Cancellation and time limits);
     "Illustrative passport and interface contracts" (Proposed browser and runtime operations);
     "Exact action approval versioning and execution rechecks" (Versioned policy and current
