@@ -1871,7 +1871,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     matrix" (critical check Unknown usage); "Architecture and chart reading guide" (Figures 4 and 5)
   - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
 
-- [ ] **GO-40 · Release the lease during a review wait and resume the original action**
+- [x] **GO-40 · Release the lease during a review wait and resume the original action**
   - **Report 1.1 change:** Figure 7; quote "Approval pauses the durable job and binds the original action."
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: GO-08, GO-11, GO-43, GO-44 · Needs: X-39 · Provides: nothing
@@ -1894,6 +1894,21 @@ typecheck` PASS; `pnpm verify` 6 passed.
     correction once GO-29 is done; an approval nobody decides closes as expired at its expiry with
     its event while no worker holds the job, and the run then continues on the blocked-action path,
     its persisted state showing the expiry, not awaiting approval. The X-24 command.
+  - Completed (2026-10-03): the awaiting transition, its `run.awaiting_approval` event and the claim
+    completion leave no lease during the wait; a continuation claim finds the decided action
+    (w3's `DecidedActionFor`), moves the run to `running` with `run.resumed`, runs the run check and
+    executes the original stored action through the executor's recheck; rejection and expiry
+    continue on the blocked-action path as a counted correction; `agent.ApprovalExpiry` (started by
+    `cmd/gateway`) closes undecided approvals every 5 s through w3's `ExpireOverdue`, which commits
+    the closure, its event and the continuation together. Tests pass on PostgreSQL:
+    `TestReviewWaitHoldsNoWorkerAndResumesTheApprovedActionAfterARestart` (no lease, same action id
+    and digest, one outbox message, one `queue_report` action),
+    `TestRejectedActionExecutesNothingAndIsACountedCorrection`,
+    `TestUndecidedApprovalExpiresWhileNoWorkerHoldsTheRun`,
+    `TestApprovedActionOfACancelledRunDoesNotResume`. Checks: gateway `format:check`, `lint`,
+    `typecheck`, `test`, `build` exit 0; `pnpm verify` 6 passed; `GOFLAGS=-p=3 pnpm test:db` gateway
+    "821 passed, 0 failed, 0 skipped", api "16 passed". The rejected reason is `approval_required` until 3c's
+    `approval_rejected` reaches main.
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Exact action approval
     versioning and execution rechecks"; "Architecture and chart reading guide" (Figure 6)
   - Blocked by: nothing
@@ -2196,7 +2211,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-49 · Recover expired leases without replaying dispatched work**
+- [x] **GO-49 · Recover expired leases without replaying dispatched work**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: M (estimate 3-6 h)
   - Depends on: GO-02, GO-39, GO-40, GO-45 · Needs: X-24, X-39 · Provides: X-54
   - Paths: the worker package from GO-08
@@ -2212,6 +2227,22 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     ends with exactly one effect per action and no unaccounted dispatch; a run stopped by its limit,
     a cancelled run, a run with an unresolved reservation and a run in the attention state keep
     their state and recorded reason across the restart. The X-24 command.
+  - Progress (2026-10-03): `agent.Recovery` runs at the start of every claim of a running run: an
+    unresolved model call keeps its reservation as `usage_unknown` (or `failed` when it never
+    reserved) and pauses the run with `outcome_unknown` with no resend; an action still executing
+    with an open attempt pauses the run for attention; an executed action without context entries is
+    restored as its call plus a withheld-result marker without re-execution; awaiting, paused,
+    stopped and completed runs keep their state and reason. Tests pass on PostgreSQL:
+    `TestRecoveryPausesARunWithAnUnresolvedModelCall` (after the reservation and after the dispatch
+    record only), `TestRecoveryContinuesAfterAnEffectCommittedWithoutItsContext` (one execution
+    attempt), `TestRecoveryPausesOnAnActionStillExecuting`,
+    `TestRestartKeepsWaitingAndEndedRunsAsTheyWere`.
+  - Completed (2026-10-03): the remaining half, a waiting run resuming its original stored action
+    after a restart with exactly one effect, is GO-40's
+    `TestReviewWaitHoldsNoWorkerAndResumesTheApprovedActionAfterARestart` (one outbox message, same
+    action id and digest). The dispatched attempts are identified by `runtime.model_calls` and
+    `runtime.execution_attempts`; the open item `dispatched attempts` stays for the lead to record.
+    Checks: as GO-40.
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Validation plan and evidence
     matrix" (critical check Waiting-state restart); "Functional requirements MVP boundary and
     deferred scope" (Durable execution)

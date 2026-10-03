@@ -9,6 +9,7 @@ import (
 
 	"starter/services/gateway/internal/catalog"
 	"starter/services/gateway/internal/model"
+	"starter/services/gateway/internal/security"
 	"starter/services/gateway/internal/testdb"
 )
 
@@ -35,5 +36,16 @@ func TestUnconfiguredModelFailsEveryCallClosed(t *testing.T) {
 	stepper, _ := NewStepper(chain.ModelCaller, &fakeRecorder{}, "unconfigured-model")
 	if _, err = stepper.Step(context.Background(), Run{OrganizationID: "org", RunID: "run", AllowedModels: []string{"qwen3.5:4b"}}, testContext); !errors.Is(err, ErrModelNotAllowed) {
 		t.Fatalf("unconfigured model step: %v", err)
+	}
+}
+
+func TestChainLabelsFixtureVerdicts(t *testing.T) {
+	pool := testdb.Open(t)
+	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
+	if _, err := NewProductionChain(pool, catalog.NewLoader(), ChainConfig{Logger: logger, VerdictSource: "made-up"}); err == nil {
+		t.Fatal("an unknown verdict source was accepted")
+	}
+	if _, err := NewProductionChain(pool, catalog.NewLoader(), ChainConfig{Logger: logger, VerdictSource: security.VerdictFixture}); err != nil {
+		t.Fatalf("fixture-labelled chain: %v", err)
 	}
 }
