@@ -28,6 +28,7 @@
     "db:roles": "node scripts/db-roles.mjs",
     "db:seed": "node scripts/seed-demo.mjs",
     "reset:demo": "node scripts/reset-demo.mjs",
+    "verify:controls": "node scripts/verify-controls.mjs",
     "judge": "node scripts/judge-client.mjs",
     "test:judge": "node --test scripts/judge-client.test.mjs",
     "test:fixtures": "node --test \"fixtures/*.test.mjs\"",

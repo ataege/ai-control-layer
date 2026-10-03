@@ -35,3 +35,6 @@ services/gateway/bin/
 
 # Browser automation output
 .playwright-mcp/
+
+# verify:controls results (machine-readable runs of the control test suite)
+.verify-controls/
