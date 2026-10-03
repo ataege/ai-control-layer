@@ -35,6 +35,8 @@ var fixtureTargets = map[string]func() any{
 	"safe-event.export-denied.json":             func() any { return new(SafeEvent) },
 	"safe-event.admission-rejected.json":        func() any { return new(SafeEvent) },
 	"operator-context.operator.json":            func() any { return new(OperatorContext) },
+	"approval-decision.approve.json":            func() any { return new(ApprovalDecision) },
+	"approval-decision.reject.json":             func() any { return new(ApprovalDecision) },
 }
 
 // Fixtures mirrored elsewhere in the gateway, or read only by the API and web app.
@@ -226,6 +228,7 @@ func TestGoEnumsMatchSchemas(t *testing.T) {
 		{"event decisions", sortedStrings(EventDecisions), schemaEnum(t, "safe-event.schema.json", "decision")},
 		{"passport tools", sortedStrings(ToolNames), schemaEnum(t, "passport.schema.json", "scope", "tools", "*")},
 		{"passport templates", sortedStrings(ReportTemplates), schemaEnum(t, "passport.schema.json", "scope", "reportTemplates", "*")},
+		{"approval choices", sortedStrings(ApprovalChoices), schemaEnum(t, "approval-decision.schema.json", "decision")},
 	}
 	for _, testCase := range cases {
 		if !slices.Equal(testCase.goValues, testCase.schema) {

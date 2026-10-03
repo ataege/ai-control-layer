@@ -357,3 +357,11 @@ export interface SafeEvent {
   };
   occurredAt: string;
 }
+
+/**
+ * X-10: approve or reject one stored action (POST /internal/actions/{actionId}/approval). It carries
+ * no replacement payload; the reviewer and organization come from the verified operator context.
+ */
+export interface ApprovalDecision {
+  decision: "approve" | "reject";
+}

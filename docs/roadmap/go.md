@@ -1149,7 +1149,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     matrix" ("a hidden URL is not a protection")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-22 · Write safe decision events with every state change**
+- [x] **GO-22 · Write safe decision events with every state change**
   - **Report 1.2 change:** Events add the metered purpose, admission and active catalog revisions, matched rule and feed revision; safe summaries omit raw notes, secrets, model requests and classifier reasoning.
   - **Report 1.1 change:** Events link the run, action, policy version, matched rule, report ID, template version, classification, lineage-check outcome and actual effect; event names from SH-10 (the architecture's examples include `report.created`, `report.export_denied`, `report.safe_template_offered`).
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 2-4 h)
@@ -1167,6 +1167,24 @@ typecheck` PASS; `pnpm verify` 6 passed.
     gap or duplicate under concurrent writes; a decision event carries every link listed; the
     serialized events of a run that read protected fields contain none of the fixture's protected
     values; a failed state change leaves no event. The X-24 command.
+  - Completed (2026-10-03): `internal/repository` is the X-12 event writer and reader.
+    `Tx.AppendEvent` validates every event against X-12 (closed types, decisions, reason codes and
+    masked-summary values; an action needs its run) and inserts it in the caller's transaction, so
+    it commits with its state change or not at all; `Join(pgx.Tx)` lets another lane's transaction
+    use it. A run-scoped append first takes a `FOR NO KEY UPDATE` lock on the run row until commit,
+    so a run's events commit in id order and `Repository.RunEvents(org, run, afterEventID, limit)`
+    pages by cursor without gaps or duplicates; a stored row outside X-12 is never served. Admission
+    writes `run.queued` / `admission.rejected`, and every `TransitionRun` requires its event. Tests
+    (PostgreSQL): four concurrent writers commit 60 events while a reader pages by cursor and reads
+    each exactly once in order (the same test failed 10 of 10 runs with the lock removed and passed
+    10 of 10 with it); a decision event round-trips every link (purpose, admission and active
+    catalog revisions, matched rule, feed revision, report, template, classification, lineage
+    check, effect, replay source, alternative template, safe message); another organization reads
+    and writes nothing; a row with an extra summary key fails closed; a failed state change leaves
+    no event (GO-19 test). Checks: gateway five checks PASS; `go test -race -count=3
+./internal/repository` with PostgreSQL ok; `pnpm verify` 6 passed. Waits on other lanes:
+    decision, approval and execution events are written by lanes w3, w2 and f3, which must switch
+    their raw inserts to `repository.Join(tx).AppendEvent` for the ordering guarantee.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a
     second disclosure channel); "Illustrative passport and interface contracts" (Decision and error
     semantics)
@@ -1416,6 +1434,24 @@ typecheck` PASS; `pnpm verify` 6 passed.
   - Work: Read the active-version pointer before new evaluations and dispatches "rather than relying indefinitely on a stale cache", and record both the admission and the evaluated revision in each decision. Optional settings apply at the next evaluation; removed models and lowered budgets apply as current restrictions; raised limits never exceed the passport. "With no valid initial catalog, the gateway is not ready and cannot dispatch work" (a readiness contract change through SH-14).
   - Done when: a changed optional threshold changes the next decision and the decision records the new revision, while the passport ceiling stays unchanged.
   - Tests: database-backed tests through the X-24 command for a threshold change, a lowered budget and a raised budget.
+  - Progress (2026-10-03): `internal/catalog` is the trusted active snapshot loader.
+    `Loader.Active(ctx, querier)` reads the active pointer on every call (in the caller's
+    transaction when given one), joins the active revision and the bound signature-feed revision,
+    and returns one snapshot: revision id, feed revision id, the limits (re-checked) and c1's
+    `security.SettingsFromCatalog` settings; it memoizes parsing only per immutable revision pair.
+    Anything missing or invalid is `ErrUnavailable` (no active revision, signature matching without
+    a feed, a feed revision other than the policy's, invalid limits, unknown disabled rules).
+    `EffectiveFor(passport, snapshot)` narrows the passport by the active catalog (removed models,
+    lowered budgets and disabled templates apply at once; raised values never exceed the passport)
+    and carries the admission and evaluated revision ids for decisions. Tests (PostgreSQL, isolated
+    revisions and feed in a rolled-back transaction): a threshold change is in the next snapshot
+    with the new revision id; five fail-closed cases; a disabled signature control needs no feed;
+    lowered and raised catalogs against a passport. Checks: gateway five checks PASS; `go test -race
+./internal/catalog` ok; `pnpm verify` 6 passed. Missing half: the gate (lane w3), the worker
+    and model path (f3) and the security controls (c1) must call `Loader.Active` before every
+    evaluation and dispatch and record both revisions; the readiness change ("no valid catalog,
+    not ready") waits on a readiness contract change; no path imports the signature feed yet, so
+    the active snapshot is unavailable while the policy enables signature matching.
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "approval-decision.schema.json",
+  "title": "ApprovalDecision",
+  "description": "X-10: approve or reject one stored action. It carries no replacement payload: the decision applies to the exact action Go stored and froze for review; any other field is refused and grants nothing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision"],
+  "properties": {
+    "decision": { "enum": ["approve", "reject"] }
+  }
+}
