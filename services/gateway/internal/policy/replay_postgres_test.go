@@ -129,6 +129,9 @@ func TestLabelledReplayIsDeniedByTheRealGate(t *testing.T) {
 					t.Fatalf("event %s of the replay lacks the label: %s", eventType, summary)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				t.Fatalf("read events: %v", err)
+			}
 			rows.Close()
 			var liveLabel *string
 			mustScan(t, world.pool.QueryRow(ctx, `SELECT replay_source FROM runtime.actions WHERE id = $1`, liveProposal.ActionID), &liveLabel)
