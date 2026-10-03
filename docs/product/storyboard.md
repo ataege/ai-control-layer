@@ -141,8 +141,9 @@ sets the timing from the rehearsal on the final build.
 ## Open items this storyboard depends on
 
 Open: `rename operation` (beat 6), the classifier prompt's tested limits (beat 10), `judge access`
-(judge interactions), `catalog activation protocol` (beat 11), `measurement method` (beat 12),
-`test command` (beat 12).
+(judge interactions), `measurement method` (beat 12), `test command` (beat 12). `catalog activation
+protocol` (beat 11) is decided (lead's delegate, decision 15): the import requests a revision, Go
+validates and acknowledges it or keeps the last good one.
 
 Decided (see `docs/product/README.md`): the replay entry (GO-05: a labelled Go runtime scenario
 test, no interface trigger, so no X-65), and, by the lead's delegate on 3 October 2026, `vendor

@@ -147,8 +147,10 @@ practicality and scalability.
   estimated-cost rule, not an implemented ledger (CL-19, D-6); broad exploit coverage (D-5).
 - Limitations, from the report: no universal prompt-injection detection; the simulated outbox is not
   email delivery; export protection covers the two templates and stored lineage only; the audit
-  export is not tamper-proof; "Production readiness is a future validation effort". Plus every failed
-  or cut claim **[replace with final-build evidence]**.
+  export is not tamper-proof; "Production readiness is a future validation effort". Also: repeated
+  identical start-run requests create separate runs (`command idempotency keys` open); the signature
+  feed is trusted by authenticated import and SHA-256, with no signing key. Plus every failed or cut
+  claim **[replace with final-build evidence]**.
 - Pre-event work and external resources, cited as HackYeah FAQ F-13 and F-14 require: the starter
   and design documents with their true preparation dates, Ollama, the model and the main libraries
   (decision 8) **[replace with the agreed
