@@ -116,3 +116,10 @@ func (store *DispatchRecordingStore) Reserve(ctx context.Context, runID, callID,
 	_, _ = store.callLog.RecordDispatchForRun(ctx, callID, runID, purpose, "test-fixture")
 	return store.PostgresStore.Reserve(ctx, runID, callID, purpose, tokens)
 }
+
+// ReserveWithin records the dispatch like Reserve, then reserves under the ceiling.
+func (store *DispatchRecordingStore) ReserveWithin(ctx context.Context, runID, callID, purpose string, tokens int64,
+	ceiling budget.Ceiling) (budget.Reservation, error) {
+	_, _ = store.callLog.RecordDispatchForRun(ctx, callID, runID, purpose, "test-fixture")
+	return store.PostgresStore.ReserveWithin(ctx, runID, callID, purpose, tokens, ceiling)
+}

@@ -190,6 +190,36 @@ func purposeOf(snapshot *Snapshot, purpose string) *PurposeUsage {
 // allowances must cover it, and a concurrency slot must be free. The call's dispatch record must
 // already exist (runtime.model_calls, same id, organization and purpose).
 func (store *PostgresStore) Reserve(ctx context.Context, runID, callID, purpose string, tokens int64) (Reservation, error) {
+	return store.ReserveWithin(ctx, runID, callID, purpose, tokens, Ceiling{})
+}
+
+// Ceiling is the active catalog's current restriction on a run (GO-72, GO-86): a revision may only
+// narrow the passport's limits, never widen them. A zero field sets no ceiling.
+type Ceiling struct {
+	CallsTotal     int64
+	CallsAgent     int64
+	CallsSecurity  int64
+	TokensTotal    int64
+	RequestTimeout time.Duration
+}
+
+// CeilingReserver reserves a call under a ceiling.
+type CeilingReserver interface {
+	ReserveWithin(ctx context.Context, runID, callID, purpose string, tokens int64, ceiling Ceiling) (Reservation, error)
+}
+
+// narrowed lowers a limit to a positive ceiling; it never raises it.
+func narrowed(limit, ceiling int64) int64 {
+	if ceiling > 0 && ceiling < limit {
+		return ceiling
+	}
+	return limit
+}
+
+// ReserveWithin is Reserve with the ledger's limits narrowed by the ceiling under the same row lock,
+// so a lowered catalog limit refuses the next reservation once usage has reached it. Past usage is
+// never refunded or rewritten.
+func (store *PostgresStore) ReserveWithin(ctx context.Context, runID, callID, purpose string, tokens int64, ceiling Ceiling) (Reservation, error) {
 	if ctx == nil || runID == "" || callID == "" || (purpose != PurposeAgent && purpose != PurposeSecurity) || tokens <= 0 {
 		return Reservation{}, ErrInvalid
 	}
@@ -209,6 +239,16 @@ func (store *PostgresStore) Reserve(ctx context.Context, runID, callID, purpose 
 	}
 	balance := ledger.snapshot
 	share := purposeOf(&balance, purpose)
+	balance.CallLimit = narrowed(balance.CallLimit, ceiling.CallsTotal)
+	balance.Limit = narrowed(balance.Limit, ceiling.TokensTotal)
+	if purpose == PurposeAgent {
+		share.CallLimit = narrowed(share.CallLimit, ceiling.CallsAgent)
+	} else {
+		share.CallLimit = narrowed(share.CallLimit, ceiling.CallsSecurity)
+	}
+	if ceiling.RequestTimeout > 0 && ceiling.RequestTimeout < balance.RequestTimeout {
+		balance.RequestTimeout = ceiling.RequestTimeout
+	}
 	switch {
 	case balance.Paused:
 		return Reservation{}, ErrPaused
