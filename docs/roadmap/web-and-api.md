@@ -1273,7 +1273,8 @@ this side starts and reviews.
     necessary to make a decision")
   - Blocked by: `read path`; `review payload read`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-20 · Forward approval decisions through `POST /api/actions/{id}/approval`**
+- [x] **API-20 · Forward approval decisions through `POST /api/actions/{id}/approval`**
+  - Done (2026-10-04): reviewer-only POST /api/actions/{id}/approval accepts exactly the shared X-10 decision and forwards it to Go; NestJS creates no grant or runtime state. Go-owned ApprovalResponse from 32b4a76 is validated and relayed unchanged; action/decision mismatches fail closed, 401/403/404/409/503 remain upstream errors, and timeout is 504 outcome_unconfirmed. Checks: API lint, typecheck and build exited 0; API unit tests: "299 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". Tests cover approve/reject, non-reviewer refusal before Go, extra identity/payload fields, invalid decisions, transport failures and response mismatches. Full live approval/outbox execution was not exercised by this API task.
   - **Report 1.1 change:** A forbidden export never reaches approval, and an approval cannot override it.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-10, API-16 · Needs: X-10, X-13, X-40 · Provides: X-43 (part: approval)
