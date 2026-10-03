@@ -258,6 +258,7 @@ All root scripts, as defined in `package.json`:
 | `pnpm verify`                           | Runs `check:instructions`, `format:check`, `lint`, `typecheck`, `test`, `build` and prints a summary.             |
 | `pnpm smoke` (`--mode=host\|container`) | HTTP checks against the running services.                                                                         |
 | `pnpm test:db` (`gateway\|api`)         | Database-backed tests against the PostgreSQL in `.env`; see "Testing and verification".                           |
+| `pnpm reset:demo`                       | Resets the demo fixtures for the judge environment; see "Testing and verification". Not complete yet.             |
 | `pnpm check:instructions`               | Checks that `AGENTS.md` and `CLAUDE.md` are identical and complete, and that the agent files are valid.           |
 | `pnpm db:migration:create <Name>`       | Writes an empty migration file.                                                                                   |
 | `pnpm db:migration:generate <Name>`     | Generates a migration from the difference between entities and the database.                                      |
@@ -360,6 +361,18 @@ A skip is never a pass. The summary marks each side PASS, FAIL or SKIPPED, and t
 non-zero unless every selected side passed: an unreachable database or a failing test is FAIL; a
 test skipped while the database is available, or a side with no database-backed tests, is
 SKIPPED. Go runs with `-count=1`, so a cached pass cannot hide a database that is down.
+
+### `pnpm reset:demo`
+
+An explicit reset for the judge environment (`make reset-demo` calls it); nothing runs it at
+startup. Decided scope: it truncates the demo and runtime data and reseeds the synthetic demo
+records, and keeps the app data (users, memberships, control-catalog revisions), so a judge's policy
+edits survive a fixture reset. It never removes the database volume.
+
+It refuses to run unless `POSTGRES_HOST` resolves only to a loopback address, and stops when the
+database does not answer. **Not complete yet:** the reset itself needs the demo and runtime tables
+and the seed command (SH-17, SH-24, SH-18). Until they exist the command stops with an error after
+these checks and changes nothing.
 
 ## Troubleshooting
 

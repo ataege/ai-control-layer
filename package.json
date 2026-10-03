@@ -25,6 +25,7 @@
     "verify": "node scripts/verify.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test:db": "node scripts/test-db.mjs",
+    "reset:demo": "node scripts/reset-demo.mjs",
     "test:fixtures": "node --test \"fixtures/*.test.mjs\"",
     "check:instructions": "node scripts/check-instructions.mjs",
     "db:migration:create": "node scripts/with-env.mjs pnpm --filter api run migration:create",
