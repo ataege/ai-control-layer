@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stored-action.schema.json",
+  "title": "StoredAction",
+  "description": "X-09: the immutable stored action (runtime.actions), stored before evaluation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "actionId",
+    "runId",
+    "stepNumber",
+    "proposal",
+    "canonicalizationVersion",
+    "actionDigest",
+    "idempotencyKey",
+    "evaluatedCatalogRevisionId",
+    "status",
+    "expiresAt",
+    "createdAt"
+  ],
+  "properties": {
+    "actionId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "stepNumber": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "proposal": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool", "arguments"],
+          "properties": {
+            "tool": {
+              "const": "read_invoice"
+            },
+            "arguments": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["invoice_id"],
+              "properties": {
+                "invoice_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool", "arguments"],
+          "properties": {
+            "tool": {
+              "const": "read_vendor"
+            },
+            "arguments": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["vendor_id"],
+              "properties": {
+                "vendor_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool", "arguments"],
+          "properties": {
+            "tool": {
+              "const": "create_report"
+            },
+            "arguments": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["template", "source_invoice_ids"],
+              "properties": {
+                "template": {
+                  "enum": ["internal_investigation_v1", "vendor_reconciliation_v1"]
+                },
+                "source_invoice_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tool", "arguments"],
+          "properties": {
+            "tool": {
+              "const": "queue_report"
+            },
+            "arguments": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["report_id", "recipient_reference"],
+              "properties": {
+                "report_id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                },
+                "recipient_reference": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "canonicalizationVersion": {
+      "const": 1
+    },
+    "actionDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "evaluatedCatalogRevisionId": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "allowed",
+        "denied",
+        "awaiting_approval",
+        "approved",
+        "rejected",
+        "expired",
+        "executing",
+        "succeeded",
+        "failed",
+        "unknown"
+      ]
+    },
+    "expiresAt": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "createdAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    }
+  }
+}

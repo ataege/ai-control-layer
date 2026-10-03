@@ -1,0 +1,7 @@
+{
+  "tool": "queue_report",
+  "arguments": {
+    "report_id": "4d5e6f70-8192-4a3b-8c5d-6e7f8091a2b3",
+    "recipient_reference": "recipient:5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b:vendor_Atlas"
+  }
+}
