@@ -11,32 +11,66 @@ writing by the organizers on 3 October 2026: "until 11:00 AM tomorrow" (organize
 "Any alterations and modifications made after the statutory time is expired will not be considered
 by the Jury." ([S9] §13)
 
-## 0. First project draft on HackTribe (due now, 3 October)
+## 0. HackTribe text to paste (final, 4 October)
 
 The organizers' announcement, relayed by the lead on 3 October 2026 at about 19:30 (verbatim in
-[organizer-questions.md](organizer-questions.md), answer 2): "Your first draft should mainly
-include: a few sentences about the project you are working on, information about the category you
-are competing in." "Clicking Submit does not mean that your work is finished. After submitting the
-draft, you can still freely edit and update your project until 11:00 AM tomorrow." The "Published"
-option "does not matter at this stage". The draft's own deadline time was not given: submit it as
-soon as possible.
+[organizer-questions.md](organizer-questions.md), answer 2): a first draft needs "a few sentences about
+the project you are working on, information about the category you are competing in", and "After
+submitting the draft, you can still freely edit and update your project until 11:00 AM tomorrow." The
+"Published" option "does not matter at this stage". If the first draft is not submitted yet, submit
+the **short description** below with the category now, then paste the final text.
 
-- [ ] Submit the first draft on HackTribe (a person does it): the few sentences below and the
-      category.
-- [ ] Category: **AI Control Layer** (Goldman Sachs).
-- [ ] Draft sentences, written as work in progress so they claim nothing that is not built yet:
+- [ ] **Project title:** `Task Passport`
+- [ ] **Category:** AI Control Layer (Goldman Sachs)
+- [ ] **Team name:** **[FILL team name]** (the team decides)
+- [ ] **Team members (1 to 6):** **[FILL members]**. The git history of `main` shows three authors:
+      Ata Ege, Noyan67 and Batın Adıgüzel. The user confirms the names, whether to add anyone else, and
+      that each member is not excluded by rule 6 ([S9] §6, G-4).
+- [ ] **Short description** (for the first draft; also usable as a one-paragraph summary):
 
-> Task Passport is an AI control layer we are building for the Goldman Sachs AI Control Layer
-> challenge. It governs one bounded agent task: a Go gateway issues a task passport (the tools,
-> records, recipients and model budget the task may use) and checks every model call and tool action
-> against it, with deterministic rules plus a separately metered semantic check on a local model. Our
-> demonstration uses synthetic invoices and a simulated outbox to show a case where reading an internal
-> note and contacting the vendor are both allowed, but sending a report built from that note is not;
-> the task then finishes through a separate vendor report built only from approved fields. The
-> submission will include an editable policy file with live reload, a security dashboard and audit
-> export, performance telemetry and an automated test suite.
+> Task Passport is an AI control layer that governs one bounded agent task. A Go gateway issues an
+> immutable task passport (the tools, records, recipients, report templates and model budget the task
+> may use) and checks every governed model call and tool action against it, with deterministic rules
+> and a separately metered semantic check on a local model. The demonstration, on synthetic invoices
+> and a simulated outbox, shows an agent that may read an internal note and contact the vendor, but
+> whose report built from that note cannot be exported to the vendor; the task still finishes through
+> a separate vendor report built only from approved fields.
 
-- [ ] After the draft: the final description replaces it before 11:00 AM on 4 October (section 4).
+- [ ] **Final description** (paste before 11:00 AM; fill **[FILL build]** with the frozen commit, or
+      keep `cdfee55` if the rerun did not happen, as section 3 says):
+
+> **What it is.** Task Passport is an AI control layer that governs one bounded agent task. A Go
+> gateway issues an immutable task passport (the tools, records, recipients, report templates and
+> model budget the task may use) and checks every governed model call and tool action against it.
+> Deterministic checks decide scope, destination and report lineage first. A separately metered
+> semantic check on a local model (`qwen3.5:4b` through Ollama) can block or redact untrusted text but
+> never grants access, and it fails closed.
+>
+> **What it shows.** On synthetic invoices and a simulated outbox (a database record; no email is
+> sent), an agent may read an internal investigation note and the vendor is a permitted recipient, yet
+> a report built from that note inherits its Internal only restriction and its export to the vendor is
+> denied; approval cannot override it. The task still finishes through a separate vendor report
+> rendered from approved invoice fields, reviewed as an exact action and queued once. The denied export
+> is shown with a labelled replay of a scripted proposal through the real gate, not as a live-model
+> action.
+>
+> **Control-layer deliverables.** An editable policy file with validated live import and a last-good
+> fallback; a four-rule attack-signature feed (trusted by authenticated import and SHA-256, not
+> signed); budgets reserved before every model call, with separate agent and security allowances; a
+> security summary and a sanitized JSON and CSV audit export; performance telemetry; a small
+> control-evaluation adapter; and a one-command test suite. `pnpm verify:controls` passed 1,145 cases
+> on build **[FILL build]** (live model: 28 of 29 labels matched on our fixture set, 0 false
+> positives, 1 false negative whose action the gate still denies).
+>
+> **Limits.** No universal prompt-injection detection; the protection covers two report templates and
+> stored lineage; the semantic check does not run on the four tools' action proposals; the audit
+> export is not tamper-proof; there are no automatic model retries. **Pre-event work:** the starter and
+> the design documents were prepared before the start, and the project was built with AI coding
+> assistance (Claude Code); see `docs/preparation-record.md`. Stack: Next.js, NestJS, Go, PostgreSQL,
+> Ollama (MIT) and `qwen3.5:4b` (Apache 2.0). Repository:
+> https://github.com/ataege/ai-control-layer
+
+- [ ] After the first draft: replace it with the final description before 11:00 AM on 4 October.
 
 ## 1. Before the freeze (M5, by about 08:00)
 
