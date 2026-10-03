@@ -73,17 +73,17 @@ func TaskOptions(ctx context.Context, database OptionsDatabase, loader *catalog.
 	}
 
 	invoiceRows, err := database.Query(ctx, `SELECT id, external_reference, to_char(issued_on, 'YYYY-MM-DD'),
-		total_minor_units FROM demo.invoices WHERE organization_id = $1 ORDER BY issued_on, id`, organizationID)
+		total_minor_units, vendor_id FROM demo.invoices WHERE organization_id = $1 ORDER BY issued_on, id`, organizationID)
 	if err != nil {
 		return contracts.TaskFormOptions{}, ErrOptionsUnavailable
 	}
 	for invoiceRows.Next() {
 		var invoice contracts.TaskFormInvoice
-		if err := invoiceRows.Scan(&invoice.ID, &invoice.Number, &invoice.Date, &invoice.Amount); err != nil {
+		if err := invoiceRows.Scan(&invoice.ID, &invoice.Number, &invoice.Date, &invoice.Amount, &invoice.VendorID); err != nil {
 			invoiceRows.Close()
 			return contracts.TaskFormOptions{}, ErrOptionsUnavailable
 		}
-		if contracts.ValidInvoiceID(invoice.ID) {
+		if contracts.ValidInvoiceID(invoice.ID) && contracts.ValidVendorID(invoice.VendorID) {
 			options.Invoices = append(options.Invoices, invoice)
 		}
 	}
