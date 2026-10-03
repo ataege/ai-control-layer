@@ -100,6 +100,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `cmd/gateway`              | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
 | `cmd/modelcheck`           | Go lane f3 (worker, agent, model, budget)                     |
 | `cmd/budgetcheck`          | Go lane f3 (worker, agent, model, budget)                     |
+| `cmd/benchmark`            | Go lane w2 (tools and provenance)                             |
 | `internal/config`          | Shared Go lanes; the lead coordinates edits                   |
 | `internal/logging`         | Shared Go lanes; the lead coordinates edits                   |
 | `internal/database`        | Shared Go lanes; the lead coordinates edits                   |
@@ -128,6 +129,7 @@ New packages get their ownership row when their first real code lands.
 cmd/gateway/          wiring, signals, -healthcheck
 cmd/modelcheck/       explicit synthetic Ollama connectivity check
 cmd/budgetcheck/      explicit central-catalog and PostgreSQL accounting diagnostic
+cmd/benchmark/        repeatable performance benchmark of the governed tool-result path (GO-81)
 internal/config/      environment and trusted accounting-catalog validation
 internal/logging/     JSON slog logger, Secret
 internal/database/    pgxpool construction
@@ -401,6 +403,58 @@ Idempotency and retries follow the stable action identity:
 
 The simulated outbox creates a database record and sends no email.
 
+## Production chain and gateway wiring (GO-11, GO-09)
+
+`agent.NewProductionChain(pool, loader, agent.ChainConfig{Model, ModelConfigured, Logger})` builds
+the governed chain once, and `cmd/gateway` uses it with the same `catalog.Loader` as admission:
+
+- `ModelCaller` (`agent.CatalogAccountedCaller`): the active catalog's accounting settings and
+  request timeout per call, the run's ledger, `model.AccountedCaller`, the Ollama provider
+  (`MODEL_BASE_URL`, `MODEL_NAME`, 2-minute outer bound, 1 MiB request/response limits);
+- `SecurityCaller` (`agent.RecordingCaller`), `Evaluator` (`security.NewSemanticEvaluator`, context
+  8192, verdicts labelled `live`), `Inspector` (`security.NewInspector`);
+- `Settings` (`agent.CatalogSettings`, policy's `SecuritySettingsSource` over the active snapshot;
+  a revision that is no longer active has no settings), `Catalog` (`agent.PoolCatalog`);
+- `Gate` (`policy.NewGate` with `PassportScopeReader`, `PostgresRecorder`, `PostgresRelationships`
+  and `policy.NewSecurityActionEvaluator`, never nil, plus `PostgresReviewFreezer`), `Executor`
+  (`tools.Runner`), `Loop` and `Worker` (`worker.Service` claiming `contracts.JobKindAgentStep`).
+
+The gateway starts the worker after the pool, reports it in `/health/ready`, and on SIGINT/SIGTERM
+stops it in parallel with the HTTP drain (6 s drain, inside the 8 s budget) before the pool closes.
+Without `MODEL_NAME` the gateway still starts and logs `model not configured; every model call
+fails closed`: the chain uses a model name no catalog allows and a provider that dispatches nothing.
+
+Live evidence (developer M2/8 GiB, Ollama 0.35.1, `qwen3.5:4b`, PostgreSQL 18 on loopback, the
+repository's policy and signature feed activated through `catalogtest`): the opt-in
+`TestLiveProductionChainExecutesAPermittedTool` ran the production chain on an admitted run. In one
+run the model read invoice A01 (the internal note passed inspection), read A02, created a
+`vendor_reconciliation_v1` report and proposed `queue_report`, which stopped at `awaiting_approval`
+(4 agent and 5 security calls, 6,954 tokens). Other runs on this memory-constrained machine (about
+70 MB free) ended differently: one answered without a tool call; four paused with `outcome_unknown`
+when an agent call exceeded the catalog's 20-second request timeout (one of them after one executed
+read). These are observations of a 4B model under memory pressure, not a reliability measure.
+
+```sh
+GO_AGENT_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
+  node scripts/with-env.mjs go -C services/gateway test -tags=model_live ./internal/agent \
+  -run '^TestLiveProductionChainExecutesAPermittedTool$' -count=1 -v
+```
+
+## Model allowance ledger alignment (GO-39)
+
+Migration `1791130000000-AlignTokenLedger` applies alignment decisions 1 to 5 to the GO-06 ledger:
+uuid `run_id` with a foreign key to `runtime.runs`, `organization_id` on both tables, `call_id` =
+`runtime.model_calls.id` with the purpose bound by the foreign key, per-purpose token sub-limits
+and counters, call limits and counters, the request timeout and the concurrency slot. Ledger rows
+without a run (pre-alignment diagnostics) and reservations with non-uuid call ids are deleted;
+reservations of existing runs without a dispatch record get a labelled backfilled `model_calls`
+row; limits are copied from the passport. `OpenRunLedger` writes every limit at admission;
+`Reserve` checks shared and purpose calls and tokens and the slot before dispatch and returns the
+request timeout, which `model.AccountedCaller` applies to the provider request. The agent loop's
+step count is the ledger's `agent_calls`, and a held slot requeues the job instead of ending the run.
+`budget.CreateRun` is gone; `cmd/budgetcheck` admits a labelled synthetic run (an unclaimed job kind)
+and records each dispatch. Details: `internal/budget/README.md`.
+
 ## Performance telemetry (GO-80)
 
 `agent.Telemetry` writes observed monotonic durations to `runtime.timing_records` and the
@@ -474,9 +528,8 @@ becomes `{"withheld":true,"reason_code":...}`; a paused inspection pauses the ru
 nothing. Security calls go through `agent.RecordingCaller`, which commits the `model_calls` row
 under the evaluator's own call id before dispatch, so control assessments can reference it.
 
-Not wired into the gateway process yet: the production scope reader and admission (GO-13) are
-needed for a live run; the wiring commit adds `worker.Service`, this handler and the readiness
-reporter to `cmd/gateway/main.go`.
+The gateway process runs this handler through `agent.NewProductionChain` (see "Production chain
+and gateway wiring").
 
 ## Deterministic content controls (GO-74)
 
@@ -869,6 +922,66 @@ a feed revision through the import and its refusals are covered by
 `apps/api/src/policies/signature-feed-import.db-spec.ts`; switching the active feed in PostgreSQL is
 GO-73 (3c).
 
+## Performance benchmark (GO-81)
+
+`cmd/benchmark` measures one permitted operation: the policy lookup (active catalog revision and
+its security settings, read from PostgreSQL as each inspection does) and the hybrid inspection of
+one minimized `read_invoice` result whose internal note is the semantically checked field. It
+writes no row. The passport, gate, effect and commit are outside the measured operation.
+
+```sh
+pnpm benchmark                              # semantic off and fixture
+MODEL_NAME=qwen3.5:4b pnpm benchmark --live
+```
+
+Flags: `--samples` (300) and `--warmup` (20) for the two configurations without a model,
+`--live-samples` (10) and `--live-warmup` (1) for the live one, `--out <file>` to keep the JSON.
+It prints a table and the full JSON report.
+
+Measurement method (open item `measurement method`, decided by the Go lane for GO-81):
+
+- Configurations: `semantic_off` (deterministic controls only), `semantic_on_fixture` (the
+  semantic path answered at once by a labelled fixture caller: gateway overhead, never detection
+  quality), `semantic_on_live` (`--live`, the model in `MODEL_NAME`, which the active catalog
+  must allow; tokens go to an in-memory ledger, not to a run). Semantic on and off are derived in
+  process from the active revision's settings; the catalog is not changed.
+- Concurrency 1. Warmup samples are not measured. The two configurations without a model are
+  interleaved sample by sample, so changing load affects both alike.
+- Phases use the `runtime.timing_records` names: `policy_lookup`, `deterministic` (the inspection
+  minus the semantic evaluator), `semantic` (the evaluator with its model call), `provider` (the
+  model time the provider reports), `total`; plus `gatewayOverhead` = total minus provider.
+  Durations are monotonic. Percentiles are nearest-rank over the measured samples, and a
+  statistic without observations is `null`. Errored or paused samples are counted, not timed.
+- The report records the commit and dirty flag, Go version, OS, architecture, CPU count and model,
+  load average, database, active catalog and feed revisions, payload and note sizes, and
+  separately aggregates what the gateway recorded in `runtime.timing_records` during real runs.
+
+It needs an enforceable active catalog with its signature feed; without one it fails closed. Until
+the feed import (API-34) is on `main`, load `config/attack-signatures.json` into
+`app.signature_feed_revisions` and the pointer's `active_feed_revision_id` by hand.
+
+### Result on the developer machine (2026-10-03)
+
+Apple M1 Pro, 10 CPUs, macOS arm64, go1.27.1, Ollama `qwen3.5:4b`; private `postgres:18-alpine`
+on 127.0.0.1:55540, database `starter_bench` (migrated, `pnpm db:seed`, feed `feed_v1` loaded by
+hand); catalog revision 1; base commit 9f29b28 plus the uncommitted benchmark code. The machine was
+heavily loaded by other work (load average 108.88 100.60 76.30 on 10 CPUs), so these numbers
+describe that state, not an idle machine. Payload 421 bytes, note 172 bytes. Every sample passed;
+0 errors.
+
+| Configuration         | Samples | Total p50 µs | Total p95 µs | Policy lookup p50 µs | Deterministic p50 µs | Semantic p50 µs | Provider p50 µs | Samples/s |
+| --------------------- | ------- | ------------ | ------------ | -------------------- | -------------------- | --------------- | --------------- | --------- |
+| `semantic_off`        | 300     | 45,021       | 284,823      | 44,719               | 294                  | null            | null            | 12.4      |
+| `semantic_on_fixture` | 300     | 38,802       | 279,920      | 38,545               | 315                  | 39              | null            | 12.8      |
+| `semantic_on_live`    | 5       | 16,204,307   | 17,407,975   | 530,094              | 5,338                | 15,507,691      | 15,456,473      | 0.1       |
+
+Reading: the in-process controls take well under a millisecond at the median, the fixture
+semantic path adds about 40 µs, and the live semantic check is dominated by the model (provider
+p50 about 15.5 s under this load; gateway overhead p50 616,328 µs). Under this load the policy
+lookup, two database reads plus settings validation, is the largest gateway cost. No timing
+records existed in `runtime.timing_records` (GO-80's writer is not on `main`). Five live samples
+are an observation, not a stable distribution.
+
 ## Worker and job lease (GO-08)
 
 `internal/worker` claims `runtime.jobs` rows and runs them one at a time (decision 5: PostgreSQL
@@ -905,8 +1018,8 @@ like a handler error; a zero `Outcome` is not a decision and records nothing.
 `health.Handler.Worker` takes the service's `Ready()`: while the loop is not running, readiness
 answers `503` with `status: "unavailable"` and the real database check, and logs
 `worker loop not running`. The readiness schema stays unchanged (open item `worker readiness`,
-option chosen with the lead: no contract change). The gateway process does not start the worker
-yet: GO-11 adds the agent-loop handler and wires the service into `cmd/gateway/main.go`.
+option chosen with the lead: no contract change). The gateway process starts the worker and reports
+it in readiness (see "Production chain and gateway wiring").
 
 Tests use a unique job kind per test, so no test claims
 another test's job. Their fixtures need a passport, which rejects `DELETE` by trigger: cleanup

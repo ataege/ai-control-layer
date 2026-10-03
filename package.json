@@ -30,6 +30,7 @@
     "reset:demo": "node scripts/reset-demo.mjs",
     "verify:controls": "node scripts/verify-controls.mjs",
     "judge": "node scripts/judge-client.mjs",
+    "benchmark": "node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark",
     "test:judge": "node --test scripts/judge-client.test.mjs",
     "test:fixtures": "node --test \"fixtures/*.test.mjs\"",
     "check:instructions": "node scripts/check-instructions.mjs",

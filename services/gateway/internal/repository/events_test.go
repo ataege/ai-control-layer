@@ -268,3 +268,25 @@ func TestRunEventsRejectsInvalidPagesBeforeDatabaseWork(t *testing.T) {
 		}
 	}
 }
+
+func TestValidStoredEventChecksTheCursorAndTheContract(t *testing.T) {
+	runID := "5f0c1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b"
+	valid := contracts.SafeEvent{EventID: "42", OrganizationID: "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01", RunID: &runID,
+		EventType: contracts.EventRunStarted, OccurredAt: time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)}
+	if !ValidStoredEvent(valid) {
+		t.Fatal("a valid event was refused")
+	}
+	for name, change := range map[string]func(event *contracts.SafeEvent){
+		"cursor with a leading zero": func(event *contracts.SafeEvent) { event.EventID = "042" },
+		"cursor not a number":        func(event *contracts.SafeEvent) { event.EventID = "abc" },
+		"no occurrence time":         func(event *contracts.SafeEvent) { event.OccurredAt = time.Time{} },
+		"unknown event type":         func(event *contracts.SafeEvent) { event.EventType = "run.exploded" },
+		"unknown summary effect":     func(event *contracts.SafeEvent) { event.MaskedSummary.Effect = pointer("email_sent") },
+	} {
+		event := valid
+		change(&event)
+		if ValidStoredEvent(event) {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
