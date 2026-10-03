@@ -275,7 +275,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-01 · Decide: handling of model responses that propose several actions**
+- [x] **GO-01 · Decide: handling of model responses that propose several actions**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 0.5-1 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
@@ -298,12 +298,18 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
     blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
     the decision-record review and completion requirements of this roadmap.
+  - Completed (2026-10-03): the outcome is recorded in `docs/product/README.md` ("GO-01: multiple-
+    action model responses"). Implemented on go/f3: `agent.Stepper` (GO-10, 19d710e) rejects a
+    response with several tool calls as `multiple_actions_not_supported` and never runs a subset
+    (`TestSeveralToolCallsRejectTheWholeResponse`); the loop (GO-11, faac792) stops the run with
+    that reason and stores no action (`TestSeveralActionsInOneResponseStopTheRun`). Bounded
+    correction instead of the stop comes with the GO-29 wiring.
   - Report: "The enforcement loop and data minimization" ("Unsupported multiple-action responses
     should be rejected or handled by an explicitly defined policy"); "Design decision record" (One
     action per model step)
   - Blocked by: nothing
 
-- [ ] **GO-02 · Decide: how dispatched attempts are identified for worker recovery**
+- [x] **GO-02 · Decide: how dispatched attempts are identified for worker recovery**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 0.5-1.5 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`
@@ -331,6 +337,12 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     (6 passed, 0 failed, 0 skipped); `git diff --check` passed. The earlier pnpm/Node environment
     blocker is resolved. Runtime behavior is not implemented. The checkbox remains open pending
     the decision-record review and completion requirements of this roadmap.
+  - Completed (2026-10-03): the outcome is recorded in `docs/product/README.md` ("GO-02: durable
+    attempts and worker recovery"). Implemented for model calls on go/f3: `budget.CallLog` commits
+    the `runtime.model_calls` pre-dispatch record before every model dispatch and records its
+    outcome once; its id is the ledger call id (19d710e,
+    `TestStepRecordsTheDispatchAndSettlesUsage`, `TestCallLogRejectsASecondOutcome`). Tool attempts
+    are written by w3's executor in `runtime.execution_attempts`. Recovery behaviour is GO-49.
   - Report: "Threat model limits and unresolved design choices" ("Durable worker recovery requires
     identifiable dispatched attempts"); "Durable state idempotency audit and uncertain outcomes"
   - Blocked by: nothing
@@ -361,6 +373,10 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     The final model freeze, measured hardware fit, endpoint, reservation strategy and SH-04 adoption
     remain open. The local Go connectivity diagnostic passed on M2/8 GiB; this does not freeze
     the model/accounting decision or verify runtime governance.
+  - Progress (2026-10-03): the Go client and the accounting rule are implemented (GO-06) and a live
+    agent step on `qwen3.5:4b` with `think: false` passed on the developer M2/8 GiB machine (GO-10,
+    19d710e). Still open: the model and hardware freeze on the presentation machine (SH-04), its
+    endpoint and measured fit.
   - Report: "Atomic allowances hard limits and estimated cost" ("The selected provider and model
     should have a documented accounting rule"); "Report purpose and design status" (one model
     provider)
@@ -544,7 +560,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-08 · Claim durable jobs with a lease in one worker**
+- [x] **GO-08 · Claim durable jobs with a lease in one worker**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: GO-19, GO-20 · Needs: X-19 · Provides: nothing
   - Paths: `services/gateway/cmd/gateway/main.go`, `services/gateway/internal/database/database.go`,
@@ -563,6 +579,17 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     job under a live lease cannot be claimed; a lease past expiry can be claimed again; a claimed
     job and its progress survive closing the pool and opening a new one; no claim transaction stays
     open while a stubbed model call runs. The X-24 command.
+  - Completed (2026-10-03): `internal/worker` (95d180c on go/f3, on main since f14b591). One-
+    statement `FOR UPDATE SKIP LOCKED` claim that sets status, a fresh per-claim lease token and
+    expiry together on the database clock; renew, finish and release succeed only for the current
+    token on a live lease (`ErrLeaseLost` otherwise); renewal at a third of the lease cancels the
+    handler on failure; no transaction or lock outlives a store call. Tests: concurrent claims yield
+    one owner, a live lease cannot be claimed, an expired lease is claimed again and fences the old
+    claim, a claim survives a new pool, no row lock or acquired connection during the handler.
+    Checks: `pnpm --filter gateway run format:check`, `lint`, `typecheck`, `test`, `build` exit 0;
+    `pnpm test:db gateway` on PostgreSQL 18 "167 passed, 0 failed, 0 skipped"; `go test -race ./...`
+    with PostgreSQL all packages ok; `pnpm verify` 6 passed. The worker is started by the gateway
+    process only with the GO-11 wiring.
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Relative implementation
     milestones and critical dependencies" (Critical path and sensible reductions, one worker
     process); "Functional requirements MVP boundary and deferred scope" (Durable execution)
@@ -595,11 +622,22 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     budget and the pool closes after it; a job interrupted by the shutdown can be claimed again
     after its lease expires; readiness answers `unavailable` while the worker loop is not running;
     the readiness fixtures decode strictly. `pnpm --filter gateway run test`.
+  - Progress (2026-10-03): `worker.Service` (456d802 on go/f3) stops claiming on `Stop`, lets the
+    current step finish until the drain deadline, then cancels the handler (`ErrDrainTimeout`); an
+    interrupted job keeps its lease and is claimed again after expiry. Readiness (option B of
+    `worker readiness`, agreed with the lead, no contract change): `health.Handler.Worker` makes
+    `/health/ready` answer 503 `unavailable` with the true database check while the loop is not
+    running. Tests pass (`TestStopLetsTheCurrentStepFinishAndStopsClaiming`,
+    `TestStopCancelsAStepThatOverrunsTheDeadline`,
+    `TestInterruptedJobIsClaimedAgainAfterItsLeaseExpires`, `TestReadinessCoversTheWorker`); `pnpm
+test:db gateway` "175 passed, 0 failed, 0 skipped"; `pnpm verify` 6 passed. Missing half: the
+    wiring into `cmd/gateway/main.go` (Stop before `pool.Close()`), which lands with the GO-11
+    wiring.
   - Report: "Durable state idempotency audit and uncertain outcomes"; "Functional requirements MVP
     boundary and deferred scope" (Durable execution)
   - Blocked by: `worker readiness`
 
-- [ ] **GO-10 · Run a live model step through the model gateway**
+- [x] **GO-10 · Run a live model step through the model gateway**
   - **Report 1.2 change:** Each call carries its trusted metered purpose and records usage and latency per purpose (M1 exit); GO-75 adds the security purpose and GO-80 the timing records.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: M (estimate 4-8 h)
   - Depends on: GO-01, GO-06, GO-19, GO-22, GO-23 · Needs: X-04, X-06, X-09, X-11 · Provides: nothing
@@ -627,6 +665,19 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     holds nothing outside the GO-23 context; the recorded call and token counts match the
     dispatches made. `pnpm --filter gateway run test`; one live run with the decision 6 model
     through the X-24 command, quoted.
+  - Completed (2026-10-03): `internal/agent` `Stepper.Step` and `budget.CallLog` (19d710e on go/f3).
+    The model must be in the passport's allowed models; the pre-dispatch record commits first; the
+    request is the fixed instruction plus the minimized context with only the four X-09 tools (a
+    drift test checks the parameters against `action-proposal.schema.json`); one tool call becomes
+    one proposal for the gate, several are rejected whole (GO-01), text is a final answer; a failed
+    call fails the run with no retry (`model call retries` default). Live: the opt-in
+    `TestLiveModelProposesATypedAction` passed four times on the developer M2/8 GiB machine (Ollama
+    0.35.1, `qwen3.5:4b` ID `2a654d98e6fb`, `think: false`), each a typed `read_invoice` with
+    `invoice_id: "invoice_A01"`, 647 input and 30 output tokens, ledger settled to 677 of 20,000
+    with nothing reserved. Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit
+    0; `pnpm test:db gateway` "399 passed, 0 failed, 0 skipped"; `go test -race ./...` with
+    PostgreSQL 17 packages ok; `pnpm verify` 6 passed. Call-count limits and per-purpose sub-budgets
+    are GO-39/GO-79.
   - Report: "The enforcement loop and data minimization"; "Relative implementation milestones and
     critical dependencies" (Hours 2-6, live model call); "Delivery scope and six person ownership"
     (Proposed team ownership); "Risk register and scope controls" (Provider instability or
@@ -659,6 +710,16 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     reason; a permitted read runs and its minimized result reaches the next model request; the
     steps and their order can be reconstructed from the stored records. The X-24 command;
     `pnpm --filter gateway run test`.
+  - Progress (2026-10-03): `agent.Loop` and the append-only `runtime.context_entries` (migration
+    `1791070000000-AddAgentContextEntries`, approved by the lead) are on go/f3 (faac792). Every
+    model request is preceded by the run check (cancellation, expiry, agent steps); proposals go
+    through the real gate and executor; inspected results are stored and reach the next request; a
+    restarted loop continues without re-executing. Database tests with the real repository, gate,
+    executor and `tools.Runner` and a labelled scripted stepper pass; `pnpm test:db` gateway "416
+    passed, 0 failed, 0 skipped", api "16 passed"; fresh database: 13 migrations run, the new one
+    reverts and re-runs; `pnpm verify` 6 passed. Missing half: the live run of the done-when, with
+    w3's `PassportScopeReader`, c1's `InspectToolResult` replacing the interim fail-closed guard,
+    GO-29 correction and admission (GO-13), and the wiring into `cmd/gateway/main.go`.
   - Report: "The enforcement loop and data minimization"; "Atomic allowances hard limits and
     estimated cost" (Cancellation and time limits); "Architecture and chart reading guide"
     (Figure 4); "Users operating model and proposed user journeys" (Journey 3 recover cancel or
@@ -695,7 +756,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Blocked by: `canonical arguments`
   - Completed (2026-10-03): `internal/policy/canonical.go` (2b7cc5c, 582eafd, b6fb078; tool names and templates switched to `internal/contracts` in c07ca60). Strict decoding rejects invalid UTF-8, non-objects, unknown, case-variant and duplicate keys, missing or null fields, wrong types including numbers, trailing data, empty, over-long or control-character identifiers, unregistered templates, empty or repeated `source_invoice_ids` and a non-UUID `report_id`; the digest covers canonicalization version, action, run, tool, canonical arguments, passport, policy revision, recipient, affected resources with versions, outbound content and expiry. Checks: `go test -v ./internal/policy` 55 cases PASS (equivalent inputs give identical bytes for all four tools, 22 rejected inputs, 15 one-at-a-time material changes each change the digest); `pnpm verify` 6 passed, 0 failed, 0 skipped. Argument names match X-09 as frozen by 3c.
 
-- [ ] **GO-13 · Admit a start-run request and issue the passport, run and job together**
+- [x] **GO-13 · Admit a start-run request and issue the passport, run and job together**
   - **Report 1.2 change:** The passport adds approved model references, the admission catalog revision, shared limits with agent and security sub-limits, concurrency and run expiry; model selection is constrained by the catalog allowlist.
   - **Report 1.1 change:** The passport adds allowed report templates, source authority and the projection rules or source policy version; both templates are in the grant (shape: `passport report fields`).
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: M (estimate 4-8 h)
@@ -722,13 +783,30 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     unreadable `app` record rejects; a narrower request after a rejection is a new admission
     ("Verify that scope rejection is explicit and the revised request must be resubmitted"); no
     repository path updates a stored passport. The X-24 command.
+  - Completed (2026-10-03, 0931f93 and 276862a): `internal/admission` derives the passport from
+    the verified operator, the registered task template `reconcile_atlas_v1` (lead decision), the
+    active catalog revision read in the admission transaction, and the organization's demo
+    records: invoices of the organization sharing one vendor, the requested vendor and destination
+    equal to it with a registered reporting address, `approvalRequirement` absent or
+    `review_queue_report`, requested limits only below the catalog (`limit_not_allowed` otherwise).
+    Passport, run (queued), job (queued, `agent_step`), token ledger (`budget.OpenRunLedger`, limit
+    from the passport) and a `run.queued` event commit in one transaction; a rejection writes only
+    an `admission.rejected` event and returns the X-13 code with the scope or limit to change; a
+    missing or invalid catalog or a storage error stores nothing. Tests (PostgreSQL, rolled-back
+    outer transaction with its own records and catalog revision): the fitting request stores one
+    of each and an identical passport read-back; twelve over-authority requests are rejected with
+    their code and zero passport, run or job rows; no or invalid catalog is unavailable; a narrowed
+    catalog narrows templates; a fault injected into the last write leaves nothing. Checks: gateway
+    five checks PASS; `pnpm test:db gateway` 461 passed, 0 skipped (at 0931f93); `go test -race
+./internal/admission` ok after the ledger; `pnpm verify` 6 passed. Known limitation recorded by
+    the lead: no idempotency key on X-07, so two identical commands make two runs.
   - Report: "Trusted authority and passport invariants" (Passport fields and their purpose; Task
     relationships matter); "Functional requirements MVP boundary and deferred scope" (Trusted
     admission); "Threat model limits and unresolved design choices" (Verification priorities);
     "Illustrative passport and interface contracts" (Illustrative passport fields)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md` (which `app` records carry the operator's authority); `passport report fields`
 
-- [ ] **GO-14 · Serve `POST /internal/runs`**
+- [x] **GO-14 · Serve `POST /internal/runs`**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: GO-13, GO-21 · Needs: X-07, X-08, X-13 · Provides: X-28
   - Paths: `services/gateway/internal/httpserver/server.go`,
@@ -746,6 +824,25 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     shared envelope with its reason code and leaves no passport row; unknown fields, an oversized
     body and a missing or forged context are rejected before admission runs.
     `pnpm --filter gateway run test`; database-backed cases through the X-24 command.
+  - Completed (2026-10-03): `internal/api` registers `POST /internal/runs` through
+    `httpserver.Options.InternalCommands`, so it runs only behind the service token and the verified
+    `X-Operator-Context` (GO-21). The body decodes strictly (at most 64 KiB, no unknown fields, so an
+    organization or actor field is refused); identity comes only from the verified operator; GO-13
+    admission answers `201` `{runId, passportId}`, a `400` envelope with the X-13 code and the scope
+    or limit to change, or `503 decision_unavailable`. It never waits on a model or tool request.
+    The same command list mounts lane w2's GO-37 stored-report route with a viewer taken from the
+    verified operator. Tests: route tests with a labelled admission double (ids returned, only the
+    verified operator passed, rejection and unavailability mapped, bad bodies refused before
+    admission, no operator refused) and a PostgreSQL end-to-end test through the real guard,
+    admission and catalog (201 and a stored passport; a foreign invoice gives
+    `resource_out_of_scope` and no second passport). Checks: `pnpm --filter gateway run`
+    `format:check`, `lint`, `typecheck`, `test`, `build` PASS; `go test -race ./internal/api` with
+    PostgreSQL ok; `pnpm verify` 6 passed. Live: the built gateway on 127.0.0.1:18310 with tokens
+    signed by the API's jose library and the real key returned 201 for the seeded Atlas request
+    (run queued, agent_step job, ledger 20000, recipient reference), 400 `resource_out_of_scope` for
+    invoice_C01 and 400 `limit_not_allowed` for 25 model calls; the key never appeared in the log.
+    Not verified: the call from NestJS itself (no seeded app users; SH-19), and the `command timeout
+budget` item stays open (admission is one short transaction).
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations; Decision and error semantics); "Technical architecture and service ownership"
     (Interfaces and repository strategy)
@@ -871,7 +968,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
 
 ### Modules the report's team table does not name (Go implementer)
 
-- [ ] **GO-18 · Mirror the frozen contracts in Go DTOs**
+- [x] **GO-18 · Mirror the frozen contracts in Go DTOs**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: nothing · Needs: X-07, X-08, X-09, X-10, X-11, X-12, X-13 · Provides: X-15 (part: the X-07 to X-13 mirrors)
   - Paths: `services/gateway/internal/health/dto.go`,
@@ -889,11 +986,23 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     of `TestEmittedValuesMatchContractFixtures`; the new test that lists
     `packages/contracts/fixtures` and fails for an unmapped fixture.
     `pnpm --filter gateway run test`.
+  - Completed (2026-10-03, 7f8904f, with GO-62 080030c): the Go-owned contracts were drafted and
+    approved by the lead as Go owner (X-08 passport, X-09 action proposal and stored action, X-11
+    run state, X-12 safe event, X-13 reason codes, now 29 with `limit_not_allowed`), and X-07 got a
+    schema and fixtures mirroring the API's `StartRunSchema` without changing it. All live in
+    `packages/contracts` (types, JSON Schemas, fixtures, typed samples) and are mirrored in
+    `services/gateway/internal/contracts`. Go tests: every fixture decodes strictly and re-encodes
+    unchanged; every shared fixture has a Go case or a recorded exemption (the unmapped-fixture
+    test); every Go enum equals its schema enum; proposal arguments fit their tool's shape. Checks:
+    `pnpm --filter @workspace/contracts run lint`, `typecheck`, `test` (6/6), `build` PASS; gateway
+    `format:check`, `lint`, `typecheck`, `test`, `build` PASS; `pnpm verify` 6 passed. X-15 is
+    reached with GO-62. RunView and SanitizedEvent (web + API side) still differ from X-11/X-12;
+    the lead asked Batın to align them.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
   - Blocked by: nothing
 
-- [ ] **GO-62 · Mirror the operator context contract in Go**
+- [x] **GO-62 · Mirror the operator context contract in Go**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: S (estimate 0.5-1 h, split from GO-18)
   - Depends on: GO-18 · Needs: X-14 · Provides: X-15 (part: the X-14 mirror)
   - Paths: `services/gateway/internal/health/dto_test.go`, `services/gateway/README.md`; the DTO
@@ -904,11 +1013,16 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     GO-18's fixtures do, and with GO-18 done X-15 is reached ("validate serialized contracts").
   - Tests: the strict decode and re-encode test for the X-14 fixture; GO-18's unmapped-fixture test
     passes. `pnpm --filter gateway run test`.
+  - Completed (2026-10-03, 080030c): X-14 `OperatorContext` (the API's type, unchanged) got
+    `operator-context.schema.json` (uuid ids, unique bounded roles), a fixture and a typed sample,
+    and is mirrored as `contracts.OperatorContext` with a strict round-trip case. Checks: contracts
+    `lint`, `typecheck`, `test`, `build` PASS; gateway five checks PASS; `pnpm --filter api run
+typecheck` PASS; `pnpm verify` 6 passed.
   - Report: "Illustrative passport and interface contracts"; "Risk register and scope controls"
     (NestJS/Go contract drift: "validate serialized contracts")
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **GO-19 · Build the runtime repository with guarded state transitions**
+- [x] **GO-19 · Build the runtime repository with guarded state transitions**
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 4-8 h)
   - Depends on: GO-20 · Needs: X-19 · Provides: nothing
   - Paths: `services/gateway/internal/database/database.go`, `services/gateway/cmd/gateway/main.go`,
@@ -925,6 +1039,20 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
   - Tests: database-backed: each invalid transition the guards name is rejected and changes no row;
     a failure injected between a state change and its event leaves neither; queries succeed with no
     `search_path` set. The X-24 command.
+  - Completed (2026-10-03, cda6336; EnqueueJob 9654150): `internal/repository` writes runtime
+    passports, runs, jobs and audit events in short transactions over the pool or an enclosing
+    transaction (`InTransaction`, `Tx.Raw` for GO-34): `InsertAdmission`, guarded `TransitionRun`
+    (one status-checked UPDATE plus its X-12 event; terminal statuses accept nothing; a reason
+    exactly for paused, failed and stopped), `AppendEvent` (validated against X-12), `EnqueueJob`,
+    organization-scoped `RunState` and `Passport` reads (stored scope and limits decoded strictly).
+    By lead decision the gate (lane w3) writes `runtime.actions` and `runtime.approvals` and lane
+    f3's budget package writes `runtime.model_calls`, so "every runtime write" holds for the
+    records this repository owns. Tests (PostgreSQL, rolled-back outer transaction): admission rows
+    and read-back, injected failure leaves none, duplicate run fails whole, refused transitions
+    write nothing, a failing event rolls back its state change, another organization reads and
+    changes nothing, schema-qualified queries with no `search_path`. Checks: gateway five checks
+    PASS; `pnpm test:db gateway` 186 passed, 0 skipped (at cda6336); `go test -race ./...` with a
+    required database ok; `pnpm verify` 6 passed.
   - Report: "Data ownership and the transition from starter to product" (Proposed database
     ownership); "Durable state idempotency audit and uncertain outcomes"; "Validation plan and
     evidence matrix" ("Exercise malformed tool arguments and invalid state transitions as well as
@@ -969,7 +1097,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     (Interpreting results honestly)
   - Blocked by: nothing
 
-- [ ] **GO-21 · Verify service identity and operator context on every internal command**
+- [x] **GO-21 · Verify service identity and operator context on every internal command**
   - **Report 1.1 change:** Both proposed internal command paths (`POST /internal/runs/:id/cancel`, `POST /internal/actions/:id/approval`) carry an identifier, so the `withJSONErrors` change applies; package per `Go package layout`.
   - Owner: Go implementer (a module the report's team table does not name) · Tier: A · Size: M (estimate 3-6 h)
   - Depends on: SH-03, GO-62 · Needs: X-13, X-14, X-23 · Provides: X-27
@@ -1001,6 +1129,20 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     appears in logs or responses; a well-formed command whose context follows X-14 and the
     mechanism decision 4 records is accepted; if a route has a path wildcard, its handler receives
     the value from the path through `NewHandler`. `pnpm --filter gateway run test`.
+  - Completed (2026-10-03, 7ed32c6): `internal/operatorcontext` verifies the `X-Operator-Context`
+    HS256 JWT the API signs (HMAC first, strict header and claims, issuer `gateway-client`,
+    audience `gateway`, at most five minutes, one-use `jti`, X-14 context); every product route is
+    registered through `httpserver.Options.InternalCommands`, behind the service token and that
+    verification, with the shared envelope (401) before the handler. `DecodeJSONBody` adds strict,
+    bounded bodies (400); matched routes are served through the mux so path wildcards work;
+    `OPERATOR_CONTEXT_SIGNING_KEY` is required in Go config. Tests: a token signed by the API's
+    jose library verifies; replay, wrong key, altered payload, alg none, wrong issuer or audience,
+    expiry and lifetime faults, unknown claims and bad contexts are rejected; route tests reject
+    the service token alone, the context alone, forged or duplicated contexts and a missing
+    verifier before the handler; no credential in responses or logs. Checks: gateway five checks
+    PASS; `go test -race` for httpserver, config, operatorcontext ok; `pnpm verify` 6 passed; the
+    built gateway on 127.0.0.1:18310 served health and ping and refused to start without the key.
+    The check against what NestJS sends end to end stays with X-26/SH-22.
   - Report: "Technical architecture and service ownership" (Interfaces and repository strategy);
     "Threat model limits and unresolved design choices" ("The service token in the starter requires
     replacement or extension for authenticated operator context"); "Validation plan and evidence
@@ -1161,7 +1303,7 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
-- [ ] **GO-71 · Record the conservative context manifest, if `internal report rendering` admits model prose**
+- [ ] **GO-71 · Record the conservative context manifest, if `internal report rendering` admits model prose** Dropped: `internal report rendering` is deterministic only (lead's delegate, 2026-10-03)
   - Owner: Go implementer (report role: Implementer 3, agent runtime, and Implementer 5, provenance) · Tier: B · Size: S (estimate 2-4 h)
   - Depends on: GO-23, GO-63 · Needs: X-69 · Provides: nothing
   - Paths: the model gateway package from GO-10
@@ -1608,6 +1750,13 @@ Every task in this file, one row each, in milestone order. 86 tasks: 65 Tier A, 
     counted, never zero; settlement settles the reservation against the reported usage in its own
     transaction; no reservation transaction is open while the stubbed provider call runs; a model
     call retry, where `model call retries` adopts them, reserves again. The X-24 command.
+  - Progress (2026-10-03): `budget.OpenRunLedger` (1a470f6 on go/f3) opens the run's ledger inside
+    admission's transaction with the passport's token total (alignment decision 6) and validates the
+    per-purpose sub-limits; without a ledger row nothing can be reserved
+    (`TestOpenRunLedgerCommitsWithTheCallersTransaction`). Missing: the new migration applying
+    alignment decisions 1 to 5 (uuid run id with a foreign key, organization id, call id =
+    `model_calls.id`, per-purpose sub-limits, calls, request time and the concurrency slot on the
+    ledger) and the reservation of calls and sub-budgets before every dispatch.
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
     matrix" (critical check Unknown usage); "Architecture and chart reading guide" (Figures 4 and 5)
   - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
