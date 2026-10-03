@@ -15,7 +15,6 @@ import {
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type {
-  OperatorContext,
   StartRunRequest,
   StartRunResponse,
   RunEventsPage,
@@ -28,6 +27,7 @@ import { z } from "zod";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { GatewayClientService } from "../gateway-client/gateway-client.service.js";
 import { StartRunSchema } from "./dto/start-run.dto.js";
+import startResponseContract from "@workspace/contracts/schemas/start-run-response.schema.json" with { type: "json" };
 import { RunEventsSchema } from "./run-events.schema.js";
 import { RunStateSchema, RunUsageSchema } from "./run-read.schemas.js";
 import { ReportViewSchema } from "./report-view.schema.js";
@@ -37,10 +37,9 @@ import {
   verifiedOperator,
 } from "../gateway-client/gateway-response.js";
 
-const StartRunResponseSchema = z.object({
-  runId: z.string(),
-  passportId: z.string(),
-});
+const StartRunResponseSchema = z.fromJSONSchema(
+  startResponseContract as Parameters<typeof z.fromJSONSchema>[0],
+);
 
 @ApiTags("runs")
 @Controller("runs")
@@ -237,46 +236,18 @@ export class RunsController {
   @UsePipes(new ZodValidationPipe(StartRunSchema))
   async startRun(
     @Body() startRunRequest: StartRunRequest,
-    @Req() request: { operatorContext?: OperatorContext; id: string },
+    @Req() request: Request,
   ): Promise<StartRunResponse> {
-    // The guard always sets the verified context; its absence is a server fault, never an allow.
-    if (!request.operatorContext) {
-      throw new InternalServerErrorException("Missing operator context");
-    }
-
-    const outcome = await this.gateway.postCommand(
-      "/internal/runs",
-      request.id,
-      startRunRequest,
-      StartRunResponseSchema,
-      request.operatorContext,
-    );
-    if (outcome.success) {
-      return outcome.data;
-    }
-
-    // A timeout does not prove the command failed: the outcome is unconfirmed.
-    if (outcome.reason === "timeout") {
-      throw new HttpException(
-        {
-          code: "outcome_unconfirmed",
-          message: "The request timed out; the outcome is unconfirmed.",
-        },
-        504,
-      );
-    }
-    if (outcome.reason === "unauthorized") {
-      throw new HttpException(
-        { code: "unauthorized", message: "Not authorized to start run" },
-        403,
-      );
-    }
-    if (outcome.reason === "bad_request") {
-      throw new HttpException(
-        { code: outcome.code ?? "bad_request", message: "Admission rejected" },
-        400,
-      );
-    }
-    throw new HttpException({ code: "upstream_unavailable", message: "Run start failed" }, 502);
+    const operator = verifiedOperator(request);
+    return gatewayData(
+      await this.gateway.postCommand(
+        "/internal/runs",
+        request.requestId,
+        startRunRequest,
+        StartRunResponseSchema,
+        operator,
+      ),
+      true,
+    ) as StartRunResponse;
   }
 }

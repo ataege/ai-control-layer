@@ -634,7 +634,8 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     register and scope controls" (NestJS/Go contract drift)
   - Blocked by: `command timeout budget`
 
-- [ ] **API-10 · Carry the verified operator context on every runtime command**
+- [x] **API-10 · Carry the verified operator context on every runtime command**
+  - Done (2026-10-04): every runtime read/command signs validated X-14 context sourced only from the real session/current membership. Admission now propagates request.requestId instead of the nonexistent request.id, validates the shared StartRunResponse strictly and uses faithful gateway error mapping. Checks: API lint, typecheck and build exited 0; API unit tests: "333 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". Real Go returned 401 for missing and invalid operator JWTs; real API admission returned 201 and the gateway log carried verified-admission-context. Tests reject browser identity fields and missing/malformed context before dispatch; JWT tests verify issuer, audience, HS256 and ctx. No fallback identity.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1.5-3 h)
   - Depends on: API-08, API-09, SH-03 · Needs: X-14, X-23, X-27 · Provides: X-26
   - Paths: `apps/api/src/gateway-client/gateway-client.service.ts`,
