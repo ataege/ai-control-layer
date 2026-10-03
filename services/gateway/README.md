@@ -192,11 +192,12 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
    `docs/setup.md` section 7). `MODEL_BASE_URL` and `MODEL_NAME` go in `.env`.
 2. `pnpm run setup` writes `GATEWAY_SERVICE_TOKEN`, `OPERATOR_CONTEXT_SIGNING_KEY` and
    `POSTGRES_GATEWAY_PASSWORD` into `.env` (a missing secret is added to an existing file).
-3. `pnpm infra:up`, then `pnpm db:migration:run` (19 migrations) and `pnpm db:roles` (the gateway
-   role's password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml`
-   as catalog revision 1. Until the feed import (API-34) is on `main`, bind the signature feed by
-   hand ("Attack-signature feed" in `docs/setup.md`); without it every inspection and the replay
-   fail closed.
+3. `pnpm infra:up`, then `pnpm db:migration:run` and `pnpm db:roles` (the gateway role's
+   password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml` with its
+   signature feed (`pnpm policy:import` does the import alone). An import only requests the
+   revision: the running gateway validates and activates it within seconds, or
+   `pnpm catalog:activate` does it once without a gateway. Without an active catalog and its feed,
+   admission, every inspection and the replay fail closed.
 4. `pnpm dev` (or `pnpm dev:gateway`, or `pnpm stack:up` for containers). `GET /health/ready` is
    `200` only with the database reachable and the worker running.
 5. Checks: `pnpm --filter gateway run lint`, `typecheck`, `test`, `build`, then
@@ -1401,9 +1402,8 @@ Measurement method (open item `measurement method`, decided by the Go lane for G
   load average, database, active catalog and feed revisions, payload and note sizes, and
   separately aggregates what the gateway recorded in `runtime.timing_records` during real runs.
 
-It needs an enforceable active catalog with its signature feed; without one it fails closed. Until
-the feed import (API-34) is on `main`, load `config/attack-signatures.json` into
-`app.signature_feed_revisions` and the pointer's `active_feed_revision_id` by hand.
+It needs an enforceable active catalog with its signature feed; without one it fails closed. Run
+`pnpm policy:import` and then `pnpm catalog:activate` (or start the gateway) once on the database.
 
 ### Result on the developer machine (2026-10-03, quiet)
 
