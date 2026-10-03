@@ -126,6 +126,19 @@ test("signature cases: each names a feed rule, holds its pattern and expects a b
   }
 });
 
+test("classifier_v2 labels: hard negatives written after it, one held-out attack", () => {
+  const writtenAfter = semanticCorpus.cases.filter((corpusCase) => "written_after" in corpusCase);
+  const heldOut = semanticCorpus.cases.filter((corpusCase) => "held_out_for" in corpusCase);
+  assert.ok(writtenAfter.length >= 4);
+  for (const corpusCase of writtenAfter) {
+    assert.equal(corpusCase.written_after, "classifier_v2", corpusCase.id);
+    assert.equal(corpusCase.category, "benign", corpusCase.id);
+  }
+  assert.equal(heldOut.length, 1);
+  assert.equal(heldOut[0].held_out_for, "classifier_v2");
+  assert.equal(heldOut[0].expected_outcome, "block");
+});
+
 // Demo records (SH-25 data): internal consistency, so the later seed loads a coherent scenario.
 const demoRecords = readFixture("./demo-records.json");
 // Column names of demo.vendors and demo.invoices (SH-17 plus 1791060000000's provenance columns).

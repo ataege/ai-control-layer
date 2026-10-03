@@ -146,14 +146,15 @@ func TestLiveSemanticCorpus(t *testing.T) {
 		t.Logf("evidence X-96: %s (%s, expected %s) -> %s verdict=%+v failure=%s provider=%dms",
 			liveCase.id, liveCase.boundary, liveCase.expected, result.Outcome, result.Verdict, result.Failure, result.ProviderMillis)
 	}
-	t.Logf("evidence X-96: model=%s threshold=%.2f context=%d total=%d pass=%d false_positives=%d false_negatives=%d guard_failures=%d hostile_pipeline_passes=%d",
-		modelSettings.Name, settings.SemanticInjection.Threshold, MinEvaluatorContextTokens,
+	t.Logf("evidence X-96: classifier=%s model=%s threshold=%.2f context=%d total=%d pass=%d false_positives=%d false_negatives=%d guard_failures=%d hostile_pipeline_passes=%d",
+		ClassifierInstructionVersion, modelSettings.Name, settings.SemanticInjection.Threshold, MinEvaluatorContextTokens,
 		summary.Total, summary.Pass, summary.FalsePositives, summary.FalseNegatives, summary.GuardFailures, summary.PipelinePasses)
 
 	if path := os.Getenv("GO_SECURITY_EVIDENCE_FILE"); path != "" {
 		document := map[string]any{
 			"evidence": "X-96", "verdict_source": VerdictLive, "model": modelSettings.Name,
-			"threshold": settings.SemanticInjection.Threshold, "context_tokens": MinEvaluatorContextTokens,
+			"classifier_instruction": ClassifierInstructionVersion,
+			"threshold":              settings.SemanticInjection.Threshold, "context_tokens": MinEvaluatorContextTokens,
 			"recorded_at": time.Now().UTC().Format(time.RFC3339), "summary": summary, "cases": results,
 			"note": "Finite labelled synthetic sample; counts are observations, not a detection rate.",
 		}

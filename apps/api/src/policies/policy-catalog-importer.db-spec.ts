@@ -16,6 +16,13 @@ import { digestPolicyBytes, validatePolicyFile } from "./policy-file.js";
 const samplePolicyBytes = readFileSync(
   resolve(import.meta.dirname, "../../../../config/policy.yaml"),
 );
+// The sample policy enables signature_match, so it is imported with the feed it names.
+const sampleFeed = {
+  sourceFileName: "attack-signatures.json",
+  fileBytes: readFileSync(
+    resolve(import.meta.dirname, "../../../../config/attack-signatures.json"),
+  ),
+};
 const invalidPolicyBytes = new TextEncoder().encode(
   samplePolicyBytes.toString("utf8").replace("calls_agent: 12", "calls_agent: 30"),
 );
@@ -52,22 +59,32 @@ async function clearPointer(): Promise<void> {
   await queryRunner.manager.delete(ControlCatalogPointer, { id: 1 });
 }
 
+/** Stands in for the gateway's activation (GO-73), which the import itself never performs. */
+async function activateAsGateway(revisionId: string): Promise<void> {
+  await queryRunner.manager.update(
+    ControlCatalogPointer,
+    { id: 1 },
+    { activeRevisionId: revisionId },
+  );
+}
+
 async function readPointer(): Promise<ControlCatalogPointer> {
   return queryRunner.manager.findOneByOrFail(ControlCatalogPointer, { id: 1 });
 }
 
 describe("importPolicyFile", () => {
-  it("stores the first valid import as an immutable revision and activates it", async () => {
+  it("stores the first valid import as an immutable revision and only requests it", async () => {
     await clearPointer();
 
     const outcome = await importPolicyFile(queryRunner.manager, {
       sourceFileName: "policy.yaml",
       fileBytes: samplePolicyBytes,
+      feed: sampleFeed,
     });
 
     expect(outcome).toMatchObject({
       accepted: true,
-      activated: true,
+      activeRevisionId: null,
       fileDigest: digestPolicyBytes(samplePolicyBytes),
     });
     if (!outcome.accepted) return;
@@ -82,9 +99,11 @@ describe("importPolicyFile", () => {
       sampleValidation.valid && sampleValidation.policy,
     );
     const pointer = await readPointer();
+    // Activation is the gateway's step (GO-73); the import never sets the active revision or feed.
     expect(pointer).toMatchObject({
       requestedRevisionId: outcome.revisionId,
-      activeRevisionId: outcome.revisionId,
+      activeRevisionId: null,
+      activeFeedRevisionId: null,
       validatedRevisionId: null,
       lastError: null,
     });
@@ -95,17 +114,20 @@ describe("importPolicyFile", () => {
     const first = await importPolicyFile(queryRunner.manager, {
       sourceFileName: "policy.yaml",
       fileBytes: samplePolicyBytes,
+      feed: sampleFeed,
     });
+    if (first.accepted) await activateAsGateway(first.revisionId);
 
     const second = await importPolicyFile(queryRunner.manager, {
       sourceFileName: "policy.yaml",
       fileBytes: samplePolicyBytes,
+      feed: sampleFeed,
     });
 
     expect(first.accepted && second.accepted).toBe(true);
     if (!first.accepted || !second.accepted) return;
     expect(second.revisionId).not.toBe(first.revisionId);
-    expect(second).toMatchObject({ activated: false, activeRevisionId: first.revisionId });
+    expect(second).toMatchObject({ activeRevisionId: first.revisionId });
     expect(await readPointer()).toMatchObject({
       requestedRevisionId: second.revisionId,
       activeRevisionId: first.revisionId,
@@ -117,7 +139,9 @@ describe("importPolicyFile", () => {
     const accepted = await importPolicyFile(queryRunner.manager, {
       sourceFileName: "policy.yaml",
       fileBytes: samplePolicyBytes,
+      feed: sampleFeed,
     });
+    if (accepted.accepted) await activateAsGateway(accepted.revisionId);
     const revisionCountBefore = await queryRunner.manager.count(ControlCatalogRevision);
     const requestedBefore = (await readPointer()).requestedRevisionId;
 
@@ -157,6 +181,7 @@ describe("importPolicyFile", () => {
     await importPolicyFile(queryRunner.manager, {
       sourceFileName: "policy.yaml",
       fileBytes: samplePolicyBytes,
+      feed: sampleFeed,
     });
 
     expect(await readPointer()).toMatchObject({ lastError: null, lastErrorAt: null });
@@ -166,6 +191,7 @@ describe("importPolicyFile", () => {
     const outcome = await importPolicyFile(queryRunner.manager, {
       sourceFileName: "policy.yaml",
       fileBytes: samplePolicyBytes,
+      feed: sampleFeed,
     });
     if (!outcome.accepted) throw new Error("the sample policy must be accepted");
 
@@ -187,6 +213,7 @@ describe("importPolicyFile", () => {
       importPolicyFile(dataSource.manager, {
         sourceFileName: "policy.yaml",
         fileBytes: samplePolicyBytes,
+        feed: sampleFeed,
       }),
     ).rejects.toThrow("inside a database transaction");
   });
