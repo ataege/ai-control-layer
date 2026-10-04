@@ -1703,7 +1703,8 @@ sit here, before the final build's evidence is captured, and are cut first.
     Missing: the live requests by hand as the seeded second organization's operator, and the
     no-mutation check through the run view and events. No second-organization operator is seeded
     (`pnpm db:seed` creates only the demo operator), and creating one with a credential needs the
-    lead's decision. Not ticked.
+    lead's decision. Lead's decision (2026-10-04): not ticked; the fixture-level evidence stands as
+    recorded, and no second operator is seeded before the freeze. Not ticked.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1.5-3 h)
   - Depends on: API-16, API-18, API-19, API-20, API-21 · Needs: X-24, X-34 · Provides: X-56 (part:
     public path)
@@ -2040,7 +2041,16 @@ handoff from X-62, and RS-09 submits.
 ### NestJS (report role: Implementer 2)
 
 - [ ] **API-27 · Supply the NestJS part of the technical handoff**
-  - NestJS text supplied (2026-10-04): apps/api/README.md now describes explicit setup/seed/reset, stored-session demonstration identity, environment names, product modules, Go authority, public operations and exact separate run/usage contracts. docs/api-facade-handoff.md records web shape/after-cursor handoffs, X-91 CLI ownership, lead-owned form/reload decisions and current smoke failures. API lint/typecheck/build exited 0; API unit tests: "370 passed"; database tests: "67 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Real web/API identity flow returned 200/200/200/401. Current overall smoke: "22 passed, 8 failed, 6 skipped"; not passed. The task stays open for the required teammate clean-checkout setup evidence and integration owner's final-build incorporation; Docker/browser/live-model rehearsal not claimed.
+  - Progress (2026-10-04, second pass on `api/w2`): the NestJS text is checked against main 31cff75 plus this
+    branch. `apps/api/README.md` "Verification and handoff limits" is rewritten with current results and
+    limits; `docs/api-facade-handoff.md` no longer carries the old smoke numbers or the draft combined run
+    view; `docs/architecture.md` "Product modules" gained the auth/identity, registry, actions and
+    security rows. Checks, my own runs: API lint and typecheck exit 0; api test "428 passed";
+    `pnpm test:db --fresh` api "71 passed", gateway "965 passed", 0 failed, 0 skipped; `pnpm verify`
+    "6 passed, 0 failed, 0 skipped"; `pnpm smoke` "36 passed, 0 failed, 6 skipped" (service-log leak
+    checks skipped in host mode); `pnpm test:judge` 8 passed (the judge CLI still sends `run_id`, which
+    the API refuses: recorded as a limit). Not done: a teammate's setup on a clean checkout, and the
+    integration owner's final-build incorporation. The task stays open.
   - **Report 1.2 change:** Adds the policy file, catalog reload, security summary and audit export.
   - **Report 1.1 change:** Adds the report templates and projection rules.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 0.5-1.5 h)

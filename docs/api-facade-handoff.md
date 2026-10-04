@@ -38,8 +38,9 @@ A 200 control-evaluation denial is a recorded deny decision and never an approva
 
 For X-91, send all five fields: `runId`, `kind`, `text`, `tool`, `arguments`. `model_input`
 uses non-null text with null tool/arguments; `tool_result` uses text/tool with null arguments;
-`action_proposal` uses null text and non-null tool/arguments. The draft judge client still needs
-the lead's contract update; do not add compatibility defaults to the API.
+`action_proposal` uses null text and non-null tool/arguments. The draft judge client (`pnpm judge`)
+still sends `run_id` and omits the null fields, so the API refuses its requests until the lead updates
+it; do not add compatibility defaults to the API.
 
 Verification: `pnpm --filter api run lint`, `typecheck`, `test`, `build`, `pnpm test:db api`,
 and `pnpm verify`. The sanitized real API/Go audit capture is
@@ -64,9 +65,7 @@ activation; unchanged files return 200, validation issues 400, pending edits 409
 Status returns the stored pointers and the four sanitized lastError fields; feedRevision in the
 requested response is the feed version label, not its database ID. Shared policy schemas/fixtures
 and their ownership are documented in packages/contracts/README.md.
-The merged web still expects draft combined RunView and cursor query naming;
-its owner must adopt the separate shared RunState/RunUsage and events after parameter.
-Host smoke after the web merge reports 22 passed, 8 failed, 6 skipped: / and /components redirect
-to login, whereas smoke expects 200 and therefore cannot scan those pages' assets. The API routes
-and real web/API identity flow passed, but this is not a passing overall smoke run. The script/web
-owners must reconcile public-page policy and smoke expectations before the local profile follow-up is pushed.
+The web run page reads the separate shared `RunState`, `RunUsage` and events (`after` parameter),
+not the earlier draft combined run view. Host smoke on `api/w2` (main 31cff75 plus this branch)
+reported `36 passed, 0 failed, 6 skipped`; the skipped checks are the service-log leak checks, which
+host mode cannot run. This is the API owner's own run on 2026-10-04, not a frozen build.
