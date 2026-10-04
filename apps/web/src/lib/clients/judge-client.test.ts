@@ -2,6 +2,8 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import type { ControlEvaluationResponse } from "@workspace/contracts";
 import { postJson, type FetchJsonResult } from "../fetch-json";
 import {
+  JUDGE_RUN_PATH,
+  JUDGE_RUN_REQUEST,
   JudgeClient,
   buildEvaluationRequest,
   interpretEvaluation,
@@ -216,5 +218,34 @@ describe("JudgeClient.evaluate", () => {
     const outcome = await JudgeClient.evaluate(request);
     expect(postJson).toHaveBeenCalledWith("/api/control/evaluate", request, expect.any(Object));
     expect(outcome.ok && outcome.requestId).toBe("req-1");
+  });
+});
+
+describe("JudgeClient.startRun", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("starts the judge run on its own route, never the agent run route", async () => {
+    vi.mocked(postJson).mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      data: { runId: RUN_ID, passportId: "7a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d" },
+      durationMs: 8,
+    });
+    const result = await JudgeClient.startRun();
+    expect(JUDGE_RUN_PATH).toBe("/api/runs/judge");
+    expect(postJson).toHaveBeenCalledWith("/api/runs/judge", JUDGE_RUN_REQUEST);
+    expect(vi.mocked(postJson).mock.calls[0]?.[0]).not.toBe("/api/runs");
+    expect(result.ok && result.data.runId).toBe(RUN_ID);
+  });
+
+  it("does not treat a response without a run id as a started run", async () => {
+    vi.mocked(postJson).mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      data: { passportId: "x" },
+      durationMs: 3,
+    });
+    const result = await JudgeClient.startRun();
+    expect(result.ok).toBe(false);
   });
 });

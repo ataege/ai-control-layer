@@ -312,9 +312,52 @@ export class RunsController {
     @Body() startRunRequest: StartRunRequest,
     @Req() request: Request,
   ): Promise<StartRunResponse> {
+    return this.admit("/internal/runs", startRunRequest, request);
+  }
+
+  // A judge run has a passport and a run but no agent: nothing is dispatched for it, and judge
+  // evaluations spend its security allowance. Same body, response, guard and error mapping as a
+  // run; only the gateway route differs (Go's judge admission).
+  @Post("judge")
+  @ApiOperation({
+    summary: "Start a judge run: a passport and run with no agent",
+    description:
+      "Validates the same X-07 body strictly and forwards it to Go's judge admission. The run has a passport but no agent job, so no model call is made for it; evaluations through POST /api/control/evaluate spend its security allowance.",
+  })
+  @ApiBody({ type: StartRunRequestDto })
+  @ApiResponse({
+    status: 201,
+    type: StartRunResponseDto,
+    description: "Admitted: Go stored the passport and the run, with no agent job.",
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Invalid body, or an admission rejection with its X-13 reason code and explanation; no passport.",
+  })
+  @ApiResponse({ status: 401, description: "No valid session." })
+  @ApiResponse({ status: 503, description: "Admission could not be decided; no run was started." })
+  @ApiResponse({
+    status: 504,
+    description: "The gateway did not answer in time; the outcome is unconfirmed.",
+  })
+  @UsePipes(new ZodValidationPipe(StartRunSchema))
+  async startJudgeRun(
+    @Body() startRunRequest: StartRunRequest,
+    @Req() request: Request,
+  ): Promise<StartRunResponse> {
+    return this.admit("/internal/judge-runs", startRunRequest, request);
+  }
+
+  /** Forwards one validated admission command to Go and maps its answer. */
+  private async admit(
+    gatewayPath: string,
+    startRunRequest: StartRunRequest,
+    request: Request,
+  ): Promise<StartRunResponse> {
     const operator = verifiedOperator(request);
     const outcome = await this.gateway.postCommand(
-      "/internal/runs",
+      gatewayPath,
       request.requestId,
       startRunRequest,
       StartRunResponseSchema,

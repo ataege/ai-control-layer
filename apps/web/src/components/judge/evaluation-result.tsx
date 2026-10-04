@@ -111,6 +111,11 @@ export function EvaluationResult({ response, durationMs, requestId }: Evaluation
             This run is finished or cancelled; start a new dedicated judge run.
           </span>
         )}
+        {response.reasonCode === "run_expired" && (
+          <span className="text-sm text-muted-foreground">
+            This run&apos;s passport has expired; start a new dedicated judge run.
+          </span>
+        )}
       </div>
       <p className="text-sm">{response.safeMessage}</p>
 
