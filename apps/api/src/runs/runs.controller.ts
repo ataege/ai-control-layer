@@ -32,6 +32,7 @@ import { StartRunSchema } from "./dto/start-run.dto.js";
 import startResponseContract from "@workspace/contracts/schemas/start-run-response.schema.json" with { type: "json" };
 import passportContract from "@workspace/contracts/schemas/passport.schema.json" with { type: "json" };
 import optionsContract from "@workspace/contracts/schemas/task-form-options.schema.json" with { type: "json" };
+import reasonCodeContract from "@workspace/contracts/schemas/reason-code.schema.json" with { type: "json" };
 import { RunEventsSchema } from "./run-events.schema.js";
 import { RunStateSchema, RunUsageSchema } from "./run-read.schemas.js";
 import { ReportViewSchema } from "./report-view.schema.js";
@@ -49,6 +50,26 @@ const TaskFormOptionsSchema = z.fromJSONSchema(
 );
 
 const PassportSchema = z.fromJSONSchema(passportContract as Parameters<typeof z.fromJSONSchema>[0]);
+
+// The X-13 reason codes: only these mark an admission rejection whose explanation may be shown.
+const ADMISSION_REASON_CODES: ReadonlySet<string> = new Set(reasonCodeContract.enum);
+const MAXIMUM_EXPLANATION_LENGTH = 300;
+
+/** A 400 from admission with a contract reason code and a bounded, printable explanation. */
+function isAdmissionRejection(
+  code: string | undefined,
+  message: string | undefined,
+): message is string {
+  return (
+    code !== undefined &&
+    ADMISSION_REASON_CODES.has(code) &&
+    message !== undefined &&
+    message.length > 0 &&
+    message.length <= MAXIMUM_EXPLANATION_LENGTH &&
+    // eslint-disable-next-line no-control-regex
+    !/[\u0000-\u001f\u007f]/.test(message)
+  );
+}
 
 @ApiTags("runs")
 @Controller("runs")
@@ -286,15 +307,22 @@ export class RunsController {
     @Req() request: Request,
   ): Promise<StartRunResponse> {
     const operator = verifiedOperator(request);
-    return gatewayData(
-      await this.gateway.postCommand(
-        "/internal/runs",
-        request.requestId,
-        startRunRequest,
-        StartRunResponseSchema,
-        operator,
-      ),
-      true,
-    ) as StartRunResponse;
+    const outcome = await this.gateway.postCommand(
+      "/internal/runs",
+      request.requestId,
+      startRunRequest,
+      StartRunResponseSchema,
+      operator,
+    );
+    // An admission rejection keeps Go's reason code and its fixed explanation, so the operator
+    // sees which scope or limit must change; NestJS never narrows the request itself (API-11).
+    if (
+      !outcome.success &&
+      outcome.statusCode === 400 &&
+      isAdmissionRejection(outcome.code, outcome.message)
+    ) {
+      throw new HttpException({ code: outcome.code, message: outcome.message }, 400);
+    }
+    return gatewayData(outcome, true) as StartRunResponse;
   }
 }

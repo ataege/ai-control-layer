@@ -22,7 +22,14 @@ export type CommandFailureReason =
 
 export type CommandOutcome<T> =
   | { success: true; data: T }
-  | { success: false; reason: CommandFailureReason; code?: string; statusCode?: number };
+  | {
+      success: false;
+      reason: CommandFailureReason;
+      code?: string;
+      statusCode?: number;
+      /** The gateway's own message of a 4xx error; callers decide whether it may be shown. */
+      message?: string;
+    };
 
 const errorEnvelopeSchema = z.object({
   error: z.object({
@@ -272,6 +279,7 @@ export class GatewayClientService {
             reason: "bad_request",
             code: parsedError.data.error.code,
             statusCode: response.status,
+            message: parsedError.data.error.message,
           };
         }
         return { success: false, reason: "bad_request", statusCode: response.status };
