@@ -165,6 +165,7 @@ Run everything from the repository root. The commands below are the scripts in t
 | `pnpm verify:controls`       | `node scripts/verify-controls.mjs`                                           | Run the one-command control test suite and write its results file            |
 | `pnpm benchmark`             | `node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark`       | Measure the hybrid controls' latency (`--live` adds the model)               |
 | `pnpm judge`                 | `node scripts/judge-client.mjs`                                              | Judge client for the API's live test entry (X-91)                            |
+| `pnpm test:scripts`          | `node --test "scripts/*.test.mjs" "scripts/lib/*.test.mjs"`                  | Run the scripts' own tests (also run inside `pnpm verify`'s test step)       |
 
 Always write `pnpm run setup`. Bare `pnpm setup` is a pnpm built-in that edits the shell profile; it does not run this repository's script.
 
