@@ -631,8 +631,8 @@ No script removes the volume for you: `infra:down` and `stack:down` always keep 
 
 ## Verification status
 
-**Submitted build.** Results of the final build (commit `<FINAL>`): `pnpm verify` <FINAL>, `pnpm test:db --fresh`
-<FINAL>, `pnpm smoke` <FINAL>, `pnpm verify:controls` <FINAL>. Per-task results with their commands are
+**Submitted build.** Results of the final build (commit `9c5f7ef`): `pnpm verify` 6 passed, 0 failed, 0 skipped; `pnpm test:db --fresh`
+gateway 1748 passed, api 82 passed, 0 skipped; `pnpm smoke` (host mode) 34 passed, 0 failed, 8 skipped; `pnpm verify:controls` PASS, exit 0, 2365 cases (live semantic 28 of 29 labels matched: 0 false positives, 1 false negative, 0 guard failures); the live web end-to-end flow, 2 rounds, 0 failed. Per-task results with their commands are
 quoted in the "Completed" lines of [docs/roadmap](docs/roadmap/README.md) and indexed in
 [docs/technical-handoff.md](docs/technical-handoff.md) ("Evidence"). The rest of this section records the
 starter baseline and is kept as history.

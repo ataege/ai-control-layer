@@ -71,5 +71,5 @@ and their ownership are documented in packages/contracts/README.md.
 `CatalogStatus` unchanged (active revision, digests, last rejected activation, the controls' settings). A gateway
 failure or a body outside the contract gives a sanitized 503, never an empty catalog.
 The web run page reads the separate shared `RunState`, `RunUsage` and events (`after` parameter),
-not the earlier draft combined run view. Host smoke on the submitted build (commit `<FINAL>`) reported
-`<FINAL>`; the skipped checks are the service-log leak checks, which host mode cannot run.
+not the earlier draft combined run view. Host smoke on the submitted build (commit `9c5f7ef`) reported
+`34 passed, 0 failed, 8 skipped`; the skipped checks are the service-log leak checks, which host mode cannot run.

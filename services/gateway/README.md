@@ -497,8 +497,8 @@ one run on one machine, not reliability measures.
 
 ### Check results (lane f3, 4 October 2026)
 
-Final build (commit `<FINAL>`): `pnpm verify` <FINAL>; `pnpm test:db --fresh` gateway <FINAL>;
-`pnpm smoke` <FINAL>; `pnpm verify:controls` <FINAL>. The results below are the earlier dated record
+Final build (commit `9c5f7ef`): `pnpm verify` 6 passed, 0 failed, 0 skipped; `pnpm test:db --fresh` gateway 1748 passed, 0 skipped;
+`pnpm smoke` 34 passed, 0 failed, 8 skipped; `pnpm verify:controls` PASS, exit 0, 2365 cases (live semantic 28 of 29 labels matched: 0 false positives, 1 false negative, 0 guard failures). The results below are the earlier dated record
 of lane f3 and are not the final figures.
 
 Run by lane f3 itself, each on its own exit code, in a clean worktree of `main` 1c07e78 (a fresh

@@ -4,7 +4,7 @@ The index of the technical handoff (SH-35). It links to the text each side owns 
 it, and it holds three things nobody else holds: the run order, the known limits in one place and
 the pointers to the evidence.
 
-**Status.** Assembled on 2026-10-04 and tied to the submitted build `9c5f7ef` (`9c5f7ef1419d0aab12d7384e41038790b344599b`, the freeze). The evidence of that build is in `docs/evidence/` (`CHECKSUMS-9c5f7ef.txt`); the Go part was checked against it under GO-61. The earlier freeze candidate `c70492d` and its two failed end-to-end runs are kept in the same folder as the record of what the queue-once fix addressed. Where the linked text still writes `<FINAL>`, quote the figures from `docs/evidence/` (SH-32).
+**Status.** Assembled on 2026-10-04 and tied to the submitted build `9c5f7ef` (`9c5f7ef1419d0aab12d7384e41038790b344599b`, the freeze). The evidence of that build is in `docs/evidence/` (`CHECKSUMS-9c5f7ef.txt`); the Go part was checked against it under GO-61. The earlier freeze candidate `c70492d` and its two failed end-to-end runs are kept in the same folder as the record of what the queue-once fix addressed. The figures in the linked text are that build's (quoted from `docs/evidence/`, SH-32, X-59).
 
 ## What the handoff contains
 
@@ -135,9 +135,7 @@ also stated where it applies.
 
 ## Before this is final
 
-- Name the submitted build here and recapture every check's evidence from it (SH-32, X-59); the
-  numbers in the linked text were taken on `main` between 1c07e78 and 9372862 and are replaced by
-  `<FINAL>` where they must be re-quoted.
+- Done: the submitted build `9c5f7ef` is named above and its evidence was recaptured from it (SH-32, X-59).
 - Run the final live checks that need a quiet machine ([demo-runbook.md](demo-runbook.md) "Final live
   checks"); the live model steps of [how-to-open.txt](how-to-open.txt) (sections 4, 6 and 7) were not
   part of the clean-checkout runs above.
