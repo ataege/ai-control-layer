@@ -73,7 +73,8 @@ type SecuritySummary struct {
 	Decisions      []DecisionCount   `json:"decisions"`
 	Assessments    []AssessmentCount `json:"assessments"`
 	// ModelUsage counts every model call of the organization, judge probes' security calls
-	// included; JudgeSecurityCalls counts those probe calls on their own.
+	// included; JudgeSecurityCalls counts those probe calls on their own. A probe's call refused
+	// before dispatch has no assessment link, so it is in ModelUsage but not here.
 	ModelUsage         []PurposeUsage `json:"modelUsage"`
 	JudgeSecurityCalls int64          `json:"judgeSecurityCalls"`
 	Timings            []PhaseTiming  `json:"timings"`

@@ -122,13 +122,14 @@ type TaskFormOption struct {
 }
 
 // TaskFormInvoice is an invoice's display fields only: reference number, issue date (YYYY-MM-DD),
-// total in minor units and its vendor (so the form offers one vendor's invoices together, as
-// admission requires). Never its internal note.
+// total in minor units with its ISO 4217 currency, and its vendor (so the form offers one
+// vendor's invoices together, as admission requires). Never its internal note.
 type TaskFormInvoice struct {
 	ID       string `json:"id"`
 	Number   string `json:"number"`
 	Date     string `json:"date"`
 	Amount   int64  `json:"amount"`
+	Currency string `json:"currency"`
 	VendorID string `json:"vendorId"`
 }
 

@@ -1,0 +1,12 @@
+{
+  "requestedRevisionId": "3",
+  "validatedRevisionId": "2",
+  "activeRevisionId": "2",
+  "activeFeedRevisionId": "1",
+  "lastError": {
+    "code": "catalog_invalid",
+    "message": "The requested catalog revision failed the gateway security validation.",
+    "revisionId": "3",
+    "stage": "gateway_validation"
+  }
+}

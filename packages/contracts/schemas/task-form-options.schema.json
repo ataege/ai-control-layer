@@ -55,7 +55,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "number", "date", "amount", "vendorId"],
+        "required": ["id", "number", "date", "amount", "currency", "vendorId"],
         "properties": {
           "id": {
             "type": "string",
@@ -70,6 +70,10 @@
           },
           "amount": {
             "type": "integer"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
           },
           "vendorId": {
             "type": "string",

@@ -1354,7 +1354,7 @@ typecheck` PASS; `pnpm verify` 6 passed.
     approval rule, vendor and destination at the maximum limits),
     `TestPostgresTaskOptionsFailClosedWithoutAnActiveCatalog`,
     `TestPostgresTaskOptionsOfAnOrganizationWithoutRecordsAreEmptyLists`; route:
-    `TestTaskOptionsServeTheVerifiedOrganizationAndFailClosed`. Each invoice also names its `vendorId` (additive, lead-approved TS change, 2026-10-04), so the form offers one vendor's invoices together, as admission requires; the PostgreSQL test groups by it before admitting.
+    `TestTaskOptionsServeTheVerifiedOrganizationAndFailClosed`. Each invoice also carries its ISO 4217 `currency` (from `demo.invoices.currency`; an invoice with a malformed code is not offered) and names its `vendorId` (additive, lead-approved TS change, 2026-10-04), so the form offers one vendor's invoices together, as admission requires; the PostgreSQL test groups by it before admitting.
   - Report: "Project definition purpose and intended outcome" (What a passport would contain);
     "Relative implementation milestones and critical dependencies" (Critical path and sensible
     reductions: "keep a fixed server-owned task template")
@@ -2967,6 +2967,13 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     appears once its transaction is final); another organization gets only its own empty
     records (this test and 3c's GO-57). The record shapes are Go drafts until nestjs lands them
     in `packages/contracts` for API-35 and API-36.
+  - Completed (2026-10-04): `judgeSecurityCalls` counts every judge security call that the
+    semantic evaluator linked to its assessment, errored ones included (timeout and transport
+    failures keep unknown usage and are linked): `TestPostgresSecuritySummaryCountsErroredJudgeSecurityCalls`
+    PASS, `pnpm test:db gateway` 961 passed, 0 failed, 0 skipped. Known limit: a judge security call
+    refused before dispatch (allowance exhausted or paused) is counted in `modelUsage`, not in
+    `judgeSecurityCalls`, because the evaluator links only dispatched calls and `model_calls` has no
+    evaluation id; the lead decided to document it instead of changing the evaluator.
   - Report: "Durable state idempotency audit and uncertain outcomes" (Evidence without creating a second disclosure channel)
   - Blocked by: `read path`
 

@@ -97,6 +97,19 @@ it("seeds idempotently without changing stored password or membership, and signs
     organizationId: organization.id,
     roles: ["operator", "reviewer"],
   });
+  const profile = await request(app.getHttpServer())
+    .get(`/api/auth/me?userId=${randomUUID()}&organizationId=${randomUUID()}&roles=admin`)
+    .set("Cookie", cookie)
+    .expect(200);
+  expect(profile.headers["cache-control"]).toBe("no-store");
+  expect(profile.body).toEqual({
+    id: DEMO_OPERATOR_ID,
+    email: DEMO_OPERATOR_EMAIL,
+    name: "Development Demonstration Operator",
+    organizationId: organization.id,
+    roles: ["operator", "reviewer"],
+  });
+  await request(app.getHttpServer()).get("/api/auth/me").expect(401);
   await request(app.getHttpServer())
     .post("/api/auth/sign-in")
     .send({ email: DEMO_OPERATOR_EMAIL, password: randomUUID() })
@@ -104,6 +117,7 @@ it("seeds idempotently without changing stored password or membership, and signs
   await request(app.getHttpServer()).get("/api/seed-test").expect(401);
   await request(app.getHttpServer()).post("/api/auth/sign-out").set("Cookie", cookie).expect(200);
   await request(app.getHttpServer()).get("/api/seed-test").set("Cookie", cookie).expect(401);
+  await request(app.getHttpServer()).get("/api/auth/me").set("Cookie", cookie).expect(401);
 });
 
 it("refuses missing credentials and refuses drift without granting or overwriting authority", async () => {

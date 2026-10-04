@@ -28,6 +28,7 @@ const options: TaskFormOptions = {
       date: "2026-09-01",
       amount: 125000,
       vendorId: "vendor_Atlas",
+      currency: "EUR",
     },
     {
       id: "invoice_A02",
@@ -35,6 +36,7 @@ const options: TaskFormOptions = {
       date: "2026-09-08",
       amount: 125000,
       vendorId: "vendor_Atlas",
+      currency: "EUR",
     },
   ],
   destinations: [
@@ -46,9 +48,30 @@ const options: TaskFormOptions = {
 };
 
 const vendorInvoices: OfferedInvoice[] = [
-  { id: "invoice_A01", number: "INV1", date: "2026-09-01", amount: 1, vendorId: "vendor_Atlas" },
-  { id: "invoice_B01", number: "INV2", date: "2026-09-02", amount: 2, vendorId: "vendor_Borealis" },
-  { id: "invoice_A02", number: "INV3", date: "2026-09-03", amount: 3, vendorId: "vendor_Atlas" },
+  {
+    id: "invoice_A01",
+    number: "INV1",
+    date: "2026-09-01",
+    amount: 1,
+    vendorId: "vendor_Atlas",
+    currency: "EUR",
+  },
+  {
+    id: "invoice_B01",
+    number: "INV2",
+    date: "2026-09-02",
+    amount: 2,
+    vendorId: "vendor_Borealis",
+    currency: "EUR",
+  },
+  {
+    id: "invoice_A02",
+    number: "INV3",
+    date: "2026-09-03",
+    amount: 3,
+    vendorId: "vendor_Atlas",
+    currency: "EUR",
+  },
 ];
 
 const validState: TaskFormState = {

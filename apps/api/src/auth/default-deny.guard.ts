@@ -29,7 +29,7 @@ declare global {
 
 /**
  * Global guard that denies access to all routes unless they are marked with @Public().
- * As per decision 7 hold, protected routes return 501 Not Implemented.
+ * Protected routes require a verified stored session and a current trusted membership.
  */
 @Injectable()
 export class DefaultDenyGuard implements CanActivate {

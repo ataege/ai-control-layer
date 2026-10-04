@@ -25,6 +25,7 @@ const options: TaskFormOptions = {
   ].map((invoice, index) => ({
     ...invoice,
     vendorId: index === 0 ? "vendor_Atlas" : "vendor_Borealis",
+    currency: "EUR",
   })),
   destinations: [
     { id: "vendor_Atlas", name: "Atlas" },
@@ -64,7 +65,7 @@ describe("TaskFormView", () => {
     const html = render();
     expect(html).toContain("Atlas");
     expect(html).toContain("Borealis");
-    expect(html).toContain("INV104 · 2026-09-01 · 125000 (minor units, currency not stated)");
+    expect(html).toContain("INV104 · 2026-09-01 · \u20ac1,250.00 (EUR)");
     // Atlas's invoice is selected, so Borealis's is not selectable; the selected one stays enabled.
     const borealisCheckbox = html.match(/<button[^>]*id="invoice-invoice_B01"[^>]*>/)?.[0] ?? "";
     const atlasCheckbox = html.match(/<button[^>]*id="invoice-invoice_A01"[^>]*>/)?.[0] ?? "";

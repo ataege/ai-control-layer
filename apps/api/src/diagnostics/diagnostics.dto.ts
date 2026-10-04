@@ -38,7 +38,11 @@ export class GatewayDiagnosticsChecksDto {
   @ApiProperty({ type: DiagnosticCheckDto, description: "Authenticated GET /internal/ping." })
   reachability: DiagnosticCheckDto;
 
-  @ApiProperty({ type: DiagnosticCheckDto, description: "GET /health/ready on the gateway." })
+  @ApiProperty({
+    type: DiagnosticCheckDto,
+    description:
+      "GET /health/ready on the gateway. The existing field includes worker/catalog readiness; 503 remains down even if the database is up.",
+  })
   databaseReadiness: DiagnosticCheckDto;
 }
 
