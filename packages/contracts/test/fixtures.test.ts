@@ -896,6 +896,7 @@ export const typedSamples = {
         number: "INV104",
         date: "2026-09-01",
         amount: 125000,
+        currency: "EUR",
         vendorId: "vendor_Atlas",
       },
       {
@@ -903,6 +904,7 @@ export const typedSamples = {
         number: "INV104",
         date: "2026-09-08",
         amount: 125000,
+        currency: "EUR",
         vendorId: "vendor_Atlas",
       },
     ],
