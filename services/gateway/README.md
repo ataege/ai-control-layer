@@ -269,12 +269,17 @@ this list calls the model; the live checks are in `docs/demo-runbook.md` ("Final
    semantic check. Only the inspected result enters `runtime.context_entries`.
 8. **Finish** (`runresult`). Only the exact final answer `{"status":"completed","report_ids":[...]}`
    naming reports this run created completes the run; the validated reference is stored with it.
-   One Markdown code fence (` ``` ` or ` ```json `) enclosing the whole answer is
-   accepted (lead decision); text outside it, two fences or a non-object inside are rejected, and
-   the stored reference never contains the fence. `runresult.Cause` names a rejection with a fixed
-   kind for the log and `maskedSummary.rejectionCause` (`not_json`, `extra_text`, `code_fence`,
-   `wrong_status`, `wrong_fields`; `unknown_report` for another run's report), never the answer's
-   text.
+   Text, a code fence (` ``` ` or ` ```json `) or whitespace around the one object is ignored (format
+   leniency, lead decision after live run fa417b6b, where the model put text around the JSON and the
+   run stopped at its corrections); the object itself is checked as strictly as before. Two top-level
+   objects, or none, are rejected, an object inside an array does not count, and the stored reference
+   never contains the surrounding text. After a successful `queue_report` the model's context ends
+   with a fixed message (`reportQueuedMessage`: the task is finished, call no more tools, and the exact
+   final format), because in that run it proposed a tool that does not exist (`status`) instead.
+   `runresult.Cause` names a rejection with a fixed kind for the log and
+   `maskedSummary.rejectionCause` (`not_json`, `extra_text` for more than one object, `wrong_status`,
+   `wrong_fields`; `unknown_report` for another run's report; `code_fence` is a contract value Parse no
+   longer returns), never the answer's text.
 9. **Reads and probes** (`reads`, `provenance`, `evaluation`). NestJS reads run state, usage,
    events, the stored report and the security records through private routes; judges probe the
    controls through `POST /internal/control/evaluate` without running the agent.
@@ -397,8 +402,8 @@ limit. Local inference has no tariff, so no cost is recorded.
 - **A 4B model's choices vary.** In live runs the model created the internal report in 3 of 3 runs
   per set but proposed sending it in only 1 of 3, and copied the recipient reference wrongly in 2 of 3
   before the instruction asked for it verbatim (0 of 3 after). Beat 5 therefore always uses the
-  labelled replay. The final answer is parsed strictly (one JSON object, optionally in one code fence);
-  a rejected answer is a correction.
+  labelled replay. The final answer must contain exactly one JSON object, checked strictly, with any text or code fence
+  around it ignored; a rejected answer is a correction.
 - **The replay needs a fresh run.** `cmd/replay` accepts a finished run, but the gate checks the run's
   expiry first: after the passport's 15 minutes it answers `run_expired` (exit 1, `UNEXPECTED`).
 - **The signature feed has no signing key.** Trust is the authenticated import plus the SHA-256

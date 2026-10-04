@@ -34,20 +34,22 @@ func TestParseAcceptsOnlyTheNarrowFormat(t *testing.T) {
 		}
 	}
 	rejected := map[string]string{
-		"prose":                "The reconciliation is done; see the reports.",
-		"empty":                "",
-		"text around the JSON": `Done: {"status":"completed","report_ids":["` + firstReport + `"]}`,
-		"other status":         `{"status":"failed","report_ids":["` + firstReport + `"]}`,
-		"missing status":       `{"report_ids":["` + firstReport + `"]}`,
-		"no reports":           `{"status":"completed","report_ids":[]}`,
-		"three reports":        `{"status":"completed","report_ids":["` + firstReport + `","` + secondReport + `","6f708192-a3b4-4c5d-8e7f-8091a2b3c4d5"]}`,
-		"repeated report":      `{"status":"completed","report_ids":["` + firstReport + `","` + firstReport + `"]}`,
-		"uppercase id":         `{"status":"completed","report_ids":["` + strings.ToUpper(firstReport) + `"]}`,
-		"not an id":            `{"status":"completed","report_ids":["internal report"]}`,
-		"extra prose field":    `{"status":"completed","report_ids":["` + firstReport + `"],"summary":"Fraud confirmed."}`,
-		"duplicate key":        `{"status":"completed","status":"completed","report_ids":["` + firstReport + `"]}`,
-		"two objects":          `{"status":"completed","report_ids":["` + firstReport + `"]}{}`,
-		"oversized":            `{"status":"completed","report_ids":["` + firstReport + `"]}` + strings.Repeat(" ", 5000),
+		"prose":               "The reconciliation is done; see the reports.",
+		"empty":               "",
+		"other status":        `{"status":"failed","report_ids":["` + firstReport + `"]}`,
+		"missing status":      `{"report_ids":["` + firstReport + `"]}`,
+		"no reports":          `{"status":"completed","report_ids":[]}`,
+		"three reports":       `{"status":"completed","report_ids":["` + firstReport + `","` + secondReport + `","6f708192-a3b4-4c5d-8e7f-8091a2b3c4d5"]}`,
+		"repeated report":     `{"status":"completed","report_ids":["` + firstReport + `","` + firstReport + `"]}`,
+		"uppercase id":        `{"status":"completed","report_ids":["` + strings.ToUpper(firstReport) + `"]}`,
+		"not an id":           `{"status":"completed","report_ids":["internal report"]}`,
+		"extra prose field":   `{"status":"completed","report_ids":["` + firstReport + `"],"summary":"Fraud confirmed."}`,
+		"duplicate key":       `{"status":"completed","status":"completed","report_ids":["` + firstReport + `"]}`,
+		"two objects":         `{"status":"completed","report_ids":["` + firstReport + `"]}{}`,
+		"two valid objects":   `{"status":"completed","report_ids":["` + firstReport + `"]} {"status":"completed","report_ids":["` + secondReport + `"]}`,
+		"object in an array":  `[{"status":"completed","report_ids":["` + firstReport + `"]}]`,
+		"nested in an object": `{"result":{"status":"completed","report_ids":["` + firstReport + `"]}}`,
+		"oversized":           `{"status":"completed","report_ids":["` + firstReport + `"]}` + strings.Repeat(" ", 5000),
 	}
 	for name, answer := range rejected {
 		if _, reason := Parse(answer); reason != contracts.ReasonInvalidArguments {
@@ -56,37 +58,52 @@ func TestParseAcceptsOnlyTheNarrowFormat(t *testing.T) {
 	}
 }
 
-// Lead decision: an answer that is exactly one code fence around the object is accepted, with the
-// same strict check inside; every other fence use, and every other rejection, names its cause.
-func TestCodeFenceRuleAndCauses(t *testing.T) {
+// Format leniency (lead's decision after live run fa417b6b): text, a code fence or whitespace around
+// the one JSON object is ignored, and the object inside gets the same strict check. Two objects, or
+// none, and every content rejection still name their cause.
+func TestFormatLeniencyAndCauses(t *testing.T) {
 	object := `{"status":"completed","report_ids":["` + firstReport + `"]}`
-	accepted := []string{
-		"```json\n" + object + "\n```",
-		"```\n" + object + "\n```",
-		"  \n```json\n" + object + "\n```\n ",
-		"```json " + object + " ```",
-		"```" + object + "```",
+	accepted := map[string]string{
+		"fenced json":             "```json\n" + object + "\n```",
+		"fenced":                  "```\n" + object + "\n```",
+		"whitespace around":       "  \n" + object + "\n ",
+		"fence on one line":       "```json " + object + " ```",
+		"fence without a break":   "```" + object + "```",
+		"text before the object":  "Done: " + object,
+		"text after the object":   object + " Thanks!",
+		"text on both sides":      "All reports are ready. " + object + " Let me know if you need more.",
+		"text before the fence":   "Here it is:\n```json\n" + object + "\n```",
+		"text after the fence":    "```json\n" + object + "\n```\nDone.",
+		"unclosed fence":          "```json\n" + object,
+		"other language tag":      "```javascript\n" + object + "\n```",
+		"text inside the fence":   "```json\nResult: " + object + "\n```",
+		"braces in the prose":     "The {duplicate} is confirmed. " + object,
+		"a bracket in the prose":  "See [1] for details. " + object,
+		"a lone brace after":      object + " {",
+		"a quote in the prose":    `He said "done". ` + object,
+		"a number list before it": "Reports: [1, 2]\n" + object,
+		"unicode text around":     "Fertig — alles erledigt ✔ " + object + " 🙂",
 	}
-	for _, answer := range accepted {
+	for name, answer := range accepted {
 		result, reason := Parse(answer)
 		if reason != "" || !reflect.DeepEqual(result.ReportIDs, []string{firstReport}) || Cause(answer) != "" {
-			t.Errorf("%q: result %v reason %q cause %q", answer, result, reason, Cause(answer))
+			t.Errorf("%s: result %v reason %q cause %q", name, result, reason, Cause(answer))
 		}
 	}
 	rejected := map[string]struct{ answer, cause string }{
-		"text before the fence":       {"Here it is:\n```json\n" + object + "\n```", CauseExtraText},
-		"text after the fence":        {"```json\n" + object + "\n```\nDone.", CauseCodeFence},
-		"two fences":                  {"```json\n" + object + "\n```\n```json\n" + object + "\n```", CauseCodeFence},
-		"unclosed fence":              {"```json\n" + object, CauseCodeFence},
-		"other language tag":          {"```javascript\n" + object + "\n```", CauseCodeFence},
-		"text inside the fence":       {"```json\nResult: " + object + "\n```", CauseExtraText},
-		"array inside the fence":      {"```json\n[" + object + "]\n```", CauseExtraText},
+		"two fences, two objects":     {"```json\n" + object + "\n```\n```json\n" + object + "\n```", CauseExtraText},
+		"two objects in prose":        {"First " + object + " then " + object, CauseExtraText},
+		"an empty object as well":     {object + " {}", CauseExtraText},
+		"array inside the fence":      {"```json\n[" + object + "]\n```", CauseNotJSON},
+		"nested object":               {`{"result":` + object + `}`, CauseWrongFields},
 		"empty fence":                 {"```json\n```", CauseNotJSON},
 		"prose":                       {"The reconciliation is done.", CauseNotJSON},
+		"prose with a brace":          {"The reconciliation {is} done.", CauseNotJSON},
 		"empty":                       {"", CauseNotJSON},
 		"broken JSON":                 {`{"status":"completed",`, CauseNotJSON},
+		"broken JSON after prose":     {`Done: {"status":"completed",`, CauseNotJSON},
+		"invalid UTF-8":               {"\xff" + object, CauseNotJSON},
 		"oversized":                   {object + strings.Repeat(" ", 5000), CauseNotJSON},
-		"text after the object":       {object + " Thanks!", CauseExtraText},
 		"other status":                {`{"status":"failed","report_ids":["` + firstReport + `"]}`, CauseWrongStatus},
 		"missing status":              {`{"report_ids":["` + firstReport + `"]}`, CauseWrongStatus},
 		"extra field":                 {`{"status":"completed","report_ids":["` + firstReport + `"],"summary":"x"}`, CauseWrongFields},
@@ -95,6 +112,7 @@ func TestCodeFenceRuleAndCauses(t *testing.T) {
 		"not an id":                   {`{"status":"completed","report_ids":["internal report"]}`, CauseWrongFields},
 		"repeated report":             {`{"status":"completed","report_ids":["` + firstReport + `","` + firstReport + `"]}`, CauseWrongFields},
 		"fenced object, wrong status": {"```json\n" + `{"status":"failed","report_ids":["` + firstReport + `"]}` + "\n```", CauseWrongStatus},
+		"prose around a bad object":   {`Done: {"status":"failed","report_ids":["` + firstReport + `"]} thanks`, CauseWrongStatus},
 	}
 	for name, testCase := range rejected {
 		if _, reason := Parse(testCase.answer); reason != contracts.ReasonInvalidArguments {
@@ -102,6 +120,21 @@ func TestCodeFenceRuleAndCauses(t *testing.T) {
 		}
 		if cause := Cause(testCase.answer); cause != testCase.cause {
 			t.Errorf("%s: cause %q, want %q", name, cause, testCase.cause)
+		}
+	}
+}
+
+// The scan stays cheap on hostile input: a full-size answer of opening brackets and braces is
+// rejected quickly and never accepted.
+func TestParseIsBoundedOnPathologicalInput(t *testing.T) {
+	for _, filler := range []string{"{", "[", `{"a":`, `[{"a":`} {
+		answer := strings.Repeat(filler, maximumAnswerBytes/len(filler))
+		started := time.Now()
+		if _, reason := Parse(answer); reason != contracts.ReasonInvalidArguments {
+			t.Errorf("%q repeated: reason %q", filler, reason)
+		}
+		if elapsed := time.Since(started); elapsed > 2*time.Second {
+			t.Errorf("%q repeated: parsing took %s", filler, elapsed)
 		}
 	}
 }
@@ -209,11 +242,34 @@ func TestPostgresValidateChecksEveryReportBelongsToTheRun(t *testing.T) {
 			t.Errorf("%s: reference %q reason %q err %v", name, reference, reason, err)
 		}
 	}
-	// A fenced answer is stored in the canonical form, without the fence.
-	fenced := "```json\n" + answerFor(world.ownReports[0]) + "\n```"
-	if reference, reason, err := Validate(ctx, world.outer, world.organizationID, world.runID, fenced); err != nil || reason != "" ||
-		reference != `{"report_ids":["`+world.ownReports[0]+`"]}` {
-		t.Errorf("fenced answer: reference %q reason %q err %v", reference, reason, err)
+	// An answer with a fence or prose around the object is stored in the canonical form, without them.
+	for name, answer := range map[string]string{
+		"fenced":        "```json\n" + answerFor(world.ownReports[0]) + "\n```",
+		"prose around":  "All reports are ready. " + answerFor(world.ownReports[0]) + " Anything else?",
+		"fence + prose": "Done!\n```json\n" + answerFor(world.ownReports[0]) + "\n```\nThanks.",
+	} {
+		if reference, reason, err := Validate(ctx, world.outer, world.organizationID, world.runID, answer); err != nil || reason != "" ||
+			reference != `{"report_ids":["`+world.ownReports[0]+`"]}` {
+			t.Errorf("%s: reference %q reason %q err %v", name, reference, reason, err)
+		}
+	}
+	// Format leniency does not widen the content check: the same wrapping around a report of another
+	// run or organization, or an unknown one, is still out of scope, and two objects are invalid.
+	for name, reportID := range map[string]string{
+		"a report of another run of the same organization": world.siblingReport,
+		"a report of another organization":                 world.otherReport,
+		"an unknown report":                                testdb.ID(t),
+	} {
+		wrapped := "Done:\n```json\n" + answerFor(reportID) + "\n```\nThanks."
+		reference, reason, err := Validate(ctx, world.outer, world.organizationID, world.runID, wrapped)
+		if err != nil || reason != contracts.ReasonResourceOutOfScope || reference != "" {
+			t.Errorf("wrapped %s: reference %q reason %q err %v", name, reference, reason, err)
+		}
+	}
+	twoObjects := answerFor(world.ownReports[0]) + " " + answerFor(world.ownReports[1])
+	if reference, reason, err := Validate(ctx, world.outer, world.organizationID, world.runID, twoObjects); err != nil ||
+		reason != contracts.ReasonInvalidArguments || reference != "" {
+		t.Errorf("two objects: reference %q reason %q err %v", reference, reason, err)
 	}
 	if _, reason, _ := Validate(ctx, world.outer, world.organizationID, world.runID, "All done."); reason != contracts.ReasonInvalidArguments {
 		t.Errorf("prose: %q", reason)

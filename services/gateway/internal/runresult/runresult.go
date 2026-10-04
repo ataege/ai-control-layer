@@ -1,8 +1,10 @@
 // Package runresult validates the narrow final result of a run (GO-26): "a structured status with
-// authorized report references". The model's final answer is exactly one JSON object
-// {"status":"completed","report_ids":[...]} naming one or two reports this run created; anything
-// else is rejected, never trimmed. Only the validated reference is persisted, never model prose:
-// the interface renders the substantive content from the stored reports.
+// authorized report references". The model's final answer must contain exactly one top-level JSON
+// object {"status":"completed","report_ids":[...]} naming one or two reports this run created; the
+// object itself is checked strictly. Text around it, a code fence or whitespace is format leniency
+// only: it is ignored and never stored. Two objects, or none, are rejected. Only the validated
+// reference is persisted, never model prose: the interface renders the substantive content from the
+// stored reports.
 package runresult
 
 import (
@@ -47,11 +49,13 @@ type Querier interface {
 // Fixed causes of a rejected final answer: the X-13 rejectionCause values, for the log and the
 // event's safe fields only, never the answer's text.
 const (
-	// CauseNotJSON: empty, over the size cap, or not a JSON object.
+	// CauseNotJSON: empty, over the size cap, invalid UTF-8, or no top-level JSON object.
 	CauseNotJSON = "not_json"
-	// CauseExtraText: text before or after the object.
+	// CauseExtraText: more than one top-level JSON object in the answer (text around one object is
+	// accepted).
 	CauseExtraText = "extra_text"
-	// CauseCodeFence: a fence that is not exactly one fence enclosing the whole answer.
+	// CauseCodeFence is a contract value that Parse no longer returns: a code fence around the object
+	// is format leniency now, like any other text around it.
 	CauseCodeFence = "code_fence"
 	// CauseWrongStatus: status missing or not "completed".
 	CauseWrongStatus = "wrong_status"
@@ -63,8 +67,9 @@ const (
 	CauseUnknownReport = "unknown_report"
 )
 
-// Parse checks the answer's format alone: one JSON object with exactly status and report_ids, the
-// completed status, one or two unique lowercase report uuids, no text around it.
+// Parse checks the answer's format alone: exactly one top-level JSON object with exactly status and
+// report_ids, the completed status, one or two unique lowercase report uuids. Text, a code fence or
+// whitespace around the object is ignored; two objects, or none, are rejected.
 func Parse(answer string) (FinalResult, contracts.ReasonCode) {
 	result, cause := parse(answer)
 	if cause != "" {
@@ -82,36 +87,55 @@ func Cause(answer string) string {
 
 // parse is the single format check behind Parse and Cause.
 func parse(answer string) (FinalResult, string) {
-	// The bound applies to the whole answer, before surrounding whitespace is ignored.
-	if len(answer) > maximumAnswerBytes {
+	// The bound applies to the whole answer, before anything around the object is ignored.
+	if len(answer) > maximumAnswerBytes || !utf8.ValidString(answer) {
 		return FinalResult{}, CauseNotJSON
 	}
-	trimmed := strings.TrimSpace(answer)
-	if strings.HasPrefix(trimmed, codeFence) {
-		// Lead decision: one code fence enclosing the whole answer is accepted; the object inside
-		// gets the same strict check. Any other fence use is rejected.
-		inner, enclosed := unfence(trimmed)
-		if !enclosed {
-			return FinalResult{}, CauseCodeFence
+	objects := topLevelObjects(answer)
+	switch len(objects) {
+	case 0:
+		return FinalResult{}, CauseNotJSON
+	case 1:
+		return parseObject(objects[0])
+	default:
+		return FinalResult{}, CauseExtraText
+	}
+}
+
+// topLevelObjects returns every JSON object in the answer that is not inside another JSON value,
+// in order. Anything that is not a complete JSON value (prose, a code fence, a lone brace) is
+// skipped, and a complete JSON array is skipped whole, so an object inside an array is not a
+// top-level object.
+func topLevelObjects(answer string) []string {
+	var objects []string
+	for position := 0; position < len(answer); {
+		if answer[position] != '{' && answer[position] != '[' {
+			position++
+			continue
 		}
-		trimmed = inner
-	}
-	switch {
-	case trimmed == "":
-		return FinalResult{}, CauseNotJSON
-	case !strings.HasPrefix(trimmed, "{"):
-		if strings.Contains(trimmed, "{") {
-			return FinalResult{}, CauseExtraText
+		decoder := json.NewDecoder(strings.NewReader(answer[position:]))
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			position++
+			continue
 		}
-		return FinalResult{}, CauseNotJSON
-	case !utf8.ValidString(trimmed):
-		return FinalResult{}, CauseNotJSON
+		end := position + int(decoder.InputOffset())
+		if answer[position] == '{' {
+			objects = append(objects, answer[position:end])
+		}
+		position = end
 	}
+	return objects
+}
+
+// parseObject is the strict check of the one JSON object: only status and report_ids, no repeated
+// key, the completed status and one or two unique lowercase report uuids.
+func parseObject(object string) (FinalResult, string) {
 	var document struct {
 		Status    *string  `json:"status"`
 		ReportIDs []string `json:"report_ids"`
 	}
-	decoder := json.NewDecoder(strings.NewReader(trimmed))
+	decoder := json.NewDecoder(strings.NewReader(object))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&document); err != nil {
 		// encoding/json names a rejected field this way; every other decode error is syntax or type.
@@ -123,7 +147,7 @@ func parse(answer string) (FinalResult, string) {
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return FinalResult{}, CauseExtraText
 	}
-	if !uniqueKeys(trimmed) {
+	if !uniqueKeys(object) {
 		return FinalResult{}, CauseWrongFields
 	}
 	if document.Status == nil || *document.Status != CompletedStatus {
@@ -182,29 +206,6 @@ func Validate(ctx context.Context, querier Querier, organizationID, runID, answe
 		return "", "", ErrUnavailable
 	}
 	return string(reference), "", nil
-}
-
-// codeFence opens and closes a Markdown code block.
-const codeFence = "```"
-
-// unfence returns the content of an answer that is exactly one code fence, opened by ``` or
-// ```json and closed by ```, with no other fence inside. The content is trimmed of whitespace.
-func unfence(answer string) (string, bool) {
-	if len(answer) < 2*len(codeFence) || !strings.HasSuffix(answer, codeFence) {
-		return "", false
-	}
-	body := strings.TrimSuffix(strings.TrimPrefix(answer, codeFence), codeFence)
-	// The info string is empty or json, and ends at the first line break or at the object.
-	if strings.HasPrefix(body, "json") {
-		body = strings.TrimPrefix(body, "json")
-	}
-	if body != "" && body[0] != '\n' && body[0] != '\r' && body[0] != ' ' && body[0] != '\t' && body[0] != '{' {
-		return "", false
-	}
-	if strings.Contains(body, codeFence) {
-		return "", false
-	}
-	return strings.TrimSpace(body), true
 }
 
 // uniqueKeys rejects an object that repeats a key at its top level (encoding/json keeps the last).
