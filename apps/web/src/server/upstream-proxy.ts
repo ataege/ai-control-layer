@@ -29,7 +29,12 @@ export const DEFAULT_UPSTREAM_TIMEOUT_MS = 10_000;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
 type ProxyErrorCode =
-  "configuration_error" | "upstream_unreachable" | "upstream_timeout" | "upstream_invalid_response";
+  | "configuration_error"
+  | "upstream_unreachable"
+  | "upstream_timeout"
+  | "upstream_invalid_response"
+  | "cross_site_request_refused"
+  | "unsupported_media_type";
 
 interface ProxyOptions {
   /** Upper bound for the whole upstream exchange, including reading the body. */
@@ -155,7 +160,10 @@ function commandRefusal(
     }
   }
   // Commands are JSON. A body of another type is how a plain HTML form would post.
-  if (request.body !== null) {
+  // A bodyless POST (sign-out, cancel) reaches a Next.js handler with an empty stream and
+  // Content-Length 0, so the stream alone does not say that a body was sent.
+  const sendsBody = request.body !== null && request.headers.get("content-length") !== "0";
+  if (sendsBody) {
     const mediaType = (request.headers.get("content-type") ?? "")
       .split(";")[0]
       ?.trim()

@@ -533,6 +533,24 @@ describe("upstream proxy", () => {
       expect(charset.status).toBe(200);
     });
 
+    it("treats a Content-Length 0 request with an empty stream as bodyless", async () => {
+      stubUpstream = await startStubUpstream((_request, response) =>
+        sendJson(response, 200, { ok: 1 }),
+      );
+      vi.stubEnv("API_UPSTREAM_URL", stubUpstream.baseUrl);
+      // What a browser's bodyless POST looks like inside a Next.js route handler.
+      const response = await proxyUpstream(
+        new Request("http://web.test/api/auth/sign-out", {
+          method: "POST",
+          headers: { "content-length": "0" },
+          body: new ReadableStream({ start: (controller) => controller.close() }),
+          duplex: "half",
+        } as RequestInit & { duplex: "half" }),
+        "/api/auth/sign-out",
+      );
+      expect(response.status).toBe(200);
+    });
+
     it("does not apply to reads", async () => {
       stubUpstream = await startStubUpstream((_request, response) =>
         sendJson(response, 200, { ok: 1 }),
