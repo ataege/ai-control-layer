@@ -150,6 +150,23 @@ func (executor *Executor) executeOnce(ctx context.Context, run RunIdentity, acti
 	if activeRevision != action.evaluatedRevisionID {
 		return refused(contracts.ReasonSourcePolicyChanged)
 	}
+	// A report is queued once per run: two proposals for it can await review together, and the one
+	// approved second must not queue a second outbox row.
+	if action.tool == ToolQueueReport {
+		var arguments struct {
+			ReportID string `json:"report_id"`
+		}
+		if json.Unmarshal(action.canonicalArguments, &arguments) != nil || arguments.ReportID == "" {
+			return refused(ReasonActionChanged)
+		}
+		queued, err := provenance.ReportAlreadyQueued(ctx, executor.pool, run.OrganizationID, run.RunID, arguments.ReportID, actionID)
+		if err != nil {
+			return paused(ReasonDecisionUnavailable)
+		}
+		if queued {
+			return refused(ReasonToolNotAllowed)
+		}
+	}
 	if approved {
 		reason, err := executor.recheckApproved(ctx, run, actionID, action)
 		if err != nil {

@@ -81,6 +81,20 @@ func queueReport(ctx context.Context, tx pgx.Tx, current scope, request EffectRe
 		return exportDenied(current, report, provenance.ExportDecision{ReasonCode: ReasonDestinationNotAllowed}, text("passed")), nil
 	}
 
+	// A report is queued once per run. The run row is locked so two approved queues of the same report
+	// cannot both pass this check; the executor refuses the second earlier, this is the atomic guard.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM runtime.runs WHERE id = $1 AND organization_id = $2 FOR NO KEY UPDATE`,
+		current.runID, current.organizationID); err != nil {
+		return adapterOutcome{}, fmt.Errorf("tools: lock the run before queueing: %w", err)
+	}
+	alreadyQueued, err := provenance.ReportAlreadyQueued(ctx, tx, current.organizationID, current.runID, report.ID, request.ActionID)
+	if err != nil {
+		return adapterOutcome{}, fmt.Errorf("tools: check the report was not queued: %w", err)
+	}
+	if alreadyQueued {
+		return failed(ReasonToolNotAllowed), nil
+	}
+
 	var outboxMessageID string
 	err = tx.QueryRow(ctx,
 		`INSERT INTO demo.outbox_messages (organization_id, action_id, report_id, report_content_hash, recipient)

@@ -69,9 +69,13 @@ func (relationships *PostgresRelationships) ReportExport(ctx context.Context, or
 			return err
 		}
 		decision := provenance.AuthorizeExport(report, provenance.DestinationRegisteredVendor, currentVersions)
+		alreadyQueued, err := provenance.ReportAlreadyQueued(ctx, tx, organizationID, runID, report.ID, "")
+		if err != nil {
+			return err
+		}
 		verdict = ExportVerdict{
 			Found: true, Allowed: decision.Allowed, ReasonCode: ReasonCode(decision.ReasonCode),
-			AlternativeTemplate: decision.AlternativeTemplate,
+			AlternativeTemplate: decision.AlternativeTemplate, AlreadyQueued: alreadyQueued,
 			// The stored references of the report; the classification is the stored fact.
 			Report: ReportRef{ID: report.ID, Template: report.TemplateName, Classification: report.Classification},
 		}
