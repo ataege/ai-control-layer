@@ -465,7 +465,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-03 · Deny every non-public route by default**
+- [x] **API-03 · Deny every non-public route by default**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2.5 h)
   - Depends on: nothing · Needs: X-03 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,
@@ -490,6 +490,17 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     without a credential; `/api/docs-json` still answers; an unknown route still answers 404; a
     guard error passes through the global filter with a safe message; the existing specs built with
     `createTestApp` keep their assertions and pass: `pnpm --filter api run test`; `pnpm smoke`.
+  - Completed (2026-10-04, lane 3c on api/3c): already in place on main 94e9a65 and verified here.
+    `auth/default-deny.guard.ts` is the global `APP_GUARD` (`auth/auth.module.ts`, and the same wiring
+    in `testing/create-test-app.ts`, so every spec built with it runs behind the guard); it reads
+    `@Public()` over the handler and the class; health, diagnostics and the two auth routes are public.
+    Since API-06 a protected route authenticates the session instead of answering 501; it never runs its
+    handler without a valid session and organization membership. Tests in `default-deny.guard.spec.ts`:
+    a missing or revoked session gets 401 in the shared envelope and the protected handler never runs
+    (new); `/api/docs-json` still answers 200 with the guard installed while the product route of the
+    same app stays 401 (new); a public route answers without a credential; an unknown route answers 404;
+    a database or session-lookup failure answers 503 through the global filter without the internal
+    error text. `pnpm --filter api run test` (see the commit).
   - Report: "Relative implementation milestones and critical dependencies" (Critical path and
     sensible reductions); "Architecture and chart reading guide" (Interpreting the full
     architecture: "Authentication placeholders in the starter must not be presented as implemented
