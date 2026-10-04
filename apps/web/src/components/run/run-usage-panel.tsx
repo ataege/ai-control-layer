@@ -1,6 +1,7 @@
 import type { RunUsage } from "@workspace/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { LabelBadge } from "@/components/labels";
+import { countOf, pluralize } from "@/lib/plural";
 import { Badge } from "@workspace/ui/components/badge";
 import {
   Card,
@@ -36,9 +37,9 @@ export function UnknownUsageNotice({ view }: { view: UsageView }) {
       </AlertTitle>
       <AlertDescription>
         <p>
-          {view.unknownCalls} model {view.unknownCalls === 1 ? "request has" : "requests have"} no
-          usable usage report. The tokens reserved for them stay held and are not counted as used or
-          as zero; the true usage is unknown until it is reconciled.
+          {view.unknownCalls} model {pluralize(view.unknownCalls, "request has", "requests have")}{" "}
+          no usable usage report. The tokens reserved for them stay held and are not counted as used
+          or as zero; the true usage is unknown until it is reconciled.
         </p>
         {view.uncertainLabel !== null ? (
           <p>
@@ -175,8 +176,9 @@ export function RunUsagePanel({ usage }: { usage: RunUsage }) {
             </Table>
             <p className="text-xs text-muted-foreground">
               Request time limit {ledger.requestTimeoutSeconds} s · at most{" "}
-              {ledger.maxConcurrentCalls} requests at once ({ledger.callsInFlight} slots held). A
-              request counts when it is reserved and is never refunded.
+              {countOf(ledger.maxConcurrentCalls, "request")} at once (
+              {countOf(ledger.callsInFlight, "slot")} held). A request counts when it is reserved
+              and is never refunded.
             </p>
           </>
         )}

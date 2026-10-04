@@ -1,6 +1,7 @@
 import type { RunState, RunUsage } from "@workspace/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Badge } from "@workspace/ui/components/badge";
+import { countOf, pluralize } from "@/lib/plural";
 import { reasonLabel } from "./labels";
 import {
   describeUsage,
@@ -108,8 +109,10 @@ export function LimitStopNotice({ run, usage, safeMessage = null }: LimitStopNot
             )}
             {view.uncertain ? (
               <span data-part="uncertain">
-                {view.unknownCalls} request(s) have unknown usage; their reservation stays held and
-                the usage is uncertain, not zero.
+                {countOf(view.unknownCalls, "request")}{" "}
+                {pluralize(view.unknownCalls, "has", "have")} unknown usage;{" "}
+                {pluralize(view.unknownCalls, "its", "their")} reservation stays held and the usage
+                is uncertain, not zero.
               </span>
             ) : null}
           </div>

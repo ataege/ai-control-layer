@@ -130,3 +130,23 @@ describe("RunUsagePanel", () => {
     expect(render(changed)).toContain('data-part="ledger-paused"');
   });
 });
+
+describe("the request limits sentence agrees with its counts", () => {
+  const withConcurrency = (maxConcurrentCalls: number, callsInFlight: number): RunUsage =>
+    asUsage({
+      ...usageLedger,
+      ledger: { ...(usageLedger as unknown as RunUsage).ledger, maxConcurrentCalls, callsInFlight },
+    });
+
+  it("says '1 request at once (1 slot held)' for one", () => {
+    expect(render(withConcurrency(1, 1))).toContain("1 request at once (1 slot held)");
+  });
+
+  it("says '2 requests at once (0 slots held)' for two and none", () => {
+    expect(render(withConcurrency(2, 0))).toContain("2 requests at once (0 slots held)");
+  });
+
+  it("says '2 requests at once (2 slots held)' for two and two", () => {
+    expect(render(withConcurrency(2, 2))).toContain("2 requests at once (2 slots held)");
+  });
+});
