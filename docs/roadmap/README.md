@@ -995,7 +995,7 @@ estimates. Every size is a planning estimate, never a schedule.
     person ownership"; "Illustrative passport and interface contracts"
   - Blocked by: `contract owners`; the names of the read operations also `read path`; `vendor projection fields` (the field list)
 
-- [ ] **SH-11 · Land the frozen contracts in `packages/contracts`**
+- [x] **SH-11 · Land the frozen contracts in `packages/contracts`**
   - **Report 1.2 change:** Provides adds X-79, the report 1.2 contracts.
   - **Report 1.1 change:** Provides adds X-71. Work adds the report and lineage summary contract and the new fields of X-08, X-09, X-12 and X-13.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 2-7 h)
@@ -1016,6 +1016,26 @@ estimates. Every size is a planning estimate, never a schedule.
   - Tests: the fixture test validates every fixture against its schema, rejects unknown fields and
     wrong enum values and pins one typed sample per schema: `pnpm --filter @workspace/contracts run test`;
     also `pnpm --filter @workspace/contracts run lint`, `typecheck` and `build`.
+  - Completed (2026-10-04, lane 3c on contracts/sh-11): every frozen contract is in `packages/contracts`
+    as a TS type, a JSON Schema, at least one fixture and a typed sample (the fixture test enforces a
+    schema per fixture and a typed sample per schema, rejects unknown fields and wrong enum values).
+    Mapping: X-07 `start-run-request` (+`start-run-response`); X-08 `passport`; X-09 `action-proposal`,
+    `stored-action`; X-10 `approval-decision` (+`approval-response`); X-11 `run-state`; X-12
+    `safe-event` (+`run-events-page`); X-13 `reason-code`, carried in the error envelope's `error.code`
+    (`error.schema.json`) and the event's `reasonCode`; X-71 `report-view` (report and lineage summary, +`review-view`). X-79: catalog revision and policy activation `catalog-status`,
+    `policy-reload-request`, `policy-reload-response`, `policy-reload-error-response`,
+    `policy-status-response`; semantic verdict NEW `semantic-verdict` (exactly Go's model output format
+    `security.verdictFormat`, also embedded in `assessment-record.verdict` and
+    `control-evaluation-response.semantic`); per-purpose reservations and usage `run-usage`; security
+    summary and audit export record `security-summary`, `security-event-page`, `assessment-page`,
+    `assessment-record` (the API's `/api/security/export` returns these pages); telemetry fields
+    `security-summary.timings` (per phase, microseconds) and the latencies of `gateway-diagnostics`;
+    control evaluation adapter `control-evaluation-request`, `control-evaluation-response`. The only
+    missing piece was the standalone semantic verdict: added `semantic-verdict.schema.json`, the fixture
+    `semantic-verdict.instruction-injection.json`, the TS type `SemanticVerdict` and its typed sample;
+    Go: the fixture is exempted in `contracts_test.go` (security imports contracts) and
+    `security/verdict_contract_test.go` proves the schema equals `verdictFormat` and `ParseVerdict`
+    accepts the fixture. No existing shape changed.
   - Report: "Delivery scope and six person ownership"; "Illustrative passport and interface contracts"
     (Decision and error semantics); "Risk register and scope controls" (NestJS/Go contract drift)
   - Blocked by: `contract owners`
