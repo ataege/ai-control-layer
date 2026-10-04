@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // First-time setup (`pnpm run setup`): reports prerequisites and prepares the root .env.
-// It installs nothing, never overwrites a non-empty value and never prints a secret.
+// It installs nothing, never overwrites a non-empty value and never prints a secret. The local-model
+// check only warns: setup never fails because Ollama or the model is missing.
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 
 import { readCommandOutput } from "./lib/commands.mjs";
 import { GENERATED_SECRETS } from "./lib/generated-secrets.mjs";
+import { isModelListed } from "./lib/local-model.mjs";
 import { printHeading, printStatus } from "./lib/output.mjs";
 import {
   fromRepositoryRoot,
@@ -15,6 +17,10 @@ import {
 } from "./lib/repo-root.mjs";
 
 const MINIMUM_GO_VERSION = "1.27";
+
+// Keys that are filled with their .env.example default when an existing .env has them empty, so an
+// .env created before the default existed still works. The value is not a secret.
+const FILL_WHEN_EMPTY = ["MODEL_NAME"];
 
 // ---------------------------------------------------------------- versions
 
@@ -120,6 +126,22 @@ function reportPrerequisites() {
 const escapeForRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
+ * Returns the content with `key=` given the value `makeValue()` returns, or null when the line has an
+ * unusual syntax. It only matches an assignment whose value is empty.
+ */
+function fillEmptyAssignment(content, key, makeValue) {
+  const emptyAssignment = new RegExp(
+    `^([ \\t]*(?:export[ \\t]+)?${escapeForRegExp(key)}[ \\t]*=)[ \\t]*(?:""|'')?[ \\t]*(?=\\r?$)`,
+    "m",
+  );
+  if (!emptyAssignment.test(content)) return null;
+  return content.replace(
+    emptyAssignment,
+    (_line, assignmentPrefix) => `${assignmentPrefix}${makeValue()}`,
+  );
+}
+
+/**
  * Returns the new .env content plus the names of the keys that were added or generated.
  * Existing non-empty values are left byte-for-byte untouched.
  */
@@ -134,15 +156,24 @@ function planEnvFile(exampleContent, existingContent) {
   // Fill generated keys that are present but empty, in place.
   for (const [secretKey, { generate: generateSecret }] of Object.entries(GENERATED_SECRETS)) {
     if (!(secretKey in currentValues) || currentValues[secretKey] !== "") continue;
-    const emptyAssignment = new RegExp(
-      `^([ \\t]*(?:export[ \\t]+)?${escapeForRegExp(secretKey)}[ \\t]*=)[ \\t]*(?:""|'')?[ \\t]*(?=\\r?$)`,
-      "m",
-    );
-    if (!emptyAssignment.test(nextContent)) continue; // unusual syntax: leave the line alone
-    nextContent = nextContent.replace(emptyAssignment, (_line, assignmentPrefix) => {
-      return `${assignmentPrefix}${generateSecret()}`;
-    });
+    const filled = fillEmptyAssignment(nextContent, secretKey, generateSecret);
+    if (filled === null) continue; // unusual syntax: leave the line alone
+    nextContent = filled;
     generatedKeys.push(secretKey);
+  }
+
+  // Fill the keys that have a default in .env.example when an existing .env has them empty.
+  const defaultedKeys = [];
+  for (const defaultedKey of FILL_WHEN_EMPTY) {
+    if (isNewFile || currentValues[defaultedKey] !== "" || !exampleValues[defaultedKey]) continue;
+    const filled = fillEmptyAssignment(
+      nextContent,
+      defaultedKey,
+      () => exampleValues[defaultedKey],
+    );
+    if (filled === null) continue;
+    nextContent = filled;
+    defaultedKeys.push(defaultedKey);
   }
 
   // Append keys that exist in .env.example but are missing from an existing .env.
@@ -158,7 +189,7 @@ function planEnvFile(exampleContent, existingContent) {
     nextContent += `${separator}\n# Added by setup (new keys from .env.example)\n${appendedLines.join("\n")}\n`;
   }
 
-  return { nextContent, generatedKeys, appendedKeys, isNewFile };
+  return { nextContent, generatedKeys, appendedKeys, defaultedKeys, isNewFile };
 }
 
 /** Returns false when .env could not be prepared. */
@@ -172,7 +203,7 @@ function prepareEnvFile() {
   const existingContent = existsSync(rootEnvFilePath)
     ? readFileSync(rootEnvFilePath, "utf8")
     : null;
-  const { nextContent, generatedKeys, appendedKeys, isNewFile } = planEnvFile(
+  const { nextContent, generatedKeys, appendedKeys, defaultedKeys, isNewFile } = planEnvFile(
     exampleContent,
     existingContent,
   );
@@ -195,6 +226,12 @@ function prepareEnvFile() {
   for (const appendedKey of appendedKeys) {
     printStatus("ok", `added missing key ${appendedKey} with its default value`);
   }
+  for (const defaultedKey of defaultedKeys) {
+    printStatus(
+      "ok",
+      `${defaultedKey} was empty; set it to its default ${parseEnv(exampleContent)[defaultedKey]}`,
+    );
+  }
 
   // Report generated keys that still have no value (for example a hand-edited unusual line).
   const finalValues = parseEnv(nextContent);
@@ -208,10 +245,45 @@ function prepareEnvFile() {
   return envFileComplete;
 }
 
+// ------------------------------------------------------------- local model
+
+/**
+ * Warns, never fails: the model is named in .env, and `ollama list` should show it. A missing Ollama
+ * or model only means runs would fail closed until it is pulled.
+ */
+function reportLocalModel() {
+  printHeading("Local model");
+  const modelName = (
+    existsSync(rootEnvFilePath) ? parseEnv(readFileSync(rootEnvFilePath, "utf8")) : {}
+  ).MODEL_NAME;
+  if (!modelName) {
+    printStatus(
+      "warn",
+      "MODEL_NAME is empty in .env: the gateway starts, but every model call fails closed. Set it to qwen3.5:4b.",
+    );
+    return;
+  }
+  const listOutput = readCommandOutput("ollama", ["list"]);
+  if (listOutput === null) {
+    printStatus(
+      "warn",
+      `could not read \`ollama list\` (Ollama is not installed or not running), so ${modelName} was not checked. Start Ollama, then: ollama pull ${modelName}`,
+    );
+  } else if (!isModelListed(listOutput, modelName)) {
+    printStatus(
+      "warn",
+      `\`ollama list\` does not show ${modelName}. Run: ollama pull ${modelName}`,
+    );
+  } else {
+    printStatus("ok", `Ollama has ${modelName} (the MODEL_NAME in .env)`);
+  }
+}
+
 // -------------------------------------------------------------------- main
 
 const prerequisitesMet = reportPrerequisites();
 const envFileReady = prepareEnvFile();
+reportLocalModel();
 
 printHeading("Next steps");
 // The first-run order of the README's "Quick start"; `pnpm install` already ran before setup.
@@ -219,7 +291,9 @@ console.log("  pnpm infra:up           start PostgreSQL in Docker (host developm
 console.log("  pnpm db:migration:run   apply the migrations");
 console.log("  pnpm db:roles           give the gateway's database role its password");
 console.log("  pnpm db:seed            load the synthetic demo records and the policy catalog");
-console.log("  ollama pull qwen3.5:4b  then set MODEL_NAME in .env (docs/setup.md, section 7)");
+console.log(
+  "  ollama pull qwen3.5:4b  the model .env names as MODEL_NAME (docs/setup.md, section 7)",
+);
 console.log("  pnpm dev                run web, api and gateway on the host");
 console.log("  pnpm smoke              check the running services");
 console.log("  pnpm reset:demo         later: restore the demo data");
