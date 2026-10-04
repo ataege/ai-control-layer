@@ -413,6 +413,9 @@ func TestStoryAfterApproval(t *testing.T) {
 	if status != contracts.RunCompleted {
 		t.Fatalf("run %s/%s after the final answer, want completed", status, reason)
 	}
+	if problems := liveStoryProblems(t, world, status, reason, false); len(problems) > 0 {
+		t.Fatalf("the completed story fails the outcome check: %s", strings.Join(problems, "; "))
+	}
 	events := []string{}
 	rows, err := world.pool.Query(context.Background(), `SELECT event_type || coalesce(' ' || reason_code, '') FROM runtime.audit_events
 		WHERE organization_id = $1 AND run_id = $2 ORDER BY id`, world.organizationID, world.passport.RunID)

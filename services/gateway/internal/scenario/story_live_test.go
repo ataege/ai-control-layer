@@ -5,6 +5,7 @@ package scenario
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"starter/services/gateway/internal/config"
@@ -101,6 +102,13 @@ func TestLiveStoryThroughTheProductionChain(t *testing.T) {
 	securityCalls := world.count(t, `SELECT count(*) FROM runtime.model_calls WHERE organization_id = $1 AND purpose = 'security'`)
 	t.Logf("evidence (live, %s): run %s %s; %d agent and %d security calls; %d live verdicts; outbox rows %d",
 		modelConfig.Name, status, reason, agentCalls, securityCalls, liveVerdicts, outbox)
+	// An infrastructure fault is never a model choice: a failed or unknown-outcome run, a call whose usage
+	// was not recorded, or a "completed" run without its events and its one outbox row fails the test.
+	// (Run it with `pnpm dev` stopped, or on the test database: a gateway sharing the database also claims
+	// the story's queued job and the run then fails with decision_unavailable.)
+	if problems := liveStoryProblems(t, world, status, reason, true); len(problems) > 0 {
+		t.Fatalf("the live story did not complete the legitimate task: %s (logs: %s)", strings.Join(problems, "; "), world.logs.String())
+	}
 	if outbox > 1 || unexpectedOutbox != 0 || queuedInternal != 0 || fixtureVerdicts != 0 {
 		t.Fatalf("boundary broken: outbox %d (%d not approved or not to the registered address), internal reports not denied %d, fixture verdicts %d",
 			outbox, unexpectedOutbox, queuedInternal, fixtureVerdicts)
