@@ -88,13 +88,10 @@ describe("TaskFormView", () => {
 
   it("shows an admission rejection with its reason and the field to change, and no passport or run", () => {
     const html = render({
-      rejection: {
-        code: "limit_not_allowed",
-        message: "limits.modelCalls exceeds the catalog limit of 12",
-      },
+      rejection: { code: "limit_not_allowed" },
     });
     expect(html).toContain('data-admission-rejection="limit_not_allowed"');
-    expect(html).toContain("limits.modelCalls exceeds the catalog limit of 12");
+    expect(html).toContain("A requested limit is above what the active policy allows.");
     expect(html).toContain("no passport was issued and no run started");
     expect(html).toContain("Submit revised request");
     expect(html).not.toMatch(/Passport (issued|id)|Run id/i);
@@ -102,7 +99,7 @@ describe("TaskFormView", () => {
 
   it("keeps the operator's choices while a rejection is shown", () => {
     const html = render({
-      rejection: { code: "limit_not_allowed", message: null },
+      rejection: { code: "limit_not_allowed" },
     });
     // The limit the operator typed is still in the field; nothing narrowed it.
     expect(html).toContain('value="999"');
@@ -118,7 +115,7 @@ describe("TaskFormView", () => {
   it("does not call onSubmit or onChange by rendering", () => {
     const onSubmit = vi.fn();
     const onChange = vi.fn();
-    render({ onSubmit, onChange, rejection: { code: "limit_not_allowed", message: null } });
+    render({ onSubmit, onChange, rejection: { code: "limit_not_allowed" } });
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
   });
