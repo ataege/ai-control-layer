@@ -127,8 +127,8 @@ repository-root `.env` itself, and real environment variables win over the file.
 
 ## Verification and handoff limits
 
-Checked on 2026-10-04 on `api/w2`, which is main 31cff75 plus this branch's commits (not a frozen
-submission build): API lint and typecheck exit 0; `pnpm --filter api run test` 428 passed;
+Checked on 2026-10-04 on `api/w2`, which is main efaae10 plus this branch's commits (not a frozen
+submission build): API lint and typecheck exit 0; `pnpm --filter api run test` 441 passed;
 `pnpm test:db --fresh` api 71 passed, gateway 965 passed, 0 failed, 0 skipped; `pnpm verify` 6 passed,
 0 failed, 0 skipped; `pnpm smoke` (host mode) 36 passed, 0 failed, 6 skipped (the service-log leak
 checks are skipped because host mode does not capture logs). The real sign-in, profile, sign-out and
@@ -149,6 +149,9 @@ Real authenticated API/Go checks observed unchanged 200, requested 202 followed 
 activation, invalid policy 400 with issue pairs and preservation of the active revision, and
 the approved importer lastError mapping. The new catalog row recorded the verified actor.
 The original configuration bytes were restored and reactivated after the check.
+`GET /api/policies/catalog` is reviewer-only (403 before Go): it proxies Go's `/internal/catalog/active` and returns the
+`CatalogStatus` unchanged (active revision, digests, last rejected activation, the controls' settings). A gateway
+failure or a body outside the contract gives a sanitized 503, never an empty catalog.
 
 Known limits:
 

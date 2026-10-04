@@ -65,6 +65,9 @@ activation; unchanged files return 200, validation issues 400, pending edits 409
 Status returns the stored pointers and the four sanitized lastError fields; feedRevision in the
 requested response is the feed version label, not its database ID. Shared policy schemas/fixtures
 and their ownership are documented in packages/contracts/README.md.
+`GET /api/policies/catalog` is reviewer-only (403 before Go): it proxies Go's `/internal/catalog/active` and returns the
+`CatalogStatus` unchanged (active revision, digests, last rejected activation, the controls' settings). A gateway
+failure or a body outside the contract gives a sanitized 503, never an empty catalog.
 The web run page reads the separate shared `RunState`, `RunUsage` and events (`after` parameter),
 not the earlier draft combined run view. Host smoke on `api/w2` (main 31cff75 plus this branch)
 reported `36 passed, 0 failed, 6 skipped`; the skipped checks are the service-log leak checks, which

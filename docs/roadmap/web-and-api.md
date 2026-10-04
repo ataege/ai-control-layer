@@ -1982,7 +1982,7 @@ handoff from X-62, and RS-09 submits.
     branch. `apps/api/README.md` "Verification and handoff limits" is rewritten with current results and
     limits; `docs/api-facade-handoff.md` no longer carries the old smoke numbers or the draft combined run
     view; `docs/architecture.md` "Product modules" gained the auth/identity, registry, actions and
-    security rows. Checks, my own runs: API lint and typecheck exit 0; api test "428 passed";
+    security rows. Checks, my own runs: API lint and typecheck exit 0; api test "441 passed";
     `pnpm test:db --fresh` api "71 passed", gateway "965 passed", 0 failed, 0 skipped; `pnpm verify`
     "6 passed, 0 failed, 0 skipped"; `pnpm smoke` "36 passed, 0 failed, 6 skipped" (service-log leak
     checks skipped in host mode); `pnpm test:judge` 8 passed (the judge CLI still sends `run_id`, which
