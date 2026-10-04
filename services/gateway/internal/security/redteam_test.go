@@ -215,17 +215,17 @@ var signatureAttempts = []attempt{
 	{"import call", "__import__('os')", "", caught, ""},
 	{"import call upper case", "__IMPORT__('os')", "", caught, ""},
 	{"import call with zero-width space", "__imp\u200bort__('os')", "", caught, ""},
-	{"import call with a space before the parenthesis", "__import__ ('os')", "", bypass, "the pattern ends with the parenthesis and spacing is collapsed, not removed"},
-	{"import call over two lines", "__import__\n('os')", "", bypass, "same cause"},
+	{"import call with a space before the parenthesis", "__import__ ('os')", "", caught, "spaces around ( ) . = are removed"},
+	{"import call over two lines", "__import__\n('os')", "", caught, "same cause"},
 	{"import through getattr", "getattr(__builtins__, '__imp' + 'ort__')('os')", "", bypass, "documented: only the listed patterns"},
 	{"pickle load", "data = pickle.loads(blob)", "", caught, ""},
 	{"cpickle load", "cPickle.loads(blob)", "", caught, ""},
-	{"pickle load with a space", "pickle.loads (blob)", "", bypass, "same cause as the import call"},
-	{"pickle load split by a dot with spaces", "pickle . loads(blob)", "", bypass, "same cause"},
+	{"pickle load with a space", "pickle.loads (blob)", "", caught, "same cause"},
+	{"pickle load split by a dot with spaces", "pickle . loads(blob)", "", caught, "same cause"},
 	{"pickle load from a file", "pickle.load(handle)", "", bypass, "a different function; not in the feed"},
 	{"trust remote code", "from_pretrained(name, trust_remote_code=True)", "", caught, ""},
 	{"trust remote code upper case", "TRUST_REMOTE_CODE=TRUE", "", caught, ""},
-	{"trust remote code with spaces", "trust_remote_code = True", "", bypass, "the pattern has no spaces around the equals sign"},
+	{"trust remote code with spaces", "trust_remote_code = True", "", caught, "same cause"},
 	{"trust remote code with a colon", "trust_remote_code: true", "", bypass, "another syntax"},
 	{"trust remote code as 1", "trust_remote_code=1", "", bypass, "another value"},
 }
@@ -308,5 +308,22 @@ func TestRedTeamToolResultStructure(t *testing.T) {
 				t.Errorf("%s: %s, want %s (outcome %s, result %s)", row.json, got, row.want, inspection.Outcome, inspection.ResultJSON)
 			}
 		})
+	}
+}
+
+// The feed accepts a pattern only if it is a fixed point of NormalizeText, so the normalization must
+// be idempotent on everything the red-team table feeds it, and an already normalized pattern must
+// not change.
+func TestRedTeamNormalizeTextIsIdempotent(t *testing.T) {
+	var inputs []string
+	for _, row := range signatureAttempts {
+		inputs = append(inputs, row.text)
+	}
+	inputs = append(inputs, "a ( ( b", "a . . b", "x = ( y ) . z", " ( ", "ignore previous instructions")
+	for _, input := range inputs {
+		once := security.NormalizeText(input)
+		if twice := security.NormalizeText(once); twice != once {
+			t.Errorf("%q normalizes to %q, then to %q", input, once, twice)
+		}
 	}
 }

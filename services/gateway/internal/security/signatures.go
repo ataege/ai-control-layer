@@ -155,7 +155,8 @@ func boundedText(text string) bool {
 // NormalizeText lowercases text, drops characters that render as nothing (format characters such
 // as zero-width spaces, combining and variation marks, and control characters) and collapses every
 // whitespace run, including letters that render blank, to one space, so trivial spacing or case
-// changes do not evade a rule. It is not a defence against paraphrase or encoding.
+// changes do not evade a rule. It also removes the space around ( ) . and = so spaced-out code
+// patterns match. It is not a defence against paraphrase or encoding.
 func NormalizeText(text string) string {
 	var builder strings.Builder
 	builder.Grow(len(text))
@@ -176,8 +177,13 @@ func NormalizeText(text string) string {
 		}
 		builder.WriteRune(unicode.ToLower(character))
 	}
-	return builder.String()
+	return punctuationSpacing.ReplaceAllString(builder.String(), "$1")
 }
+
+// punctuationSpacing matches the single space (whitespace is already collapsed) around a call or
+// assignment character, so `__import__ ('os')` and `trust_remote_code = true` read as the code
+// patterns of the feed do.
+var punctuationSpacing = regexp.MustCompile(` ?([().=]) ?`)
 
 // isBlankLetter reports the few characters that are not whitespace in Unicode but render as a
 // blank: the Hangul fillers and the empty braille pattern.
