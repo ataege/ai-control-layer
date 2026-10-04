@@ -6,18 +6,19 @@ configuration and safe reload": "The required sample configuration would be a do
 policy.yaml imported through NestJS into one central immutable control-catalog version."
 
 This schema is the "policy activation and catalog revision" contract, owned by the web + API
-implementer (`docs/product/README.md`, "Contracts to freeze first"). It is a draft until its owner
-approves it and it merges into `main` through SH-11.
+implementer (`docs/product/README.md`, "Contracts to freeze first"). It is on `main` and enforced:
+the importer (`apps/api/src/policies/policy-file.ts`) and Go (`services/gateway/internal/security`
+and `internal/catalog`) both parse the whole file against it.
 
 ## How the file is used
 
-| Step     | What happens                                                                                                                                                                                                                                                                                                  | Owner         |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| Edit     | An authorized policy owner or judge edits `policy.yaml`.                                                                                                                                                                                                                                                      | operator      |
-| Import   | An explicit command (API-32) or the authenticated reload (API-33) parses the whole file against the schema below, records its SHA-256 digest and stores it as a new immutable catalog revision. Nothing imports it at application startup.                                                                    | NestJS        |
-| Validate | "Go fetches and validates the candidate, acknowledges readiness" (GO-73): Go validates the whole candidate against this shared schema, and refuses one it cannot enforce. It does not check that a model is installed (see "Known limitations"). The protocol is the open item `catalog activation protocol`. | Go            |
-| Evaluate | Go reads the active revision before each new evaluation and dispatch and records the admission and evaluated revision in every decision (GO-72).                                                                                                                                                              | Go            |
-| Reject   | An invalid file never partially activates. The last accepted revision stays active and the rejection reason is visible (`policy_reload_rejected`). With no valid initial revision the gateway is not ready and dispatches nothing.                                                                            | NestJS and Go |
+| Step     | What happens                                                                                                                                                                                                                                                                                                                                         | Owner         |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Edit     | An authorized policy owner or judge edits `policy.yaml`.                                                                                                                                                                                                                                                                                             | operator      |
+| Import   | An explicit command (API-32) or the authenticated reload (API-33) parses the whole file against the schema below, records its SHA-256 digest and stores it as a new immutable catalog revision. Nothing imports it at application startup.                                                                                                           | NestJS        |
+| Validate | "Go fetches and validates the candidate, acknowledges readiness" (GO-73): Go validates the whole candidate against this shared schema, and refuses one it cannot enforce. It does not check that a model is installed (see "Known limitations"). The protocol is item 15 of "Decisions recorded by the lead's delegate" in `docs/product/README.md`. | Go            |
+| Evaluate | Go reads the active revision before each new evaluation and dispatch and records the admission and evaluated revision in every decision (GO-72).                                                                                                                                                                                                     | Go            |
+| Reject   | An invalid file never partially activates. The last accepted revision stays active and the rejection reason is visible (`policy_reload_rejected`). With no valid initial revision the gateway is not ready and dispatches nothing.                                                                                                                   | NestJS and Go |
 
 The file is an import input, "not a second configuration authority": after an import, the stored
 revision is what counts, and editing the file changes nothing until the next accepted import.
@@ -40,9 +41,9 @@ next to the policy file; the feed half of API-34), and then, in one transaction:
   "requested revision N; the gateway validates and activates it" and exits 0. The import never
   activates: the gateway validates the requested revision and switches the active revision and feed
   together (GO-73, `catalog activation protocol`). Without a running gateway, `pnpm catalog:activate`
-  runs that activation once (the test database and `pnpm reset:demo` do). Until GO-73's activation is on `main`, nothing
-  activates a requested revision, so a fresh database has no active catalog and the gateway stays
-  not ready.
+  runs that activation once (the test database and `pnpm reset:demo` do). With a running gateway its
+  watcher activates a requested revision within a few seconds; until a revision is active, a fresh
+  database has no active catalog and the gateway stays not ready.
 - **Unchanged file and feed:** a no-op. When the policy digest and the feed (issuer, revision,
   digest) equal the current revision (the requested one, else the active one), the command prints
   "unchanged: revision N is already current", writes nothing and exits 0. A new revision with the same
@@ -92,9 +93,9 @@ startup.
 
 Every number in the sample is an illustrative value from the project report, labelled there as
 "illustrative team settings, not sponsor requirements or measured performance". The team fixes the
-real values at the M0 freeze (X-06). Limits "depend on the selected model and hardware and require
-measurement". The model `qwen3.5:4b` is provisional: decision 6 is open, and the probe that chose it
-is in `docs/setup.md`, section 7.
+real values at the M0 freeze (X-06); the sample values are that policy fixture. Limits "depend on the
+selected model and hardware and require measurement". The model `qwen3.5:4b` through Ollama is frozen
+for the demonstration (model decision, GO-03), and the probe that chose it is in `docs/setup.md`, section 7.
 
 ## Relation to the report's sample
 
@@ -197,7 +198,7 @@ file ("Only registered adapters and supported policy controls would be executabl
 | ------------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `enabled`    | boolean         | `false` explicitly disables the optional guard; the change is recorded in the new revision. All keys stay required when a guard is disabled. |
 | `mode`       | string          | The response when the guard fires: `block` or `redact`.                                                                                      |
-| `threshold`  | number          | The semantic risk cutoff. Provisionally from 0 to 1 inclusive, the score range the SH-45 probe asked the model for. See the note below.      |
+| `threshold`  | number          | The semantic risk cutoff, from 0 to 1 inclusive (the verdict score range); a score at or above it fires the guard. See the note below.       |
 | `boundaries` | list of strings | Where the guard runs. Non-empty, no duplicates, each one of the values the guard supports.                                                   |
 
 The boundaries are the report's "Proposed hybrid evaluation boundaries": before model dispatch
@@ -208,16 +209,17 @@ boundary runs on the judge's test entry (see "Known limitations").
 Notes on each guard:
 
 - `secret_pattern`: covers the report's "Configured secret/PII patterns". Where the patterns are
-  defined, which fields they apply to and how match spans are validated is the open item
-  `redaction rules`; this schema carries no pattern or regular expression.
+  defined, which fields they apply to and how match spans are validated is recorded in the
+  `redaction rules` decision (items 8 and 25 of "Decisions recorded by the lead's delegate" in
+  `docs/product/README.md`); this schema carries no pattern or regular expression.
 - `semantic_injection`: the 0.75 cutoff "is an illustrative score cutoff, not a calibrated
   probability". Go validates the verdict's schema and "applies policy thresholds itself". The score
-  range and the comparison (at or above, or above) belong to the open item `classifier prompt and
-verdict schema`, so the 0 to 1 range here is provisional and changes with it. Semantic suspicion
+  range is 0 to 1 and a score at or above the threshold fires (item 7 of that list; the importer and
+  Go both enforce the range). Semantic suspicion
   in `redact` mode "may cause the server to mask the whole configured field rather than accepting
   free-form rewritten text". At `action_proposal`, "Allow, deny and require approval remain the
   principal action outcomes; redaction applies to supported content fields", so what `redact` means
-  for a proposal belongs to `redaction rules`. The security request is metered against
+  for a proposal is recorded in the `redaction rules` decision. The security request is metered against
   `calls_security` and the shared ceilings, and does not trigger another semantic check.
 - `signature_match`: matches the rules of the feed named in `signatures`. Each feed rule carries its
   own response (report: "versioned rule data carrying issuer, revision, scope, pattern type, response
@@ -247,8 +249,7 @@ bytes with their SHA-256; Go accepts only those bytes. There is no signing key: 
 authenticated import plus the digest pin. Grammar and rule table: `services/gateway/README.md`.
 
 The report says "The same activation command validates the referenced versioned attack-signatures.json
-feed. A failed validation leaves the accepted active version intact". The recommendation for the open
-item `catalog activation protocol`: a candidate whose enabled `signature_match` references a feed
+feed. A failed validation leaves the accepted active version intact". As decided (item 15 of that list): a candidate whose enabled `signature_match` references a feed
 revision that has not been accepted is invalid and does not activate, so the last-known-good revision
 stays active; it never runs as an empty rule set that matches nothing.
 
@@ -273,10 +274,11 @@ after an action was evaluated voids it. A template listed here still needs the p
 The other settings the report names for this group are not in the schema yet, and the schema holds no
 values for them:
 
-- Projections: the template and projection-rule records are `app` records (SH-41); what the vendor
-  projection holds is the open item `vendor projection fields`.
-- Authorized destinations: where recipient rules live is the open item `source classification
-storage`.
+- Projections: the report templates and the projection rule are Go constants
+  (`services/gateway/internal/provenance`); the vendor projection is `vendor_invoice_fields_v1` (item 5
+  of the delegate's list, `vendor projection fields`).
+- Authorized destinations: the vendor's registered reporting address on `demo.vendors` and the
+  `internal_note_classification` column on `demo.invoices` (item 6, `source classification storage`).
 - Safe export fields: set by the security summary and audit export record contract (web + API
   implementer). JSON and CSV export are fixed capabilities, not settings.
 
