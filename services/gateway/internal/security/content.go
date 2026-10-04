@@ -195,7 +195,11 @@ func ApplyContentRules(field Field, boundary Boundary, settings Settings) (Conte
 		return finish(OutcomeNotApplicable, "", "", nil)
 	}
 
-	spans, err := FindSecrets(field.Text)
+	// Invisible format characters (zero-width spaces, soft hyphens) must not split a keyword or a
+	// value, so the rules read a copy without them. A value that passes is returned as it came;
+	// a masked one is the masked copy, so its spans index that copy.
+	scanned := stripFormatCharacters(field.Text)
+	spans, err := FindSecrets(scanned)
 	if err != nil {
 		return finish(OutcomeError, "", "", err)
 	}
@@ -205,12 +209,23 @@ func ApplyContentRules(field Field, boundary Boundary, settings Settings) (Conte
 	if settings.SecretPattern.Mode == ModeBlock {
 		return finish(OutcomeBlock, ReasonContentBlocked, spans[0].RuleID, nil)
 	}
-	masked, err := MaskText(field.Text, spans)
+	masked, err := MaskText(scanned, spans)
 	if err != nil {
 		return finish(OutcomeError, "", "", err)
 	}
 	result.Text, result.Spans = masked, spans
 	return finish(OutcomeRedact, ReasonContentRedacted, spans[0].RuleID, nil)
+}
+
+// stripFormatCharacters drops the invisible format characters (Unicode category Cf) that
+// NormalizeText also ignores for signature matching.
+func stripFormatCharacters(text string) string {
+	return strings.Map(func(character rune) rune {
+		if unicode.Is(unicode.Cf, character) {
+			return -1
+		}
+		return character
+	}, text)
 }
 
 // credentialShape accepts a value of at least minimumLength that mixes letters and digits, so
