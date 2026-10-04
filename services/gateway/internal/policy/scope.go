@@ -48,17 +48,19 @@ func (reader *PassportScopeReader) LoadScope(ctx context.Context, run RunIdentit
 	if err != nil {
 		return PassportScope{}, ErrScopeUnavailable
 	}
-	templates := allowedTemplates(passport, snapshot)
+	// The catalog only narrows the passport: templates and the tool-attempt ceiling (config/README.md,
+	// "Budget changes apply as current restrictions").
+	effective := catalog.EffectiveFor(passport, snapshot)
 	return PassportScope{
 		OrganizationID:             passport.OrganizationID,
 		RunID:                      passport.RunID,
 		PassportID:                 passport.PassportID,
 		AllowedTools:               passport.Scope.Tools,
 		AllowedInvoiceIDs:          passport.Scope.InvoiceIDs,
-		AllowedTemplates:           templates,
+		AllowedTemplates:           templateNames(effective.ReportTemplates),
 		RecipientReferences:        passport.Scope.RecipientReferences,
 		ApprovalRequiredTools:      passport.Scope.ApprovalRequiredTools,
-		ToolAttemptLimit:           int(passport.Limits.ToolAttempts),
+		ToolAttemptLimit:           int(effective.ToolAttempts),
 		AdmissionCatalogRevisionID: passport.AdmissionCatalogRevisionID,
 		ExpiresAt:                  passport.ExpiresAt,
 	}, nil
@@ -82,15 +84,14 @@ func (reader *PassportScopeReader) ActiveCatalogRevision(ctx context.Context) (i
 	return snapshot.RevisionID, nil
 }
 
-// allowedTemplates is the passport's report templates that the active catalog still enables
-// (GO-70/GO-72): a template disabled in reports.enabled_templates after admission is refused at
-// the gate with template_not_allowed. It only narrows: a template the catalog enables but the
+// templateNames lists the report templates that the passport allows and the active catalog still
+// enables (GO-70/GO-72): a template disabled in reports.enabled_templates after admission is refused
+// at the gate with template_not_allowed. It only narrows: a template the catalog enables but the
 // passport lacks is never added.
-func allowedTemplates(passport contracts.Passport, snapshot catalog.Snapshot) []string {
-	effective := catalog.EffectiveFor(passport, snapshot).ReportTemplates
-	templates := make([]string, 0, len(effective))
-	for _, template := range effective {
-		templates = append(templates, string(template))
+func templateNames(templates []contracts.ReportTemplate) []string {
+	names := make([]string, 0, len(templates))
+	for _, template := range templates {
+		names = append(names, string(template))
 	}
-	return templates
+	return names
 }

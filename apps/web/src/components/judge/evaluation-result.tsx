@@ -2,6 +2,7 @@ import type { ControlEvaluationResponse } from "@workspace/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
 import { Badge } from "@workspace/ui/components/badge";
 import { CopyButton } from "@workspace/ui/components/copy-button";
+import { VerdictSourceLabel } from "@/components/labels";
 import type { EvaluationFailure } from "@/lib/clients/judge-client";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
@@ -178,10 +179,9 @@ export function EvaluationResult({ response, durationMs, requestId }: Evaluation
         <p className="text-sm font-medium">Semantic evaluator</p>
         {semantic ? (
           <p className="text-sm" data-testid="judge-semantic">
-            <Badge variant={semantic.source === "live" ? "default" : "secondary"}>
-              {semantic.source === "live" ? "live model" : "fixture (not live detection)"}
-            </Badge>{" "}
-            category <code>{semantic.riskCategory}</code>, score {semantic.score}, reason{" "}
+            {/* The shared label says what the verdict is; an unrecognized source gets none, never "live". */}
+            <VerdictSourceLabel verdictSource={semantic.source} detail /> category{" "}
+            <code>{semantic.riskCategory}</code>, score {semantic.score}, reason{" "}
             <code>{semantic.reasonCode}</code>
           </p>
         ) : (

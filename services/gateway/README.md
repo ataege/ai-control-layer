@@ -193,8 +193,9 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
 
 1. Go 1.27 or newer on `PATH`; Ollama with the catalog's allowed model (`ollama pull qwen3.5:4b`,
    `docs/setup.md` section 7). `MODEL_BASE_URL` and `MODEL_NAME` go in `.env`.
-2. `pnpm run setup` writes `GATEWAY_SERVICE_TOKEN`, `OPERATOR_CONTEXT_SIGNING_KEY` and
-   `POSTGRES_GATEWAY_PASSWORD` into `.env` (a missing secret is added to an existing file).
+2. `pnpm run setup` writes six generated secrets into `.env`: `GATEWAY_SERVICE_TOKEN`,
+   `OPERATOR_CONTEXT_SIGNING_KEY`, `POSTGRES_GATEWAY_PASSWORD`, `POSTGRES_PASSWORD`, `AUTH_JWT_SECRET`
+   and `DEMO_OPERATOR_PASSWORD` (a missing secret is added to an existing file).
 3. `pnpm infra:up`, then `pnpm db:migration:run` and `pnpm db:roles` (the gateway role's
    password). `pnpm db:seed` loads the synthetic records and imports `config/policy.yaml` with its
    signature feed (`pnpm policy:import` does the import alone). An import only requests the
@@ -222,9 +223,15 @@ differs and write the difference down.
 | `GOFLAGS=-p=3 pnpm test:db --fresh`                                                              | exit 0; the gateway and API counts of "Check results" below, none failed or skipped |
 | `pnpm dev`, then `curl -s -o /dev/null -w '%{http_code}\n' localhost:$GATEWAY_PORT/health/ready` | `200` (the worker runs and an enforceable catalog is active)                        |
 
+The last row needs `GATEWAY_PORT`, which lives in `.env` (8080 by default): load it first with
+`set -a; . ./.env; set +a`, or use the value from the file. If `MODEL_NAME` is not in `.env` (setup
+step 1), `pnpm dev` logs a WARN "model not configured; every model call fails closed" while
+readiness is still `200`; that is expected for this list, which makes no model call.
+
 Stop `pnpm dev` before `pnpm verify` or any web build in the same worktree: the build overwrites
 `apps/web/.next` and the dev server then answers `404` until the directory is deleted. Nothing in
-this list calls the model; the live checks are in `docs/demo-runbook.md` ("Final live checks").
+this list calls the model; the live checks are in `docs/demo-runbook.md` ("Final live checks", added on 4 October 2026; it is on
+`main` once the lead's merge round that carries it is in).
 
 ### How a run flows through the packages
 
@@ -416,11 +423,26 @@ limit. Local inference has no tariff, so no cost is recorded.
   anywhere in the database holds them back. Pages come back empty with the same cursor until it
   ends; nothing is lost.
 - **Two identical start-run requests create two runs** (`command idempotency keys` is open).
+- **Stored-document decoding accepts case-variant keys.** `contracts.DecodeStrict` rejects unknown
+  fields and trailing data but, like `encoding/json`, matches field names case-insensitively and keeps
+  the last of two equal keys. The command bodies (start-run, cancel, approval, evaluate:
+  `httpserver.DecodeJSONBody`) and the action decoder (`policy.DecodeArguments`) are strict: duplicate
+  keys at any depth, case-variant keys, stray closing delimiters and nesting past 32 levels are a bad
+  request or `invalid_arguments`. The adapters' own re-decode of the stored canonical arguments
+  (`tools.decodeArguments`) is the permissive kind too; those arguments come from the gate and are
+  bound to the action digest, so changing them needs write access to the database.
+- **`source_invoice_ids` has no length cap in the decoder.** The array is bounded by the size of the
+  model's answer and, before any effect, by the passport's invoice list (every element must be in
+  scope and repeats are refused); a 100,000-level nesting bomb is refused quickly. Found by the
+  red-team tables (`go/w2-redteam`).
 
 ### Evidence commands
 
-From the repository root; database tests need the test database settings (`pnpm test:db` sets
-them; for a single package see "PostgreSQL test harness").
+The `pnpm` rows run from the repository root. The `go test` rows are shown as in the package
+READMEs and run from `services/gateway`, or from the root as `go -C services/gateway test ...`; the
+database-backed ones need the test database settings, for example
+`POSTGRES_DB=<test database> TEST_DATABASE_REQUIRED=1 node scripts/with-env.mjs go -C services/gateway test -count=1 -run '<name>' ./internal/<package>`
+(`pnpm test:db` sets them and runs all of them; for a single package see "PostgreSQL test harness").
 
 | Command                                                                                        | Proves                                                                                     |
 | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -475,6 +497,11 @@ reliability or detection measures:
   WEB-16, WEB-17 and WEB-19 in `docs/roadmap/web-and-api.md`.
 - **A forced model timeout** (a labelled stub provider that never answers, not a model): the run paused
   `outcome_unknown`, its reservation became `usage_unknown` and its slot stayed held.
+- **A provider answer without token counts** (a labelled stub that answers at once with a valid chat
+  message and no `prompt_eval_count` or `eval_count`, not a model): the run paused `outcome_unknown`
+  in about 2 s, the call and its reservation became `usage_unknown`, 4,428 tokens and the slot stayed
+  held, nothing was counted as used, and the run page showed the usage as uncertain. The same case, in
+  three variants, is `TestAnswerWithoutTokenCountsIsUnknownUsageNotZero` in `internal/agent`.
 - **A run that failed on a loaded machine** (run `b0027f84-0967-437e-bcb2-5fa675ff5fd9`): the last
   agent call timed out and marking it unknown also did not finish within its 5 s, which failed the run
   as "model call failed" while the reservation stayed `reserved`. Fixed in 0eea3c2 (a sent request with
@@ -484,8 +511,19 @@ reliability or detection measures:
   recipient reference was copied wrongly in 2 of 3 before the instruction asked for it verbatim and in
   0 of 3 after.
 
-Not done: a dry run of the setup list above by a teammate who did not write the Go code (the Tests
-line of GO-61), the live checks that need a quiet machine (`docs/demo-runbook.md`, "Final live
+Dry run of the setup list above by a teammate who did not write the Go code (session c2, 4 October
+2026, `go/f3-61` 641f611, a clean worktree with its own Compose project and port, a fresh
+`pnpm install`, no model call, each line on its own exit code): every line held. Install and setup
+exit 0; `infra:up`, `db:migration:run` (21 migrations) and `db:roles` exit 0; `db:seed` printed
+"requested revision 1"; `catalog:activate` "activated revision 1 with signature feed revision 1";
+the five gateway checks exit 0; `GOFLAGS=-p=3 pnpm test:db --fresh` exit 0 with gateway "965 passed,
+0 failed, 0 skipped" and api "79 passed, 0 failed, 0 skipped", the same numbers as above; `pnpm dev`
+readiness `200`; `pnpm smoke` "36 passed, 0 failed, 6 skipped"; the five named evidence tests passed;
+`pnpm benchmark` (model-free) exit 0. It found six small mismatches in this text (the gateway port
+variable, the working directory of the `go test` rows, the dangling runbook pointer, six secrets
+not three, the missing-model warning and the command count), all corrected here.
+
+Not done: the live checks that need a quiet machine (`docs/demo-runbook.md`, "Final live
 checks"), and a re-check at the freeze against the final build (X-59).
 
 ## Ollama transport (GO-06 progress)

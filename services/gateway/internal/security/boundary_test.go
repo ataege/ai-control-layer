@@ -98,7 +98,10 @@ func (atlasRelationships) ReportExport(_ context.Context, _, _, reportID string)
 	case internalReportID:
 		return policy.ExportVerdict{Found: true, ReasonCode: policy.ReasonReportExportRestricted, AlternativeTemplate: policy.TemplateVendorReconciliation}, nil
 	case vendorReportID:
-		return policy.ExportVerdict{Found: true, Allowed: true}, nil
+		// The real ReportExport always names the stored report and its template; the gate checks the
+		// template against the scope, so a verdict without one is denied.
+		return policy.ExportVerdict{Found: true, Allowed: true,
+			Report: policy.ReportRef{ID: reportID, Template: policy.TemplateVendorReconciliation}}, nil
 	}
 	return policy.ExportVerdict{}, nil
 }

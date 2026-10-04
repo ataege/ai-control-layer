@@ -1,0 +1,5 @@
+{
+  "risk_category": "instruction_injection",
+  "score": 0.92,
+  "reason_code": "instruction_override"
+}

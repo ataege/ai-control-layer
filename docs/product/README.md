@@ -142,6 +142,12 @@ and the files cannot disagree silently.
   the vendor report uses `vendor_invoice_fields_v1` (item 5 of the same list).
 - Classifications and templates: `Internal only` and `Vendor shareable`; `internal_investigation_v1`
   and `vendor_reconciliation_v1`.
+- Content differences from the SH-25 work list, accepted by the lead's delegate 2026-10-04 as the
+  intended fixture content: (1) the small allowance for beat 9 is set per run through the task form's
+  limits (`limits.modelCalls`, the WEB-17 run used 2), not seeded; (2) the hostile notes live in
+  `fixtures/hostile-notes.json`, used by the replays and the tests (SH-49), not in the seed; (3) the
+  report templates and the projection rule are Go constants in
+  `services/gateway/internal/provenance/provenance.go`, not stored records.
 - Limits and controls: `config/policy.yaml` (item 29 for `tokens_total: 40000`), documented in
   `config/README.md`; the signature feed is `config/attack-signatures.json`.
 
