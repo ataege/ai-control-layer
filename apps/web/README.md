@@ -38,22 +38,22 @@ browser -> src/lib/fetch-json.ts -> route handler -> proxyUpstream -> API (${API
 
 Route handlers (each a thin file; GET unless noted):
 
-| Route                                           | Upstream path (same)       | Notes                                        |
-| ----------------------------------------------- | -------------------------- | -------------------------------------------- |
-| `/api/health/live`, `/api/health/ready`         | same                       | Public                                       |
-| `/api/diagnostics/gateway`                      | same                       | Public                                       |
-| `POST /api/auth/sign-in`, `POST .../sign-out`   | same                       | Sets or clears the HttpOnly `session` cookie |
-| `/api/auth/me`                                  | same                       | The signed-in operator (API-06)              |
-| `POST /api/runs`                                | `/api/runs` plus the query | Start a run                                  |
-| `/api/runs/options`                             | same                       | Task form options (API-12)                   |
-| `/api/runs/[id]`, `/passport`, `/usage`         | same                       | Run state, passport, ledger-based usage      |
-| `/api/runs/[id]/events`                         | same                       | Cursor page; streamed, not buffered          |
-| `/api/runs/[id]/reports/[reportId]`             | same                       | Stored report with lineage                   |
-| `POST /api/runs/[id]/cancel`                    | same                       | Cancel request                               |
-| `/api/actions/[id]/review`, `POST .../approval` | same                       | Exact-action review and decision             |
-| `POST /api/control/evaluate`                    | same                       | Judge input; 45 s timeout (local model)      |
-| `/api/security/summary`, `/api/security/export` | same                       | Posture; the audit export is reviewer-only   |
-| `/api/policies/catalog`                         | same                       | Active control catalog and reload state      |
+| Route                                           | Upstream path (same)       | Notes                                               |
+| ----------------------------------------------- | -------------------------- | --------------------------------------------------- |
+| `/api/health/live`, `/api/health/ready`         | same                       | Public                                              |
+| `/api/diagnostics/gateway`                      | same                       | Public                                              |
+| `POST /api/auth/sign-in`, `POST .../sign-out`   | same                       | Sets or clears the HttpOnly `session` cookie        |
+| `/api/auth/me`                                  | same                       | The signed-in operator (API-06)                     |
+| `POST /api/runs`                                | `/api/runs` plus the query | Start a run                                         |
+| `/api/runs/options`                             | same                       | Task form options (API-12)                          |
+| `/api/runs/[id]`, `/passport`, `/usage`         | same                       | Run state, passport, ledger-based usage             |
+| `/api/runs/[id]/events`                         | same                       | Cursor page (polled JSON, buffered like every read) |
+| `/api/runs/[id]/reports/[reportId]`             | same                       | Stored report with lineage                          |
+| `POST /api/runs/[id]/cancel`                    | same                       | Cancel request                                      |
+| `/api/actions/[id]/review`, `POST .../approval` | same                       | Exact-action review and decision                    |
+| `POST /api/control/evaluate`                    | same                       | Judge input; 45 s timeout (local model)             |
+| `/api/security/summary`, `/api/security/export` | same                       | Posture; the audit export is reviewer-only          |
+| `/api/policies/catalog`                         | same                       | Active control catalog and reload state             |
 
 To proxy another API route, add a prefix to `UPSTREAM_PREFIXES` (or keep it under an existing one)
 and create a matching `route.ts`.
@@ -98,13 +98,13 @@ no approve button.
 A label function returns null when the data carries no mark, so an unmarked thing has no label and a
 marked one always does:
 
-| Label                     | Shown when                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| Simulated outbox          | An event's `effect` is `outbox_message_queued` (a database record, no email)    |
-| Labelled replay           | An action or event carries a `replaySource` (`labelled_replay:<fixture>`)       |
-| Fixture verdict / Live    | A control's `verdictSource` is `fixture` or `live`; anything else gets no label |
-| Development demonstration | The signed-in operator is the seeded `demo-operator@example.com`                |
-| Synthetic records         | Pages that show the demo data                                                   |
+| Label                        | Shown when                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| Simulated outbox             | An event's `effect` is `outbox_message_queued` (a database record, no email)    |
+| Labelled replay              | An action or event carries a `replaySource` (`labelled_replay:<fixture>`)       |
+| Fixture verdict / Live model | A control's `verdictSource` is `fixture` or `live`; anything else gets no label |
+| Development demonstration    | The signed-in operator is the seeded `demo-operator@example.com`                |
+| Synthetic records            | Pages that show the demo data                                                   |
 
 ## Failure states
 
@@ -199,6 +199,11 @@ downloads), layout and styling, and keyboard or screen-reader behavior. No compo
 and no browser end-to-end test exists. These were checked by hand in a browser against a running
 stack, and the roadmap blocks (WEB-12, WEB-23, WEB-27, WEB-28) quote what was seen.
 
+`scripts/e2e-flow.mjs` is a route-level end-to-end script, not run by `pnpm test`: it needs the running
+stack and the local model, drives the demonstration through the web server's routes with `fetch` (no
+browser, no client-side React) and ends each round with `pnpm reset:demo` (`E2E_ROUNDS`,
+`E2E_POSTGRES_CONTAINER`; see `docs/demo-runbook.md`).
+
 ## Known limitations
 
 - The `session` cookie check in the middleware is existence only; a forged cookie reaches the page
@@ -223,7 +228,8 @@ Then run `pnpm run format` at the repository root and import it as
 
 ## Where code goes
 
-- `scripts/` Node launchers for the `dev` and `start` package scripts
+- `scripts/` Node launchers for the `dev` and `start` package scripts (`lib/` holds their helpers and
+  `secret-verdict.mjs`), and `e2e-flow.mjs`, the route-level end-to-end script (`docs/demo-runbook.md`)
 - `src/app/` routes, with page-specific components next to their page
 - `src/components/` components by feature (`approval`, `errors`, `judge`, `labels`, `passport`,
   `report`, `run`, `security`)
