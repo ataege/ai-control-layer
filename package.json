@@ -32,6 +32,7 @@
     "verify:controls": "node scripts/verify-controls.mjs",
     "judge": "node scripts/judge-client.mjs",
     "benchmark": "node scripts/with-env.mjs go -C services/gateway run ./cmd/benchmark",
+    "test:scripts": "node --test \"scripts/*.test.mjs\" \"scripts/lib/*.test.mjs\"",
     "test:judge": "node --test scripts/judge-client.test.mjs",
     "test:fixtures": "node --test \"fixtures/*.test.mjs\"",
     "check:instructions": "node scripts/check-instructions.mjs",
