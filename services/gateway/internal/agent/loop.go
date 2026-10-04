@@ -95,11 +95,17 @@ func (results PoolFinalResults) Validate(ctx context.Context, organizationID, ru
 const finalAnswerRejectedMessage = "The final answer was not accepted. " + runresult.FinalAnswerInstruction +
 	" Send no other text and no code fence."
 
-// reportQueuedMessage is the fixed message after a successful queue_report: the work is done and only
-// the final answer remains (live run fa417b6b: after the approval the model proposed a tool that does
-// not exist, `status`, because nothing told it to stop). It names no tool beyond the finish.
+// reportQueuedMessage is the fixed message that ends the context of every request once the run has a
+// successful queue_report: the work is done and only the final answer remains (live run fa417b6b: after
+// the approval the model proposed a tool that does not exist, `status`, because nothing told it to
+// stop). It names no tool beyond the finish.
 const reportQueuedMessage = "The report was queued, so the task is finished. Do not call any more tools. " +
 	runresult.FinalAnswerInstruction
+
+// reportQueuedFeedback is added to every correction feedback once the run has a queued report (live
+// runs of 4 October: after the queue the model proposed queue_report again, once for the internal
+// report and once for the vendor report, and the single finish message was gone from the next request).
+const reportQueuedFeedback = " The report is already queued and the task is finished; do not call any more tools."
 
 // ContinuationReader finds the decided action a continuation resumes (policy.Approvals).
 type ContinuationReader interface {
@@ -479,6 +485,13 @@ func (loop *Loop) correct(ctx context.Context, run policy.RunIdentity, effective
 	if message != "" {
 		denialFeedback = policy.DenialFeedback{ReasonCode: decision.ReasonCode, SafeMessage: message}
 	}
+	entries, err := loop.dependencies.Contexts.List(ctx, run.OrganizationID, run.RunID)
+	if err != nil {
+		return runEnd{}, false, err
+	}
+	if reportQueued(entries) {
+		denialFeedback.SafeMessage += reportQueuedFeedback
+	}
 	feedback, err := json.Marshal(denialFeedback)
 	if err != nil {
 		return runEnd{status: contracts.RunStopped, reason: denialReason}, false, nil
@@ -845,9 +858,6 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 		strings.Join(passport.Scope.RecipientReferences, ", "), strings.Join(templates, ", "))
 	messages := []model.Message{{Role: "user", Content: task}}
 	previousCallStep := 0
-	// lastCall is the tool of the latest call; resultOfLastCall is true while the latest stored entry is
-	// that call's result, that is, while the model has just seen what the call did.
-	lastCall, resultOfLastCall := "", false
 	for _, entry := range entries {
 		switch entry.Kind {
 		case entryAssistantCall:
@@ -862,12 +872,9 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 				{Function: model.FunctionCall{Name: call.Tool, Arguments: compactJSON(call.Arguments)}},
 			}})
 			previousCallStep = entry.StepNumber
-			lastCall, resultOfLastCall = call.Tool, false
 		case entryToolResult:
 			messages = append(messages, model.Message{Role: "tool", Content: string(compactJSON(entry.Content))})
-			resultOfLastCall = true
 		case entryCorrection:
-			resultOfLastCall = false
 			// The answer to the denied call of the same step, or, after a rejected response that
 			// had no single call, a message to the model.
 			role := "user"
@@ -877,12 +884,35 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 			messages = append(messages, model.Message{Role: role, Content: string(compactJSON(entry.Content))})
 		}
 	}
-	// A stored result of queue_report means the report was queued (a denied or failed call stores a
-	// correction instead): only the final answer remains.
-	if resultOfLastCall && lastCall == string(policy.ToolQueueReport) {
+	// Once the run has queued its report only the final answer remains, however many stray proposals
+	// and corrections follow the queue step, so the finish message ends every later request.
+	if reportQueued(entries) {
 		messages = append(messages, model.Message{Role: "user", Content: reportQueuedMessage})
 	}
 	return messages
+}
+
+// reportQueued reports whether the stored steps hold a successful queue_report: a stored result of
+// that tool. A denied or failed call stores a correction instead, never a result, so the answer is a
+// deterministic function of the stored steps and survives a restart.
+func reportQueued(entries []ContextEntry) bool {
+	lastCall := ""
+	for _, entry := range entries {
+		switch entry.Kind {
+		case entryAssistantCall:
+			var call struct {
+				Tool string `json:"tool"`
+			}
+			if json.Unmarshal(entry.Content, &call) == nil {
+				lastCall = call.Tool
+			}
+		case entryToolResult:
+			if lastCall == string(policy.ToolQueueReport) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // compactJSON removes the whitespace jsonb adds when it renders stored content; jsonb's key order
