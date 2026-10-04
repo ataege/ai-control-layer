@@ -5,7 +5,13 @@ import admissionRejected from "@workspace/contracts/fixtures/safe-event.admissio
 import eventsPage from "@workspace/contracts/fixtures/run-events-page.export-denied.json";
 import semanticJudge from "@workspace/contracts/fixtures/assessment-record.semantic-judge.json";
 import semanticNotApplicable from "@workspace/contracts/fixtures/assessment-record.semantic-not-applicable.json";
-import { decisionBadges, describeEvent, summarizeEvents, terminalSafeMessage } from "./event-model";
+import {
+  decisionBadges,
+  describeEffects,
+  describeEvent,
+  summarizeEvents,
+  terminalSafeMessage,
+} from "./event-model";
 
 // The JSON fixtures are typed as plain strings; the contract types are the narrower ones.
 const asEvent = (value: unknown): SafeEvent => value as SafeEvent;
@@ -293,5 +299,28 @@ describe("terminalSafeMessage", () => {
     ];
     expect(terminalSafeMessage(events)).toBe("last");
     expect(terminalSafeMessage([event({ eventType: "run.started" })])).toBeNull();
+  });
+});
+
+describe("describeEffects: a count and its noun agree", () => {
+  it("says 0 and 2 in the plural and 1 in the singular, for each kind of effect", () => {
+    expect(describeEffects({ reads: 0, reportsStored: 0, messagesQueued: 0 })).toBe(
+      "0 reads · 0 reports stored · 0 messages queued",
+    );
+    expect(describeEffects({ reads: 1, reportsStored: 1, messagesQueued: 1 })).toBe(
+      "1 read · 1 report stored · 1 message queued",
+    );
+    expect(describeEffects({ reads: 2, reportsStored: 2, messagesQueued: 2 })).toBe(
+      "2 reads · 2 reports stored · 2 messages queued",
+    );
+  });
+
+  it("agrees each count on its own", () => {
+    expect(describeEffects({ reads: 1, reportsStored: 0, messagesQueued: 2 })).toBe(
+      "1 read · 0 reports stored · 2 messages queued",
+    );
+    expect(describeEffects({ reads: 3, reportsStored: 1, messagesQueued: 0 })).toBe(
+      "3 reads · 1 report stored · 0 messages queued",
+    );
   });
 });

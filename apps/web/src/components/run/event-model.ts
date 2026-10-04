@@ -1,3 +1,4 @@
+import { countOf } from "@/lib/plural";
 import type { AssessmentRecord, SafeEvent, SafeEventType } from "@workspace/contracts";
 import {
   outboxEffectLabel,
@@ -517,4 +518,17 @@ export function terminalSafeMessage(events: readonly SafeEvent[]): string | null
     }
   }
   return null;
+}
+
+/** The completed effects of a run in words, each count with its own singular or plural noun. */
+export function describeEffects(effects: {
+  reads: number;
+  reportsStored: number;
+  messagesQueued: number;
+}): string {
+  return [
+    countOf(effects.reads, "read"),
+    `${countOf(effects.reportsStored, "report")} stored`,
+    `${countOf(effects.messagesQueued, "message")} queued`,
+  ].join(" · ");
 }

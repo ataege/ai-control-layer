@@ -10,7 +10,13 @@ import {
 import { DecisionBadges } from "./decision-badges";
 import { LabelBadge } from "@/components/labels";
 import { LABELS } from "@/lib/labels";
-import { describeEvent, summarizeEvents, type EventKind, type EventView } from "./event-model";
+import {
+  describeEffects,
+  describeEvent,
+  summarizeEvents,
+  type EventKind,
+  type EventView,
+} from "./event-model";
 
 const KIND_LABEL: Record<EventKind, string> = {
   state: "Run state",
@@ -151,8 +157,7 @@ export function RunEventTimeline({ events, assessments = [] }: RunEventTimelineP
           <div>
             <dt className="text-xs text-muted-foreground">Completed effects</dt>
             <dd data-summary="effects">
-              {summary.effects.reads} reads · {summary.effects.reportsStored} reports stored ·{" "}
-              {summary.effects.messagesQueued} messages queued ({LABELS.simulatedOutbox.short})
+              {describeEffects(summary.effects)} ({LABELS.simulatedOutbox.short})
             </dd>
           </div>
           <div>

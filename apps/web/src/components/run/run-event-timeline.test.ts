@@ -59,7 +59,8 @@ describe("RunEventTimeline", () => {
     expect(html).toContain('data-kind="effect"');
     expect(html).toContain('data-effect="completed"');
     expect(html).toContain("Simulated outbox: a database record, no email is sent");
-    expect(html).toContain("1 messages queued (Simulated outbox)");
+    expect(html).toContain("1 message queued (Simulated outbox)");
+    expect(html).not.toContain("1 messages");
   });
 
   it("shows an unknown event type instead of dropping it", () => {
@@ -121,5 +122,28 @@ describe("RunEventTimeline", () => {
 
   it("says plainly when there are no events", () => {
     expect(render([])).toContain("No events have been recorded for this run yet.");
+  });
+
+  it("counts completed effects with agreeing nouns: 1 read and 2 messages queued", () => {
+    const effectOf = (eventId: string, actionId: string, effect: string): SafeEvent => ({
+      ...first,
+      eventId,
+      actionId,
+      eventType: "action.succeeded",
+      decision: "allow",
+      reasonCode: null,
+      maskedSummary: {
+        ...first.maskedSummary,
+        effect: effect as SafeEvent["maskedSummary"]["effect"],
+        alternativeTemplate: null,
+        safeMessage: null,
+      },
+    });
+    const html = render([
+      effectOf("201", "a1", "read"),
+      effectOf("202", "a2", "outbox_message_queued"),
+      effectOf("203", "a3", "outbox_message_queued"),
+    ]);
+    expect(html).toContain("1 read · 0 reports stored · 2 messages queued (Simulated outbox)");
   });
 });

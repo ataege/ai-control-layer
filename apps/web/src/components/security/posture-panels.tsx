@@ -22,6 +22,7 @@ import { cn } from "@workspace/ui/lib/utils";
 
 import { VerdictSourceLabel } from "@/components/labels";
 import { LABELS } from "@/lib/labels";
+import { pluralize } from "@/lib/plural";
 
 import {
   INPUT_SOURCE_LABELS,
@@ -126,8 +127,9 @@ export function HeadlineCards({ view }: { view: PostureView }) {
           tone="attention"
           caption={
             <p className="text-xs text-muted-foreground">
-              {formatCount(view.heldTokens)} tokens stay reserved until resolved; unknown usage is
-              never counted as zero.
+              {formatCount(view.heldTokens)}{" "}
+              {pluralize(view.heldTokens, "token stays", "tokens stay")} reserved until resolved;
+              unknown usage is never counted as zero.
             </p>
           }
         />

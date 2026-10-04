@@ -4,6 +4,8 @@
 
 import type { CatalogControl, CatalogStatus } from "@workspace/contracts";
 
+import { countOf } from "@/lib/plural";
+
 export interface ReloadRejection {
   code: string;
   message: string;
@@ -79,4 +81,18 @@ export function controlRows(status: CatalogStatus): ControlRow[] {
     threshold: control.threshold === null ? "none" : String(control.threshold),
     boundaries: control.enabled ? control.boundaries : [],
   }));
+}
+
+/**
+ * The signature feed the active catalog is bound to, in words: its revision, the feed revision id and
+ * how many rules it has ("1 rule", "2 rules"; an unserved count is said to be unknown, not "none").
+ */
+export function describeSignatureFeed(
+  status: Pick<CatalogStatus, "feedRevision" | "feedRevisionId" | "feedRuleCount">,
+): string {
+  if (status.feedRevision === null) return "none bound";
+  const revisionId = status.feedRevisionId === null ? "none" : String(status.feedRevisionId);
+  const rules =
+    status.feedRuleCount === null ? "rule count unknown" : countOf(status.feedRuleCount, "rule");
+  return `${status.feedRevision} (revision ${revisionId}, ${rules})`;
 }

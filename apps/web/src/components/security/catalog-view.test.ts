@@ -4,7 +4,13 @@ import { createRequire } from "node:module";
 import type { CatalogStatus } from "@workspace/contracts";
 import { describe, expect, it } from "vitest";
 
-import { controlRows, describeReload, isReloadPending, shortDigest } from "./catalog-view";
+import {
+  controlRows,
+  describeReload,
+  describeSignatureFeed,
+  isReloadPending,
+  shortDigest,
+} from "./catalog-view";
 
 // The contract fixtures are the shapes the gateway really serves (generated from Go's handler).
 function fixture(name: string): CatalogStatus {
@@ -115,5 +121,30 @@ describe("shortDigest", () => {
   it("shortens a digest and says none for a missing one", () => {
     expect(shortDigest(active.policyDigest)).toBe("df00c9d60645…");
     expect(shortDigest(null)).toBe("none");
+  });
+});
+
+describe("describeSignatureFeed", () => {
+  const bound = { feedRevision: "feed_v2", feedRevisionId: 3 };
+
+  it("counts rules with an agreeing noun: 0, 1 and 2", () => {
+    expect(describeSignatureFeed({ ...bound, feedRuleCount: 0 })).toBe(
+      "feed_v2 (revision 3, 0 rules)",
+    );
+    expect(describeSignatureFeed({ ...bound, feedRuleCount: 1 })).toBe(
+      "feed_v2 (revision 3, 1 rule)",
+    );
+    expect(describeSignatureFeed({ ...bound, feedRuleCount: 2 })).toBe(
+      "feed_v2 (revision 3, 2 rules)",
+    );
+  });
+
+  it("says an unserved count is unknown, not 'none rules', and no feed is none bound", () => {
+    expect(describeSignatureFeed({ ...bound, feedRuleCount: null })).toBe(
+      "feed_v2 (revision 3, rule count unknown)",
+    );
+    expect(
+      describeSignatureFeed({ feedRevision: null, feedRevisionId: null, feedRuleCount: null }),
+    ).toBe("none bound");
   });
 });

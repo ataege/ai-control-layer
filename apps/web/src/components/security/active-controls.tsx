@@ -36,6 +36,7 @@ import { browserPollEnvironment, pollDelay, schedulePoll } from "./catalog-polli
 import {
   controlRows,
   describeReload,
+  describeSignatureFeed,
   isReloadPending,
   shortDigest,
   type ReloadRejection,
@@ -184,14 +185,7 @@ function Catalog({ catalog, requestId }: { catalog: CatalogStatus; requestId?: s
         <Fact label="Active revision" value={numberOrNone(catalog.activeRevisionId)} />
         <Fact label="Requested revision" value={numberOrNone(catalog.requestedRevisionId)} />
         <Fact label="Validated revision" value={numberOrNone(catalog.validatedRevisionId)} />
-        <Fact
-          label="Signature feed"
-          value={
-            catalog.feedRevision === null
-              ? "none bound"
-              : `${catalog.feedRevision} (revision ${numberOrNone(catalog.feedRevisionId)}, ${numberOrNone(catalog.feedRuleCount)} rules)`
-          }
-        />
+        <Fact label="Signature feed" value={describeSignatureFeed(catalog)} />
         <Digest label="Policy digest (SHA-256)" digest={catalog.policyDigest} />
         <Digest label="Feed digest (SHA-256)" digest={catalog.feedDigest} />
         <Fact

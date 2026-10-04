@@ -105,3 +105,28 @@ describe("LimitStopNotice", () => {
     expect(html).toContain("time allowance passed");
   });
 });
+
+describe("the unknown-usage sentence agrees with the count", () => {
+  const withUnknown = (unknown: number): RunUsage =>
+    asUsage({
+      ...usageLedger,
+      modelCalls: (usageLedger as unknown as RunUsage).modelCalls.map((row) =>
+        row.purpose === "agent"
+          ? { ...row, usageUnknown: unknown, usageUnknownReservations: unknown }
+          : { ...row, usageUnknown: 0, usageUnknownReservations: 0 },
+      ),
+    });
+
+  it("says '1 request has ... its reservation' for one", () => {
+    const html = render(asRun(pausedAllowance), withUnknown(1));
+    expect(html).toContain("1 request has");
+    expect(html).toContain("its reservation stays held");
+    expect(html).not.toContain("request(s)");
+  });
+
+  it("says '2 requests have ... their reservation' for two", () => {
+    const html = render(asRun(pausedAllowance), withUnknown(2));
+    expect(html).toContain("2 requests have");
+    expect(html).toContain("their reservation stays held");
+  });
+});
