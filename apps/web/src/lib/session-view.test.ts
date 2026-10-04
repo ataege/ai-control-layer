@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { isPublicPath, mustSignIn, sessionOutcome, type OperatorSession } from "./session-view";
+import {
+  isPublicPath,
+  mustSignIn,
+  sessionOutcome,
+  signInFailureMessage,
+  type OperatorSession,
+} from "./session-view";
 
 const operator: OperatorSession = {
   name: "Development Demonstration Operator",
@@ -61,5 +67,25 @@ describe("mustSignIn", () => {
     expect(isPublicPath("/components")).toBe(false);
     expect(isPublicPath("/diagnostics/extra")).toBe(true);
     expect(isPublicPath("/diagnosticsx")).toBe(false);
+  });
+});
+
+describe("signInFailureMessage", () => {
+  it("says the credentials were wrong for a 401, never that a session ended", () => {
+    expect(signInFailureMessage({ kind: "http", status: 401, body: undefined })).toBe(
+      "The email or password is not correct.",
+    );
+  });
+
+  it("uses the shared safe message for every other failure and never a server message", () => {
+    const message = signInFailureMessage({
+      kind: "http",
+      status: 500,
+      body: { error: { code: "internal_error", message: "stack trace secret" } },
+    });
+    expect(message).not.toContain("secret");
+    expect(signInFailureMessage({ kind: "network", message: "x" })).toMatch(
+      /could not reach the web server/,
+    );
   });
 });
