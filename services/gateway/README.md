@@ -13,6 +13,7 @@ with "Technical handoff (GO-61)".
 | `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, the worker runs and an enforceable control catalog is active (GO-72), else `503`.                                                                                                                                                                 |
 | `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                                                                                                                                                                                                                                |
 | `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable` (the log names the failed stage, for example `catalog`).                                                                                                                                             |
+| `POST /internal/judge-runs`                     | Judge console run: the same X-07 body, answers and admission as `POST /internal/runs`, but no agent job, so the agent never runs; the run stays `queued` and is used only by `POST /internal/control/evaluate`; its `run.queued` event carries `maskedSummary.inputSource: "judge"`.                                  |
 | `GET /internal/task-options`                    | GO-25: the task form options (API-12 `TaskFormOptions`) of the verified organization: the template, its vendors (also the destinations), its invoices by display fields only, the approval rule, and the highest limits admission accepts under the active catalog; `503 unavailable` without an enforceable catalog. |
 | `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                                                                                                                                                                                                                    |
 | `POST /internal/runs/{runId}/cancel`            | GO-41: records a cancellation; `200` X-11 run state, `404` unknown or another organization's run.                                                                                                                                                                                                                     |
@@ -1659,6 +1660,14 @@ answers `503` with `status: "unavailable"` and the real database check, and logs
 `worker loop not running`. The readiness schema stays unchanged (open item `worker readiness`,
 option chosen with the lead: no contract change). The gateway process starts the worker and reports
 it in readiness (see "Production chain and gateway wiring").
+
+**Judge runs (no agent).** `POST /internal/judge-runs` (`admission.Admitter.AdmitJudge`,
+`repository.Tx.InsertJudgeAdmission`) stores the passport, the run in status `queued`, its ledger
+and a `run.queued` event marked `inputSource: "judge"`, but no `runtime.jobs` row, so no worker
+claims it and its agent never calls the model; only the judge console's evaluations use the run
+(they meter security calls on its ledger). Evaluations accept it until it is cancelled (`stopped` /
+`run_cancelled` at once) or its passport expires (`run_expired`). Known limit: nothing ends an
+expired judge run, so its status stays `queued` in run lists and the security summary after expiry.
 
 **Catalog readiness (GO-72).** "With no valid initial catalog, the gateway is not ready and cannot
 dispatch work." `catalog.Readiness` loads the active snapshot through the same `Loader.Active`

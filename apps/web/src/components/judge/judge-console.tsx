@@ -77,7 +77,7 @@ export function JudgeConsole() {
       }
       setRunId(startResult.data.runId);
       setRunNotice(
-        "Dedicated judge run started. Evaluations spend this run's security allowance, not a demo run's.",
+        "Judge run started: it has a passport but no agent. Evaluations spend this run's security allowance, not a demo run's.",
       );
       await refreshRunStatus(startResult.data.runId);
     } finally {
@@ -120,7 +120,10 @@ export function JudgeConsole() {
         <CardHeader>
           <CardTitle>1. Choose a run</CardTitle>
           <CardDescription>
-            Evaluations run against an admitted, still active run of your organization.
+            Evaluations run against an admitted, still active run of your organization. A judge run
+            has a passport but no agent: nothing runs on it and no model call is made for it.
+            Evaluations spend its security allowance, never a demo run&apos;s. It stays valid for
+            its passport&apos;s lifetime (about 15 minutes).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -165,7 +168,8 @@ export function JudgeConsole() {
         <CardHeader>
           <CardTitle>2. Submit input</CardTitle>
           <CardDescription>
-            The same gates as the agent path decide. The agent model is never dispatched.
+            The same gates as the agent path decide. The agent is never dispatched; the security
+            evaluator may call the local model and spends the run&apos;s security allowance.
           </CardDescription>
         </CardHeader>
         <form onSubmit={evaluate}>

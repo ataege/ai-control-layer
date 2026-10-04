@@ -7,6 +7,7 @@ vi.mock("@/server/upstream-proxy", () => ({
 import { proxyUpstream } from "@/server/upstream-proxy";
 import { GET as readEvents } from "./[id]/events/route";
 import { GET as readUsage } from "./[id]/usage/route";
+import { POST as startJudgeRun } from "./judge/route";
 import { POST as startRun } from "./route";
 
 afterEach(() => vi.clearAllMocks());
@@ -20,6 +21,14 @@ describe("the run proxy routes", () => {
     );
     expect(proxyUpstream).toHaveBeenCalledTimes(1);
     expect(vi.mocked(proxyUpstream).mock.calls[0]?.[1]).toBe("/api/runs");
+  });
+
+  it("starts a judge run on its own path, without the browser's query string", async () => {
+    await startJudgeRun(
+      new Request("http://localhost/api/runs/judge?admin=1", { method: "POST", body: "{}" }),
+    );
+    expect(proxyUpstream).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(proxyUpstream).mock.calls[0]?.[1]).toBe("/api/runs/judge");
   });
 
   it("reads events as a buffered JSON page and keeps the paging query", async () => {
