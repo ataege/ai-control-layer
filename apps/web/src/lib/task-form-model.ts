@@ -9,28 +9,24 @@ import { classifyFailure, type Failure } from "./errors/failure";
 import type { FetchJsonError } from "./fetch-json";
 
 /**
- * An offered invoice. Its `vendorId` (carried by the options contract) lets the form keep a selection to
- * one vendor, because admission rejects a set that mixes vendors. `currency` is the ISO 4217 code of
- * `amount`, which is in minor units; the contract does not carry it yet, so it may be absent.
+ * An offered invoice. Its `vendorId` lets the form keep a selection to one vendor, because admission
+ * rejects a set that mixes vendors; `currency` is the ISO 4217 code of `amount`, which is in minor units.
  */
-export type OfferedInvoice = TaskFormOptions["invoices"][number] & { currency?: string };
+export type OfferedInvoice = TaskFormOptions["invoices"][number];
 
 /**
- * An invoice amount for display. The amount is an integer in the currency's minor units, so it is only
- * shown as money when the invoice names its currency; otherwise it is shown raw and said to be in minor
- * units of an unstated currency, never guessed.
+ * An invoice amount for display: the integer minor-unit amount as money in the invoice's currency,
+ * using that currency's own number of minor-unit digits. A code the platform cannot format is shown
+ * as the raw figure with its code, never as another currency.
  */
-export function formatInvoiceAmount(amount: number, currency: string | undefined): string {
-  if (currency !== undefined && /^[A-Z]{3}$/.test(currency)) {
-    try {
-      const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency });
-      const minorUnitDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-      return `${formatter.format(amount / 10 ** minorUnitDigits)} (${currency})`;
-    } catch {
-      // An unknown currency code falls through to the raw figure below.
-    }
+export function formatInvoiceAmount(amount: number, currency: string): string {
+  try {
+    const formatter = new Intl.NumberFormat("en-US", { style: "currency", currency });
+    const minorUnitDigits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
+    return `${formatter.format(amount / 10 ** minorUnitDigits)} (${currency})`;
+  } catch {
+    return `${amount} (minor units of ${currency})`;
   }
-  return `${amount} (minor units, currency not stated)`;
 }
 
 export interface InvoiceGroup {

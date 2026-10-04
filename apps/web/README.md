@@ -16,7 +16,7 @@ browser -> src/lib/fetch-json.ts -> route handler -> proxyUpstream -> API (${API
 `proxyUpstream` rules:
 
 - Only paths under the allowlist prefixes `/api/health/*`, `/api/diagnostics/gateway`, `/api/runs`,
-  `/api/actions`, `/api/auth`, `/api/control` and `/api/security` are forwarded. Anything else
+  `/api/actions`, `/api/auth`, `/api/control`, `/api/security` and `/api/policies` are forwarded. Anything else
   answers 500 `configuration_error`.
 - It forwards the method, the query of the path the handler built, the `session` cookie only (never
   other cookies or headers), the request body and `content-type`, and an `x-request-id` (the
@@ -32,7 +32,7 @@ browser -> src/lib/fetch-json.ts -> route handler -> proxyUpstream -> API (${API
 | 500    | `configuration_error`        | `API_UPSTREAM_URL` is missing or invalid, or bad path |
 | 502    | `upstream_unreachable`       | The API refused or dropped the connection             |
 | 502    | `upstream_invalid_response`  | The API answered with something that is not JSON      |
-| 504    | `upstream_timeout`           | No complete answer within 10 seconds (45 s for judge) |
+| 504    | `upstream_timeout`           | No complete answer within 12 seconds (45 s for judge) |
 | 403    | `cross_site_request_refused` | A command came from another site or origin            |
 | 415    | `unsupported_media_type`     | A command body was not `application/json`             |
 
@@ -53,6 +53,7 @@ Route handlers (each a thin file; GET unless noted):
 | `/api/actions/[id]/review`, `POST .../approval` | same                       | Exact-action review and decision             |
 | `POST /api/control/evaluate`                    | same                       | Judge input; 45 s timeout (local model)      |
 | `/api/security/summary`, `/api/security/export` | same                       | Posture; the audit export is reviewer-only   |
+| `/api/policies/catalog`                         | same                       | Active control catalog and reload state      |
 
 To proxy another API route, add a prefix to `UPSTREAM_PREFIXES` (or keep it under an existing one)
 and create a matching `route.ts`.
@@ -79,7 +80,7 @@ one shows the "Your session has ended" failure state with a sign-in link.
 | `/runs/[id]/review/[actionId]`  | Exact-action review: the stored action and its reasons, approve or reject (reviewer role)                                 |
 | `/runs/[id]/reports/[reportId]` | A stored report: classification badge, source trail (template, projection, content hash), content or "Content withheld"   |
 | `/judge`                        | Judge console: submit model input, a tool result or an action proposal and see the control layer's decision               |
-| `/security`                     | Posture: decisions, controls that fired, model usage per purpose, phase timings                                           |
+| `/security`                     | Posture: decisions, controls that fired, the active control catalog, model usage per purpose, phase timings               |
 | `/security/export`              | Sanitized audit export as JSON or CSV pages (reviewer role; others see a refusal and no control)                          |
 | `/diagnostics`                  | Live health of the API, the gateway and their database connections, from real responses only                              |
 | `/components`                   | Showcase of every shared primitive and generic component                                                                  |
@@ -180,7 +181,7 @@ container image runs the same server directly (see `infra/docker/web.Dockerfile`
 
 ## What the tests cover
 
-`pnpm --filter web run test` runs 33 files, 332 tests (2026-10-04, branch web/reports): Vitest in the
+`pnpm --filter web run test` runs 42 files, 409 tests (2026-10-04, main 39d5899): Vitest in the
 node environment, so every test is a pure function or a server-rendered string. Covered:
 
 - the proxy (allowlist, cookie and header forwarding, request ids, the four failure codes), the
@@ -200,8 +201,6 @@ stack, and the roadmap blocks (WEB-12, WEB-23, WEB-27, WEB-28) quote what was se
 
 ## Known limitations
 
-- Sign-in redirect: `login-form.tsx` sends the browser to the `callbackUrl` query value without
-  checking that it is a path on this site.
 - The `session` cookie check in the middleware is existence only; a forged cookie reaches the page
   shell and is refused by the API on the first data read.
 - Polling, not push: the run page refreshes every 3 s while the run is not terminal.

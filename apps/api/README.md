@@ -151,17 +151,15 @@ migration yet.
 
 ## Verification and handoff limits
 
-API lint, typecheck and build passed; unit tests: 407 passed; database tests: 71 passed,
-0 failed, 0 skipped; policy/shared contract tests: 9 passed. `pnpm verify` currently reports
-4 passed, 2 failed, 0 skipped: the merged web has formatting failures and two homepage tests fail.
-Those failures are not reported as passing and require the web owner. The real web/API
-sign-in → profile → sign-out → revoked-profile check returned 200/200/200/401. These results
-cover this branch's current code, not a frozen submission build. The sanitized audit evidence
-and its build identifier are linked in the handoff.
+Checked on 2026-10-04 on `api/w2`, which is main 31cff75 plus this branch's commits (not a frozen
+submission build): API lint and typecheck exit 0; `pnpm --filter api run test` 428 passed;
+`pnpm test:db --fresh` api 71 passed, gateway 965 passed, 0 failed, 0 skipped; `pnpm verify` 6 passed,
+0 failed, 0 skipped; `pnpm smoke` (host mode) 36 passed, 0 failed, 6 skipped (the service-log leak
+checks are skipped because host mode does not capture logs). The real sign-in, profile, sign-out and
+revoked-profile flow returned 200/200/200/401, and a signed-in operator stays on `/tasks/new` with the
+task form loaded. Nothing here called the live model. The sanitized audit evidence and its build
+identifier are linked in the handoff.
 
-The merged web middleware redirects `/` and `/components` to login. Current host smoke still
-expects 200 there and reported 22 passed, 8 failed, 6 skipped after restarting the stack.
-The web/script owners must settle that expectation; it is not recorded as passing.
 API-12 form options forward GET /internal/task-options unchanged through the shared schema;
 real Go/API/web-proxy reads returned 200 with identical bodies.
 API-33 provides reviewer-only POST /api/policies/reload with exactly {} and GET /api/policies/status.
@@ -175,8 +173,19 @@ Real authenticated API/Go checks observed unchanged 200, requested 202 followed 
 activation, invalid policy 400 with issue pairs and preservation of the active revision, and
 the approved importer lastError mapping. The new catalog row recorded the verified actor.
 The original configuration bytes were restored and reactivated after the check.
-The draft judge CLI needs the lead's X-91 update. Activity uses polling, not SSE.
-API-15 browser presentation, teammate clean-checkout setup, Docker, and a new live-model
-approval/outbox rehearsal were not verified in this API work. Fixtures prove contract and
-authorization behavior, not semantic detection quality. Cookie auth has no production identity
-federation, onboarding or production hardening claim.
+
+Known limits:
+
+- The draft judge CLI (`pnpm judge`, `scripts/judge-client.mjs`) still sends `run_id` and omits the
+  null fields; the API's X-91 request needs `runId` plus all of `kind`, `text`, `tool` and
+  `arguments` and refuses unknown keys, so the CLI cannot reach a decision until it is updated.
+  The API adds no compatibility defaults.
+- Activity uses polling, not server-sent events (API-25 was not built).
+- Organization access is proven through the public path with labelled Go response fixtures
+  (`src/auth/product-access.db-spec.ts`: a second organization gets 404 on every object route).
+  A live two-operator check is missing because no second-organization operator is seeded (API-23).
+- Free-text fields the contract allows (for example an event's `safeMessage`) are relayed as Go sends
+  them; the API cannot recognise a protected value inside them (API-24).
+- Teammate clean-checkout setup, Docker, and a new live-model approval/outbox rehearsal were not
+  verified in this API work. Fixtures prove contract and authorization behavior, not semantic
+  detection quality. Cookie auth has no production identity federation, onboarding or hardening claim.
