@@ -18,6 +18,12 @@ const committedFeedDigest = "ff6ff4fef7e7091a50c1e416fab5a7b1aa825b55d783ada38de
 // config/policy.yaml binds to.
 const committedFeedRevision = "feed_v2"
 
+// committedPolicyContent is the sample catalog content bound to the committed feed's revision, the
+// way config/policy.yaml binds to it.
+func committedPolicyContent() string {
+	return strings.Replace(samplePolicyContent, `"revision":"feed_v1"`, `"revision":"`+committedFeedRevision+`"`, 1)
+}
+
 func loadCommittedFeed(t *testing.T) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("../../../../config", "attack-signatures.json"))
@@ -40,8 +46,7 @@ func TestCommittedFeedParsesWithItsPin(t *testing.T) {
 	if feed.Issuer != "task-passport-security" || feed.Revision != committedFeedRevision || !slices.Equal(feed.RuleIDs(), want) {
 		t.Fatalf("feed = %+v", feed)
 	}
-	committedPolicy := strings.Replace(samplePolicyContent, `"revision":"feed_v1"`, `"revision":"`+committedFeedRevision+`"`, 1)
-	if _, err := SettingsFromCatalog(1, []byte(committedPolicy), loadCommittedFeed(t), committedFeedDigest); err != nil {
+	if _, err := SettingsFromCatalog(1, []byte(committedPolicyContent()), loadCommittedFeed(t), committedFeedDigest); err != nil {
 		t.Fatalf("sample policy with the committed feed: %v", err)
 	}
 }

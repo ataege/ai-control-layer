@@ -29,7 +29,7 @@ func judgeToolResultInput(t *testing.T, text string) ToolResultInput {
 
 func fullPolicySettings(t *testing.T) Settings {
 	t.Helper()
-	settings, err := SettingsFromCatalog(4, []byte(samplePolicyContent), loadCommittedFeed(t), committedFeedDigest)
+	settings, err := SettingsFromCatalog(4, []byte(committedPolicyContent()), loadCommittedFeed(t), committedFeedDigest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestSecretToolResultIsDeniedWhenTheSemanticVerdictBlocksTheRedactedText(t *
 // The deterministic part alone (no semantic call) redacts: so a deny can only come from the
 // semantic verdict, a signature, or a guard failure, never from the secret rule.
 func TestSecretToolResultWithoutTheSemanticGuardIsRedactedByTheSecretRuleAlone(t *testing.T) {
-	settings, err := deterministicSettings(t, 4, "feed_v1", loadCommittedFeed(t), committedFeedDigest)
+	settings, err := deterministicSettings(t, 4, committedFeedRevision, loadCommittedFeed(t), committedFeedDigest)
 	if err != nil {
 		t.Fatal(err)
 	}
