@@ -67,7 +67,7 @@ func TestPostgresActivatesTheRequestedRevision(t *testing.T) {
 	if active == nil || *active != requested || feed == nil || *feed != w.feedID {
 		t.Errorf("active %v feed %v, want %d and %d", active, feed, requested, w.feedID)
 	}
-	for _, leak := range []string{"threshold", "qwen", "feed_v1"} {
+	for _, leak := range []string{"threshold", "qwen", "feed_v2"} {
 		if strings.Contains(stdout+stderr, leak) {
 			t.Errorf("output mentions %q: %s%s", leak, stdout, stderr)
 		}
@@ -92,7 +92,7 @@ func TestPostgresFailsWhenNothingIsActive(t *testing.T) {
 func TestPostgresRejectedRequestFailsAndKeepsTheLastGoodRevision(t *testing.T) {
 	w := newWorld(t)
 	good := catalogtest.Activate(t, w.outer, catalogtest.PolicyContent, &w.feedID)
-	catalogtest.Request(t, w.outer, strings.Replace(catalogtest.PolicyContent, `"revision": "feed_v1"`, `"revision": "feed_v9"`, 1))
+	catalogtest.Request(t, w.outer, strings.Replace(catalogtest.PolicyContent, `"revision": "feed_v2"`, `"revision": "feed_v9"`, 1))
 
 	for attempt := 1; attempt <= 2; attempt++ {
 		code, stdout, stderr := w.run()

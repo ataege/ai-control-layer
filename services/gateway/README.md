@@ -13,6 +13,7 @@ with "Technical handoff (GO-61)".
 | `GET /health/ready`                             | `200` when a PostgreSQL ping succeeds within `DATABASE_TIMEOUT_MS`, the worker runs and an enforceable control catalog is active (GO-72), else `503`.                                                                                                                                                                 |
 | `GET /internal/ping`                            | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`. Does not touch the database.                                                                                                                                                                                                                                |
 | `POST /internal/runs`                           | GO-14: admits an X-07 start-run command; `201` X-07 response, `400` X-13 reason code, `503 decision_unavailable` (the log names the failed stage, for example `catalog`).                                                                                                                                             |
+| `POST /internal/judge-runs`                     | Judge console run: the same X-07 body, answers and admission as `POST /internal/runs`, but no agent job, so the agent never runs; the run stays `queued` and is used only by `POST /internal/control/evaluate`; its `run.queued` event carries `maskedSummary.inputSource: "judge"`.                                  |
 | `GET /internal/task-options`                    | GO-25: the task form options (API-12 `TaskFormOptions`) of the verified organization: the template, its vendors (also the destinations), its invoices by display fields only, the approval rule, and the highest limits admission accepts under the active catalog; `503 unavailable` without an enforceable catalog. |
 | `GET /internal/runs/{runId}/reports/{reportId}` | GO-37 (lane w2): one stored report of the operator's organization.                                                                                                                                                                                                                                                    |
 | `POST /internal/runs/{runId}/cancel`            | GO-41: records a cancellation; `200` X-11 run state, `404` unknown or another organization's run.                                                                                                                                                                                                                     |
@@ -1192,9 +1193,13 @@ unknown or duplicate key, a second JSON value or more than 64 KiB rejects the wh
   normalized form. There is no regular expression, code, URL or loading path.
 - `response` must be `block`; `boundaries` is a non-empty subset of `model_input`, `tool_result`
   and `action_proposal`.
-- `NormalizeText` lowercases, drops invisible format characters (Unicode `Cf`, for example
-  zero-width spaces) and collapses whitespace runs to one space. It does not counter paraphrase or
-  encoding.
+- `NormalizeText` applies Unicode compatibility decomposition (NFKD, so full-width, mathematical and
+  circled letters read as plain letters), lowercases, drops characters that render as nothing
+  (format characters `Cf`, combining and variation marks `Mn` and `Me`, and control characters that
+  are not whitespace), reads the Hangul fillers and the empty braille pattern as whitespace, collapses
+  whitespace runs to one space and removes the space around `(`, `)`, `.` and `=`. It does not counter
+  paraphrase, lookalike letters from other scripts, or encodings. The secret rules read a copy of the
+  text without the `Cf` characters.
 - Trust: `ParseFeed` takes the file bytes and the SHA-256 digest pinned in the active catalog
   (`app.signature_feed_revisions.file_digest` of the feed on the active pointer) and rejects any
   other bytes. The digest proves the bytes are the ones the authenticated import accepted; as the
@@ -1244,7 +1249,7 @@ revision (it never activates), nothing in those flows is enforceable until this 
 ### The sample feed (SH-46)
 
 `config/attack-signatures.json` is the sample feed: issuer `task-passport-security`, revision
-`feed_v1`, SHA-256 `c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244` (of the
+`feed_v2`, SHA-256 `ff6ff4fef7e7091a50c1e416fab5a7b1aa825b55d783ada38de43b42a399d98c` (of the
 committed bytes). The import (API-34) stores these bytes as `source_text` with
 this digest as `file_digest`; any other bytes fail `ParseFeed`. GO-73's activation accepts only the
 trusted issuer `task-passport-security` and finds the feed by that issuer and `signatures.revision`,
@@ -1512,11 +1517,11 @@ The note keeps `classification: internal_only` and its trusted `Source`, the inv
 (`external_reference`, totals) return unchanged, and each record names `content_redacted`, the
 matched rule and the catalog revision.
 
-**X-100, attack feed update** (`TestEvidenceAttackFeedUpdate`). Under `feed_v1` (the committed feed,
-catalog revision 5) a note asking for `os.system('id')` passes. A trusted `feed_v2` that adds
+**X-100, attack feed update** (`TestEvidenceAttackFeedUpdate`). Under `feed_v2` (the committed feed,
+catalog revision 5) a note asking for `os.system('id')` passes. A trusted `feed_v3` that adds
 `code_exec_os_system_v1` (`os.system(`), bound by catalog revision 6 through `SettingsFromCatalog`,
-blocks it: the record names the rule, `feed_v2`, its digest and revision 6, and the note in the
-would-be agent context is `[WITHHELD:signature_match]`. A malformed `feed_v2` (a `regex` rule) is
+blocks it: the record names the rule, `feed_v3`, its digest and revision 6, and the note in the
+would-be agent context is `[WITHHELD:signature_match]`. A malformed `feed_v3` (a `regex` rule) is
 refused with `ErrFeed` and an untrusted copy (bytes other than the pinned digest) with
 `ErrFeedDigest`; the caller keeps the accepted settings, and the same input stays blocked. Storing
 a feed revision through the import and its refusals are covered by
@@ -1655,6 +1660,14 @@ answers `503` with `status: "unavailable"` and the real database check, and logs
 `worker loop not running`. The readiness schema stays unchanged (open item `worker readiness`,
 option chosen with the lead: no contract change). The gateway process starts the worker and reports
 it in readiness (see "Production chain and gateway wiring").
+
+**Judge runs (no agent).** `POST /internal/judge-runs` (`admission.Admitter.AdmitJudge`,
+`repository.Tx.InsertJudgeAdmission`) stores the passport, the run in status `queued`, its ledger
+and a `run.queued` event marked `inputSource: "judge"`, but no `runtime.jobs` row, so no worker
+claims it and its agent never calls the model; only the judge console's evaluations use the run
+(they meter security calls on its ledger). Evaluations accept it until it is cancelled (`stopped` /
+`run_cancelled` at once) or its passport expires (`run_expired`). Known limit: nothing ends an
+expired judge run, so its status stays `queued` in run lists and the security summary after expiry.
 
 **Catalog readiness (GO-72).** "With no valid initial catalog, the gateway is not ready and cannot
 dispatch work." `catalog.Readiness` loads the active snapshot through the same `Loader.Active`

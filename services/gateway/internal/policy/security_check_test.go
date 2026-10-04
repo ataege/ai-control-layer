@@ -20,7 +20,7 @@ const sampleCatalogContent = `{"schema_version":1,"allowed_models":["qwen3.5:4b"
   "secret_pattern":{"enabled":true,"mode":"redact","boundaries":["model_input","tool_result"]},
   "semantic_injection":{"enabled":true,"mode":"block","threshold":0.75,"boundaries":SEMANTIC_BOUNDARIES},
   "signature_match":{"enabled":true,"boundaries":["model_input","tool_result","action_proposal"]}},
-"signatures":{"path":"attack-signatures.json","revision":"feed_v1","disabled_rules":[]},
+"signatures":{"path":"attack-signatures.json","revision":"feed_v2","disabled_rules":[]},
 "reports":{"enabled_templates":["internal_investigation_v1","vendor_reconciliation_v1"]}}`
 
 // sampleSettings builds settings from the sample catalog and the repository's real sample feed.

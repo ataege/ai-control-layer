@@ -55,7 +55,7 @@ the **short description** below with the category now, then paste the final text
 > action.
 >
 > **Control-layer deliverables.** An editable policy file with validated live import and a last-good
-> fallback; a four-rule attack-signature feed (trusted by authenticated import and SHA-256, not
+> fallback; an eleven-rule attack-signature feed (trusted by authenticated import and SHA-256, not
 > signed); budgets reserved before every model call, with separate agent and security allowances; a
 > security summary and a sanitized JSON and CSV audit export; performance telemetry; a small
 > control-evaluation adapter; and a one-command test suite. `pnpm verify:controls` passed 1,145 cases

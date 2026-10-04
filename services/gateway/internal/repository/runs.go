@@ -55,6 +55,22 @@ func (tx Tx) InsertAdmission(ctx context.Context, passport contracts.Passport, j
 	if ctx == nil || !validPassport(passport) || !validUUID(job.ID) || !slices.Contains(jobKinds, job.Kind) {
 		return ErrInvalid
 	}
+	return tx.insertAdmission(ctx, passport, &job)
+}
+
+// InsertJudgeAdmission stores the passport and its run in status queued with NO job: the run of
+// a judge console is evaluated through POST /internal/control/evaluate only, and no worker ever
+// claims it, so its agent never runs. It stays queued until cancelled; after its passport expires
+// evaluations answer run_expired.
+func (tx Tx) InsertJudgeAdmission(ctx context.Context, passport contracts.Passport) error {
+	if ctx == nil || !validPassport(passport) {
+		return ErrInvalid
+	}
+	return tx.insertAdmission(ctx, passport, nil)
+}
+
+// insertAdmission writes the passport, the run and, unless job is nil, the run's first job.
+func (tx Tx) insertAdmission(ctx context.Context, passport contracts.Passport, job *NewJob) error {
 	scope, scopeErr := json.Marshal(passport.Scope)
 	limits, limitsErr := json.Marshal(passport.Limits)
 	if scopeErr != nil || limitsErr != nil {
@@ -71,8 +87,13 @@ func (tx Tx) InsertAdmission(ctx context.Context, passport contracts.Passport, j
 				passport.AdmissionCatalogRevisionID, scope, limits, passport.IssuedAt, passport.ExpiresAt}},
 		{`INSERT INTO runtime.runs (id, organization_id, passport_id, status) VALUES ($1, $2, $3, $4)`,
 			[]any{passport.RunID, passport.OrganizationID, passport.PassportID, string(contracts.RunQueued)}},
-		{`INSERT INTO runtime.jobs (id, organization_id, run_id, kind, status) VALUES ($1, $2, $3, $4, 'queued')`,
-			[]any{job.ID, passport.OrganizationID, passport.RunID, job.Kind}},
+	}
+	if job != nil {
+		statements = append(statements, struct {
+			sql       string
+			arguments []any
+		}{`INSERT INTO runtime.jobs (id, organization_id, run_id, kind, status) VALUES ($1, $2, $3, $4, 'queued')`,
+			[]any{job.ID, passport.OrganizationID, passport.RunID, job.Kind}})
 	}
 	for _, statement := range statements {
 		if _, err := tx.transaction.Exec(ctx, statement.sql, statement.arguments...); err != nil {

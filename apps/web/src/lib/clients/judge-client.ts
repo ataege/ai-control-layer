@@ -15,10 +15,14 @@ export const MAX_ARGUMENTS_BYTES = 4096;
 const textEncoder = new TextEncoder();
 export const utf8ByteLength = (value: string): number => textEncoder.encode(value).length;
 
+/** Starts a judge run: a passport and a run with no agent job (Go's judge admission). */
+export const JUDGE_RUN_PATH = "/api/runs/judge";
+
 /**
- * The seeded Atlas scenario (fixtures/demo-records.json), started as the judge's own run so an
- * evaluation spends this run's security allowance and never a demo run's. The review requirement
- * pauses the run at its report, which keeps it active for further evaluations.
+ * The seeded Atlas scenario (fixtures/demo-records.json), admitted as the judge's own run. It has
+ * the passport of that scenario but no agent: nothing runs on it and no model call is made for it,
+ * so it stays queued until its passport expires (about 15 minutes) or it is cancelled, and an
+ * evaluation spends this run's security allowance, never a demo run's.
  */
 export const JUDGE_RUN_REQUEST: StartRunRequest = {
   template: "reconcile_atlas_v1",
@@ -176,9 +180,9 @@ export function interpretEvaluation(result: FetchJsonResult<unknown>): Evaluatio
 }
 
 export class JudgeClient {
-  /** Starts the judge's dedicated run through the existing start-run route. */
+  /** Starts the judge's dedicated run: a passport and a run with no agent. */
   static async startRun(): Promise<FetchJsonResult<{ runId: string }>> {
-    const result = await postJson<{ runId?: unknown }>("/api/runs", JUDGE_RUN_REQUEST);
+    const result = await postJson<{ runId?: unknown }>(JUDGE_RUN_PATH, JUDGE_RUN_REQUEST);
     if (result.ok && typeof result.data?.runId !== "string") {
       return {
         ok: false,

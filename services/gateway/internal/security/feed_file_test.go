@@ -6,12 +6,23 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
 // committedFeedDigest pins config/attack-signatures.json the way the catalog does; editing the
 // file without updating the pin (and the imported row) fails this test.
-const committedFeedDigest = "c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244"
+const committedFeedDigest = "ff6ff4fef7e7091a50c1e416fab5a7b1aa825b55d783ada38de43b42a399d98c"
+
+// committedFeedRevision is the revision label inside config/attack-signatures.json and the one
+// config/policy.yaml binds to.
+const committedFeedRevision = "feed_v2"
+
+// committedPolicyContent is the sample catalog content bound to the committed feed's revision, the
+// way config/policy.yaml binds to it.
+func committedPolicyContent() string {
+	return strings.Replace(samplePolicyContent, `"revision":"feed_v1"`, `"revision":"`+committedFeedRevision+`"`, 1)
+}
 
 func loadCommittedFeed(t *testing.T) []byte {
 	t.Helper()
@@ -27,11 +38,15 @@ func TestCommittedFeedParsesWithItsPin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseFeed: %v", err)
 	}
-	want := []string{"prompt_ignore_previous_v1", "code_exec_python_import_v1", "unsafe_deserialization_pickle_v1", "model_repo_trust_remote_code_v1"}
-	if feed.Issuer != "task-passport-security" || feed.Revision != "feed_v1" || !slices.Equal(feed.RuleIDs(), want) {
+	want := []string{
+		"prompt_ignore_previous_v1", "prompt_ignore_all_previous_v1", "prompt_ignore_the_previous_v1", "prompt_ignore_prior_v1",
+		"prompt_ignore_all_prior_v1", "prompt_disregard_previous_v1", "prompt_disregard_all_previous_v1", "prompt_disregard_prior_v1",
+		"code_exec_python_import_v1", "unsafe_deserialization_pickle_v1", "model_repo_trust_remote_code_v1",
+	}
+	if feed.Issuer != "task-passport-security" || feed.Revision != committedFeedRevision || !slices.Equal(feed.RuleIDs(), want) {
 		t.Fatalf("feed = %+v", feed)
 	}
-	if _, err := SettingsFromCatalog(1, []byte(samplePolicyContent), loadCommittedFeed(t), committedFeedDigest); err != nil {
+	if _, err := SettingsFromCatalog(1, []byte(committedPolicyContent()), loadCommittedFeed(t), committedFeedDigest); err != nil {
 		t.Fatalf("sample policy with the committed feed: %v", err)
 	}
 }

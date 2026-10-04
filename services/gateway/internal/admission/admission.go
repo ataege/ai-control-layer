@@ -81,6 +81,19 @@ func New(runtimeRepository *repository.Repository, catalogLoader *catalog.Loader
 // returns the stored passport, or a Rejection (after recording an admission.rejected event), or
 // ErrUnavailable. Identity comes only from the verified operator, never from the request.
 func (admitter *Admitter) Admit(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest) (contracts.Passport, error) {
+	return admitter.admit(ctx, operator, request, false)
+}
+
+// AdmitJudge admits a run for the judge console exactly as Admit does (the same request,
+// validation, passport, ledger and run.queued event), but enqueues no agent job: the run is only
+// evaluated through POST /internal/control/evaluate, and its agent never calls the model. Its
+// run.queued event is marked inputSource "judge", so summaries can tell it apart.
+func (admitter *Admitter) AdmitJudge(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest) (contracts.Passport, error) {
+	return admitter.admit(ctx, operator, request, true)
+}
+
+// admit is the shared admission; judge selects the judge run (no job, marked event).
+func (admitter *Admitter) admit(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest, judge bool) (contracts.Passport, error) {
 	if admitter == nil || admitter.repository == nil || admitter.catalog == nil || ctx == nil {
 		return contracts.Passport{}, unavailableAt("dependencies")
 	}
@@ -111,7 +124,13 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 		if rejection != nil {
 			return rejection
 		}
-		if err := tx.InsertAdmission(ctx, passport, repository.NewJob{ID: newUUID(), Kind: contracts.JobKindAgentStep}); err != nil {
+		var insertErr error
+		if judge {
+			insertErr = tx.InsertJudgeAdmission(ctx, passport)
+		} else {
+			insertErr = tx.InsertAdmission(ctx, passport, repository.NewJob{ID: newUUID(), Kind: contracts.JobKindAgentStep})
+		}
+		if insertErr != nil {
 			return unavailableAt("storage")
 		}
 		// The run's token ledger opens with the passport (alignment decision 6); without it no
@@ -131,6 +150,7 @@ func (admitter *Admitter) Admit(ctx context.Context, operator contracts.Operator
 			MaskedSummary: contracts.MaskedSummary{
 				AdmissionCatalogRevisionID: &snapshot.RevisionID,
 				Effect:                     pointer("none"),
+				InputSource:                judgeSource(judge),
 			},
 		})
 		if err != nil {
@@ -355,4 +375,12 @@ func newUUID() string {
 	bytes[6] = (bytes[6] & 0x0f) | 0x40
 	bytes[8] = (bytes[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:16])
+}
+
+// judgeSource marks a judge run's run.queued event; an agent run carries no input source.
+func judgeSource(judge bool) *string {
+	if judge {
+		return pointer("judge")
+	}
+	return nil
 }

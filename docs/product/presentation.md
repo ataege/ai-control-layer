@@ -274,7 +274,7 @@ then the outbox row from `psql`.
   decision. **[Rehearse and confirm before presenting.]**
 - The judge client is a **draft**; confirm the live-test entry works end to end before showing it, and
   if it does not, say so and use the corpus test instead.
-- The signature feed has four rules and no signing key: trust is the authenticated import plus the
+- The signature feed has eleven rules and no signing key: trust is the authenticated import plus the
   file's SHA-256. Never call it "signed".
 
 **Visual:** **[SCREENSHOT 8]** the active controls and policy revision view. Terminal alternative: the
