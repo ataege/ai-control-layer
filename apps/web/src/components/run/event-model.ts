@@ -188,7 +188,8 @@ function effectText(event: SafeEvent, kind: EventKind): string | null {
     const outbox = outboxEffectLabel(effect);
     return outbox !== null ? `${text} ${outbox.full}.` : text;
   }
-  if (effect === "none") {
+  // Only an operation that was attempted or reviewed says it changed nothing; a run state has no effect.
+  if (effect === "none" && (kind === "attempt" || kind === "review" || kind === "uncertain")) {
     return "No change was made.";
   }
   return null;
