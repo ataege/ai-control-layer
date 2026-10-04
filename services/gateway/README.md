@@ -134,7 +134,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `cmd/gateway`              | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
 | `cmd/modelcheck`           | Go lane f3 (worker, agent, model, budget)                     |
 | `cmd/budgetcheck`          | Go lane f3 (worker, agent, model, budget)                     |
-| `cmd/catalogactivate`      | Go lane 3c (repository, admission, passport, API)             |
+| `cmd/catalogactivate`      | Go lane c1 (security; built with the feed import)             |
 | `cmd/replay`               | Go lane w3 (action gate and approvals)                        |
 | `cmd/benchmark`            | Go lane w2 (tools and provenance)                             |
 | `internal/config`          | Shared Go lanes; the lead coordinates edits                   |
