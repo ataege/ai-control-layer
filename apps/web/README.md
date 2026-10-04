@@ -27,12 +27,14 @@ browser -> src/lib/fetch-json.ts -> route handler -> proxyUpstream -> API (${API
   variable and no `NEXT_PUBLIC_*` variable.
 - Its own failures use the shared `ErrorResponse` envelope:
 
-| Status | Code                        | Meaning                                               |
-| ------ | --------------------------- | ----------------------------------------------------- |
-| 500    | `configuration_error`       | `API_UPSTREAM_URL` is missing or invalid, or bad path |
-| 502    | `upstream_unreachable`      | The API refused or dropped the connection             |
-| 502    | `upstream_invalid_response` | The API answered with something that is not JSON      |
-| 504    | `upstream_timeout`          | No complete answer within 10 seconds (45 s for judge) |
+| Status | Code                         | Meaning                                               |
+| ------ | ---------------------------- | ----------------------------------------------------- |
+| 500    | `configuration_error`        | `API_UPSTREAM_URL` is missing or invalid, or bad path |
+| 502    | `upstream_unreachable`       | The API refused or dropped the connection             |
+| 502    | `upstream_invalid_response`  | The API answered with something that is not JSON      |
+| 504    | `upstream_timeout`           | No complete answer within 10 seconds (45 s for judge) |
+| 403    | `cross_site_request_refused` | A command came from another site or origin            |
+| 415    | `unsupported_media_type`     | A command body was not `application/json`             |
 
 Route handlers (each a thin file; GET unless noted):
 
@@ -120,6 +122,27 @@ not to the working gateway. Raw error messages are never printed.
 created by `pnpm db:seed` (email `demo-operator@example.com`, password generated into the untracked
 `.env` as `DEMO_OPERATOR_PASSWORD`). The interface labels it "Development demonstration". There is
 no registration, no identity federation and no production onboarding.
+
+## Browser security: headers and the command guard
+
+`next.config.ts` sets four headers on every route: `Content-Security-Policy`, `X-Content-Type-Options:
+nosniff`, `Referrer-Policy: no-referrer` and `X-Frame-Options: DENY`. The policy allows this origin
+only, forbids framing (`frame-ancestors 'none'`) and sets `object-src 'none'`, `base-uri 'self'` and
+`form-action 'self'`. `src/server/security-headers.test.ts` pins it.
+
+Known limitation: `script-src` and `style-src` allow `'unsafe-inline'`, because Next.js inlines its
+bootstrap scripts and the app styles. An injected inline script would therefore not be stopped by the
+policy. The app avoids the sinks that would let one in (no `dangerouslySetInnerHTML`; report, event and
+judge text render as plain text), so the policy is a second layer, not the protection. A nonce-based
+policy would need middleware and dynamic rendering of every page. In development the policy also
+allows `'unsafe-eval'` and websockets for hot reload.
+
+Commands (every method except GET and HEAD) pass `commandRefusal` in `src/server/upstream-proxy.ts`
+before anything is forwarded: `Sec-Fetch-Site` must be `same-origin` or `none` when present, `Origin`
+must be this site's own origin when present, and a body must be `application/json`. A browser always
+sends these headers, so another site's page is refused even where the `SameSite=Lax` cookie would
+travel (any other port on `localhost`, a sibling subdomain). A client that sends neither header (the
+end-to-end script, `pnpm judge`) is not a browser and passes.
 
 ## Environment
 
