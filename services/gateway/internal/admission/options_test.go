@@ -41,8 +41,8 @@ func TestPostgresTaskOptionsOfferOnlyTheOrganizationsRecords(t *testing.T) {
 	var invoiceIDs []string
 	for _, invoice := range options.Invoices {
 		invoiceIDs = append(invoiceIDs, invoice.ID)
-		if invoice.Number != "INV104" || invoice.Date != "2026-09-01" || invoice.Amount != 125000 {
-			t.Errorf("invoice %+v: want INV104, 2026-09-01, 125000", invoice)
+		if invoice.Number != "INV104" || invoice.Date != "2026-09-01" || invoice.Amount != 125000 || invoice.Currency != "EUR" {
+			t.Errorf("invoice %+v: want INV104, 2026-09-01, 125000 EUR", invoice)
 		}
 		// Each invoice names its vendor, and that vendor is one the form offers.
 		wantVendor := fixture.vendorID

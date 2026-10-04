@@ -13,6 +13,7 @@ import { ControlCatalogRevision } from "./control-catalog-revision.entity.js";
 import { importPolicyFile } from "./policy-catalog-importer.js";
 import { SignatureFeedRevision } from "./signature-feed-revision.entity.js";
 import { digestPolicyBytes, validatePolicyFile } from "./policy-file.js";
+import { randomUUID } from "node:crypto";
 
 const samplePolicyBytes = readFileSync(
   resolve(import.meta.dirname, "../../../../config/policy.yaml"),
@@ -100,6 +101,54 @@ async function readPointer(): Promise<ControlCatalogPointer> {
 }
 
 describe("importPolicyFile", () => {
+  it("records reload provenance on new policy/feed rows and leaves activation to Go", async () => {
+    await clearPointer();
+    const actor = randomUUID();
+    const revisionLabel = `reload_${randomUUID().replaceAll("-", "")}`;
+    const feed = JSON.parse(sampleFeed.fileBytes.toString("utf8")) as { revision: string };
+    const oldRevision = feed.revision;
+    feed.revision = revisionLabel;
+    const outcome = await importPolicyFile(queryRunner.manager, {
+      sourceFileName: "policy.yaml",
+      fileBytes: new TextEncoder().encode(
+        samplePolicyBytes.toString("utf8").replace(oldRevision, revisionLabel),
+      ),
+      feed: {
+        sourceFileName: sampleFeed.sourceFileName,
+        fileBytes: new TextEncoder().encode(JSON.stringify(feed)),
+      },
+      provenance: { importSource: "reload", importedBy: actor },
+    });
+    expect(outcome.accepted).toBe(true);
+    if (!outcome.accepted) throw new Error("Reload fixture rejected");
+    expect(
+      await queryRunner.manager.findOneByOrFail(ControlCatalogRevision, { id: outcome.revisionId }),
+    ).toMatchObject({ importSource: "reload", importedBy: actor });
+    expect(
+      await queryRunner.manager.findOneByOrFail(SignatureFeedRevision, {
+        id: outcome.feedRevisionId!,
+      }),
+    ).toMatchObject({ importSource: "reload", importedBy: actor, revision: revisionLabel });
+    expect(await readPointer()).toMatchObject({
+      requestedRevisionId: outcome.revisionId,
+      validatedRevisionId: null,
+      activeRevisionId: null,
+      activeFeedRevisionId: null,
+    });
+  });
+
+  it("refuses missing reload actor before writing revisions or pointer", async () => {
+    const before = await counts();
+    await expect(
+      importPolicyFile(queryRunner.manager, {
+        sourceFileName: "policy.yaml",
+        fileBytes: samplePolicyBytes,
+        feed: sampleFeed,
+        provenance: { importSource: "reload", importedBy: "" },
+      }),
+    ).rejects.toThrow("Invalid reload provenance");
+    expect(await counts()).toEqual(before);
+  });
   it("stores the first valid import as an immutable revision and only requests it", async () => {
     await clearPointer();
 

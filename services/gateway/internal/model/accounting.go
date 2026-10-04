@@ -137,7 +137,9 @@ func (caller *AccountedCaller) Call(ctx context.Context, runID, callID string, r
 		cleanupContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if caller.store.MarkUnknown(cleanupContext, runID, callID) != nil {
-			return result, ErrAccounting
+			// The request was sent, so its usage is unknown whether or not that fact was persisted:
+			// the run must pause for attention, never fail as if no request had been made.
+			return result, errors.Join(ErrUsageUnknown, ErrAccounting)
 		}
 		if errors.Is(err, context.Canceled) {
 			return result, context.Canceled
@@ -167,7 +169,7 @@ func (caller *AccountedCaller) Call(ctx context.Context, runID, callID string, r
 		result.Provider.Message = Message{}
 		result.UsageUnknown = true
 		if caller.store.MarkUnknown(settleContext, runID, callID) != nil {
-			return result, ErrAccounting
+			return result, errors.Join(ErrUsageUnknown, ErrAccounting)
 		}
 		return result, ErrUsageUnknown
 	}

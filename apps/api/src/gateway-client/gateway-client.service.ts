@@ -140,7 +140,7 @@ export class GatewayClientService {
     );
   }
 
-  /** GET /health/ready: reports whether the gateway can reach its database. */
+  /** GET /health/ready: reports aggregate database, worker and catalog readiness (decision 11). */
   checkReadiness(requestId: string): Promise<DiagnosticCheck> {
     return this.probe(READINESS_PATH, requestId, {}, interpretReadinessResponse);
   }

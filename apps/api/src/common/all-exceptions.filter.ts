@@ -7,7 +7,7 @@ import {
   HttpStatus,
   Logger,
 } from "@nestjs/common";
-import type { ErrorResponse } from "@workspace/contracts";
+import type { PolicyReloadErrorResponse } from "@workspace/contracts";
 import reasonContract from "@workspace/contracts/schemas/reason-code.schema.json" with { type: "json" };
 import type { Request, Response } from "express";
 import { getRequestPath } from "./request-id.middleware.js";
@@ -26,6 +26,7 @@ const ERROR_CODES_BY_STATUS: Record<number, string> = {
 const KNOWN_ERROR_CODES = new Set([
   ...reasonContract.enum,
   "conflict",
+  "revision_pending",
   "bad_request",
   "unauthorized",
   "forbidden",
@@ -131,7 +132,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       });
     }
 
-    const body: ErrorResponse = {
+    const body: PolicyReloadErrorResponse = {
       error: {
         code: resolveErrorCode(statusCode, exception),
         message: resolveSafeMessage(exception, statusCode),
@@ -141,6 +142,31 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: requestPath,
     };
+    // Only this NestJS-owned validation envelope includes the importer's safe issue list.
+    if (
+      statusCode === 400 &&
+      body.error.code === "policy_reload_rejected" &&
+      exception instanceof HttpException
+    ) {
+      const payload = exception.getResponse() as { issues?: unknown };
+      if (
+        Array.isArray(payload.issues) &&
+        payload.issues.every(
+          (issue: unknown) =>
+            typeof issue === "object" &&
+            issue !== null &&
+            "path" in issue &&
+            typeof issue.path === "string" &&
+            "message" in issue &&
+            typeof issue.message === "string",
+        )
+      ) {
+        body.error.issues = payload.issues.map((issue: { path: string; message: string }) => ({
+          path: issue.path,
+          message: issue.message,
+        }));
+      }
+    }
     response.status(statusCode).json(body);
   }
 }

@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "revision_pending",
+    "message": "A previous revision is still being validated"
+  },
+  "statusCode": 409,
+  "requestId": "reload-fixture",
+  "timestamp": "2026-10-04T00:00:00Z",
+  "path": "/api/policies/reload"
+}
