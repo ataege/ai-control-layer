@@ -60,6 +60,16 @@ var fixturesCoveredElsewhere = map[string]string{
 	"gateway-diagnostics.ok.json":          "API only",
 	"gateway-diagnostics.degraded.json":    "API only",
 	"gateway-diagnostics.unavailable.json": "API only",
+	// Policy import and reload contracts, served by the API from its own tables.
+	"policy-reload-error-response.invalid.json":   "API only",
+	"policy-reload-error-response.pending.json":   "API only",
+	"policy-reload-request.empty.json":            "API only",
+	"policy-reload-response.no-feed.json":         "API only",
+	"policy-reload-response.requested.json":       "API only",
+	"policy-reload-response.unchanged.json":       "API only",
+	"policy-status-response.active.json":          "API only",
+	"policy-status-response.import-rejected.json": "API only",
+	"policy-status-response.rejected.json":        "API only",
 	// Go-owned read contracts (lane w2), decoded by internal/reads' TestReadContractFixturesMatchTheGoTypes.
 	"run-usage.ledger.json":                          "internal/reads",
 	"run-usage.no-ledger.json":                       "internal/reads",
