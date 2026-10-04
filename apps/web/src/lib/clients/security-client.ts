@@ -14,7 +14,7 @@ import { fetchJson, type FetchJsonError } from "../fetch-json";
 
 export const SECURITY_SUMMARY_URL = "/api/security/summary";
 export const AUDIT_EXPORT_URL = "/api/security/export";
-export const CATALOG_STATUS_URL = "/api/policies/status";
+export const CATALOG_STATUS_URL = "/api/policies/catalog";
 
 export const EXPORT_KINDS = ["events", "assessments"] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
