@@ -775,9 +775,15 @@ describes.
   Fixed afterwards (lead-authorized change to the web launchers): `next dev` now binds to
   `WEB_HOST`, default `127.0.0.1`; lsof showed `TCP 127.0.0.1:3000 (LISTEN)` only and the Wi-Fi
   address refused the connection.
-- Not covered, because the commands do not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
+- Not covered, because the commands did not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
   control suite (SH-47) and the policy reload in a container (API-32). SH-30 is done only when a
   teammate who did not write the procedure has followed it.
+- Update 2026-10-04: [docs/setup.md](docs/setup.md) section 8 was rewritten as the full procedure
+  (prerequisites with `think: false`, clone to catalog activation, model warm-up, `pnpm reset:demo`
+  between rounds, what must not run during the demonstration, the quiet-machine check, teardown). The
+  seed, catalog activation, `pnpm dev`, sign-in, the workflow and `pnpm reset:demo` were run from
+  worktrees of `main`; a fresh clone, the control suite and the live model steps were not repeated
+  for it.
 
 ## Documentation
 
