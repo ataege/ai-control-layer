@@ -938,6 +938,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing (settles `contract owners`, `shared-track assignment`, `researcher role`)
 
 - [ ] **SH-08 · Prepare every implementer machine**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** Batın's machine was never verified and he stopped; the other implementers' and sessions' `pnpm verify` results (6 of 6) are quoted in their commit messages and in `docs/evidence/verify-9c5f7ef.txt`.
   - **Report 1.1 change:** "each implementer" is "each person"; the lead coordinates.
   - Owner: each person runs it; the lead coordinates · Tier: A · Size: S (estimate 0.5-1.5 h per person)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -1050,6 +1051,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `contract owners`
 
 - [ ] **SH-12 · Bring up the starter and confirm service connectivity**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** `pnpm dev` and `pnpm smoke` were verified on the lead's machine and on clean clones (w2: smoke 36 passed, 0 failed, 6 skipped; final build 9c5f7ef: 34 passed, 0 failed, 8 skipped); Batın's and Noyan's machines were never verified.
   - Owner: the lead with both implementers · Tier: A · Size: S (estimate 2.5-5 h, one estimate's total for every machine and the demonstration
     environment)
   - Depends on: SH-08 · Needs: X-01 · Provides: X-03
@@ -1063,6 +1065,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 8 in docs/product/README.md`
 
 - [ ] **SH-13 · Wire the model provider credential for Go only**
+  - **Closed, not done:** no model credential exists: local Ollama needs none. The non-secret endpoint and alias (`MODEL_BASE_URL`, `MODEL_NAME`) are given to the gateway only (`scripts/dev.mjs` removes them from the web and API children; `infra/compose.yaml` sets them on the gateway service only), and `pnpm smoke` leak checks cover every generated secret (34 passed, 0 failed, 8 skipped on `9c5f7ef`). (lead, 2026-10-04)
   - **Progress (2026-10-03):** No credential exists for local Ollama, so no credential variable was added; this branch (`feat/local-model-setup`) named the variables `MODEL_BASE_URL` (default `http://localhost:11434`) and `MODEL_NAME` (empty until `ollama pull`), wired them for Go only in `.env.example`, `scripts/dev.mjs` (removed from the web and API children) and `infra/compose.yaml` (gateway service only), and documented the setup in `docs/setup.md`, section 7. Reading them in Go is GO-06's work. Open: the API still re-reads the root `.env` on the host (see Work below). Container mode is unverified (never run).
   - **Report 1.2 change:** With a local model there may be no provider credential; the model endpoint and alias are still Go-only variables (SH-45).
   - Owner: the lead (infrastructure) with the Go implementer and, for the API's own `.env` loading, the web + API implementer · Tier: A · Size: S (estimate 1-2 h)
@@ -1097,7 +1100,8 @@ estimates. Every size is a planning estimate, never a schedule.
     minimization" ("Model and tool credentials remain with Go")
   - Blocked by: `decision 6 in docs/product/README.md`
 
-- [ ] **SH-14 · Run a quick shared review for every contract, schema and event-name change**
+- [x] **SH-14 · Run a quick shared review for every contract, schema and event-name change**
+  - **Evidence** (2026-10-04, final build `9c5f7ef`): at the freeze no shared contract change is pending (the lead reviewed every contract change at merge, by the lead's statement), and both fixture test sets decode every fixture: `@workspace/contracts` tests 11 passed inside `pnpm verify` (`docs/evidence/verify-9c5f7ef.txt`, turbo cache bypassed); in the full Go run on `9c5f7ef` (`docs/evidence/test-db-9c5f7ef.txt`: gateway 1748 passed, 0 failed, 0 skipped) `TestFixturesDecodeStrictlyAndRoundTrip` (`internal/contracts`), `TestReadContractFixturesMatchTheGoTypes` (`internal/reads`), `TestReviewContractFixturesMatchTheGoTypes` (`internal/policy`) and the two health fixture tests pass.
   - **Report 1.1 change:** Work adds the report lineage, classification and projection shapes and the event names (the architecture's examples are input).
   - Owner: each recorded contract owner with the web + API implementer, who also takes schema changes with the Go implementer's table definitions · Tier: A · Size: S (estimate 1-4 h, person-hours over the window)
   - Depends on: SH-11 · Needs: X-15 · Provides: nothing
@@ -1119,6 +1123,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-37 · Wire the non-secret Go variables, if the Go owners add any**
+  - **Closed, not done:** the variables the Go owners added (`MODEL_BASE_URL`, `MODEL_NAME`; the others the gateway reads were already there) are in `.env.example`, both README tables and the gateway's Compose environment, and reach the gateway on the host (live runs on `9c5f7ef`); `GATEWAY_HOST` is in the README tables and Compose but not in `.env.example`; full-container mode was not verified. (lead, 2026-10-04)
   - **Progress (2026-10-03):** For the model endpoint and alias, this branch (`feat/local-model-setup`) named the variables `MODEL_BASE_URL` (default `http://localhost:11434`) and `MODEL_NAME` (empty until `ollama pull`), wired them for Go only in `.env.example`, `scripts/dev.mjs` (removed from the web and API children) and `infra/compose.yaml` (gateway service only), and documented the setup in `docs/setup.md`, section 7. Reading them in Go is GO-06's work. Both are non-secret. Container mode is unverified (never run). Two deviations from Work: Compose sets `MODEL_BASE_URL` to `http://host.docker.internal:11434` directly instead of the `${NAME:-default}` pattern, because the host value `localhost` is wrong inside a container; and the variable table in `services/gateway/README.md` is left to GO-06, which owns that file.
   - Owner: the lead (infrastructure) with the Go implementer · Tier: A · Size: S (estimate 0.5-1.5 h over M0 and M1, this roadmap's estimate)
   - Depends on: SH-04 · Needs: X-01 · Provides: nothing
@@ -1169,6 +1174,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-45 · Install the local model on every machine and the presentation machine**
+  - **Closed, not done:** the presentation machine (MacBookPro18,1, Apple M1 Pro) has `qwen3.5:4b`, digest `2a654d98e6fb`, and answered an agent and a security request on the final build (`docs/evidence/modelcheck-9c5f7ef.txt` exit 0: agent 3.7 s cold, security 0.2 s; benchmark live p50 2.03 s); Batın's and Noyan's machines were never verified. (lead, 2026-10-04)
   - **Progress (2026-10-03):** This branch (`feat/local-model-setup`) named the variables `MODEL_BASE_URL` (default `http://localhost:11434`) and `MODEL_NAME` (empty until `ollama pull`), wired them for Go only in `.env.example`, `scripts/dev.mjs` (removed from the web and API children) and `infra/compose.yaml` (gateway service only), and documented the setup in `docs/setup.md`, section 7. Reading them in Go is GO-06's work. Done when (both machines answer an agent and a security request within the recorded limits) is not yet observed: the lead is installing Ollama, and no model is chosen or recorded. Container mode is unverified (never run). Later the same day the lead installed Ollama 0.35.1 on the presentation machine (M1 Pro, 16 GB) and pulled `qwen2.5:3b` and `qwen3.5:4b`; a quick probe (docs/setup.md section 7) made `qwen3.5:4b` the provisional model for both purposes. Still open for Done when: the M2 8 GB machine, and recorded limits from `policy.yaml`.
   - Owner: the lead (infrastructure) with the Go implementer · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-04 · Needs: nothing · Provides: X-84
@@ -1380,6 +1386,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 7 in docs/product/README.md`; `decision 3 in docs/product/README.md`; `decision 4 in docs/product/README.md`; `read path`
 
 - [ ] **SH-23 · Extend the smoke and leak checks**
+  - **Closed, not done:** `pnpm smoke` covers the public health, sign-in and sign-out, the proxy routes, request-id echo and the gateway's service-token checks, and leak checks for every generated secret (34 passed, 0 failed, 8 skipped on `9c5f7ef`, `docs/evidence/smoke-9c5f7ef.txt`); it does not exercise every product operation (runs, approvals, reports, judge), which `docs/evidence/e2e-9c5f7ef.txt` covers, and the service-log leak checks are skipped in host mode. (lead, 2026-10-04)
   - **Report 1.2 change:** Adds the reload, summary and export routes and the model endpoint to the checks.
   - Owner: the lead (integration and infrastructure) · Tier: A · Size: S (estimate 2-5 h over M1 to M3)
   - Depends on: SH-13, SH-20 · Needs: X-13, X-31, X-32, X-43 (approval part) · Provides: nothing
@@ -1477,6 +1484,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 7 in docs/product/README.md` (the second organization's sign-in); `source classification storage`
 
 - [ ] **SH-26 · Create the service database roles and grants**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** the API connects as the owner role (API-17 deferred); the gateway connects with its own role and a write outside its authority fails (`TestTheGatewayRoleRunsTheEffectsAndNothingElse`, `TestPostgresGatewayRoleMayOnlyAcknowledge`); the smoke leak checks find no role password in pages or assets.
   - **Progress:** Not ticked (2026-10-04): the API does not connect with its own role: `task_passport_api` is NOLOGIN and the API runs as the owner `starter`. Gateway side PASS: `TestTheGatewayRoleRunsTheEffectsAndNothingElse`, `TestPostgresGatewayRoleMayOnlyAcknowledge`; `pnpm smoke` 34 passed, 0 failed, 8 skipped (leak checks for the gateway role password in responses PASS; service logs are not captured in host mode).
   - **Report 1.1 change:** Work adds the Go read grant on report templates, projection rules and source labels in `app` and the lineage grants per `report storage`; NestJS read on the classification and lineage summary if `stored report read` chooses a view.
   - Owner: the lead (database roles, by default) with both implementers · Tier: B · Size: M (estimate 2-9 h)
@@ -1534,6 +1542,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-40 · Write the migration for report lineage (and context manifests if chosen)**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** the database does not enforce "no report row without its lineage rows" (lead's decision: no migration before the freeze); Go stores the report and its lineage in one transaction and refuses a report without lineage (`TestStoreReportWithoutLineageStoresNothing`, `TestEffectsCommitTogetherOrNotAtAll`).
   - **Progress:** Not ticked (2026-10-04): the database does not enforce "a report row cannot be committed without its lineage rows": `demo.reports` and `runtime.report_lineage` carry only immutability triggers. Go enforces it: `TestStoreReportWithoutLineageStoresNothing` PASS.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data); the Go implementer supplies the definitions · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-16, SH-24 · Needs: X-24 · Provides: X-69
@@ -1647,6 +1656,7 @@ estimates. Every size is a planning estimate, never a schedule.
     - **M3 exit** ("The reviewed action executes once; changed content and depleted allowance cannot dispatch an operation"): executes once (one outbox row per approved run, grant consumed once), changed content refused at the recheck, depleted allowance rejected before dispatch: shown above by tests and by the stub runs; confirmation on the final build with its identifier is the quiet window. Not covered here: the build identifier of the demonstrated build (X-59) and screenshots.
 
 - [ ] **SH-38 · Write the app-schema migration for the revocation records**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** the revocation migration was not written (lead's decision: no migration before the freeze); see API-22 and GO-52.
   - **Progress:** Not ticked (2026-10-04): no revocation table exists after the 20 migrations (the `app` schema has 11 tables, none for revocations).
   - **Report 1.1 change:** The revocation records include source and template revocations.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: B · Size: S (estimate 1-2 h, this roadmap's estimate)
@@ -1690,7 +1700,8 @@ estimates. Every size is a planning estimate, never a schedule.
     documentation and submission workflow" (the handoff includes the "synthetic-data reset")
   - Blocked by: `test command`
 
-- [ ] **SH-30 · Write the deployment procedure for the demonstration environment**
+- [x] **SH-30 · Write the deployment procedure for the demonstration environment**
+  - **Evidence** (2026-10-04): the procedure is `docs/setup.md` section 8, written by c2 from w2's clean-checkout rehearsal. A teammate who did not write it followed it: w2 on a clean clone (`pnpm smoke` 36 passed, 0 failed, 6 skipped, reported by the lead), and lane 08 on a clean worktree of the final build `9c5f7ef` (install, migrations, roles, seed, catalog activation, `pnpm dev`, the workflow twice with a reset between, `docs/evidence/e2e-9c5f7ef.txt`: `0 failed`, "round 2's counts match round 1"). Lane 08 started PostgreSQL with `docker run` instead of `pnpm infra:up` and did not run the container stack.
   - **Report 1.1 change:** Work cites the architecture's "NestJS and Go use a private service network. Only the browser-facing entry points are exposed."
   - Owner: the lead (infrastructure) · Tier: B · Size: S (estimate 2-6 h)
   - Depends on: SH-09 · Needs: X-01, X-02 · Provides: X-49
@@ -1863,7 +1874,8 @@ estimates. Every size is a planning estimate, never a schedule.
     register and scope controls"
   - Blocked by: nothing
 
-- [ ] **SH-35 · Assemble the technical handoff**
+- [x] **SH-35 · Assemble the technical handoff**
+  - **Evidence** (2026-10-04): `docs/technical-handoff.md` is the assembled handoff index; it lists every item the report asks for with its location (setup, architecture and boundaries, the Next.js, NestJS and Go parts, tool contracts, adapter contract and judge client, policy fixture and feed, synthetic data and reset, audit export, control suite, demonstration script, dependency disclosures, critical-check outcomes), names the submitted build `9c5f7ef` (`9c5f7ef1419d0aab12d7384e41038790b344599b`) and points to its evidence (`docs/evidence/CHECKSUMS-9c5f7ef.txt`). The `<FINAL>` placeholders in the linked texts were replaced with that build's figures (no `<FINAL>` remains in the README files or `docs/`), and the Go part was checked against the build under GO-61.
   - **Report 1.2 change:** Adds one-command setup and control tests, local model acquisition and setup, the adapter contract, `policy.yaml`, the feed schema and revision, the audit export and measured telemetry.
   - **Report 1.1 change:** Owner not assigned by the default.
   - Owner: not assigned by the default (`shared-track assignment`), with both implementers · Tier: B · Size: S (estimate 1-3 h)
@@ -1895,6 +1907,7 @@ sizes are this roadmap's estimates.
 ### P (before the coding window)
 
 - [ ] **RS-01 · Ask the organizers and sponsor mentors the report's questions, decision 8 first**
+  - **Closed, not done:** organizer question 1 (the pre-event starter and its disclosure) was never asked: `docs/product/organizer-questions.md` records answer 2 (deadline) only, and answers 1, 3, 4 and 5 read "not yet asked". The remaining uncertainty is documented there and in `docs/preparation-record.md`, and the pre-event work is disclosed in `docs/product/presentation.md` and `docs/product/submission-checklist.md`. (lead, 2026-10-04)
   - **Report 1.2 change:** Questions per report 1.2: whether "started solving" covers prepared architecture, reports and planning and which starter or components may be reused; the actual start and deadline (`start time confirmation`); which scoring distribution applies (`scoring weights`); the live presentation duration and judge setup and access (`judge access`); cross-track rules.
   - **Report 1.1 change:** No person holds the role yet: until `researcher role` is settled, X-01 waits unless the lead takes RS-01.
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: A · Size: S (estimate 1-3 h)
@@ -1976,6 +1989,7 @@ sizes are this roadmap's estimates.
   - Blocked by: nothing
 
 - [ ] **RS-05 · Keep the claim-to-proof list**
+  - **Closed, not done:** `docs/product/claim-to-proof.md` exists (182 lines) but still reads "every claim is a target" with the 2026-10-03 build `cdfee55`; it was not refreshed with the final build's evidence (`docs/evidence/`, `9c5f7ef`), and the presentation was prepared and submitted by the user. (lead, 2026-10-04)
   - **Report 1.2 change:** Claims add the semantic limits: no universal prompt-injection detection, a fixture verdict is not detection quality, thresholds are not calibrated probabilities.
   - **Report 1.1 change:** Requote "the integrated tools, data rules, projections and limits to which it applies" and "A recipient allowlist does not prove that arbitrary free text is safe."; add the report 1.1 limits, including "not universal taint tracking across every possible tool" and "it does not reproduce Fides or establish its formal guarantees".
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: A · Size: S (estimate 1-3 h over the
@@ -2015,6 +2029,7 @@ sizes are this roadmap's estimates.
   - Blocked by: nothing
 
 - [ ] **RS-06 · Keep the source register**
+  - **Closed, not done:** `docs/product/source-register.md` exists (S1 to S10 and later entries, status "started 3 October 2026"); the check that every external statement in the presentation and the handoff cites an entry was not made. (lead, 2026-10-04)
   - **Report 1.2 change:** Adds sources S9 and S10.
   - **Report 1.1 change:** Sources S1 to S8; decide whether the hostile-note rehearsal still cites S4; the internal design sources per `design source references`.
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: B · Size: S (estimate 1-2 h)
@@ -2030,6 +2045,7 @@ sizes are this roadmap's estimates.
 ### M2 (hours 6-10)
 
 - [ ] **RS-07 · Compare existing controls from primary documentation**
+  - **Closed, not done:** `docs/product/comparison.md` exists (first version, 3 October 2026); the check that the presentation's positioning matches it was not made. (lead, 2026-10-04)
   - **Report 1.1 change:** Work quote: "Compare relevant authorization and information-flow approaches using primary documentation, including the Fides research [S8]." The claim limit is "Task Passport should not be presented as the invention of tool authorization, approvals, audit logging, or information-flow control."
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: B · Size: S (estimate 2-4 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -2046,7 +2062,8 @@ sizes are this roadmap's estimates.
 
 ### M5 (hours 18-21)
 
-- [ ] **RS-08 · Prepare the presentation from the final build**
+- [x] **RS-08 · Prepare the presentation from the final build**
+  - **Evidence** (2026-10-04, reported by the user): the presentation was prepared and submitted by the user. Not checked by lane 08: the slides. `docs/product/presentation.md` is the draft text; `docs/product/claim-to-proof.md` was not refreshed with the final build's evidence (`docs/evidence/`, build `9c5f7ef`), so the Done-when's mapping of every claim to a final-build claim-to-proof entry is not recorded in the file.
   - **Report 1.2 change:** Use the report's ten-slide structure ("Proposed ten slide presentation structure").
   - **Report 1.1 change:** Adds the positioning statement "Task Passport controls what an agent can do and where the information it uses can go.", the persuasive story and the changed challenge rows.
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: A · Size: M (estimate 3-6 h)
@@ -2076,7 +2093,8 @@ sizes are this roadmap's estimates.
 
 ### M6 (hours 21-24)
 
-- [ ] **RS-09 · Complete the submission checklist and submit**
+- [x] **RS-09 · Complete the submission checklist and submit**
+  - **Evidence** (2026-10-04, reported by the user): the user filled in and submitted all seven HackTribe items themselves, including the PDF slides and the instructions text. Not checked by lane 08: the submitted files themselves. `docs/product/claim-to-proof.md` still shows the 2026-10-03 status ("every claim is a target", build `cdfee55`); it was not updated to the final build.
   - **Report 1.2 change:** Preserve the submitted commit, configuration, feed and presentation versions.
   - **Report 1.1 change:** The report is brought up from version 1.1; closes `design source references`.
   - Owner: Researcher, document owner, and presenter (not assigned; `researcher role`) · Tier: A · Size: S (estimate 2-5 h)

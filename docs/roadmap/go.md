@@ -1529,6 +1529,7 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
   - Progress (2026-10-04, quiet window): Quiet window (2026-10-04, f3, commit 1365d63, worktree ai-control-layer-qw, fresh database with feed_v2 (11 rules, digest ff6ff4fe…), live qwen3.5:4b digest 2a654d98e6fb, Ollama 0.35.1, an isolated headless Chromium signed in through the login form as the seeded demo operator, screenshots kept outside the repository). The live story three times on `POSTGRES_DB=f3_test`: run 1 completed with 7 agent and 1 security calls; run 2 stopped `allowance_exhausted` after 10 agent calls (the model itself attempted `queue_report` of the Internal only report twice, both denied `report_export_restricted`, plus one `invalid_arguments` denial); run 3 completed with 8 agent calls (one `multiple_actions_not_supported` correction). Internal report created 3 of 3; recipient altered 0 of 3; `semantic_injection_detected` on a clean proposal 0; agent calls p50 3.80 s, p95 5.15 s, max 6.39 s over 25 calls, security p50 2.31 s over 3 calls. Caution found: the same command against the demo database while `pnpm dev` ran failed 3 of 3 (`failed decision_unavailable` after 1 agent call, error kind `recording`), because the running gateway shares the database and its job queue (one gateway process per database); with the stack stopped it completed (9 agent, 1 security call, 1 outbox row).
 
 - [ ] **GO-71 · Record the conservative context manifest, if `internal report rendering` admits model prose** Dropped: `internal report rendering` is deterministic only (lead's delegate, 2026-10-03)
+  - **Closed with a written reason, accepted by the user 2026-10-04:** conditional and not built: the internal report is rendered by Go from trusted fields (`internal_investigation_v1`), not by the model, and its lineage (`runtime.report_lineage`) records every source and field it consumed; a separate manifest of everything the model saw was not written.
   - Owner: Go implementer (report role: Implementer 3, agent runtime, and Implementer 5, provenance) · Tier: B · Size: S (estimate 2-4 h)
   - Depends on: GO-23, GO-63 · Needs: X-69 · Provides: nothing
   - Paths: the model gateway package from GO-10
@@ -2541,6 +2542,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
   - Blocked by: nothing
 
 - [ ] **GO-51 · Prove that cancellation and expiry stop dispatch, also after a review wait**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** cancellation and expiry stopping dispatch are proven (the tests of `internal/agent`, the UI cancel and the process-level capture, SH-31 X-55); the revocation case is not (GO-52 and SH-38 are not built), so the Go half of X-55 is reached for cancellation and expiry only.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-2 h)
   - Depends on: GO-41, GO-45, GO-52 · Needs: X-24, X-34 · Provides: X-55
   - Paths: none (scenario tests in the packages above)
@@ -2640,6 +2642,7 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
 ### Enforcement (report role: Implementer 4)
 
 - [ ] **GO-52 · Check current revocations before dispatch and before execution**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** no revocation table or reader exists (SH-38 not migrated, `revocation reads` undecided; lead's decision: no migration before the freeze); cancellation and expiry stop dispatch.
   - **Report 1.1 change:** Adds source and template revocations.
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 2-3 h)
   - Depends on: GO-11, GO-45 · Needs: X-35, X-47 · Provides: nothing
@@ -2938,6 +2941,7 @@ gateway` and `pnpm verify` as quoted in the commit. On the seeded test database 
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **GO-60 · Optional: stream events from Go, if the read path chooses Go endpoints**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** optional and not built: events are read by cursor through the private read route; the gateway's 30 s write timeout would end a stream, and no stream was needed.
   - Owner: Go implementer (a module the report's team table does not name) · Tier: C · Size: S (estimate 1-3 h)
   - Depends on: GO-24 · Needs: X-12 · Provides: X-60
   - Paths: `services/gateway/internal/httpserver/server.go`,

@@ -519,6 +519,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
   - Blocked by: nothing
 
 - [ ] **API-04 · Add the task template, policy version and tool definition entities**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** the three entities exist, are registered and create no table or extension on a fresh database (`app-entities.db-spec.ts`), but admission reads its policy from the control catalog and the task template is a Go constant, so `app.task_templates`, `app.policy_versions` and `app.tool_definitions` have no Go reader and nothing writes them; "Go admission reads the authoritative task and policy versions from these records" does not hold.
   - **Report 1.2 change:** The policy configuration now comes from `policy.yaml` imported into the catalog (API-31 to API-33); there is no policy editor screen.
   - **Report 1.1 change:** Module names: the architecture's proposal, TasksModule, PoliciesModule and ToolsModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -1062,6 +1063,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
   - Blocked by: `decision 7 in docs/product/README.md`
 
 - [ ] **API-17 · Connect the API with its own database role**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** the API connects as the owner role `starter`; `task_passport_api` is NOLOGIN and unused. A least-privilege API role was deferred by the lead; the gateway role is enforced and tested (`TestTheGatewayRoleRunsTheEffectsAndNothingElse`). The known limit is stated in the handoff.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2.5 h)
   - Depends on: API-04 · Needs: X-24, X-35 · Provides: nothing
   - Paths: `apps/api/src/config/environment.ts`, `apps/api/src/config/environment.spec.ts`,
@@ -1492,6 +1494,7 @@ this side starts and reviews.
   - Blocked by: `decision 7 in docs/product/README.md`
 
 - [ ] **API-22 · Record revocations in the app schema**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** no revocation records exist: the SH-38 migration was not written (lead's decision: no migration before the freeze) and Go has no reader (GO-52). Cancellation and expiry, which stop dispatch, are built and tested (SH-31 X-55).
   - **Report 1.1 change:** Adds source and template revocations.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1.5-3.5 h)
   - Depends on: API-04, API-16 · Needs: X-18, X-24 · Provides: X-47 (part: NestJS write path);
@@ -1758,6 +1761,7 @@ sit here, before the final build's evidence is captured, and are cut first.
 ### NestJS (report role: Implementer 2)
 
 - [ ] **API-23 · Record organization access evidence on the public path**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** the public-path evidence uses labelled Go contract fixtures because no second-organization operator is seeded (lead's decision, no second operator before the freeze); real session and membership checks and the Go-boundary test are recorded under SH-31 X-56.
   - **Report 1.1 change:** Adds the report and source trail reads; no restricted source content in general views.
   - Progress (2026-10-04): the public-path part with a labelled Go fixture exists in
     `apps/api/src/auth/product-access.db-spec.ts` (second organization's operator gets 404 on every
@@ -1827,6 +1831,7 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Blocked by: nothing
 
 - [ ] **API-25 · Optional: serve the activity feed over server-sent events**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** optional and not built: the run page reads the activity feed by cursor (`after`, `limit`), which is the supported path; no stream and no unrestricted raw payload stream exists.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: C · Size: S (estimate 2-4 h)
   - Depends on: API-14 · Needs: X-30 · Provides: X-60 (part)
   - Paths: `apps/api/src` (the activity feed module from API-14), `apps/api/src/main.ts`
@@ -1956,6 +1961,7 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Progress (2026-10-04, quiet window), not ticked at the time (ticked on the final build, see Evidence): Quiet window (2026-10-04, f3, commit 1365d63, worktree ai-control-layer-qw, fresh database with feed_v2 (11 rules, digest ff6ff4fe…), live qwen3.5:4b digest 2a654d98e6fb, Ollama 0.35.1, an isolated headless Chromium signed in through the login form as the seeded demo operator, screenshots kept outside the repository). `E2E_POSTGRES_CONTAINER=f3-go-pg E2E_ROUNDS=2 node scripts/with-env.mjs node apps/web/scripts/e2e-flow.mjs`: exit 0, "0 failed", `[reset] round 2's counts match round 1 (outbox, reports, invoice versions)`, 75 PASS lines, beat 10's secret check redacted in round 1 and was denied by the semantic check after redaction in round 2 (recorded as a NOTE, no 504). The by-hand repeat through the interface after a reset has not been done, so this stays open.
 
 - [ ] **WEB-21 · Optional: receive the activity feed over server-sent events**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** optional and not built (API-25 is not built): the run page polls the events read, which is the supported path.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: C · Size: S (estimate 1-3 h)
   - Depends on: API-25, WEB-09 · Needs: X-60 · Provides: nothing
   - Paths: `apps/web/src/app` (the run page from WEB-06), `apps/web/src/server/upstream-proxy.ts`
@@ -1974,6 +1980,7 @@ sit here, before the final build's evidence is captured, and are cut first.
   - Blocked by: `decision 3 in docs/product/README.md`
 
 - [ ] **WEB-22 · Optional: show the demonstration baseline in the interface**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** optional and not built as a screen: beat 2's baseline (record versions, report count, outbox count) is checked by `docs/evidence/e2e-9c5f7ef.txt` beat 2 and by documented read-only queries; the security page shows run, decision and usage counts, not the demo baseline.
   - **Report 1.1 change:** Beat 2 content per `demonstration baseline`: the note with its label, invoice versions and the empty outbox.
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: C · Size: M (estimate 3-6 h)
   - Depends on: WEB-18 · Needs: nothing · Provides: nothing
@@ -2098,6 +2105,7 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
   - Progress (2026-10-04, quiet window), not ticked at the time (ticked on the final build, see Evidence): Quiet window (2026-10-04, f3, commit 1365d63, worktree ai-control-layer-qw, fresh database with feed_v2 (11 rules, digest ff6ff4fe…), live qwen3.5:4b digest 2a654d98e6fb, Ollama 0.35.1, an isolated headless Chromium signed in through the login form as the seeded demo operator, screenshots kept outside the repository). Walked by hand through the interface in this window: beat 1 (the form and the passport), the awaiting-approval page, the review page and approval (beats 7 and 8), the export-denial page after both replays (beats 5 and 9), `/judge` with live verdicts for the hostile note, the benign case and six secret cases (beat 10), the active-controls panel through a valid, an invalid and a restoring reload (beat 11) and the limit stop (beat 12 evidence). Not walked: the full twelve beats in order by someone who did not build the screens, with screenshots; the Claude in Chrome pass the lead planned is the open part.
 
 - [ ] **WEB-25 · Optional: polish comprehension beyond the exit condition**
+  - **Closed with a written reason, accepted by the user 2026-10-04:** optional and not scheduled: the M5 exit evidence is recorded under SH-33 and WEB-24 and no further polish was made.
   - **Report 1.1 change:** Quote: "A polished dashboard would help explain the boundary, while stored report lineage, a denied export, and the resulting simulated outbox would supply concrete evidence."
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: C · Size: S (estimate 1-3 h)
   - Depends on: WEB-24 · Needs: nothing · Provides: nothing
