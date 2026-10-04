@@ -282,6 +282,7 @@ All root scripts, as defined in `package.json`:
 | `pnpm format:check`                                              | Prettier check, then a `gofmt` check for the gateway.                                                                                                                   |
 | `pnpm typecheck`                                                 | `tsc --noEmit` per TypeScript workspace (web runs `next typegen` first); `go build ./...` for the gateway.                                                              |
 | `pnpm test`                                                      | Vitest (web, API), `node --test` (contracts), `go test ./...` (gateway).                                                                                                |
+| `pnpm test:scripts`                                              | `node --test` of the scripts' own tests (`scripts/*.test.mjs`); `pnpm verify` runs it inside its `test` step.                                                           |
 | `pnpm build`                                                     | Builds contracts, web, API and the gateway binary (`services/gateway/bin/gateway`).                                                                                     |
 | `pnpm verify`                                                    | Runs `check:instructions`, `format:check`, `lint`, `typecheck`, `test`, `build` and prints a summary.                                                                   |
 | `pnpm smoke` (`--mode=host\|container`)                          | HTTP checks against the running services.                                                                                                                               |
@@ -344,6 +345,8 @@ Static quality gate. Needs no `.env`, no database and no running service, but it
    interpretation); API tests (readiness failure and connection release, gateway timeout and
    failure mapping, error envelope, environment validation, database connection retries); Go tests
    (configuration, token rejection, readiness, shutdown, log redaction, contract fixtures).
+   The step then runs `pnpm test:scripts`, the scripts' own tests (judge client, smoke session
+   helper, local model preflight, evidence audit), so the summary still counts six steps.
 6. `build`: contracts, web, API, gateway binary.
 
 It exits non-zero when any step fails or is skipped. Gateway tasks are never cached by Turborepo,

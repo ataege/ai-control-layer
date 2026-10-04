@@ -16,6 +16,10 @@ const VERIFICATION_STEPS = [
   "build",
 ];
 
+// A step normally runs the root script of its own name. `test` also runs the tests of the scripts
+// themselves after the workspace tests, so the summary still counts six steps.
+const STEP_COMMANDS = { test: ["test", "test:scripts"] };
+
 // Steps that include a gateway task and therefore need the Go toolchain.
 const GO_DEPENDENT_STEPS = new Set(["format:check", "lint", "typecheck", "test", "build"]);
 
@@ -49,7 +53,8 @@ for (const stepName of VERIFICATION_STEPS) {
     });
     continue;
   }
-  if (!(stepName in rootScripts)) {
+  const stepScripts = STEP_COMMANDS[stepName] ?? [stepName];
+  if (!stepScripts.every((scriptName) => scriptName in rootScripts)) {
     stepResults.push({
       name: stepName,
       status: "SKIPPED",
@@ -60,7 +65,12 @@ for (const stepName of VERIFICATION_STEPS) {
 
   printHeading(`verify: ${stepName}`);
   const startedAt = Date.now();
-  const exitCode = await runCommand("pnpm", ["run", stepName], { cwd: repositoryRoot });
+  let exitCode = 0;
+  for (const scriptName of stepScripts) {
+    // Every script of the step runs; the first failing exit code is the step's.
+    const scriptExitCode = await runCommand("pnpm", ["run", scriptName], { cwd: repositoryRoot });
+    if (exitCode === 0) exitCode = scriptExitCode;
+  }
   const duration = formatDuration(Date.now() - startedAt);
 
   if (exitCode === 0) {
