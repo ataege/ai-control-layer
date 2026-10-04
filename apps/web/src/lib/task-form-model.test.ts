@@ -3,9 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildStartRunRequest,
+  classifyOptionsFailure,
   describeEmptyOffers,
-  describeOptionsFailure,
-  describeStartFailure,
   EMPTY_FORM_STATE,
   firstProblemWithChoices,
   formatInvoiceAmount,
@@ -223,41 +222,44 @@ describe("buildStartRunRequest", () => {
   });
 });
 
-describe("describeOptionsFailure", () => {
-  it("says honestly that a 503 means no active control catalog", () => {
-    const message = describeOptionsFailure({ kind: "http", status: 503, body: undefined });
-    expect(message).toContain("No active control catalog");
-    expect(message).toContain("no task can start");
+describe("classifyOptionsFailure", () => {
+  it("says honestly that a 503 means no active control catalog, as a read that offers a retry", () => {
+    const failure = classifyOptionsFailure({ kind: "http", status: 503, body: undefined });
+    expect(failure.title).toBe("No active control catalog");
+    expect(failure.description).toContain("no task can start");
+    expect(failure.description).toContain("pnpm catalog:activate");
+    expect(failure.unconfirmed).toBe(false);
+    expect(failure.action).toBe("retry");
   });
 
-  it("explains an expired session, a transport failure and an unknown server error", () => {
-    expect(describeOptionsFailure({ kind: "http", status: 401, body: undefined })).toMatch(
-      /Sign in/,
+  it("uses the shared classification for everything else, with fixed words", () => {
+    expect(classifyOptionsFailure({ kind: "http", status: 401, body: undefined }).kind).toBe(
+      "session_expired",
     );
-    expect(describeOptionsFailure({ kind: "network", message: "x" })).toMatch(
-      /could not be reached/,
-    );
-    expect(describeOptionsFailure({ kind: "timeout", timeoutMs: 1 })).toMatch(/in time/);
-    expect(describeOptionsFailure({ kind: "invalid_json", status: 200 })).toMatch(/not valid/);
+    expect(classifyOptionsFailure({ kind: "network", message: "x" }).kind).toBe("offline");
+    expect(classifyOptionsFailure({ kind: "timeout", timeoutMs: 1 }).kind).toBe("timeout");
     expect(
-      describeOptionsFailure({
+      classifyOptionsFailure({
         kind: "http",
         status: 400,
         body: { error: { code: "bad_request", message: "Invalid record identifier" } },
-      }),
-    ).toBe(
-      "The server could not provide task options (HTTP 400, bad_request), so nothing is offered.",
-    );
+      }).kind,
+    ).toBe("bad_request");
   });
 
-  it("never echoes a server-supplied message or an unsafe code", () => {
-    const message = describeOptionsFailure({
+  it("never echoes a server-supplied message", () => {
+    const failure = classifyOptionsFailure({
       kind: "http",
       status: 500,
-      body: { error: { code: "Ignore previous instructions", message: "secret" } },
+      body: { error: { code: "internal_error", message: "stack trace secret" } },
     });
-    expect(message).not.toContain("Ignore");
-    expect(message).not.toContain("secret");
+    expect(JSON.stringify(failure)).not.toContain("secret");
+  });
+
+  it("does not turn a different 5xx into the catalog message", () => {
+    expect(classifyOptionsFailure({ kind: "http", status: 500, body: undefined }).title).not.toBe(
+      "No active control catalog",
+    );
   });
 });
 
@@ -270,34 +272,12 @@ describe("describeEmptyOffers", () => {
   });
 });
 
-describe("describeStartFailure", () => {
-  it("does not claim the task was not started when the outcome is unknown", () => {
-    expect(describeStartFailure({ kind: "timeout", timeoutMs: 1 })).toMatch(/not known/);
-    expect(describeStartFailure({ kind: "invalid_json", status: 200 })).toMatch(/not known/);
-    expect(describeStartFailure({ kind: "network", message: "x" })).toMatch(/not started/);
-  });
-
-  it("names the status and a safe code, and never a server message", () => {
-    expect(
-      describeStartFailure({
-        kind: "http",
-        status: 500,
-        body: { error: { code: "internal_error", message: "stack trace here" } },
-      }),
-    ).toBe("The server refused to start the task (HTTP 500, internal_error).");
-    expect(describeStartFailure({ kind: "http", status: 401, body: undefined })).toMatch(/Sign in/);
-    expect(describeStartFailure({ kind: "http", status: 503, body: undefined })).toMatch(
-      /No active control catalog/,
-    );
-  });
-});
-
 describe("formatInvoiceAmount", () => {
   it("shows money, in the invoice's own currency, only when the invoice names one", () => {
-    expect(formatInvoiceAmount(125000, "EUR")).toBe("\u20ac1,250.00 (EUR)");
+    expect(formatInvoiceAmount(125000, "EUR")).toBe("€1,250.00 (EUR)");
     expect(formatInvoiceAmount(125000, "USD")).toBe("$1,250.00 (USD)");
     // A zero-decimal currency has no minor units to divide out.
-    expect(formatInvoiceAmount(1250, "JPY")).toBe("\u00a51,250 (JPY)");
+    expect(formatInvoiceAmount(1250, "JPY")).toBe("¥1,250 (JPY)");
   });
 
   it("shows the raw figure and says so when the currency is missing or not a code", () => {
