@@ -8,22 +8,28 @@ outside `docs/product`); written by lane w3.
 Status: **not rehearsed on the final build.** Commands and expected output below were taken from the
 code and from recorded test runs; timings are observations from one developer machine, not targets.
 SH-33 sets the pitch timing from the rehearsal. The steps marked "checked" were run once on lane w3's
-machine at `main` 93e1c96 (load average 15 to 18, not idle).
+machine at `main` 93e1c96 (load average 15 to 18, not idle). "What exists today", the
+**[web]** markers and the "Final live checks" were refreshed on 4 October 2026 (lane f3) against `main`
+efaae10 plus the lead's pending merges.
 
 ## What exists today
 
-The NestJS API and the web screens for runs, review and reporting are not on `main` yet. Every step
-that needs them is marked **[API pending]** with the gateway path that works now. The gateway's
-internal routes require the service token and a signed `X-Operator-Context` token; no presenter tool
-mints that token, so until the API lands the Go-backed beats run through the scenario tests and the
-commands below, not through an HTTP client.
+The NestJS API and the web pages for runs, review, reports, the judge and the security posture are on
+`main`: sign in, the task form (`/tasks/new`), the run page (`/runs/<run id>`), the review page
+(`/runs/<run id>/review/<action id>`), the report page (`/runs/<run id>/reports/<report id>`), the
+judge page (`/judge`) and the security page with the active controls and the audit export
+(`/security`). Each beat below says which page shows it (**[web]**) and keeps the gateway command or
+test as the fallback, because the web path is only as good as the last rehearsal. The gateway's
+internal routes still require the service token and a signed `X-Operator-Context` token; no presenter
+tool mints that token, so a presenter reaches the gateway through the API (`/api/...`) or the commands
+below, never by calling an internal route directly.
 
-| Need                     | Once the API lands                    | Until then (this runbook)                                                                   |
-| ------------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Start a run (beat 1)     | API start-run (API-13) and the form   | the live or scripted story test admits the run through real Go admission                    |
-| Review and approve (8)   | review screen and approval (API-19)   | the story test approves through `policy.Approvals`, the same code the approval route calls  |
-| Timeline, summary (3-12) | run views and security pages (API-20) | the test output, `psql`, and the gateway read routes listed in `services/gateway/README.md` |
-| Ad-hoc judge input (10)  | judge client through the API (SH-48)  | the live corpus test; `POST /internal/control/evaluate` exists but needs the signed context |
+| Need                     | Where it is on `main`                                                 | Fallback (this runbook)                                                                     |
+| ------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Start a run (beat 1)     | the task form `/tasks/new`, `POST /api/runs`                          | the live or scripted story test admits the run through real Go admission                    |
+| Review and approve (8)   | the review page, `POST /api/actions/<id>/approval`                    | the story test approves through `policy.Approvals`, the same code the approval route calls  |
+| Timeline, summary (3-12) | the run page and `/security` (events, usage, passport, summary)       | the test output, `psql`, and the gateway read routes listed in `services/gateway/README.md` |
+| Ad-hoc judge input (10)  | `/judge` and `pnpm judge` through `POST /api/control/evaluate` (X-91) | the live corpus test; `POST /internal/control/evaluate` needs the signed context            |
 
 ## Before the demo (about 30 minutes before)
 
@@ -139,7 +145,8 @@ GOFLAGS=-p=3 pnpm test:db gateway   # includes TestStoryThroughTheProductionChai
 ### Beat 1: delegate the job
 
 - Today: the story test admits the run through `admission.Admitter` (the code behind
-  `POST /internal/runs`). **[API pending]** the task form and passport summary (API-13).
+  `POST /internal/runs`). **[web]** the task form at `/tasks/new` and the passport panel on the run
+  page.
 - Audience sees: the passport with the four tools, `invoice_A01` and `invoice_A02`, the Atlas vendor
   and its one recipient reference, both report templates, `queue_report` requiring approval, the
   expiry and the limits; event `run.queued`.
@@ -149,7 +156,8 @@ GOFLAGS=-p=3 pnpm test:db gateway   # includes TestStoryThroughTheProductionChai
 ### Beat 2: establish the baseline
 
 - Today: in `psql`, the invoice versions, `SELECT count(*) FROM demo.outbox_messages` (0) and the
-  active catalog and feed revision (step 2 above). **[API pending]** the controls view.
+  active catalog and feed revision (step 2 above). **[web]** the passport and the empty outbox state on
+  the run page, and the active controls panel at the top of `/security`.
 - Say: "The outbox is simulated: a database record, no email is sent."
 
 ### Beats 3 and 4: investigate and create the internal report (live)
@@ -208,8 +216,8 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   `vendor_shareable`, projection rule `vendor_invoice_fields_v1`, no internal note text;
   `approval.requested` and `run.awaiting_approval`; the reviewer approves (`approval.decided`); then
   `run.resumed`, `action.succeeded` and one outbox row to the registered address whose content hash
-  matches the reviewed report; `run.completed`. **[API pending]** the review screen (API-19); today the
-  test approves through `policy.Approvals`.
+  matches the reviewed report; `run.completed`. **[web]** the review page (click Approve, then Approve in the
+  confirm dialog); the fallback test approves through `policy.Approvals`.
 - Recorded live run: 6 agent calls, 1 security call, one outbox row, completed.
 - Fallback: `TestStoryAfterApproval` (scripted provider) shows the same ordered events every time.
 
@@ -243,7 +251,8 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
     -run '^TestLiveSemanticCorpus$' -count=1 -v -timeout 20m
   ```
 
-  **[API pending]** the judge client and live test entry (SH-48, API-38).
+  **[web]** `/judge` ("Start a dedicated judge run", then evaluate) and `pnpm judge --run <run id> --case
+<fixture id>`, both through the API's `POST /api/control/evaluate` (X-91).
 
 - Audience sees: verdicts labelled `live` with score and category, benign cases passing (including the
   hard negative), blocked notes absent from the would-be agent context.
@@ -267,16 +276,18 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   revision is then refused with `source_policy_changed`, so do not change the configuration during
   a review wait. Re-importing an unchanged file creates a new revision today as well; after lane
   c1's importer fix it is a no-op.
-- Show the same input before and after (the judge input path once the API lands; until then a test
-  or replay against the new revision). **[API pending]** the revision view (WEB-29).
+- Show the same input before and after on the judge input path (`/judge` or `pnpm judge`). **[web]** the
+  revision view: the active controls panel on `/security` shows the requested, validated and active
+  revision and any rejection.
 
 ### Beat 12: test and reporting evidence
 
 - The suite: `MODEL_NAME=qwen3.5:4b pnpm verify:controls` (about two minutes, checked; see "Evidence
   windows" above for the result). Open the results file it names.
 - Summary and export: `GET /internal/security/summary`, `/internal/security/assessments` and
-  `/internal/security/events` on the gateway (contracts in `packages/contracts`); **[API pending]**
-  the dashboard and export file (API-20, WEB-30, WEB-31).
+  `/internal/security/events` on the gateway (contracts in `packages/contracts`). **[web]** the security
+  posture dashboard and the audit export at `/security` (`GET /api/security/summary` and
+  `/api/security/export`).
 - Timing: the quiet benchmark table (deterministic controls well under 1 ms, live semantic about
   1.9 s, gateway overhead about 5 ms).
 
@@ -400,22 +411,15 @@ pnpm judge --run <judge run id> --case hostile_note_internal_disclosure_v1
 pnpm judge --run <judge run id> --case benign_duplicate_finding_v1
 ```
 
-**Known break, checked on 4 October 2026 (`main` efaae10):** `scripts/judge-client.mjs` still sends the
-draft request (`run_id`, no `arguments`) and reads snake_case replies, while the frozen X-91 contract is
-camelCase with all five fields required (`runId`, `kind`, `text`, `tool`, `arguments`). Against the
-real API the two `pnpm judge` commands print `No decision: HTTP 400 bad_request: Invalid control
-evaluation request` and exit 1; the same request in the frozen shape answers 200 with a decision. Until
-the client is aligned to the frozen contract, record that 400 as the CLI result (the check fails) and
-take the passing evidence for this item from the `/judge` page; do not report the CLI as working.
-
-Passes when, on the `/judge` page (and on the CLI once it is aligned), the hostile note is denied (a known
+Passes when, on the `/judge` page and on the CLI (which prints the decision, the active revision and the
+verdict source), the hostile note is denied (a known
 signature fires before any semantic call, or the live semantic verdict blocks it) and its text is never
 echoed back, the benign case is allowed, both
 decisions carry the active catalog revision and the verdict source label ("Live model", never presented
 as a detection rate), and the judge run's timeline shows the evaluations as judge input, never as an
 action. A model-dependent mismatch (a hard negative blocked, a hostile note allowed) is recorded as a
 note, not hidden. Ticks **WEB-32** (the hostile-note run shows the block before context and the clean
-run its allow) and, once the client is aligned, c2's live `pnpm judge` call against X-91 (SH-48).
+run its allow) and c2's live `pnpm judge` call against X-91 (SH-48).
 
 ### 8. The limit stop through the interface (WEB-17, about 3 minutes, _model_)
 
@@ -503,9 +507,12 @@ Point to these limitations in `services/gateway/README.md` instead of claiming m
 
 ## Gaps to close before the pitch
 
-- A way to start and approve a run in the demo database without the test harness (the API, or a
-  documented presenter command that signs the operator context).
-- A rehearsal on the final build with recorded timings (SH-33), and a run kept for beat 5.
+- A rehearsal on the final build with recorded timings (SH-33), and a run kept for beat 5 (the replay
+  only works within that run's 15-minute window, so "kept" means the screenshots and the printed
+  output, not the run).
+- The "Final live checks" above, run once in a quiet window; until then every live number in this file
+  is an observation from a loaded machine.
 
 Done on `main` since the first version: the feed import in `pnpm policy:import` with
-`pnpm catalog:activate` (no hand load anywhere), and `pnpm verify:controls` (SH-47).
+`pnpm catalog:activate` (no hand load anywhere), `pnpm verify:controls` (SH-47), and the API and web
+pages that start, review, approve and inspect a run without the test harness.
