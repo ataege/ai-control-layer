@@ -23,8 +23,9 @@ export const UPSTREAM_PREFIXES = [
   "/api/policies",
 ] as const;
 
-// Longer than the API's own upstream timeouts, so its mapped status arrives first.
-export const DEFAULT_UPSTREAM_TIMEOUT_MS = 10_000;
+// Longer than the API's default command timeout (10 s), so its mapped status arrives first,
+// and shorter than the browser's 15 s fetch timeout.
+export const DEFAULT_UPSTREAM_TIMEOUT_MS = 12_000;
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 

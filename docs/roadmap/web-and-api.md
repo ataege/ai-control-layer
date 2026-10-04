@@ -329,7 +329,7 @@ owners to the lead in SH-07, joins SH-05 (the read path) and prepares their mach
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-01 · Confirm the migration tooling against the Compose PostgreSQL image**
+- [x] **API-01 · Confirm the migration tooling against the Compose PostgreSQL image**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 0.5-1 h, this roadmap's
     estimate)
   - Depends on: SH-08 · Needs: nothing · Provides: nothing
@@ -350,6 +350,7 @@ owners to the lead in SH-07, joins SH-05 (the read path) and prepares their mach
   - Report: "Data ownership and the transition from starter to product"; "Design decision record"
     (TypeORM migration toolchain)
   - Blocked by: a fix it needs before the coding window waits on `decision 8 in docs/product/README.md`
+  - Done (2026-10-04): the sequence ran against the Compose image on an empty database (the starter's zero-entity wording cannot be reproduced any more: 21 migrations exist, so it ran the equivalent). `pnpm db:migration:show` on the empty database lists every migration as pending (`[ ] InitApp1791021755877` ... `[ ] AllowUnclassifiedSemanticNotApplicable1791150000000`, 20 at that time) and leaves exactly one table, `public.migrations`. `pnpm db:migration:run` exited 0 and executed all 20. `pnpm db:migration:generate Probe` on the migrated database then did NOT report no changes: it generated a migration, which exposed real drift between the entities and the migrations (three registry entities without their organization foreign keys, and the `memberships` uniqueness the entity declares but the migrations never created); fixed under API-04 and API-05 (entity relations, migration `AddMembershipUniqueness1791160000000`). After the fix, with 21 migrations applied, `generate` exits 1 with: "No changes in database schema were found - cannot generate a migration. To create a new empty migration use \"typeorm migration:create\" command". `db:migration:revert` reverted the latest ("Migration AddMembershipUniqueness1791160000000 has been reverted successfully.") and `db:migration:run` re-applied it ("has been executed successfully"). Not done: `pnpm infra:up`/`infra:down` themselves (the Compose project is shared; the same image ran in a private container), and the result was not handed to integration for the README's "Verification status". Checks (2026-10-04, worktree ai-control-layer-c2, own PostgreSQL 18.6 from the Compose image `postgres:18-alpine` on port 55590): `pnpm --filter api run lint`, `typecheck` and `test` exit 0 (366 passed); `pnpm test:db api --fresh` exit 0 ("api PASS 67 passed, 0 failed, 0 skipped"; the gateway side was not run).
 
 ### Next.js (report role: Implementer 1)
 
@@ -370,7 +371,7 @@ must enforce and show, so that any gap reaches the document owner in the same se
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-02 · Check the frozen examples against the checks the public API makes**
+- [x] **API-02 · Check the frozen examples against the checks the public API makes**
   - **Report 1.1 change:** Authority checks also cover the stored report and source trail reads.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 0.5-1.5 h, this roadmap's
     estimate)
@@ -395,8 +396,9 @@ must enforce and show, so that any gap reaches the document owner in the same se
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository strategy)
   - Blocked by: `contract owners`; the operator context part also `decision 4 in docs/product/README.md` and `decision 7 in docs/product/README.md`
+  - Done (2026-10-04), a review plus the existing database tests: (1) No actor or organization field exists in a command body: `start-run-request.schema.json` and `control-evaluation-request.schema.json` are `additionalProperties: false` without one; the approval body is exactly `{"decision":"approve"}` or `{"decision":"reject"}` (docs/api-facade-handoff.md); the runs, events and review examples carry `runId`/`run_id` and, for events, `organizationId`, which the object check needs, while organization and actor come from the session's verified membership. (2) `product-access.db-spec.ts` (real credentials and sessions; labelled Go response fixtures) passes 18 tests: verified membership on every public read and command, object denial for a second organization on runs and actions, reviewer role read from the database on each call. (3) "Authorized subscription; no unrestricted raw payload stream": no stream exists (WEB-21 and API-25 are optional); nothing to authorize. (4) Facts for `command timeout budget`, read from the code: web proxy 10 s default (`DEFAULT_UPSTREAM_TIMEOUT_MS`; the judge route sets 45 s), browser helper 15 s (`DEFAULT_FETCH_TIMEOUT_MS`), API `GATEWAY_TIMEOUT_MS` default 3000 ms and `COMMAND_TIMEOUT_MS` default 10000 ms (each at most 20000), API server request timeout 30 s, gateway write timeout 30 s. Finding for the document owner: the proxy's 10 s deadline equals the API's 10 s command timeout, so on a slow command the proxy may answer `upstream_timeout` before the API's `outcome_unconfirmed`, both 504; the comment in `upstream-proxy.ts` says the proxy should be longer. Not reviewed row by row against the report's table (not available as text here): the gap list above is what the code and tests show. Checks (2026-10-04, worktree ai-control-layer-c2, own PostgreSQL 18.6 from the Compose image `postgres:18-alpine` on port 55590): `pnpm --filter api run lint`, `typecheck` and `test` exit 0 (366 passed); `pnpm test:db api --fresh` exit 0 ("api PASS 67 passed, 0 failed, 0 skipped"; the gateway side was not run).
 
-- [ ] **API-31 · Add the control catalog, active revision and feed records**
+- [x] **API-31 · Add the control catalog, active revision and feed records**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: SH-10 · Needs: X-78 · Provides: X-80 (part: entities)
   - Paths: `apps/api/src` (a new module; the architecture proposes PoliciesModule), `apps/api/src/database/typeorm-options.ts`
@@ -405,8 +407,9 @@ must enforce and show, so that any gap reaches the document owner in the same se
   - Tests: `pnpm --filter api run test`; `pnpm db:migration:generate <Name>` yields only `app` statements.
   - Report: "Data ownership and the transition from starter to product" (Proposed database ownership); "Central policy configuration and safe reload"
   - Blocked by: nothing
+  - **Done (2026-10-04, api/w3), audited against its definition of done; the records were built earlier by the API lane:** `ControlCatalogRevision` (schema version, source file name, exact source text, SHA-256 file digest, validated content, import source and `imported_by`, created at; a database trigger rejects every UPDATE, DELETE and TRUNCATE), `ControlCatalogPointer` (requested, validated and active revision ids, the active feed revision, `last_error`) and `SignatureFeedRevision` (issuer, revision, file digest, content, import provenance) are `app` entities registered in `typeorm-options.ts` and created by migration `AddControlCatalog`. Only a file that passed validation becomes a revision row, so "validation result" is the row's existence plus the pointer's `last_error` for a rejected import. Go reads the active revision: with the test database migrated, `go test ./internal/catalog ./internal/reads -run 'Catalog|Activat|Loader|Load' -count=1` exit 0 (`TestPostgresFirstRevisionActivatesAndDisabledSignaturesNeedNoFeed`, `TestPostgresReadinessFollowsTheEnforceableCatalog`, `TestPostgresCatalogStatusShowsTheActiveRevisionControlsAndLastError`). The API database suite (`policy-catalog-importer.db-spec.ts`, `signature-feed-import.db-spec.ts`, `draft-schemas.db-spec.ts` and two more) ran against `starter_test` with `--testTimeout=60000 --hookTimeout=60000`: exit 0, 5 files, 71 tests passed. `pnpm db:migration:generate AuditCheck` on that migrated database produced only `app` statements and none for the three catalog tables; its output was the existing drift of other lanes' tables (three `ALTER TABLE ... DROP CONSTRAINT` on `policy_versions`, `task_templates` and `tool_definitions`, one `ADD CONSTRAINT UNIQUE` on `memberships`), and I deleted that file instead of committing it. Not verified: `pnpm test:db --fresh` as one command did not exit 0 on this machine at load 33 to 68: the first run stopped at a 10 s `beforeAll` timeout in `draft-schemas.db-spec.ts` ("Connection terminated" during a migration); the second run failed `TestWorkerRenewsTheLeaseOfALongHandler`, a 5 s importer test and the same hook timeout. The Go test passed alone (exit 0) and the API suite passed with longer timeouts, as quoted.
 
-- [ ] **API-32 · Import and validate `policy.yaml` into an immutable catalog revision**
+- [x] **API-32 · Import and validate `policy.yaml` into an immutable catalog revision**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 3-5 h, this roadmap's estimate)
   - Depends on: API-31 · Needs: X-78 · Provides: X-81
   - Paths: `apps/api/src` (the module from API-31); `package.json` for an explicit import command (through integration)
@@ -415,6 +418,7 @@ must enforce and show, so that any gap reaches the document owner in the same se
   - Tests: `pnpm --filter api run test` with valid and invalid files (unknown model, impossible limit, URL, unknown control).
   - Report: "Central policy configuration and safe reload"; "Illustrative passport and interface contracts" (Documented policy file and reload contract)
   - Blocked by: nothing
+  - **Done (2026-10-04, api/w3), audited against its definition of done; the importer was built earlier by the API lane:** `validatePolicyFile` parses a bounded schema (size bound, UTF-8, no duplicate keys, aliases, custom tags or several documents, integers only) and rejects unknown controls and plugin keys, URLs and paths for models or the feed, impossible limits and unknown templates, with issues that never echo file text; `importPolicyFile` stores a valid file as an immutable revision with its digest and only requests it, records a rejected one on the pointer without storing a revision, and keeps the last-known-good revision; `pnpm policy:import` is the explicit command. The sample `config/policy.yaml` is the base of the tests: `policy-file.spec.ts` accepts it and digests its exact bytes, and rejects the four cases the task names (unknown model, impossible limit, URL, unknown control) and about thirty more. `pnpm --filter api run test` exit 0, 26 files, 436 passed (on main 39d5899 with this branch's catalog route); the API database suite exit 0, 5 files, 71 passed (importer rejection recorded on the pointer, `retries a request the gateway rejected with a new revision`, feed refusals). The live import of a valid and an invalid copy through `pnpm policy:import` is checked together with WEB-29's live reload. The authenticated reload is API-33.
 
 ### Next.js (report role: Implementer 1)
 
@@ -465,7 +469,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-03 · Deny every non-public route by default**
+- [x] **API-03 · Deny every non-public route by default**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2.5 h)
   - Depends on: nothing · Needs: X-03 · Provides: nothing
   - Paths: `apps/api/src/auth/auth.module.ts`, `apps/api/src/auth/auth.types.ts`,
@@ -490,6 +494,17 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     without a credential; `/api/docs-json` still answers; an unknown route still answers 404; a
     guard error passes through the global filter with a safe message; the existing specs built with
     `createTestApp` keep their assertions and pass: `pnpm --filter api run test`; `pnpm smoke`.
+  - Completed (2026-10-04, lane 3c on api/3c): already in place on main 94e9a65 and verified here.
+    `auth/default-deny.guard.ts` is the global `APP_GUARD` (`auth/auth.module.ts`, and the same wiring
+    in `testing/create-test-app.ts`, so every spec built with it runs behind the guard); it reads
+    `@Public()` over the handler and the class; health, diagnostics and the two auth routes are public.
+    Since API-06 a protected route authenticates the session instead of answering 501; it never runs its
+    handler without a valid session and organization membership. Tests in `default-deny.guard.spec.ts`:
+    a missing or revoked session gets 401 in the shared envelope and the protected handler never runs
+    (new); `/api/docs-json` still answers 200 with the guard installed while the product route of the
+    same app stays 401 (new); a public route answers without a credential; an unknown route answers 404;
+    a database or session-lookup failure answers 503 through the global filter without the internal
+    error text. `pnpm --filter api run test` (see the commit).
   - Report: "Relative implementation milestones and critical dependencies" (Critical path and
     sensible reductions); "Architecture and chart reading guide" (Interpreting the full
     architecture: "Authentication placeholders in the starter must not be presented as implemented
@@ -524,8 +539,9 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     reviewed policy and a small task form can stand in for a general policy editor"); "Functional
     requirements MVP boundary and deferred scope" (Product decisions that keep the MVP coherent)
   - Blocked by: nothing
+  - Progress (2026-10-04), NOT ticked: the entities exist and are registered (`TaskTemplate`, `PolicyVersion`, `ToolDefinition` in `apps/api/src/registry/entities`), `typeorm-options.ts` sets `uuidExtension: "pgcrypto"` and `installExtensions: false`, and `app-entities.db-spec.ts` shows that initializing the data source on a fresh database creates no table and no extension and that the entity diff is empty (I declared the organization foreign keys on the three entities so it is). Not met: admission reads policy from the control catalog (report 1.2); `app.task_templates`, `app.policy_versions` and `app.tool_definitions` have no Go reader (no Go code names them and the gateway role has no grant on them), so "Go admission can read the authoritative task and policy versions from these records" does not hold; nothing writes them either. Also not enforced: "Tool definitions name only the four registered tools" (no CHECK on `tool_definitions.name`). Decision for the lead: keep them as unused registry records (documented limitation) or drop them; no reader was invented. Checks (2026-10-04, worktree ai-control-layer-c2, own PostgreSQL 18.6 from the Compose image `postgres:18-alpine` on port 55590): `pnpm --filter api run lint`, `typecheck` and `test` exit 0 (366 passed); `pnpm test:db api --fresh` exit 0 ("api PASS 67 passed, 0 failed, 0 skipped"; the gateway side was not run).
 
-- [ ] **API-05 · Add the user and membership entities**
+- [x] **API-05 · Add the user and membership entities**
   - **Report 1.1 change:** Adds `organizations` (architecture table proposal).
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2.5 h)
   - Depends on: SH-01, SH-10 · Needs: X-24 · Provides: X-17 (part: user and membership entities)
@@ -546,6 +562,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     task; Proposed user responsibilities); "Data ownership and the transition from starter to
     product"
   - Blocked by: `decision 7 in docs/product/README.md`
+  - Done (2026-10-04): `User`, `Organization`, `Membership` (roles array on the membership), `PasswordHash` and `Session` are entities with `schema: "app"`, registered once in `typeorm-options.ts`; password hashes and sessions are separate tables, and migration `GrantGatewayMembershipRead` lets Go read memberships without them. They authenticate and verify membership with no fabricated identity: `demo-operator.db-spec.ts` signs in through the real session check and `product-access.db-spec.ts` uses real membership. Fixed here: the migrations never created the uniqueness the entity declares, so one user could hold two memberships in an organization; new migration `AddMembershipUniqueness1791160000000` (timestamp reserved by the lead) adds `UQ_64893eb3c6fcaeaaee71a4d0ae1`. New `apps/api/src/database/app-entities.db-spec.ts` (8 tests): initializing the API's data source on a fresh database leaves the table list empty and `pg_extension` at `plpgsql` only; after the migrations the entity diff (`createSchemaBuilder().log()`) is empty; a second membership of the same user in the same organization is refused (`UQ_`); a membership of a missing user or organization is refused (`FK_`). Checked to catch the problem: with the migration moved aside, 2 of the 8 fail (the entity diff and the second membership), with it all 8 pass. Checks (2026-10-04, worktree ai-control-layer-c2, own PostgreSQL 18.6 from the Compose image `postgres:18-alpine` on port 55590): `pnpm --filter api run lint`, `typecheck` and `test` exit 0 (366 passed); `pnpm test:db api --fresh` exit 0 ("api PASS 67 passed, 0 failed, 0 skipped"; the gateway side was not run).
 
 - [x] **API-06 · Authenticate the operator through a real credential check**
   - Integration follow-up (2026-10-04): add GET /api/auth/me for the web owner's merged profile consumer. Only the verified stored-session user and current membership supply id/email/name/organizationId/roles; deleted users and unavailable identity dependencies fail closed. Real web → API sign-in/profile/sign-out/revoked-profile returned 200/200/200/401; profile had exactly five fields and no-store. API lint/typecheck/build exited 0; API unit tests: "370 passed"; `pnpm test:db api`: "67 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Overall host smoke after main's web merge: "22 passed, 8 failed, 6 skipped" because / and /components now redirect to login while smoke expects 200; this is not a passed check. The web/script owners must resolve it before pushing this follow-up.
@@ -576,7 +593,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     (Journey 1 create and delegate a task)
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
+- [x] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: API-06, SH-02 · Needs: nothing · Provides: X-31 (part)
   - Paths: `apps/api/src/app.setup.ts`, `apps/api/src/config/environment.ts`,
@@ -609,8 +626,21 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     204, 205 or 304 from the API became a 502. `pnpm verify`: 6 passed, 0 failed.
   - Not covered: service logs for secrets (host mode); a browser (checks used curl). The events route's
     `buffer: false` and the query string on `POST /api/runs` were reported to the owner of those files.
+  - Completed (2026-10-04, lane 3c on api/3c): decision 3 = the same-origin forwarder (lead as
+    document-owner delegate, 2026-10-04; the researcher records it in docs/product/README.md). The
+    browser calls only the web app, whose route handlers forward the session cookie and a fixed set of
+    headers (`apps/web/src/server/upstream-proxy.ts`); the API reads the operator's credential from that
+    forwarded request (`auth/session-cookie.ts`, `auth/default-deny.guard.ts`), trusts no
+    `x-forwarded-*` header (Express `trust proxy` stays off) and keeps CORS to GET, HEAD and OPTIONS
+    without credentials for the explicit origins only. Tests: `app.setup.spec.ts` (forged
+    `x-forwarded-for` and `x-forwarded-host` change neither the client address nor the host); new
+    `common/cors-forwarder.spec.ts` (a preflight from another origin gets no CORS headers; the
+    configured origin gets no POST and no credentials; an unauthenticated command is refused whatever
+    origin and forwarded host it claims). Evidence for the authenticated path: WEB-14/WEB-15 browser
+    checks on 2026-10-04 (approve, reject and cancel through `/api/actions/…` and `/api/runs/…` on the
+    forwarder with the demo operator's session). `pnpm --filter api run test` (see the commit).
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
-  - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 3 in docs/product/README.md` (forwarder, lead 2026-10-04); `decision 7 in docs/product/README.md`
 
 - [x] **API-08 · Resolve the operator context and check organization membership**
   - Done (2026-10-04): the stored session resolves the user and the global guard loads the current membership and roles from app records on each request. Browser organization/user claims and forged operator headers cannot replace that context. Database-backed public-route tests remove membership before each of eight read/command operations and observe 401 with neither gateway method called; a real stored session with another organization's query/header claims still forwards only its own verified membership. API-16 already covers current role changes. Checks: API lint, typecheck and build exited 0; API unit tests: "367 passed"; `pnpm test:db api`: "67 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Go responses in these authorization tests are explicitly labelled fixtures, not live runtime evidence. The user's stored-session instruction governs the outdated JWT proposal in decision 7; no fallback identity or runtime/demo write was added.
@@ -683,7 +713,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     ownership" (Proposed team ownership)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-11 · Start a run through `POST /api/runs`**
+- [x] **API-11 · Start a run through `POST /api/runs`**
   - **Report 1.2 change:** The facade also forwards the catalog validation request of API-33.
   - **Report 1.1 change:** Module proposal RuntimeModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -704,6 +734,24 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     its reason code and explanation; a timeout is reported as unconfirmed, not as started; by hand
     against the real gateway, a passport exists after an accepted request and none after a rejected
     one: `pnpm --filter api run test`; `pnpm smoke`.
+  - Completed (2026-10-04, lane 3c on api/3c): `POST /api/runs` (`runs/runs.controller.ts`) validates
+    the body strictly with `runs/dto/start-run.dto.ts` (a zod `.strict()` object mirroring X-07), takes
+    actor and organization only from the verified context, forwards to `POST /internal/runs` with the
+    signed operator context and returns its X-07 response validated against the contract. New here: an
+    admission rejection keeps Go's fixed explanation. `gateway-client.service.ts` keeps the gateway's
+    message on a 4xx failure outcome, and the route passes it through only for a 400 whose code is one
+    of the X-13 reason codes (`reason-code.schema.json`) with a bounded, printable message; every other
+    failure keeps the generic text. Swagger: the route is documented with an inline request schema (no
+    DTO class); the title and description in `openapi.ts` are already Task Passport's. Tests
+    (`start-run.controller.spec.ts`): forged `organizationId`, `actorId` or `roles` and wrong value
+    types are refused with 400 before any upstream call; a Go rejection keeps `resource_out_of_scope`
+    and its explanation; an unknown code, a message with control characters or no message keep the
+    generic text; Go statuses 401/403/404/409/503 are preserved; a timeout is 504 `outcome_unconfirmed`,
+    never "started"; an unknown field or malformed id in Go's answer is 503.
+    `gateway-client.service.spec.ts`: the 4xx outcome carries the message. By hand against the real
+    gateway (api/3c on a private database, demo operator): an over-scope request (an invoice of another
+    vendor) answered 400 `resource_out_of_scope` "an invoice in invoiceIds is not available to this
+    organization" and the passport count stayed 2; an accepted request answered 201 and the count became 3.
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Trusted authority and passport invariants" ("Silently reducing the scope would
     make the accepted task differ from the user's request"); "Functional requirements MVP boundary
@@ -788,7 +836,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     implementation milestones and critical dependencies" (Critical path and sensible reductions)
   - Blocked by: `read path`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-15 · Carry the worker readiness change through the diagnostics route and page**
+- [x] **API-15 · Carry the worker readiness change through the diagnostics route and page**
   - API portion verified (2026-10-04): decision 11 explicitly keeps the existing readiness contract. An HTTP fixture sends authenticated ping 200 and readiness 503 with its database check up; the real gateway client and diagnostics controller preserve 503 degraded/not_ready. Swagger now describes aggregate database/worker/catalog readiness. Checks: API lint, typecheck and build exited 0; API unit tests: "367 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". This HTTP fixture is not a live-worker measurement. The overall task stays open for the web owner's browser presentation/verification; no web or shared contract edits were made.
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: B · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: nothing · Needs: X-32 · Provides: nothing
@@ -805,9 +853,21 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
   - Tests: `gateway-client.service.spec.ts` and `diagnostics.controller.spec.ts` with a worker that
     is not ready; `apps/web/src/lib/service-checks.test.ts`: such a report never yields "healthy":
     `pnpm --filter api run test`; `pnpm --filter web run test`; `pnpm smoke`.
+  - Completed (2026-10-04, lane 3c on api/3c): `worker readiness` was settled with option B (no
+    readiness schema change): the gateway answers `/health/ready` 503 with its real database check
+    whenever the worker loop is not running (GO-09) or no enforceable catalog is active (GO-72). The API
+    already reads any 503 as `not_ready` (`gateway-client.service.ts` `interpretReadinessResponse`), so
+    diagnostics answers 503 `degraded` with the gateway check down, and the web reports it as degraded,
+    never healthy; no code change was needed. Tests: new `gateway-client.service.spec.ts` case with the
+    exact body of a stopped worker or missing catalog (503, `status: "unavailable"`,
+    `checks.database.status: "up"`) → `not_ready`; `diagnostics.controller.spec.ts` "returns 503
+    degraded when the gateway is reachable but not ready"; `apps/web/src/lib/service-checks.test.ts` (a
+    `not_ready` report yields `degraded`, never `healthy`). Health and diagnostics stay public
+    (`@Public()`). Known naming limit: the check is still called `databaseReadiness`, as option B keeps
+    the schema. `pnpm --filter api run test` (see the commit).
   - Report: "Durable state idempotency audit and uncertain outcomes" (durable jobs claimed with a
     lease); the readiness rule is the repository rule of decision 5 in `docs/product/README.md`
-  - Blocked by: `worker readiness`
+  - Blocked by: `worker readiness` (option B, no schema change)
 
 ### Next.js (report role: Implementer 1)
 
@@ -862,7 +922,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     register and scope controls" (NestJS/Go contract drift)
   - Blocked by: `decision 3 in docs/product/README.md` (the transport only)
 
-- [ ] **WEB-04 · Add sign-in, the operator display and the development demonstration label**
+- [x] **WEB-04 · Add sign-in, the operator display and the development demonstration label**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-5 h)
   - Depends on: WEB-02, API-06 · Needs: X-22 · Provides: nothing
   - Paths: `apps/web/src/components/app-navigation.tsx`, `packages/ui/src/components/app-shell.tsx`,
@@ -882,7 +942,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
   - Report: "Architecture and chart reading guide" (Interpreting the full architecture); "Users
     operating model and proposed user journeys"
   - Blocked by: `decision 7 in docs/product/README.md`; `smoke under login`
-  - Progress (2026-10-04, prepared on `web/forms` against main 49d0320, not yet pushed): the navigation reads the session with `sessionOutcome` (`lib/session-view.ts`): a 401 from `/api/auth/me` is signed out and sends the visitor to `/login` from a product page, while a session that cannot be read (the route unfinished, a server or network failure) is "unavailable", shows "The signed-in operator could not be read." and never signs the operator out. The development-demonstration label is now derived from the session through `DevelopmentDemonstrationLabel` (the server's `developmentDemonstration` flag when `/me` sends one, else the seeded operator's email) instead of a hardcoded line, so an unreadable or other session never shows it. `/components` is no longer treated as a public path by the navigation (the middleware gates it); the public paths are `/login`, `/diagnostics` and `/health`. The links are Home, New Task, Components, Diagnostics, Judge and "Security posture". The middleware and the navigation share one `isPublicPath` (`lib/public-paths.ts`) that matches a public prefix exactly or with a `/` boundary, so `/loginx`, `/apix`, `/healthx` and `/diagnosticsx` are no longer public (web security review #5; `middleware.test.ts`). The sign-in page follows `callbackUrl` only for a path inside the app (`lib/safe-callback.ts`): an absolute URL, `//host` or a backslash form falls back to `/`. Checks: `pnpm --filter web run lint` and `typecheck` exit 0, `vitest` 177 passed, 2 failed (the two home-page cases that main's 49d0320 broke by reverting WEB-07). Browser evidence (2026-10-04, same stack): the navigation lists Home, New Task, Components, Diagnostics, Judge and Security posture; with `/api/auth/me` answering 404 it shows "The signed-in operator could not be read." and no Development Demonstration label, and does not sign the operator out. Not done, so not ticked: the operator display and label against a working `/api/auth/me` (`apps/api` has no such route; its auth controller has sign-in and sign-out only), the `developmentDemonstration` flag from the server, and the `/security` page does not exist yet, so its link answers 404.
+  - Progress (2026-10-04, prepared on `web/forms` against main 49d0320, not yet pushed): the navigation reads the session with `sessionOutcome` (`lib/session-view.ts`): a 401 from `/api/auth/me` is signed out and sends the visitor to `/login` from a product page, while a session that cannot be read (the route unfinished, a server or network failure) is "unavailable", shows "The signed-in operator could not be read." and never signs the operator out. The development-demonstration label is now derived from the session through `DevelopmentDemonstrationLabel` (the server's `developmentDemonstration` flag when `/me` sends one, else the seeded operator's email) instead of a hardcoded line, so an unreadable or other session never shows it. `/components` is no longer treated as a public path by the navigation (the middleware gates it); the public paths are `/login`, `/diagnostics` and `/health`. The links are Home, New Task, Components, Diagnostics, Judge and "Security posture". The middleware and the navigation share one `isPublicPath` (`lib/public-paths.ts`) that matches a public prefix exactly or with a `/` boundary, so `/loginx`, `/apix`, `/healthx` and `/diagnosticsx` are no longer public (web security review #5; `middleware.test.ts`). The sign-in page follows `callbackUrl` only for a path inside the app (`lib/safe-callback.ts`): an absolute URL, `//host` or a backslash form falls back to `/`. Checks: `pnpm --filter web run lint` and `typecheck` exit 0, `vitest` 177 passed, 2 failed (the two home-page cases that main's 49d0320 broke by reverting WEB-07). Browser evidence on the old main: with `/api/auth/me` answering 404 the navigation showed "The signed-in operator could not be read." and no label, and did not sign the operator out. Live evidence (2026-10-04, my stack on main 39d5899 plus `web/forms` d2a5d94, 20 migrations, seeded, catalog revision 1 active; an isolated headless Chromium; `pnpm smoke` exit 0, 36 passed, 0 failed, 6 skipped; no model call was made): the seeded operator signs in through the form (08's CSRF and content-type checks pass); the navigation lists Home, New Task, Components, Diagnostics, Judge and Security posture, shows the "Development demonstration" badge and the operator's name, email and organization from `/api/auth/me`; a session cookie the API does not know leads `/tasks/new` and `/judge` to `/login` with the sign-in form shown. Known limit (the lead decided against a server flag, 2026-10-04: it would only repeat the email comparison and needs `DEMO_OPERATOR_EMAIL` in the API config, a contract change and a Go fixture exemption): the Development demonstration label derives from the session's email being the seeded operator's (`demo-operator@example.com`), so it is a development convenience, not an identity claim by the server; `DevelopmentDemonstrationLabel` still prefers a `developmentDemonstration` boolean if `/me` ever sends one.
 
 - [ ] **WEB-05 · Build the task form**
   - **Report 1.2 change:** Model selection is constrained by the catalog allowlist.
@@ -906,7 +966,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     task); "Project definition purpose and intended outcome" (What a passport would contain); "Live
     demonstration storyboard and proof checks" (Proposed demo sequence, beat 1)
   - Blocked by: `form options`; `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
-  - Progress (2026-10-04, prepared on `web/forms` against main 49d0320, not yet pushed): the form is rebuilt on `lib/task-form-model.ts` and `components/task-form.tsx` (`TaskFormView` renders a loaded read; `TaskForm` holds the state). It offers only what `GET /api/runs/options` returned and preselects a field only when the server offered exactly one value; the limits start empty (the server's default) with the ceiling as a hint. Invoices are grouped by vendor and an invoice of another vendor is disabled once one is selected, because admission rejects a mixed set (this uses the `vendorId` every option invoice now carries in the contract). A failed options read or a failed start (other than an admission rejection) is shown with the shared `FailureState` (WEB-23): the options read through `classifyOptionsFailure`, which keeps the 503 wording "No active control catalog" and otherwise uses `classifyFailure`, and the start through `classifyFailure(error, { command: true })`, so a start with no answer says the outcome is unconfirmed and offers no retry; the request id is shown and no server message is. An empty list shows its reason and a Retry button; nothing is ever a default. `buildStartRunRequest` holds only start-run contract fields. An invoice amount is shown as money with its currency when the option invoice names one (`formatInvoiceAmount`), and otherwise as the raw minor-unit figure marked "currency not stated", never a guessed currency. Checks: `pnpm --filter web run lint` and `typecheck` exit 0, `vitest` 177 passed, 2 failed (the two home-page cases that main's 49d0320 broke). Browser evidence (2026-10-04, my stack on main 3e54f50 plus `web/forms`, signed in as the seeded operator, an isolated headless Chromium; `pnpm smoke` exit 0, 36 passed, 0 failed, 6 skipped): `/tasks/new` shows "The server could not provide task options (HTTP 400, bad_request), so nothing is offered." with a Retry button and no selectable field, because `GET /api/runs/options` answers 400: `apps/api` has no such route (its runs controller has `:id` routes only, so `options` matches `:id`), although the gateway serves `/internal/task-options`. Not done, so not ticked: the form against a working options route, the over-limit request and the real start, and `currency` on the option invoices (3c adds it; the form already renders it).
+  - Progress (2026-10-04, prepared on `web/forms` against main 49d0320, not yet pushed): the form is rebuilt on `lib/task-form-model.ts` and `components/task-form.tsx` (`TaskFormView` renders a loaded read; `TaskForm` holds the state). It offers only what `GET /api/runs/options` returned and preselects a field only when the server offered exactly one value; the limits start empty (the server's default) with the ceiling as a hint. Invoices are grouped by vendor and an invoice of another vendor is disabled once one is selected, because admission rejects a mixed set (this uses the `vendorId` every option invoice now carries in the contract). A failed options read or a failed start (other than an admission rejection) is shown with the shared `FailureState` (WEB-23): the options read through `classifyOptionsFailure`, which keeps the 503 wording "No active control catalog" and otherwise uses `classifyFailure`, and the start through `classifyFailure(error, { command: true })`, so a start with no answer says the outcome is unconfirmed and offers no retry; the request id is shown and no server message is. An empty list shows its reason and a Retry button; nothing is ever a default. `buildStartRunRequest` holds only start-run contract fields. An invoice amount is shown as money with its currency when the option invoice names one (`formatInvoiceAmount`), and otherwise as the raw minor-unit figure marked "currency not stated", never a guessed currency. Checks: `pnpm --filter web run lint` and `typecheck` exit 0, `vitest` 177 passed, 2 failed (the two home-page cases that main's 49d0320 broke). Browser evidence (2026-10-04, my stack on main 3e54f50 plus `web/forms`, signed in as the seeded operator, an isolated headless Chromium; `pnpm smoke` exit 0, 36 passed, 0 failed, 6 skipped): `/tasks/new` shows "The server could not provide task options (HTTP 400, bad_request), so nothing is offered." with a Retry button and no selectable field, because `GET /api/runs/options` answers 400: `apps/api` has no such route (its runs controller has `:id` routes only, so `options` matches `:id`), although the gateway serves `/internal/task-options`. Live evidence (2026-10-04, my stack on main 39d5899 plus `web/forms` d2a5d94, 20 migrations, seeded, catalog revision 1 active; an isolated headless Chromium; `pnpm smoke` exit 0, 36 passed, 0 failed, 6 skipped; no model call was made): `/tasks/new` loads the options from `GET /api/runs/options`, preselects the sole template, destination and approval requirement, groups the invoices under the vendor (ATLAS) and shows "€1,250.00 (EUR)" style amounts, leaves the limits empty with "up to 900" as the hint, and the over-limit submission is rejected at admission (see WEB-11). The live options offer only the seeded organization's own vendor (Atlas), as expected, so the case that another vendor's invoices are disabled once one is selected is unit-test evidence only (`task-form-model.test.ts`, `task-form.test.ts`), not a live observation. Not done, so not ticked: the real start, which runs the agent and so waits for the quiet window the lead set (Done-when: the run that starts is the one Go admitted, and demo beat 1 performed).
 
 - [ ] **WEB-06 · Show the run's persisted events on the run page**
   - **Report 1.1 change:** Route proposal `/runs/:id`.
@@ -1023,6 +1083,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     (Proposed ownership: "Explicit service privileges and transactions; no assumed tenant
     isolation")
   - Blocked by: `decision 2 in docs/product/README.md`; `read path`
+  - Progress (2026-10-04), NOT ticked, deferred by the lead: the API connects as the owner role (`POSTGRES_USER`); a least-privilege API role is planned. Findings for whoever picks it up: the role `task_passport_api` exists (CreateServiceRoles) but is NOLOGIN and holds grants only on the three catalog tables, while the API also reads and writes users, memberships, password hashes, sessions and organizations, so connecting as it needs a migration with those grants, a `POSTGRES_API_PASSWORD` in setup, `.env.example`, Compose and `scripts/db-roles.mjs` (every worktree and the presentation machine must rerun `pnpm run setup` and `pnpm db:roles`), and new variables through `environmentSchema.extend`. No file for it was changed.
 
 - [x] **API-18 · Serve the stored report and its registered template**
   - Done (2026-10-04): GET /api/runs/{id}/reports/{reportId} relays the shared ReportView unchanged through verified membership and Go's organization/content access boundary. Strict response validation preserves stored classifications, source lineage, template/projection versions and withheld content; mismatched run/report references or leaked withheld content fail closed. Checks: API lint, typecheck and build exited 0; API unit tests: "224 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Tests cover both report fixtures, unknown fields, incorrect lineage/projection, missing sessions, 401/403/404/503 and transport failures. The source-trail behavior required by API-30 is included; its separate evidence task remains open. No runtime/demo SQL writes or computed labels.
@@ -1046,7 +1107,12 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     finish and leave an inspectable report in application state")
   - Blocked by: `stored report read`; `final result format`; `decision 7 in docs/product/README.md`; `report storage`
 
-- [ ] **API-28 · Add the report template and projection rule records**
+- [x] **API-28 · Add the report template and projection rule records**
+  - Dropped (2026-10-04, lead confirmed): the templates and the vendor projection rule are Go constants
+    in `services/gateway/internal/provenance` (`InternalInvestigationV1`, `VendorReconciliationV1`,
+    `VendorInvoiceFieldsV1`; `docs/product/README.md` decisions 4 and 5), and Go already reads them with
+    their versions. No `report_templates` or `projection_rules` table, entity or migration is added.
+    X-68 in `docs/roadmap/README.md` now names the Go constants.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-04, SH-10 · Needs: X-06, X-24 · Provides: X-68 (part: entities)
   - Paths: `apps/api/src` (the policies module from API-04)
@@ -1062,7 +1128,11 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     template manifests)
   - Blocked by: `vendor projection fields` (rule content)
 
-- [ ] **API-29 · Record trusted source classifications and recipient rules, if `source classification storage` chooses `app`**
+- [x] **API-29 · Record trusted source classifications and recipient rules, if `source classification storage` chooses `app`**
+  - Dropped (2026-10-04, lead confirmed): `source classification storage` chose demo records
+    (`docs/product/README.md` decision 6): `demo.invoices.internal_note_classification` and
+    `demo.vendors.registered_reporting_address`, migration `1791060000000`. Nothing is added in `app`.
+    X-70 in `docs/roadmap/README.md` now names those columns.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: API-04 · Needs: X-24 · Provides: X-70 (part)
   - Paths: `apps/api/src` (the policies module from API-04)
@@ -1197,7 +1267,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     challenge" (Why successful work matters as much as blocked work)
   - Blocked by: nothing
 
-- [ ] **WEB-11 · Explain an admission rejection and require explicit resubmission**
+- [x] **WEB-11 · Explain an admission rejection and require explicit resubmission**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 1-2.5 h)
   - Depends on: WEB-05 · Needs: X-13 · Provides: nothing
   - Paths: `apps/web/src/app` (the task setup page from WEB-05)
@@ -1216,7 +1286,7 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     1 create and delegate a task)
   - Blocked by: nothing
   - Progress (2026-10-04): the explanation is built but not mounted. `apps/web/src/lib/admission-rejection.ts` reads an admission rejection from a failed start-run response (`admissionRejectionFromError`: a 4xx whose safe error body carries `resource_out_of_scope`, `destination_not_allowed`, `template_not_allowed`, `limit_not_allowed` or `invalid_arguments`; anything else is not explained as one) and names the form fields to change (`explainAdmissionRejection`). `apps/web/src/components/admission-rejection.tsx` exports `AdmissionRejectionNotice({rejection, onResubmit, isSubmitting})`: it shows the reason code, the server's safe message, what was unavailable and the fields to change, says no passport or run exists and that nothing was narrowed, and resubmits only when the operator presses its button (type "button", never a form submit). For the form's owner to mount in `task-form.tsx`: on a failed `startRun`, call `admissionRejectionFromError(result.error)`, keep every field state as it is, render the notice, and call the existing submit only from `onResubmit`. Checks: `pnpm --filter web run lint`, `typecheck` and `test` exit 0 (74 passed, 12 of them new: a rejection shows its code, message and the scope to change; a non-admission failure is not explained as one; rendering never calls `onResubmit`; the button is not a form submit; markup in a server message is escaped). Not done, so not ticked: the notice is not mounted in the form, and the browser check with an over-scope request has not run.
-  - Progress (2026-10-04, prepared on `web/forms`, not yet pushed): the tick on main was premature, so it is cleared: the notice was not mounted. `AdmissionRejectionNotice` is now mounted in `TaskForm`. A failed `startRun` whose error is an admission rejection shows the notice and keeps every field as the operator left it; its button calls the same submit, and no field changes unless the operator edits it. A failure that is not an admission rejection (network, 5xx, 401) shows a plain alert, no longer headed "Admission Rejected". The limit inputs carry no `max`, so an over-limit request reaches admission and is explained there. The notice shows the reason code and a fixed safe message per code and never the server's own wording (web security review #7), so a reply's text cannot reach the page. `components/task-form.test.ts` renders the loaded form with a rejection (code, safe message, no passport or run, the typed limit kept) and checks that rendering calls neither `onSubmit` nor `onChange`. Not done: the browser check with an over-scope request, which needs the API's `options` route.
+  - Progress (2026-10-04, prepared on `web/forms`, not yet pushed): the tick on main was premature, so it is cleared: the notice was not mounted. `AdmissionRejectionNotice` is now mounted in `TaskForm`. A failed `startRun` whose error is an admission rejection shows the notice and keeps every field as the operator left it; its button calls the same submit, and no field changes unless the operator edits it. A failure that is not an admission rejection (network, 5xx, 401) shows a plain alert, no longer headed "Admission Rejected". The limit inputs carry no `max`, so an over-limit request reaches admission and is explained there. The notice shows the reason code and a fixed safe message per code and never the server's own wording (web security review #7), so a reply's text cannot reach the page. `components/task-form.test.ts` renders the loaded form with a rejection (code, safe message, no passport or run, the typed limit kept) and checks that rendering calls neither `onSubmit` nor `onChange`. Live evidence (2026-10-04, my stack on main 39d5899 plus `web/forms` d2a5d94, 20 migrations, seeded, catalog revision 1 active; an isolated headless Chromium; `pnpm smoke` exit 0, 36 passed, 0 failed, 6 skipped; no model call was made): an over-limit request (invoice_A01, destination vendor_Atlas, model calls 999) is rejected with `limit_not_allowed` (HTTP 400) and the notice reads "Request rejected at admission: no passport was issued and no run started.", the reason code, the safe message, "Change: Limits (model calls, timeout)"; the page stays on `/tasks/new`, the typed 999 and the checked invoice are kept, the request body holds only `template`, `invoiceIds`, `destination`, `approvalRequirement` and `limits`, and no second request is sent until the operator presses "Submit revised request" (1 request before, 2 after; the second is rejected the same way). No run exists in `runtime.runs`.
 
 - [x] **WEB-12 · Render the report from the stored report and its registered template**
   - **Report 1.1 change:** Renders both reports; beats 4 and 7.
@@ -1410,11 +1480,15 @@ this side starts and reviews.
   - Tests: specs: a non-administrator is refused; a revocation cannot widen authority or change a
     passport; database-backed tests through X-24 for the record; against the real gateway, a run
     waiting for review dispatches nothing after the revocation: `pnpm --filter api run test`.
+  - Deferred (2026-10-04, lead): not done tonight. Tier B, and every prerequisite is missing: the record
+    shape (`revocation reads`, open), the migration (SH-38; no revocation table on main) and the Go
+    reader that enforces it before dispatch and execution (GO-52, blocked on the same items). No
+    migration or entity was added, so nothing claims revocation exists.
   - Report: "Exact action approval versioning and execution rechecks" (Versioned policy and current
     revocation); "Users operating model and proposed user journeys" (Proposed user
     responsibilities); "Threat model limits and unresolved design choices" ("Verify that
     cancellation and revocation prevent future dispatch after a review wait")
-  - Blocked by: `revocation reads`; `decision 7 in docs/product/README.md`
+  - Blocked by: `revocation reads`; SH-38; GO-52; `decision 7 in docs/product/README.md`
 
 - [x] **API-33 · Serve the authenticated policy reload and activation**
   - Done (2026-10-04): lead-approved reviewer-only POST /api/policies/reload accepts exactly {}, reads fixed repository policy/feed files with the CLI's shared bounded reader, imports with reload/verified-user provenance and only sets requested_revision_id. NestJS calls no Go activation endpoint and never waits for activation. Responses: 202 requested with feed version label or null, 200 unchanged, 400 shared-shaped policy error with safe issue pairs, 409 revision_pending and fail-closed 401/403/503. GET /api/policies/status reads app pointer facts and exposes only requested/validated/active/feed IDs and approved code/message/revisionId/stage mapping, rejecting malformed or imprecise stored values. NestJS-owned types/schemas/fixtures land together; the Go-owned error schema is unchanged. API lint/typecheck/build exited 0; API unit tests: "407 passed"; `pnpm test:db api`: "71 passed, 0 failed, 0 skipped"; shared contracts lint/typecheck/build exited 0, tests: "9 passed". Real authenticated API/Go check: unchanged 200; edited policy requested 202, actor recorded and watcher activation observed; invalid policy 400 with issues and prior active revision preserved; status import_validation with null rejected revisionId; original file restored and reactivated. Overall `pnpm verify`: "4 passed, 2 failed, 0 skipped" (merged web formatting and two homepage tests); smoke: "22 passed, 8 failed, 6 skipped" (existing login redirects). These are failed checks; keep local until owners resolve them. Removed the unused obsolete combined run-view DTO that main's contract changes made fail typecheck; no public run response changed. No Docker/browser/live-model quality evidence claimed. The lead's watcher-only flow supersedes this block's older NestJS activation wording.
@@ -1622,6 +1696,15 @@ sit here, before the final build's evidence is captured, and are cut first.
 
 - [ ] **API-23 · Record organization access evidence on the public path**
   - **Report 1.1 change:** Adds the report and source trail reads; no restricted source content in general views.
+  - Progress (2026-10-04): the public-path part with a labelled Go fixture exists in
+    `apps/api/src/auth/product-access.db-spec.ts` (second organization's operator gets 404 on every
+    run, event, report, review, approval, cancel and evaluate route; removed membership 401; reviewer
+    role from the database, not the browser): 71 database tests passed in `pnpm test:db --fresh`.
+    Missing: the live requests by hand as the seeded second organization's operator, and the
+    no-mutation check through the run view and events. No second-organization operator is seeded
+    (`pnpm db:seed` creates only the demo operator), and creating one with a credential needs the
+    lead's decision. Lead's decision (2026-10-04): not ticked; the fixture-level evidence stands as
+    recorded, and no second operator is seeded before the freeze. Not ticked.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1.5-3 h)
   - Depends on: API-16, API-18, API-19, API-20, API-21 · Needs: X-24, X-34 · Provides: X-56 (part:
     public path)
@@ -1641,8 +1724,28 @@ sit here, before the final build's evidence is captured, and are cut first.
     internal service boundary; a hidden URL is not a protection")
   - Blocked by: nothing
 
-- [ ] **API-24 · Record field minimization evidence for the activity views**
+- [x] **API-24 · Record field minimization evidence for the activity views**
   - **Report 1.1 change:** Adds the report and source trail reads; no restricted source content in general views.
+  - Completed (2026-10-04, build: main 39d5899 merged into `api/w2`; the live scan ran on 90a5e41, which has no code change since):
+    the protected values of the synthetic policy fixture are the invoice_A01 internal note (whole text and
+    two fragments) and the registered reporting address of `vendor_Atlas` (`fixtures/demo-records.json`).
+    `field-minimization.spec.ts` (5 tests; the Go side is a labelled fixture, so it proves what the API
+    relays and refuses, not what Go decides) serves a full run's state, usage, events and vendor report
+    through the real controllers and error filter and scans every serialized body; checks the scan is
+    not vacuous; refuses an upstream view that adds a protected key (state, usage, events, report) with
+    no echo of the value; shows an upstream error code carrying the note is never relayed; and shows the
+    review content (recipient address, canonical arguments) is served only to a reviewer (403 and no Go
+    call otherwise) and appears on no other view. The same scan on a real run (read-only, no model call;
+    run `f1912314-...`, 17 events over the public API as the demo operator): state, usage, passport,
+    all 17 events, both reports, the 7 review reads (1 served, 6 not found because those actions are not reviewable) and 4 error bodies (unknown run 404, malformed id
+    400, bad cursor 400, no session 401): protected hits none, except the internal report
+    (`internal_investigation_v1`, `internal_only`, shown to an authorized internal viewer: note text) and
+    the one existing review view (`queue_report`: the recipient address, reviewer read); the vendor
+    report `vendor_reconciliation_v1` has none. Known limit: free-text fields the contract allows
+    (`safeMessage` up to 512 characters) are relayed as Go sends them; the API cannot recognise a
+    protected value in them, so their content stays Go's duty. Checks: `pnpm --filter api run lint` exit
+    0; typecheck exit 0; `pnpm --filter api run test` "26 passed" files, "428 passed" tests; `GOFLAGS=-p=3 pnpm test:db --fresh`: gateway
+    "965 passed, 0 failed, 0 skipped", api "71 passed, 0 failed, 0 skipped".
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2.5 h)
   - Depends on: API-14, API-19 · Needs: X-06, X-12, X-34 · Provides: X-50 (part: safe activity
     views)
@@ -1938,7 +2041,16 @@ handoff from X-62, and RS-09 submits.
 ### NestJS (report role: Implementer 2)
 
 - [ ] **API-27 · Supply the NestJS part of the technical handoff**
-  - NestJS text supplied (2026-10-04): apps/api/README.md now describes explicit setup/seed/reset, stored-session demonstration identity, environment names, product modules, Go authority, public operations and exact separate run/usage contracts. docs/api-facade-handoff.md records web shape/after-cursor handoffs, X-91 CLI ownership, lead-owned form/reload decisions and current smoke failures. API lint/typecheck/build exited 0; API unit tests: "370 passed"; database tests: "67 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Real web/API identity flow returned 200/200/200/401. Current overall smoke: "22 passed, 8 failed, 6 skipped"; not passed. The task stays open for the required teammate clean-checkout setup evidence and integration owner's final-build incorporation; Docker/browser/live-model rehearsal not claimed.
+  - Progress (2026-10-04, second pass on `api/w2`): the NestJS text is checked against main 31cff75 plus this
+    branch. `apps/api/README.md` "Verification and handoff limits" is rewritten with current results and
+    limits; `docs/api-facade-handoff.md` no longer carries the old smoke numbers or the draft combined run
+    view; `docs/architecture.md` "Product modules" gained the auth/identity, registry, actions and
+    security rows. Checks, my own runs: API lint and typecheck exit 0; api test "428 passed";
+    `pnpm test:db --fresh` api "71 passed", gateway "965 passed", 0 failed, 0 skipped; `pnpm verify`
+    "6 passed, 0 failed, 0 skipped"; `pnpm smoke` "36 passed, 0 failed, 6 skipped" (service-log leak
+    checks skipped in host mode); `pnpm test:judge` 8 passed (the judge CLI still sends `run_id`, which
+    the API refuses: recorded as a limit). Not done: a teammate's setup on a clean checkout, and the
+    integration owner's final-build incorporation. The task stays open.
   - **Report 1.2 change:** Adds the policy file, catalog reload, security summary and audit export.
   - **Report 1.1 change:** Adds the report templates and projection rules.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 0.5-1.5 h)
@@ -1961,7 +2073,7 @@ handoff from X-62, and RS-09 submits.
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-26 · Supply the Next.js part of the technical handoff**
+- [x] **WEB-26 · Supply the Next.js part of the technical handoff**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: SH-34 · Needs: X-59 · Provides: X-62 (part)
   - Paths: `apps/web/README.md`, `packages/ui/README.md`, `docs/architecture.md`, `README.md`
@@ -1976,11 +2088,15 @@ handoff from X-62, and RS-09 submits.
   - Tests: a teammate follows the web setup on a clean checkout, quoted.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation)
-  - Progress (2026-10-04): draft of `apps/web/README.md` written from the web code on main 3e54f50
-    plus web/reports (browser path and proxy rules, route table, pages, labels, failure states,
-    sign-in as a development demonstration, test coverage, known limitations). Completed after
-    SH-34 so it matches the submitted build; `packages/ui/README.md`, `docs/architecture.md` and
-    `README.md` still describe the baseline and are placed by integration.
+  - Completed (2026-10-04): `apps/web/README.md` rewritten from the web code on main 39d5899:
+    browser path and proxy allowlist, route table, pages, truthful labels, failure states, sign-in as
+    a development demonstration, test coverage and limitations. Checks: `pnpm --filter web run test`
+    42 files, 409 tests passed; browser check on the merged build: signed in as the demo operator,
+    `/api/auth/me` 200 and `/api/runs/options` 200, and `/tasks/new` stayed on `/tasks/new` with the
+    task form loaded (before the fix it redirected to `/login`). Not verified: a teammate's setup on
+    a clean checkout (this task's test), and a re-read at the freeze (SH-34). `packages/ui/README.md`,
+    `docs/architecture.md` and the root `README.md` still describe the baseline; integration places
+    them.
   - Blocked by: nothing
 
 ## Coverage
