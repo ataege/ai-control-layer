@@ -73,7 +73,12 @@ func decodeJSONBody(responseWriter http.ResponseWriter, request *http.Request, m
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil || decoder.More() {
+	if err := decoder.Decode(target); err != nil {
+		return errMalformedBody
+	}
+	// decoder.More is false before a stray closing brace or bracket, so it would let `{...}}`
+	// through; only the end of the input is acceptable after the document.
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return errMalformedBody
 	}
 	return nil
