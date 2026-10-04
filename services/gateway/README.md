@@ -25,6 +25,18 @@ evidence; where a record says "draft" or "not on main", the handoff section and 
 | `POST /internal/control/evaluate`               | GO-82: X-91 control evaluation through the agent path's controls; `200` for every decision, `400`, `404`, `503 decision_unavailable`.                                                                                                                                                                                 |
 | `POST /internal/actions/{actionId}/approval`    | GO-44 (lane w3): approve or reject one stored action (X-10).                                                                                                                                                                                                                                                          |
 | `GET /internal/actions/{actionId}/review`       | GO-44 (lane w3): the frozen review payload, for a reviewer of the organization.                                                                                                                                                                                                                                       |
+| `GET /internal/runs/{runId}`                    | GO-24 (lane w2): the X-11 state of one run of the operator's organization; `404` unknown or another organization's run.                                                                                                                                                                                               |
+| `GET /internal/runs/{runId}/usage`              | GO-24: the run's model usage by purpose, its token ledger and its tool attempts; no estimate and no cost.                                                                                                                                                                                                             |
+| `GET /internal/runs/{runId}/events`             | X-12, cursor paged: the run's sanitized events after the `after` cursor, in order, at most `limit` (default 100, at most 500); `nextCursor` equals the request's cursor when no new event was committed.                                                                                                              |
+| `GET /internal/runs/{runId}/passport`           | The X-08 passport of the run as stored and strictly decoded.                                                                                                                                                                                                                                                          |
+| `GET /internal/catalog/active`                  | WEB-29: the active control catalog as the gateway enforces it (revisions, digests, the last rejected activation and each control's setting); `503` when the stored revision cannot be enforced.                                                                                                                       |
+| `GET /internal/security/summary`                | GO-83: the security summary of the operator's organization.                                                                                                                                                                                                                                                           |
+| `GET /internal/security/assessments`            | GO-83: the organization's control assessments, by window cursor.                                                                                                                                                                                                                                                      |
+| `GET /internal/security/events`                 | GO-83: the organization's sanitized events, including those without a run (a rejected admission or reload), by window cursor.                                                                                                                                                                                         |
+
+The read routes are organization-scoped through the verified operator context: `404 not_found` for
+a run of another organization or an unknown run, `400 bad_request` for bad query parameters and
+`503 unavailable` when the records cannot be read.
 
 Internal product commands are registered through `httpserver.Options.InternalCommands`, which
 always wraps them in the service-token check and the `X-Operator-Context` verification (GO-21): an
@@ -114,7 +126,7 @@ values; the process then exits with code 1.
 ### Package ownership
 
 Since the evening of 3 October 2026 the lead's Claude Code sessions build the Go side, one lane per
-package group; the lead routes cross-lane interfaces (see "People" in `AGENTS.md`). The report's
+package group; the lead routes cross-lane interfaces (see "Repository map and ownership" in `AGENTS.md`). The report's
 Implementer 3/4/5 labels group responsibilities; they do not assign separate people.
 
 | Existing package           | Owner                                                         |
@@ -122,6 +134,7 @@ Implementer 3/4/5 labels group responsibilities; they do not assign separate peo
 | `cmd/gateway`              | Shared Go lanes; the lead coordinates edits (wiring: lane f3) |
 | `cmd/modelcheck`           | Go lane f3 (worker, agent, model, budget)                     |
 | `cmd/budgetcheck`          | Go lane f3 (worker, agent, model, budget)                     |
+| `cmd/catalogactivate`      | Go lane 3c (repository, admission, passport, API)             |
 | `cmd/replay`               | Go lane w3 (action gate and approvals)                        |
 | `cmd/benchmark`            | Go lane w2 (tools and provenance)                             |
 | `internal/config`          | Shared Go lanes; the lead coordinates edits                   |
@@ -198,7 +211,8 @@ boundary is, what happens when it fails, how evidence is labelled and what is no
 Follow `docs/setup.md`; the Go-specific steps, from the repository root:
 
 1. Go 1.27 or newer on `PATH`; Ollama with the catalog's allowed model (`ollama pull qwen3.5:4b`,
-   `docs/setup.md` section 7). `MODEL_BASE_URL` and `MODEL_NAME` go in `.env`.
+   `docs/setup.md` section 7). `pnpm run setup` creates `.env` from `.env.example`, which already sets `MODEL_BASE_URL` and
+   `MODEL_NAME=qwen3.5:4b`.
 2. `pnpm run setup` writes six generated secrets into `.env`: `GATEWAY_SERVICE_TOKEN`,
    `OPERATOR_CONTEXT_SIGNING_KEY`, `POSTGRES_GATEWAY_PASSWORD`, `POSTGRES_PASSWORD`, `AUTH_JWT_SECRET`
    and `DEMO_OPERATOR_PASSWORD` (a missing secret is added to an existing file).
@@ -230,14 +244,13 @@ differs and write the difference down.
 | `pnpm dev`, then `curl -s -o /dev/null -w '%{http_code}\n' localhost:$GATEWAY_PORT/health/ready` | `200` (the worker runs and an enforceable catalog is active)                        |
 
 The last row needs `GATEWAY_PORT`, which lives in `.env` (8080 by default): load it first with
-`set -a; . ./.env; set +a`, or use the value from the file. If `MODEL_NAME` is not in `.env` (setup
+`set -a; . ./.env; set +a`, or use the value from the file. If `MODEL_NAME` is empty in `.env` (setup
 step 1), `pnpm dev` logs a WARN "model not configured; every model call fails closed" while
 readiness is still `200`; that is expected for this list, which makes no model call.
 
 Stop `pnpm dev` before `pnpm verify` or any web build in the same worktree: the build overwrites
 `apps/web/.next` and the dev server then answers `404` until the directory is deleted. Nothing in
-this list calls the model; the live checks are in `docs/demo-runbook.md` ("Final live checks", added on 4 October 2026; it is on
-`main` once the lead's merge round that carries it is in).
+this list calls the model; the live checks are in `docs/demo-runbook.md` ("Final live checks").
 
 ### How a run flows through the packages
 
@@ -455,25 +468,25 @@ database-backed ones need the test database settings, for example
 `POSTGRES_DB=<test database> TEST_DATABASE_REQUIRED=1 node scripts/with-env.mjs go -C services/gateway test -count=1 -run '<name>' ./internal/<package>`
 (`pnpm test:db` sets them and runs all of them; for a single package see "PostgreSQL test harness").
 
-| Command                                                                                        | Proves                                                                                     |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `pnpm --filter gateway run test`                                                               | unit tests, contract fixtures, handler and fail-closed mapping without a database          |
-| `GOFLAGS=-p=3 pnpm test:db gateway`                                                            | every database-backed test, among them the ones below                                      |
-| `go test -run TestStory ./internal/scenario`                                                   | the core story through the production chain (GO-66, GO-67, GO-47, GO-56), fixture provider |
-| `go test -run TestPostgresCompeting ./internal/budget ./internal/policy`                       | competing requests cannot spend the same allowance (GO-50)                                 |
-| `go test -run TestPostgresAnotherOrganization ./internal/api`                                  | another organization reaches nothing (GO-57)                                               |
-| `go test -run TestPostgresReadRoutesThroughTheGatewayHandler ./internal/reads`                 | the read routes through the real handler tree (GO-24, GO-83)                               |
-| `go test -run TestUnreachableProviderRecordsTheActualFailureState ./internal/agent`            | a provider failure records the actual state (GO-58)                                        |
-| `go test -tags=model_live -run TestLiveStoryThroughTheProductionChain ./internal/scenario`     | with `GO_STORY_LIVE=1`: the story with the live model, labelled live                       |
-| `go test -tags=model_live -run TestLiveSemanticCorpus ./internal/security`                     | with `GO_SECURITY_LIVE=1`: the labelled corpus through the live evaluator (GO-84)          |
-| `go test -tags=model_live -run TestLiveProductionChainExecutesAPermittedTool ./internal/agent` | with `GO_AGENT_LIVE=1`: one permitted tool through the live chain (GO-11)                  |
-| `pnpm benchmark` (`--live`)                                                                    | latency of the policy lookup and inspection, model-free and live (GO-81)                   |
-| `go -C services/gateway run ./cmd/replay -run <run> -fixture <fixture>`                        | a labelled replay of a hostile-note proposal is denied by the real gate (GO-36)            |
-| `go -C services/gateway run ./cmd/modelcheck`, `./cmd/budgetcheck`                             | the model connection and the ledger accounting against the active catalog                  |
-| `pnpm smoke`                                                                                   | the running services answer end to end                                                     |
-| `MODEL_NAME=qwen3.5:4b pnpm verify:controls`                                                   | the control suite with the live model; writes `.verify-controls/results-<timestamp>.json`  |
-| `node scripts/with-env.mjs node apps/web/scripts/e2e-flow.mjs`                                 | the demonstration through the web server's routes, two rounds with a reset (live model)    |
-| `pnpm judge --run <run> --case <fixture id>`                                                   | one judge input through the API to `POST /internal/control/evaluate` (X-91)                |
+| Command                                                                                           | Proves                                                                                     |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `pnpm --filter gateway run test`                                                                  | unit tests, contract fixtures, handler and fail-closed mapping without a database          |
+| `GOFLAGS=-p=3 pnpm test:db gateway`                                                               | every database-backed test, among them the ones below                                      |
+| `go test -run TestStory ./internal/scenario`                                                      | the core story through the production chain (GO-66, GO-67, GO-47, GO-56), fixture provider |
+| `go test -run TestPostgresCompeting ./internal/budget ./internal/policy`                          | competing requests cannot spend the same allowance (GO-50)                                 |
+| `go test -run TestPostgresAnotherOrganization ./internal/api`                                     | another organization reaches nothing (GO-57)                                               |
+| `go test -run TestPostgresReadRoutesThroughTheGatewayHandler ./internal/reads`                    | the read routes through the real handler tree (GO-24, GO-83)                               |
+| `go test -run TestUnreachableProviderRecordsTheActualFailureState ./internal/agent`               | a provider failure records the actual state (GO-58)                                        |
+| `go test -tags=model_live -run TestLiveStoryThroughTheProductionChain ./internal/scenario`        | with `GO_STORY_LIVE=1`: the story with the live model, labelled live                       |
+| `go test -tags=model_live -run TestLiveSemanticCorpus ./internal/security`                        | with `GO_SECURITY_LIVE=1`: the labelled corpus through the live evaluator (GO-84)          |
+| `go test -tags=model_live -run TestLiveProductionChainExecutesAPermittedTool ./internal/agent`    | with `GO_AGENT_LIVE=1`: one permitted tool through the live chain (GO-11)                  |
+| `pnpm benchmark` (`--live`)                                                                       | latency of the policy lookup and inspection, model-free and live (GO-81)                   |
+| `node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run> -fixture <fixture>` | a labelled replay of a hostile-note proposal is denied by the real gate (GO-36)            |
+| `node scripts/with-env.mjs go -C services/gateway run ./cmd/modelcheck`, `./cmd/budgetcheck`      | the model connection and the ledger accounting against the active catalog                  |
+| `pnpm smoke`                                                                                      | the running services answer end to end                                                     |
+| `MODEL_NAME=qwen3.5:4b pnpm verify:controls`                                                      | the control suite with the live model; writes `.verify-controls/results-<timestamp>.json`  |
+| `node scripts/with-env.mjs node apps/web/scripts/e2e-flow.mjs`                                    | the demonstration through the web server's routes, two rounds with a reset (live model)    |
+| `pnpm judge --run <run> --case <fixture id>`                                                      | one judge input through the API to `POST /internal/control/evaluate` (X-91)                |
 
 Live tests need `MODEL_BASE_URL` and `MODEL_NAME` and run alone. Their results are observations of
 one run on one machine, not reliability measures.
@@ -556,14 +569,12 @@ are proposed data only; the client executes none. Usage preserves missing counts
 explicit zero as zero, including parseable usage on a rejected response. Go measures request wall
 time separately from provider time. A timeout does not establish that remote inference stopped.
 
-This is transport code, not a completed governed model gateway. The worker must still check
-identity/passport and active model authority, reserve call-count/purpose allowances, persist
-attempts and apply the concurrency cap before using it. Token reservations are now implemented
-through `AccountedCaller` and the PostgreSQL ledger described below. The client is not called by startup or
-an HTTP route. The explicit diagnostic command below loads the infrastructure-agreed model variables. Runtime
-configuration wiring, remote-access setup and live presentation-machine evidence remain pending
-GO-03, SH-04 and the infrastructure handoff; existing startup behavior is unchanged.
-No provider credential mechanism is invented for the selected local Ollama setup.
+This section describes the transport only. The governed model gateway is
+`agent.CatalogAccountedCaller` (allowlist, reservation, concurrency slot and deadline), described in
+"Production chain and gateway wiring (GO-11, GO-09)"; the gateway builds the client at startup from
+`MODEL_BASE_URL` and `MODEL_NAME`. The explicit diagnostic command below loads the
+infrastructure-agreed model variables. Presentation-machine evidence is SH-45 and SH-50 and is still
+open. No provider credential mechanism is invented for the selected local Ollama setup.
 
 Unit tests use a labelled local HTTP provider test double; they are not live model evidence.
 API reference: [Ollama chat](https://docs.ollama.com/api/chat).
@@ -622,8 +633,9 @@ MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gatew
 Each call used `think: false`, context 4096, output ceiling 256, deadline 30 seconds and 1 MiB
 request/response limits. These are diagnostic settings. The durations are two observations, not
 a benchmark, a throughput estimate or proof of a maximum latency. The configured model remains
-a provisional choice. These observations predate the accounting adoption below; the shared
-model/hardware freeze remains GO-03/SH-04.
+a provisional choice. These observations predate the accounting adoption below; the model and
+hardware freeze is recorded in "Model and hardware freeze (GO-03)" below, and the presentation
+machine is SH-45 and SH-50.
 
 ## GO-06 token accounting
 
@@ -640,15 +652,16 @@ reservation. Missing counters, transport errors and timeouts retain the complete
 `usage_unknown`; no measured zero is invented. There is no automatic retry. A trusted late result
 can reconcile once, including after constructing a new store. Identical repeated settlement
 changes nothing; conflicting counters are rejected. A measured overrun records full usage and
-persists a pause that blocks later reservations. The future run controller must propagate this
-ledger pause to the run state; no worker or admission API is implemented by this task.
+persists a pause that blocks later reservations. The agent loop propagates this ledger pause to the
+run state (`paused` / `allowance_exhausted`, `agent.stepErrorEnd`).
 
-The TypeORM migration `1791043000000-AddModelTokenBudgets.ts` creates only the ledger tables.
-Application startup performs no migration or budget creation. Go alone mutates the ledger;
-service-role grants and the future runtime-run relationship remain integration work.
+The TypeORM migration `1791043000000-AddModelTokenBudgets.ts` creates the ledger tables;
+`1791050000000-CreateServiceRoles.ts` grants the gateway role access and
+`1791130000000-AlignTokenLedger.ts` relates the ledger to `runtime.runs` (GO-39). Application
+startup performs no migration or budget creation. Go alone mutates the ledger.
 
 Central values live in `config/policy.yaml` and its accepted immutable catalog revision:
-`tokens_total: 20000`, `agent_output_tokens: 512`, `security_output_tokens: 256`, and
+`tokens_total: 40000`, `agent_output_tokens: 512`, `security_output_tokens: 256`, and
 `input_template_tokens: 1024`. Older v1 revisions use the last three defaults. Go reads the
 active revision in one SQL snapshot and never reads the YAML file as a second runtime authority.
 The accounting projection does not replace GO-72/73 full catalog/feed validation or activation.
@@ -726,10 +739,11 @@ Verification commands on the isolated test database:
 > read their sections above for the current behaviour.
 
 Read-only review of `origin/feat/fd-catalog-and-tests` at `538fed4`: `config/README.md`,
-`config/policy.yaml`, the catalog entities and their migration. These are draft inputs to GO-72/73,
-not an implemented activation protocol or frozen contract. The branch is not merged here.
+`config/policy.yaml`, the catalog entities and their migration. These were draft inputs to GO-72/73;
+the branch is merged and the activation protocol is implemented (`catalog.ActivateRequested`,
+`catalog.WatchRequested`; see "One-shot catalog activation").
 
-| Go reader        | Draft storage                                                                                            |
+| Go reader        | Storage (as reviewed; now implemented)                                                                   |
 | ---------------- | -------------------------------------------------------------------------------------------------------- |
 | Catalog content  | `app.control_catalog_revisions`: immutable source text, digest and JSON content                          |
 | Accepted feed    | `app.signature_feed_revisions`: immutable content, unique issuer/revision                                |
@@ -747,16 +761,18 @@ short-lived `X-Operator-Context` JWT, then independently authorizes the command'
 run. This settles the transport mechanism, not the frozen claim schema, signing algorithm, issuer,
 audience or key handoff. GO-62 mirrors the agreed operator-context contract when it lands; GO-21
 uses it without treating a valid signature alone as object authorization. No operator-context
-schema is currently present in `packages/contracts` on that main commit.
+schema is currently present in `packages/contracts` on that main commit. Both are done since: GO-21
+verifies the header (`internal/operatorcontext`) and GO-62 mirrors the frozen
+`packages/contracts/schemas/operator-context.schema.json`.
 
 ## Tool results and idempotency (GO-07)
 
 Recorded 3 October 2026 by the W2 Go lane (tools and provenance), with the lead's decisions:
 `vendor projection fields`, `source classification storage` (a classification column on the demo
 invoice note), `report storage` (lineage in `runtime.report_lineage`) and `internal report
-rendering` (deterministic server rendering only). The tools' typed **arguments** are the action
-proposal contract (X-09), drafted by another lane; until it is frozen the argument types stay
-internal to `internal/tools`. Sources: report, "Illustrative passport and interface contracts"
+rendering` (deterministic server rendering only). The tools' typed **arguments** are the frozen
+action proposal contract (X-09, `action-proposal.schema.json`, mirrored by
+`contracts.ActionProposal`); `internal/tools` decodes them. Sources: report, "Illustrative passport and interface contracts"
 (Proposed tool argument boundaries; Narrow final result and context boundary) and "Durable state
 idempotency audit and uncertain outcomes".
 
@@ -764,7 +780,7 @@ Every adapter checks the organization and the passport scope itself; an upstream
 replaces its own. The model-facing result is a typed Go struct, and its fields are the allowlist:
 nothing else reaches the worker (GO-23).
 
-| Tool            | Arguments (internal until X-09)    | Model-facing result fields                                                                                                                                                                          | Protected values                                                                                                             |
+| Tool            | Arguments (X-09)                   | Model-facing result fields                                                                                                                                                                          | Protected values                                                                                                             |
 | --------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `read_invoice`  | `invoice_id`                       | invoice id and version, vendor id, external reference, currency, total in minor units, issue and due date; the internal note with its classification only where the passport's field rules allow it | The note is readable for the internal investigation but carries its trusted `internal_only` classification; never exportable |
 | `read_vendor`   | `vendor_id`                        | vendor id and version, display name, a recipient reference                                                                                                                                          | The registered report recipient address: an opaque, run-scoped reference only                                                |
@@ -853,7 +869,7 @@ The Go input to decision 6, measured on 2026-10-03.
 | Reservation          | JSON UTF-8 input bytes + template allowance 1024 + output ceiling (agent 512, security 256), from `config/policy.yaml`                             |
 | Usage                | `prompt_eval_count` + `eval_count`; missing or invalid usage is `usage_unknown` (reservation held), never zero                                     |
 | Cost                 | no tariff: monetary cost is unavailable, not zero                                                                                                  |
-| Limits (policy.yaml) | 24 calls (12 agent, 12 security), 20,000 tokens, 20 s request time, 2 local concurrent requests                                                    |
+| Limits (policy.yaml) | 24 calls (12 agent, 12 security), 40,000 tokens (raised from 20,000 on 3 October 2026), 20 s request time, 2 local concurrent requests             |
 | Machine              | MacBookPro18,1, Apple M1 Pro, 10 CPUs, 16 GB, macOS 27.0; Ollama on `http://localhost:11434`, same machine as the gateway                          |
 | Memory fit           | model resident in 3.33 GB, fully on the GPU, at context 8192                                                                                       |
 | Agent latency        | live agent calls p50 3.9 s, p95 5.4 s, max 7.6 s (30 calls; GO-27 live runs, load about 12 on 10 CPUs)                                             |
@@ -1015,7 +1031,7 @@ every model request, rereads the run and passport:
 
 - queued → `running` (`run.started`); terminal, awaiting approval or paused → nothing to do;
 - a cancellation request → `stopped` / `run_cancelled`; an expired passport → `stopped` /
-  `run_expired`; agent steps used up (`model_calls` with purpose `agent` ≥ `callsAgent`) →
+  `run_expired`; agent steps used up (the ledger's `agent_calls` ≥ the effective agent call limit, `catalog.EffectiveFor`) →
   `paused` / `allowance_exhausted` (alignment decision 7). None of these sends a model request.
 
 Each step: `Stepper.Step` (GO-10) with the fixed task message built from the passport's opaque
@@ -1079,10 +1095,11 @@ fields. The caller passes the catalog settings and trusted source metadata; the 
 neither PostgreSQL nor `policy.yaml`, and it never sets or changes a field's source
 classification, so masking an internal note does not make its report Vendor shareable.
 
-| Boundary      | Designated fields (lead's delegate, 3 October 2026) |
-| ------------- | --------------------------------------------------- |
-| `tool_result` | `tool_result_text`, `internal_note`                 |
-| `model_input` | `model_input_text`                                  |
+| Boundary          | Designated fields (lead's delegate, 3 October 2026)                                      |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `tool_result`     | `tool_result_text`, `internal_note`, `tool_result_value`                                 |
+| `model_input`     | `model_input_text`                                                                       |
+| `action_proposal` | `action_proposal_text` (signature and semantic checks; the secret rules are not applied) |
 
 - Rules: `secret_password_keyword_v1` and `secret_url_credential_v1` (password),
   `secret_api_token_keyword_v1`, `secret_iban_v1` (mod-97 checked) and `secret_payment_card_v1`
@@ -1100,7 +1117,7 @@ classification, so masking an internal note does not make its report Vendor shar
 - Missing catalog revision, an unknown mode or an undesignated field return an error and no text.
 
 `content_blocked` and `content_too_large` were approved by the lead's delegate on 3 October 2026
-and wait to be frozen in the reason vocabulary (X-13). Tests read `fixtures/semantic-corpus.json`:
+and are in the reason vocabulary (X-13; `internal/contracts` and `packages/contracts`). Tests read `fixtures/semantic-corpus.json`:
 the six secret cases must give exactly their fixture spans, and the benign, hard-negative and attack
 cases and `fixtures/hostile-notes.json` must give none. This is a finite fixture set, not universal
 secret detection.
@@ -1277,20 +1294,28 @@ refuses other bytes under a stored revision. There is no
 signing key: the trust decision is the digest pin plus the authenticated import, so the roadmap's
 "broken signature" acceptance case is a copy whose bytes differ from the pinned digest.
 
-| Rule                               | Attack class                    | Pattern                        | Source                                      |
-| ---------------------------------- | ------------------------------- | ------------------------------ | ------------------------------------------- |
-| `prompt_ignore_previous_v1`        | `instruction_redirection`       | `ignore previous instructions` | report 1.2 sample rule                      |
-| `code_exec_python_import_v1`       | `malicious_code_execution`      | `__import__(`                  | S16 (CVE-2023-44467), S17 (CVE-2023-36258)  |
-| `unsafe_deserialization_pickle_v1` | `unsafe_deserialization`        | `pickle.loads(`                | criteria section 4.4; requirements.md D-5   |
-| `model_repo_trust_remote_code_v1`  | `model_repository_supply_chain` | `trust_remote_code=true`       | S15 (Transformers `trust_remote_code` docs) |
+| Rule                               | Attack class                    | Pattern                               | Source                                      |
+| ---------------------------------- | ------------------------------- | ------------------------------------- | ------------------------------------------- |
+| `prompt_ignore_previous_v1`        | `instruction_redirection`       | `ignore previous instructions`        | report 1.2 sample rule                      |
+| `prompt_ignore_all_previous_v1`    | `instruction_redirection`       | `ignore all previous instructions`    | common wording of the sample rule (feed_v2) |
+| `prompt_ignore_the_previous_v1`    | `instruction_redirection`       | `ignore the previous instructions`    | same                                        |
+| `prompt_ignore_prior_v1`           | `instruction_redirection`       | `ignore prior instructions`           | same                                        |
+| `prompt_ignore_all_prior_v1`       | `instruction_redirection`       | `ignore all prior instructions`       | same                                        |
+| `prompt_disregard_previous_v1`     | `instruction_redirection`       | `disregard previous instructions`     | same                                        |
+| `prompt_disregard_all_previous_v1` | `instruction_redirection`       | `disregard all previous instructions` | same                                        |
+| `prompt_disregard_prior_v1`        | `instruction_redirection`       | `disregard prior instructions`        | same                                        |
+| `code_exec_python_import_v1`       | `malicious_code_execution`      | `__import__(`                         | S16 (CVE-2023-44467), S17 (CVE-2023-36258)  |
+| `unsafe_deserialization_pickle_v1` | `unsafe_deserialization`        | `pickle.loads(`                       | criteria section 4.4; requirements.md D-5   |
+| `model_repo_trust_remote_code_v1`  | `model_repository_supply_chain` | `trust_remote_code=true`              | S15 (Transformers `trust_remote_code` docs) |
 
-All four run at all three boundaries with response `block`. They match text only: the gateway
+All eleven run at all three boundaries with response `block`. They match text only: the gateway
 downloads no models, loads no model files and deserializes nothing, so the last three show that the
 managed feed can carry rules for these classes and that a judge can disable or add them; they do not
-protect model-loading infrastructure. A paraphrase or a spacing change inside a pattern (for
-example `trust_remote_code = True`) is not matched. The tests pin the file by its digest and check that on the shared fixtures exactly the labelled
+protect model-loading infrastructure. A paraphrase, or a wording the feed does not list, is not
+matched; case and spacing are normalized and the space around `(`, `)`, `.` and `=` is removed, so
+`trust_remote_code = True` is matched. The tests pin the file by its digest and check that on the shared fixtures exactly the labelled
 cases hit: the two corpus cases holding the sample phrase and the `signature_rule` positive case of
-each data-only rule (`fixtures/semantic-corpus.json`, version 2). The file is listed in
+each data-only rule (`fixtures/semantic-corpus.json`, version 3). The file is listed in
 `.prettierignore`, so a formatter change cannot alter the pinned bytes.
 
 To change the feed, edit the file (byte-stable; prettier skips it), bump `revision`, recompute the digest
@@ -1317,10 +1342,11 @@ To change the feed, edit the file (byte-stable; prettier skips it), bump `revisi
    subset ever runs). An empty response is `ErrUnusableResponse`.
 5. The call outcome (`completed`, `usage_unknown`, `failed`) is recorded once.
 
-A failed or usage-unknown call returns `ErrModelCallFailed` and the run fails, with no retry: the
-`model call retries` default of Figure 5. The underlying cause stays matchable (`budget.ErrExhausted`,
-`model.ErrTimeout`) for the run's stop reason. Call-count limits, per-purpose sub-budgets and the
-concurrency slot follow in GO-39 and GO-79.
+A failed or usage-unknown call returns `ErrModelCallFailed` joined with its cause, and nothing is
+retried: the `model call retries` default of Figure 5. The loop turns it into the run's end: unknown
+usage or a timeout pauses the run (`outcome_unknown`), see "Bounded agent loop". The cause stays
+matchable (`budget.ErrExhausted`, `model.ErrTimeout`). Call-count limits, per-purpose sub-budgets and
+the concurrency slot are GO-39 and GO-79.
 
 Live evidence on the developer M2/8 GiB machine, Ollama 0.35.1, `qwen3.5:4b` ID `2a654d98e6fb`,
 PostgreSQL 18 on loopback: three runs of the command below each returned one typed
@@ -1642,8 +1668,9 @@ totals of about 40 ms and a live p50 of 16 s; those numbers describe that state 
 ## Worker and job lease (GO-08)
 
 `internal/worker` claims `runtime.jobs` rows and runs them one at a time (decision 5: PostgreSQL
-jobs with leases, no broker, one worker process). It keeps its own small job store until the
-runtime repository (`internal/repository`) exists; it moves there if that fits.
+jobs with leases, no broker, one worker process). It keeps its own small job store
+(`internal/worker/jobs.go`); it did not move into `internal/repository`, which holds runs, events and
+control records.
 
 - **Claim.** One `UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING`
   picks the oldest job of the worker's kinds that is `queued`, or `running` with an expired lease,
@@ -1706,7 +1733,7 @@ All Go database tests use `internal/testdb.Open(t)`. It reads the same `POSTGRES
 `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` settings supplied by
 `pnpm test:db`. If all five variables are absent, an optional test visibly skips. Partial,
 blank or malformed configuration fails; `TEST_DATABASE_REQUIRED=1` also makes missing settings
-fail. The helper requires a successful ping within three seconds and reports fixed safe errors
+fail. The helper requires a successful ping within 15 seconds and reports fixed safe errors
 without connection strings or credentials. It closes the pool after callers clean their fixtures.
 
 `testdb.ID(t)` generates UUID v4 identifiers for isolated synthetic rows. Tests remove only their
@@ -1762,6 +1789,12 @@ before integration so there is one budget authority. This remains a shared schem
 second ledger implementation. GO-07 likewise remains open for SH-10 tool arguments and X-06 field
 rules; its numeric storage input above is settled without inventing the remaining contract.
 
+Resolved since: the `budget_reservations` / `model_usage` draft was aligned with the GO-06 token
+ledger (GO-39, migration `1791130000000-AlignTokenLedger`; decision 5 of
+`docs/contracts/runtime-schema-alignment.md` makes the ledger the single authority for model calls,
+request time and the concurrency slot, and `runtime.model_usage` was removed), SH-16 and SH-27 are
+done, and GO-07 is recorded.
+
 ## Commands
 
 Go 1.27 or newer must be on `PATH`. The wrapper prints install guidance and exits non-zero when
@@ -1772,7 +1805,7 @@ From the repository root:
 ```sh
 pnpm dev:gateway                      # build bin/gateway-dev and run it with the root .env
 pnpm --filter gateway run build       # go build -trimpath -o bin/gateway ./cmd/gateway
-pnpm --filter gateway run test        # go test ./...
+pnpm --filter gateway run test        # go test -count=1 -v ./...
 pnpm --filter gateway run lint        # go vet ./... and a gofmt check
 pnpm --filter gateway run typecheck   # go build ./...
 pnpm --filter gateway run format      # gofmt -w .
