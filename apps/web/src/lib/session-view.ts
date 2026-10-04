@@ -3,6 +3,7 @@
 // is tested without a browser.
 
 import type { FetchJsonResult } from "./fetch-json";
+import { isPublicPath } from "./public-paths";
 
 /** The operator `/api/auth/me` returns. The flag is the server's own mark of a development identity. */
 export interface OperatorSession {
@@ -27,14 +28,7 @@ export function sessionOutcome(result: FetchJsonResult<OperatorSession>): Sessio
     : { status: "unavailable" };
 }
 
-// Mirrors apps/web/src/middleware.ts: these paths are served without a session.
-const PUBLIC_PATH_PREFIXES = ["/login", "/diagnostics", "/health"];
-
-export function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
+export { isPublicPath };
 
 /**
  * An expired or missing session on a product page leads to sign-in, never to an empty page. A session
