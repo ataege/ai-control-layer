@@ -125,6 +125,30 @@ repository-root `.env` itself, and real environment variables win over the file.
   output; it does not affect the scripts above.
 - Files created by the migration commands are not formatted; run `pnpm format` afterwards.
 
+## Known limits of the database and identity records
+
+Checked by `src/database/app-entities.db-spec.ts` (`pnpm test:db api`); none of these is fixed by a
+migration yet.
+
+- Membership roles are a free `text[]` column with no CHECK: a typo in a role name is stored, and
+  nothing in the database limits the values to the report's roles. The API only compares against
+  the roles it knows (`reviewer`).
+- The registry foreign keys (`task_templates`, `policy_versions`, `tool_definitions` to
+  `organizations`) cascade on organization delete, while the membership foreign keys are
+  `NO ACTION`: deleting an organization removes its registry rows but is refused while memberships
+  exist.
+- Membership uniqueness is per (user, organization) pair, not one organization per user. A user with
+  several memberships gets the oldest one (`createdAt` ascending, in the default-deny guard); there
+  is no organization switch.
+- The registry tables (`app.task_templates`, `app.policy_versions`, `app.tool_definitions`) are
+  unused by admission (report 1.2: the control catalog is the policy source). No Go code reads them,
+  the gateway role has no grant on them, and nothing limits `tool_definitions.name` to the four
+  registered tools. Cancelling a run (`POST /api/runs/{id}/cancel`) is checked at organization and
+  run scope only: any member of the organization can cancel its runs; the demo has one operator.
+- The API connects to PostgreSQL as the owner role (`POSTGRES_USER`); a least-privilege API role
+  (`task_passport_api`, which exists but has no login and grants only on the catalog tables) is
+  planned (API-17, deferred).
+
 ## Verification and handoff limits
 
 Checked on 2026-10-04 on `api/w2`, which is main efaae10 plus this branch's commits (not a frozen
