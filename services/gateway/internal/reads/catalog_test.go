@@ -34,6 +34,40 @@ func TestDecodeLastErrorKeepsOnlyTheDecidedFields(t *testing.T) {
 	}
 }
 
+func TestDecodeLastErrorMapsAnImportRejectionWithoutEchoingIt(t *testing.T) {
+	// The record the API's importer writes when a policy file fails validation.
+	stored := `{"reason":"policy_reload_rejected","source_file_name":"secret-file.yaml","file_digest":"` + strings.Repeat("a", 64) + `","issues":[{"path":"controls.semantic_injection.threshold","message":"secret issue text"}]}`
+	got := decodeLastError([]byte(stored))
+	want := CatalogLastError{Code: "policy_reload_rejected", Message: "The policy file failed validation.", Stage: "import_validation"}
+	if got == nil || *got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	for _, leaked := range []string{"secret", "threshold", "aaaa"} {
+		if strings.Contains(got.Message, leaked) || strings.Contains(got.Code, leaked) {
+			t.Fatalf("import rejection echoes %q: %+v", leaked, got)
+		}
+	}
+	// The same record with the stage the lead named is the same rejection.
+	staged := decodeLastError([]byte(`{"reason":"policy_reload_rejected","stage":"import_validation","issues":[]}`))
+	if staged == nil || *staged != want {
+		t.Fatalf("staged record %+v", staged)
+	}
+	// Anything else without a code fails closed.
+	for name, record := range map[string]string{
+		"another reason":    `{"reason":"something_else","issues":[]}`,
+		"a foreign stage":   `{"reason":"policy_reload_rejected","stage":"gateway_validation"}`,
+		"no reason":         `{"issues":[]}`,
+		"an empty object":   `{}`,
+		"not an object":     `[1]`,
+		"a mistyped reason": `{"reason":7}`,
+	} {
+		unreadable := decodeLastError([]byte(record))
+		if unreadable == nil || unreadable.Code != "last_error_unreadable" || unreadable.Stage != "unknown" {
+			t.Fatalf("%s: got %+v", name, unreadable)
+		}
+	}
+}
+
 func TestPostgresCatalogStatusShowsTheActiveRevisionControlsAndLastError(t *testing.T) {
 	_, tx := openTransaction(t)
 	revisionID := catalogtest.ActivatePolicy(t, tx)
