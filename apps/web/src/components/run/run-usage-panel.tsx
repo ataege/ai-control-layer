@@ -70,11 +70,13 @@ export function RunUsagePanel({ usage }: { usage: RunUsage }) {
       <CardContent className="flex flex-col gap-4">
         <UnknownUsageNotice view={view} />
         <Table>
-          <TableCaption>Requests and tokens by purpose</TableCaption>
+          <TableCaption className="mt-0 mb-2 caption-top text-left font-medium text-foreground">
+            Requests and tokens by purpose
+          </TableCaption>
           <TableHeader>
             <TableRow>
               <TableHead>Purpose</TableHead>
-              <TableHead>Requests sent</TableHead>
+              <TableHead>Requests recorded</TableHead>
               <TableHead>Reported tokens</TableHead>
               <TableHead>Reserved tokens (held)</TableHead>
             </TableRow>
@@ -86,8 +88,8 @@ export function RunUsagePanel({ usage }: { usage: RunUsage }) {
                 <TableCell>
                   {row.dispatched}
                   <span className="block text-xs text-muted-foreground">
-                    {row.completed} completed · {row.failed} failed · {row.inFlight} running ·{" "}
-                    {row.unknownCalls} with unknown usage
+                    {row.completed} completed · {row.failed} failed or refused before sending ·{" "}
+                    {row.inFlight} running · {row.unknownCalls} with unknown usage
                   </span>
                 </TableCell>
                 <TableCell data-cell="reported">
@@ -115,7 +117,9 @@ export function RunUsagePanel({ usage }: { usage: RunUsage }) {
               </p>
             ) : null}
             <Table>
-              <TableCaption>Token allowance, from this run&apos;s own limits</TableCaption>
+              <TableCaption className="mt-0 mb-2 caption-top text-left font-medium text-foreground">
+                Token allowance, from this run&apos;s own limits
+              </TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Allowance</TableHead>
@@ -142,7 +146,9 @@ export function RunUsagePanel({ usage }: { usage: RunUsage }) {
               </TableBody>
             </Table>
             <Table>
-              <TableCaption>Request limits</TableCaption>
+              <TableCaption className="mt-0 mb-2 caption-top text-left font-medium text-foreground">
+                Request limits
+              </TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Requests</TableHead>
