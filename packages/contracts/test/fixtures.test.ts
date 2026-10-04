@@ -42,6 +42,7 @@ import type {
   PolicyReloadResponse,
   PolicyReloadErrorResponse,
   PolicyStatusResponse,
+  SemanticVerdict,
 } from "../src/index.ts";
 
 const packageRoot = join(import.meta.dirname, "..");
@@ -918,6 +919,11 @@ export const typedSamples = {
     ],
     limits: { maxModelCalls: 24, maxTimeoutSeconds: 900 },
   } satisfies TaskFormOptions,
+  semanticVerdict: {
+    risk_category: "instruction_injection",
+    score: 0.92,
+    reason_code: "instruction_override",
+  } satisfies SemanticVerdict,
 };
 
 // Fixture file that each typed literal must equal, one per schema.
@@ -955,6 +961,7 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   policyReloadResponse: "policy-reload-response.requested.json",
   policyStatusResponse: "policy-status-response.active.json",
   policyReloadErrorResponse: "policy-reload-error-response.invalid.json",
+  semanticVerdict: "semantic-verdict.instruction-injection.json",
 };
 
 test("typed samples are identical to their fixtures", () => {
@@ -1043,4 +1050,20 @@ test("policy reload contracts reject browser authority and inconsistent response
     validatorFor("policy-status-response")({ ...status, rawPolicy: "protected" }),
     false,
   );
+});
+
+test("the semantic verdict schema rejects what Go's ParseVerdict rejects", () => {
+  const validateVerdict = validatorFor("semantic-verdict");
+  const verdict = readJson(
+    join(fixtureDirectory, "semantic-verdict.instruction-injection.json"),
+  ) as SemanticVerdict;
+  assert.equal(validateVerdict(verdict), true);
+  assert.equal(validateVerdict({ ...verdict, explanation: "free text" }), false);
+  assert.equal(validateVerdict({ ...verdict, risk_category: "prompt_injection" }), false);
+  assert.equal(validateVerdict({ ...verdict, reason_code: "looks_bad" }), false);
+  assert.equal(validateVerdict({ ...verdict, score: 90 }), false);
+  assert.equal(validateVerdict({ ...verdict, score: -0.1 }), false);
+  const withoutScore: Record<string, unknown> = { ...verdict };
+  delete withoutScore.score;
+  assert.equal(validateVerdict(withoutScore), false);
 });

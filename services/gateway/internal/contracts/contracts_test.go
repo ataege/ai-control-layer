@@ -49,17 +49,19 @@ var fixtureTargets = map[string]func() any{
 
 // Fixtures mirrored elsewhere in the gateway, or read only by the API and web app.
 var fixturesCoveredElsewhere = map[string]string{
-	"liveness.gateway.json":                "internal/health",
-	"liveness.api.json":                    "internal/health",
-	"readiness.ready.json":                 "internal/health",
-	"readiness.unavailable.json":           "internal/health",
-	"gateway-ping.ok.json":                 "internal/health",
-	"error.unauthorized.json":              "internal/health",
-	"api-readiness.ready.json":             "API only",
-	"api-readiness.unavailable.json":       "API only",
-	"gateway-diagnostics.ok.json":          "API only",
-	"gateway-diagnostics.degraded.json":    "API only",
-	"gateway-diagnostics.unavailable.json": "API only",
+	// security imports contracts, so the verdict is checked there (verdict_contract_test.go).
+	"semantic-verdict.instruction-injection.json": "internal/security",
+	"liveness.gateway.json":                       "internal/health",
+	"liveness.api.json":                           "internal/health",
+	"readiness.ready.json":                        "internal/health",
+	"readiness.unavailable.json":                  "internal/health",
+	"gateway-ping.ok.json":                        "internal/health",
+	"error.unauthorized.json":                     "internal/health",
+	"api-readiness.ready.json":                    "API only",
+	"api-readiness.unavailable.json":              "API only",
+	"gateway-diagnostics.ok.json":                 "API only",
+	"gateway-diagnostics.degraded.json":           "API only",
+	"gateway-diagnostics.unavailable.json":        "API only",
 	// Policy import and reload contracts, served by the API from its own tables.
 	"policy-reload-error-response.invalid.json":   "API only",
 	"policy-reload-error-response.pending.json":   "API only",

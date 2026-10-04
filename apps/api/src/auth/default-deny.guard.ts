@@ -71,6 +71,8 @@ export class DefaultDenyGuard implements CanActivate {
       throw new ServiceUnavailableException("Authentication unavailable");
     }
 
+    // Known limit: one organization per operator in the demo, with no organization switch. The
+    // membership table allows a user in several organizations; the oldest membership decides.
     let membership;
     try {
       membership = await this.membershipRepository.findOne({

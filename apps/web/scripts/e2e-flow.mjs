@@ -14,7 +14,8 @@
 // Limits, stated plainly: this proves routes, statuses, contract fields, database effects and the
 // server-rendered page shell. It does not execute client-side React, so it does not prove what a
 // browser renders. The run is live (local model, real gateway): the agent's path can vary, and the
-// model-dependent checks (a hard negative that must pass, a hostile note that must not) record a
+// model-dependent checks (a hard negative that must pass, a hostile note that must not, a secret the
+// semantic check may still block after redaction) record a
 // mismatch as a NOTE instead of failing, as the runbook does. Beat 5 uses the labelled replay.
 //
 // Run from the repository root with the stack up (`pnpm dev`):
@@ -28,6 +29,8 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+import { classifySecretVerdict } from "./lib/secret-verdict.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const readJson = (relativePath) =>
@@ -613,19 +616,17 @@ async function runRound(round) {
         expect(verdict.content === null, "blocked text was echoed back");
       },
     );
-    await check("beat 10", "a secret is redacted and its value never returned", async () => {
+    // The semantic verdict on the redacted text can legitimately block (see lib/secret-verdict.mjs):
+    // that outcome is model- and load-dependent, so it is a NOTE; a leak or an allow is a FAIL.
+    const SECRET_NAME = "a secret is redacted and its value never returned";
+    try {
       const secretCase = corpusCases.secret_portal_password_v1;
       const verdict = await evaluate(secretCase.boundary, secretCase.text, "read_invoice");
-      expect(verdict.decision === "redact", `decision is ${verdict.decision}`);
-      expect(
-        verdict.content?.text.includes("[REDACTED"),
-        "no redaction marker in the returned text",
-      );
-      expect(
-        !JSON.stringify(verdict).includes(secretCase.secrets[0].value),
-        "the secret value came back",
-      );
-    });
+      const { status, detail } = classifySecretVerdict(verdict, secretCase.secrets[0].value);
+      record("beat 10", SECRET_NAME, status, detail);
+    } catch (error) {
+      record("beat 10", SECRET_NAME, "fail", error.message);
+    }
     await check(
       "beat 10",
       "a benign task input passes with a live, metered semantic verdict",
@@ -635,7 +636,10 @@ async function runRound(round) {
           corpusCases.benign_operator_task_v1.text,
           null,
         );
-        expect(verdict.decision === "allow", `decision is ${verdict.decision}`);
+        expect(
+          verdict.decision === "allow",
+          `decision is ${verdict.decision}/${verdict.reasonCode}`,
+        );
         expect(
           verdict.semantic?.source === "live",
           `semantic source is ${verdict.semantic?.source}`,

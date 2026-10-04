@@ -22,7 +22,17 @@ export type CommandFailureReason =
 
 export type CommandOutcome<T> =
   | { success: true; data: T }
-  | { success: false; reason: CommandFailureReason; code?: string; statusCode?: number };
+  | {
+      success: false;
+      reason: CommandFailureReason;
+      code?: string;
+      statusCode?: number;
+      /**
+       * The gateway's own message of a 4xx error, kept only when the caller asked for it
+       * (postCommand's keepErrorMessage); every other outcome omits it.
+       */
+      message?: string;
+    };
 
 const errorEnvelopeSchema = z.object({
   error: z.object({
@@ -202,8 +212,19 @@ export class GatewayClientService {
     body: unknown,
     responseSchema: Schema,
     context: OperatorContext,
+    options: { keepErrorMessage?: boolean } = {},
   ): Promise<CommandOutcome<z.infer<Schema>>> {
-    return this.runtimeRequest("POST", path, requestId, responseSchema, context, body);
+    // keepErrorMessage: only the start-run route asks, to show an admission rejection's fixed
+    // explanation (API-11); it still filters the code and the text itself.
+    return this.runtimeRequest(
+      "POST",
+      path,
+      requestId,
+      responseSchema,
+      context,
+      body,
+      options.keepErrorMessage === true,
+    );
   }
 
   /** Reads Go-owned state with the same authenticated boundary and deadline as commands. */
@@ -223,6 +244,7 @@ export class GatewayClientService {
     responseSchema: Schema,
     context: OperatorContext,
     body?: unknown,
+    keepErrorMessage = false,
   ): Promise<CommandOutcome<z.infer<Schema>>> {
     const verifiedContext = operatorContextSchema.safeParse(context);
     if (!verifiedContext.success) {
@@ -272,6 +294,7 @@ export class GatewayClientService {
             reason: "bad_request",
             code: parsedError.data.error.code,
             statusCode: response.status,
+            ...(keepErrorMessage ? { message: parsedError.data.error.message } : {}),
           };
         }
         return { success: false, reason: "bad_request", statusCode: response.status };

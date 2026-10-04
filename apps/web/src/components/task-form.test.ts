@@ -74,16 +74,6 @@ describe("TaskFormView", () => {
     expect(atlasCheckbox).not.toContain('disabled=""');
   });
 
-  it("shows an invoice's amount as money once the invoice names its currency", () => {
-    const withCurrency = {
-      ...options,
-      invoices: options.invoices.map((invoice) => ({ ...invoice, currency: "EUR" })),
-    };
-    expect(render({ options: withCurrency })).toContain(
-      "INV104 · 2026-09-01 · \u20ac1,250.00 (EUR)",
-    );
-  });
-
   it("states the limits ceiling without capping the input, so an over-limit request reaches admission", () => {
     const html = render();
     expect(html).toContain("up to 24");

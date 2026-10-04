@@ -93,12 +93,25 @@ describe("DiagnosticsController", () => {
       });
       const response = await request(app.getHttpServer())
         .get("/api/diagnostics/gateway")
+        .set("x-request-id", "req-worker-down")
         .expect(503);
-      expect(response.body).toMatchObject({
+      // The exact degraded body (API-15): the gateway check is down as not_ready although the
+      // upstream database check is up; nothing reads as healthy.
+      expect(response.body).toEqual({
         status: "degraded",
+        requestId: "req-worker-down",
         checks: {
-          reachability: { status: "up", upstreamStatus: 200 },
-          databaseReadiness: { status: "down", upstreamStatus: 503, reason: "not_ready" },
+          reachability: {
+            status: "up",
+            upstreamStatus: 200,
+            latencyMs: expect.any(Number) as unknown,
+          },
+          databaseReadiness: {
+            status: "down",
+            upstreamStatus: 503,
+            reason: "not_ready",
+            latencyMs: expect.any(Number) as unknown,
+          },
         },
       });
     } finally {

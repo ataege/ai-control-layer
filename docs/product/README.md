@@ -43,9 +43,10 @@ requests, 15-minute expiry, a semantic threshold of 0.75): "illustrative team se
 
 One Go implementer, one web + API implementer, and the lead, who helps both sides when needed. The
 report's six roles are responsibility areas mapped onto these people; the mapping is in
-[AGENTS.md](../../AGENTS.md), "Repository map and ownership". Two staffing items are open: who holds
-the researcher, document owner and presenter role, and confirmation of the default shared-track
-assignment (both listed under "Open items" below).
+[AGENTS.md](../../AGENTS.md), "Repository map and ownership". The staffing items (shared-track
+assignment, researcher and document owner role) are decided: see "Staffing and contract ownership
+(SH-07)" below. Since 2026-10-04 the web + API implementer who wrote most of NestJS is unavailable and
+the lead coordinates every contract change.
 
 ## Ownership
 
@@ -120,6 +121,36 @@ branch for the Go implementer's approval. A contract is frozen when its owner ap
 it is merged into `main` through SH-11; until then it is a draft, and nothing built on it counts as
 done. The M0 freeze (SH-10) is this per-contract approval, not one meeting.
 
+**Versioning rule (SH-10), decided by the lead's delegate 2026-10-04.** A contract is frozen when its
+owner approves it and it is merged through SH-11. After that, changes are additive only, each with a
+change-log line in `packages/contracts/README.md`; a breaking change needs a new version. The change
+log in that file ("Change log (additive only; existing fields keep their meaning)") is where the
+lines go.
+
+**Frozen task definition and policy fixture (X-06), recorded 2026-10-04 by the lead's delegate from the
+files that hold them.** The values live in the files below; this paragraph says where, so the record
+and the files cannot disagree silently.
+
+- Task: `reconcile_atlas_v1` (item 12 of "Decisions recorded by the lead's delegate"), the Atlas reconciliation of `invoice_A01` and
+  `invoice_A02` (same external reference INV104 and total) for `vendor_Atlas`; `invoice_B01` is
+  outside the task (`fixtures/demo-records.json`, `task_scope`).
+- Tools: `read_invoice`, `read_vendor`, `create_report`, `queue_report`; the approval rule requires a
+  reviewer for `queue_report` (the passport fixture's `approvalRequiredTools`).
+- Destination: the vendor's registered reporting address, reached only through an opaque recipient
+  reference, never an address in model-visible data.
+- Field rules: the internal note of `invoice_A01` is `internal_only` and readable for investigation;
+  the vendor report uses `vendor_invoice_fields_v1` (item 5 of the same list).
+- Classifications and templates: `Internal only` and `Vendor shareable`; `internal_investigation_v1`
+  and `vendor_reconciliation_v1`.
+- Content differences from the SH-25 work list, accepted by the lead's delegate 2026-10-04 as the
+  intended fixture content: (1) the small allowance for beat 9 is set per run through the task form's
+  limits (`limits.modelCalls`, the WEB-17 run used 2), not seeded; (2) the hostile notes live in
+  `fixtures/hostile-notes.json`, used by the replays and the tests (SH-49), not in the seed; (3) the
+  report templates and the projection rule are Go constants in
+  `services/gateway/internal/provenance/provenance.go`, not stored records.
+- Limits and controls: `config/policy.yaml` (item 29 for `tokens_total: 40000`), documented in
+  `config/README.md`; the signature feed is `config/attack-signatures.json`.
+
 Proposed reason vocabulary (reports 1.1 and 1.2): `resource_out_of_scope`, `destination_not_allowed`,
 `report_export_restricted`, `report_lineage_missing`, `source_policy_changed`, `template_not_allowed`,
 `approval_required`, `approval_expired`, `action_changed`, `resource_version_changed`,
@@ -148,18 +179,24 @@ writes each outcome down here when it is settled.
    to commit the report or outbox effect, trusted lineage, runtime completion and associated events",
    which matches the report's recommendation. The starter still has one database user. Owner: the lead
    (database roles, by default).
-3. **Browser to API path. Open.** The Next.js proxy forwards no cookies or authorization headers and
-   buffers a JSON response with a ten second timeout. The report allows authenticated polling before
-   server-sent events. Proposed, not decided: one same-origin route handler that forwards an allowlist
-   of top-level API prefixes, the session cookie and a fixed set of headers, and streams the response.
-   Owner: the web + API implementer.
+3. **Browser to API path. Decided by the lead's delegate 2026-10-04, matches the implementation:
+   the same-origin forwarder.** The browser calls only the web app. Its route handlers
+   (`apps/web/src/server/upstream-proxy.ts`) forward to the API a fixed path, the `session` cookie only
+   (never other cookies, `authorization` or `x-forwarded-*`), the request body and `content-type`, and
+   pass the API's status and JSON body back; a command from another origin or a body that is not JSON
+   is refused (403, 415). The API reads the operator's credential from that forwarded request and
+   trusts no `x-forwarded-*` header (`trust proxy` stays off). Streaming is not used: reads are
+   polled. Evidence: API-07's specs (`apps/api/src/app.setup.spec.ts`) and the live checks recorded
+   under WEB-02 and API-07 in the roadmap. Owner: the web + API implementer.
 4. **Operator context to Go. Settled with decision 7 by the lead on 2026-10-03.** NestJS turns the
    verified operator context (actor, organization, roles) into a short-lived signed JWT and sends it to
    Go in an `X-Operator-Context` header on every runtime command, next to the service token. Go verifies
    the signature, the expiry and the service identity before it acts, and still authorizes each command
    against its organization and run itself. This matches the architecture's "signed, short-lived
-   operator context containing the user and organization". Not implemented yet; the signing key is an
-   API and gateway secret, never sent to the browser (SH-20). Owner: the web + API implementer with the
+   operator context containing the user and organization". On `main`: the gateway verifies the
+   signed context (`services/gateway/internal/operatorcontext`; `TestPostgresReadRoutesThroughTheGatewayHandler`
+   covers a signed context, a missing one and another organization). The signing key is an API and
+   gateway secret, never sent to the browser (SH-20). Owner: the web + API implementer with the
    Go implementer.
 5. **Background worker in Go. Settled by the report:** durable jobs in PostgreSQL, claimed with a lease
    and released during an approval wait, and no message broker; one worker process is the report's
@@ -183,23 +220,18 @@ writes each outcome down here when it is settled.
    freeze (GO-03)"). **Measured on the team's M1 Pro; whether it is the presentation machine is to be
    confirmed by the user** (SH-45, SH-50). The live latencies were taken under load and are not slide
    numbers (decision 22). Owner: the Go implementer with the lead (infrastructure).
-7. **Authentication mechanism. Settled by the lead on 2026-10-03: an HttpOnly cookie carrying a
-   signed JWT.** NestJS (`AuthModule`) checks the operator's credential, then issues a JWT signed with a
-   symmetric key and sets it in an HttpOnly cookie that browser JavaScript cannot read; NestJS also
-   checks organization membership and roles. The seeded operator is a development demonstration user,
-   created by an explicit seed command and labelled "Development Demonstration" in the interface. Not in
-   the repository yet: no implementation of this has been pushed, so guardrail 2 still applies
-   (`UnimplementedAuthProvider` answers 501 until the real provider lands). Details the web + API
-   implementer fixes in the implementation: password hashing, token lifetime, cookie attributes,
-   logout (a stateless JWT cannot be revoked before it expires, so keep its lifetime short) and the
-   signing-key variable, generated by `pnpm run setup` and never sent to the browser (SH-20). Owner:
-   the web + API implementer.
-
-   **Open for the user (not decided), 3 October 2026:** the record above says a signed JWT, but the
-   implementation on `main` (44e925f) is a stored session: `apps/api/src/auth/auth.controller.ts`
-   stores a SHA-256 hash of the session identifier (`Session` entity) and reads it from the session
-   cookie. The lead recommends keeping the stored session and changing this record to match. Until the
-   user decides, the record and the implementation disagree.
+7. **Authentication mechanism. Decided by the lead's delegate 2026-10-04, matches the implementation:
+   a server-side stored session in an HttpOnly `session` cookie, with a real credential check.**
+   NestJS (`AuthModule`) checks the operator's password against a scrypt hash
+   (`apps/api/src/auth/password.util.ts`), stores a SHA-256 hash of a random session identifier with an
+   expiry of 24 hours (`Session` entity, `auth.controller.ts`) and sets the identifier in an HttpOnly,
+   `SameSite=Lax` cookie (`Secure` when `NODE_ENV=production`) that browser JavaScript cannot read;
+   sign-out deletes the stored session, so a session can be revoked before it expires. NestJS also
+   checks organization membership and roles. This replaces the 2026-10-03 record of a signed JWT in the
+   cookie; the signed token is used only between NestJS and Go (decision 4). The seeded operator is a
+   development demonstration user, created by an explicit seed command and labelled "Development
+   Demonstration" in the interface. The signing keys are API and gateway secrets, generated by
+   `pnpm run setup` and never sent to the browser (SH-20). Owner: the web + API implementer.
 
 ## Decisions recorded by the lead's delegate (3 October 2026)
 
@@ -478,7 +510,7 @@ Each item is open until the document owner records the outcome here; the roadmap
   `catalog activation protocol` is decided too (item 15), `measurement method` (item 22) and the
   classifier prompt (item 23, measured on its fixture set only). Nothing in this group is still open.
 - `judge access`: how judges reach the running layer, the test suite and the configuration files.
-- `researcher role` and `shared-track assignment`: the two staffing items above.
+- `researcher role` and `shared-track assignment`: **decided by the lead's delegate 2026-10-04**, "Staffing and contract ownership (SH-07)".
 
 ### Status of the roadmap's open items named on 3 October 2026
 
@@ -520,11 +552,24 @@ All existing Go packages (`cmd/gateway`, `internal/config`, `internal/logging`, 
 Future packages inherit this responsibility assignment and receive their package row when real
 code lands. No empty packages are created by this update.
 
-This records the Go ownership portion of SH-07. The lead has since recorded shared contract
-owners in the table above; contracts remain drafts until owner approval and the SH-11 merge.
-SH-07 remains open for the shared-track assignment and researcher role. NestJS contract coordination and shared migration, database-role,
-infrastructure and document responsibilities remain with their recorded roles; owning Go adapters
-does not automatically transfer that shared work to the user.
+This records the Go ownership portion of SH-07. The rest of SH-07 is decided in the next section.
+
+### Staffing and contract ownership (SH-07)
+
+**Decided by the lead's delegate 2026-10-04.**
+
+- **Contract owners.** The owners are the roles in the table under "Contracts to freeze first". The
+  nestjs role lands every contract change in `packages/contracts`; the go role mirrors it in the Go
+  DTOs and holds the authority for action canonicalization, artifact classification and execution.
+  Since 2026-10-04 the web + API implementer (Noyan) is unavailable, so the lead coordinates every
+  contract change and lands it in the nestjs role's place.
+- **Shared-track assignment.** The lead's Claude sessions, since 2026-10-03, hold the shared track: the
+  migrations, seeds, database roles, fixtures, reset and judge tooling, smoke checks and evidence.
+  This replaces the default (migrations and seeds by the web + API implementer).
+- **Researcher role.** The lead's researcher session holds the researcher role (requirements sheet,
+  demo specification and storyboard, claim-to-proof list, source register, submission checklist), and
+  the lead is the document owner. The presenter role stays with the lead.
+- **Go modules.** Recorded above, in the Go ownership update.
 
 ### GO-01: multiple-action model responses
 
@@ -639,7 +684,7 @@ and execution boundary. The canonicalization and digest are implemented (`intern
 Go implementer recorded in the SH-07 Go ownership update above.
 Source: report, "Live demonstration storyboard and proof checks" (Reliable demonstrations without
 invented behavior) and "Illustrative invoice scenario and future domain adaptations" (Scene 2).
-Replay and contract ownership are recorded. The shared-track assignment and researcher role remain open;
+Replay and contract ownership are recorded; the shared-track assignment and researcher role are decided (SH-07);
 X-09 and X-12 still need their freeze before replay implementation.
 
 Chosen approach: a labelled Go runtime scenario test substitutes one stored prohibited proposal

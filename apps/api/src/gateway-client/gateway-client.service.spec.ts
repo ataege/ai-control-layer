@@ -248,7 +248,35 @@ describe("GatewayClientService", () => {
         testSchema,
         testOperatorContext,
       );
+      // By default the gateway's message is not carried, so no caller can expose it.
       expect(outcome).toEqual({
+        success: false,
+        reason: "bad_request",
+        code: "invalid_input",
+        statusCode: 400,
+      });
+      expect(JSON.stringify(outcome)).not.toContain("upstream-secret-detail");
+    });
+
+    it("keeps a 4xx message only when the caller asks for it (API-11)", async () => {
+      stubBehaviour = "bad-request";
+      const outcome = await client.postCommand(
+        "/internal/runs",
+        "req-cmd-4",
+        {},
+        testSchema,
+        testOperatorContext,
+        { keepErrorMessage: true },
+      );
+      expect(outcome).toMatchObject({ code: "invalid_input", message: "upstream-secret-detail" });
+      // A read never carries it.
+      const read = await client.getRead(
+        "/internal/runs/run",
+        "req-read-4",
+        testSchema,
+        testOperatorContext,
+      );
+      expect(read).toEqual({
         success: false,
         reason: "bad_request",
         code: "invalid_input",
