@@ -1976,6 +1976,11 @@ handoff from X-62, and RS-09 submits.
   - Tests: a teammate follows the web setup on a clean checkout, quoted.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation)
+  - Progress (2026-10-04): draft of `apps/web/README.md` written from the web code on main 3e54f50
+    plus web/reports (browser path and proxy rules, route table, pages, labels, failure states,
+    sign-in as a development demonstration, test coverage, known limitations). Completed after
+    SH-34 so it matches the submitted build; `packages/ui/README.md`, `docs/architecture.md` and
+    `README.md` still describe the baseline and are placed by integration.
   - Blocked by: nothing
 
 ## Coverage
