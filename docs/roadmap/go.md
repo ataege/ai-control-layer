@@ -3013,7 +3013,7 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-58 · Make every Go stop, failure and denial state readable**
+- [x] **GO-58 · Make every Go stop, failure and denial state readable**
   - **Report 1.2 change:** Readable states add guard failures, rejected reloads and security allowance exhaustion with their reason codes.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-29, GO-42, GO-53 · Needs: X-13, X-16 · Provides: nothing
@@ -3040,6 +3040,19 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     GO-79 joins the transport cause; a bad response has its own message; lead: no new X-13 code). Error envelopes: no error text reaches them; admission echoes request ids
     through `%q`. Every other reason-coded event gets its X-13 message from 3c's default in
     `repository.AppendEvent` (go/3c; an emitter's own message wins).
+  - Completed (2026-10-04): audited every emitter. All events go through `repository.AppendEvent`, which
+    gives a reason-coded event its X-13 message; every run end goes through `TransitionRun`, which
+    refuses a reason outside X-13, and the agent's end writer replaces an invalid reason with
+    `decision_unavailable`. New tests: `TestEveryStopPauseAndFailureIsReadableThroughTheStoredRecords`
+    (`internal/agent`, real writer and database: all 31 X-13 codes x paused, failed and stopped = 93 run
+    ends, each stored run state carries the code and each stored event the code with its fixed safe
+    message) and `TestEverySecurityDecisionReasonIsAnX13CodeWithASafeMessage` (`internal/security`: the
+    seven security reasons are X-13 codes; `no_free_text_arguments` is evidence on a control record, not
+    a decision reason). No gap found in the Go records; the stale vocabulary comment in
+    `security/security.go` is corrected. Checks: `pnpm test:db gateway` "1060 passed, 0 failed, 0
+    skipped"; `pnpm verify` "6 passed, 0 failed, 0 skipped"; no model called. Not covered: the SH-33
+    rehearsal's wording fixes, and whether a reviewer needs no narration (a human check on the web
+    pages that render these messages).
   - Report: "Relative implementation milestones and critical dependencies" (Hours 18-21); "Live
     demonstration storyboard and proof checks" (Reliable demonstrations without invented
     behavior); "Illustrative passport and interface contracts" (Decision and error semantics)
