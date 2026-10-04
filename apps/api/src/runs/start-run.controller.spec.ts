@@ -14,7 +14,9 @@ import { RunsController } from "./runs.controller.js";
 describe("Admission verified context", () => {
   let app: NestExpressApplication;
   let responseBody: unknown;
-  let failure: { success: false; reason: string; statusCode?: number } | undefined;
+  let failure:
+    | { success: false; reason: string; statusCode?: number; code?: string; message?: string }
+    | undefined;
   const state = fixture;
   const input = {
     template: "reconcile_atlas_v1",
@@ -94,6 +96,57 @@ describe("Admission verified context", () => {
       .set("Cookie", "session=test")
       .send(input)
       .expect(statusCode);
+  });
+  it("rejects a wrong value type before any upstream call", async () => {
+    for (const body of [
+      { ...input, template: 7 },
+      { ...input, invoiceIds: "invoice_A01" },
+      { ...input, limits: { modelCalls: -1 } },
+    ]) {
+      await request(app.getHttpServer())
+        .post("/api/runs")
+        .set("Cookie", "session=test")
+        .send(body)
+        .expect(400);
+    }
+    expect(postCommand).not.toHaveBeenCalled();
+  });
+  it("keeps an admission rejection's reason code and explanation (API-11)", async () => {
+    failure = {
+      success: false,
+      reason: "bad_request",
+      statusCode: 400,
+      code: "resource_out_of_scope",
+      message: "An invoice in invoiceIds is not available to this organization.",
+    };
+    const result = await request(app.getHttpServer())
+      .post("/api/runs")
+      .set("Cookie", "session=test")
+      .send(input)
+      .expect(400);
+    expect(result.body).toMatchObject({
+      statusCode: 400,
+      error: {
+        code: "resource_out_of_scope",
+        message: "An invoice in invoiceIds is not available to this organization.",
+      },
+    });
+  });
+  it.each([
+    ["an unknown code", "not_a_reason_code", "Driver said: host db.internal"],
+    ["control characters", "resource_out_of_scope", "line one\nline two"],
+    ["no explanation", "resource_out_of_scope", undefined],
+  ])("keeps the generic text for %s", async (_name, code, message) => {
+    failure = { success: false, reason: "bad_request", statusCode: 400, code, message };
+    const result = await request(app.getHttpServer())
+      .post("/api/runs")
+      .set("Cookie", "session=test")
+      .send(input)
+      .expect(400);
+    const body = result.body as { error: { code: string; message: string } };
+    // A contract code is kept; the global filter replaces any other code with bad_request.
+    expect(body.error.code).toBe(code === "not_a_reason_code" ? "bad_request" : code);
+    expect(body.error.message).toBe("Gateway request failed");
   });
   it("reports a timeout as an unconfirmed command with 504", async () => {
     failure = { success: false, reason: "timeout" };

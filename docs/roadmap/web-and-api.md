@@ -707,7 +707,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     ownership" (Proposed team ownership)
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-11 · Start a run through `POST /api/runs`**
+- [x] **API-11 · Start a run through `POST /api/runs`**
   - **Report 1.2 change:** The facade also forwards the catalog validation request of API-33.
   - **Report 1.1 change:** Module proposal RuntimeModule.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
@@ -728,6 +728,24 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     its reason code and explanation; a timeout is reported as unconfirmed, not as started; by hand
     against the real gateway, a passport exists after an accepted request and none after a rejected
     one: `pnpm --filter api run test`; `pnpm smoke`.
+  - Completed (2026-10-04, lane 3c on api/3c): `POST /api/runs` (`runs/runs.controller.ts`) validates
+    the body strictly with `runs/dto/start-run.dto.ts` (a zod `.strict()` object mirroring X-07), takes
+    actor and organization only from the verified context, forwards to `POST /internal/runs` with the
+    signed operator context and returns its X-07 response validated against the contract. New here: an
+    admission rejection keeps Go's fixed explanation. `gateway-client.service.ts` keeps the gateway's
+    message on a 4xx failure outcome, and the route passes it through only for a 400 whose code is one
+    of the X-13 reason codes (`reason-code.schema.json`) with a bounded, printable message; every other
+    failure keeps the generic text. Swagger: the route is documented with an inline request schema (no
+    DTO class); the title and description in `openapi.ts` are already Task Passport's. Tests
+    (`start-run.controller.spec.ts`): forged `organizationId`, `actorId` or `roles` and wrong value
+    types are refused with 400 before any upstream call; a Go rejection keeps `resource_out_of_scope`
+    and its explanation; an unknown code, a message with control characters or no message keep the
+    generic text; Go statuses 401/403/404/409/503 are preserved; a timeout is 504 `outcome_unconfirmed`,
+    never "started"; an unknown field or malformed id in Go's answer is 503.
+    `gateway-client.service.spec.ts`: the 4xx outcome carries the message. By hand against the real
+    gateway (api/3c on a private database, demo operator): an over-scope request (an invoice of another
+    vendor) answered 400 `resource_out_of_scope` "an invoice in invoiceIds is not available to this
+    organization" and the passport count stayed 2; an accepted request answered 201 and the count became 3.
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Trusted authority and passport invariants" ("Silently reducing the scope would
     make the accepted task differ from the user's request"); "Functional requirements MVP boundary

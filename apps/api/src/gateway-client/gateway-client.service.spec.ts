@@ -248,11 +248,14 @@ describe("GatewayClientService", () => {
         testSchema,
         testOperatorContext,
       );
+      // The 4xx outcome keeps the gateway's message (API-11); the caller decides whether it may
+      // be shown: only the start-run route does, for an X-13 admission reason code.
       expect(outcome).toEqual({
         success: false,
         reason: "bad_request",
         code: "invalid_input",
         statusCode: 400,
+        message: "upstream-secret-detail",
       });
     });
 
