@@ -1,5 +1,6 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { getRepositoryToken } from "@nestjs/typeorm";
+import passportFixture from "@workspace/contracts/fixtures/passport.atlas.json" with { type: "json" };
 import stateFixture from "@workspace/contracts/fixtures/run-state.completed.json" with { type: "json" };
 import usageFixture from "@workspace/contracts/fixtures/run-usage.ledger.json" with { type: "json" };
 import context from "@workspace/contracts/fixtures/operator-context.operator.json" with { type: "json" };
@@ -14,6 +15,7 @@ import { RunsController } from "./runs.controller.js";
 
 describe.each([
   ["state", "", stateFixture],
+  ["passport", "/passport", passportFixture],
   ["usage", "/usage", usageFixture],
 ])("Run %s facade", (_name, suffix, fixture) => {
   let app: NestExpressApplication;

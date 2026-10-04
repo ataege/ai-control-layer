@@ -22,6 +22,7 @@ import type {
   RunUsage,
   ReportView,
   TaskFormOptions,
+  Passport,
 } from "@workspace/contracts";
 import type { Request } from "express";
 import { z } from "zod";
@@ -29,6 +30,7 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { GatewayClientService } from "../gateway-client/gateway-client.service.js";
 import { StartRunSchema } from "./dto/start-run.dto.js";
 import startResponseContract from "@workspace/contracts/schemas/start-run-response.schema.json" with { type: "json" };
+import passportContract from "@workspace/contracts/schemas/passport.schema.json" with { type: "json" };
 import optionsContract from "@workspace/contracts/schemas/task-form-options.schema.json" with { type: "json" };
 import { RunEventsSchema } from "./run-events.schema.js";
 import { RunStateSchema, RunUsageSchema } from "./run-read.schemas.js";
@@ -45,6 +47,8 @@ const StartRunResponseSchema = z.fromJSONSchema(
 const TaskFormOptionsSchema = z.fromJSONSchema(
   optionsContract as Parameters<typeof z.fromJSONSchema>[0],
 );
+
+const PassportSchema = z.fromJSONSchema(passportContract as Parameters<typeof z.fromJSONSchema>[0]);
 
 @ApiTags("runs")
 @Controller("runs")
@@ -108,6 +112,24 @@ export class RunsController {
     if (state.runId !== runId)
       throw new ServiceUnavailableException("Invalid gateway run reference");
     return state;
+  }
+
+  @Get(":id/passport")
+  @ApiOperation({ summary: "Read the stored immutable passport of an authorized run" })
+  async passport(@Param("id") runId: string, @Req() request: Request): Promise<Passport> {
+    const operator = verifiedOperator(request);
+    requireRecordId(runId);
+    const passport = gatewayData(
+      await this.gateway.getRead(
+        `/internal/runs/${runId}/passport`,
+        request.requestId,
+        PassportSchema,
+        operator,
+      ),
+    ) as Passport;
+    if (passport.runId !== runId || passport.organizationId !== operator.organizationId)
+      throw new ServiceUnavailableException("Invalid gateway passport reference");
+    return passport;
   }
 
   @Get(":id/usage")
