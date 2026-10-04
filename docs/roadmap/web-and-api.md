@@ -1961,7 +1961,7 @@ handoff from X-62, and RS-09 submits.
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-26 · Supply the Next.js part of the technical handoff**
+- [x] **WEB-26 · Supply the Next.js part of the technical handoff**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: SH-34 · Needs: X-59 · Provides: X-62 (part)
   - Paths: `apps/web/README.md`, `packages/ui/README.md`, `docs/architecture.md`, `README.md`
@@ -1976,11 +1976,15 @@ handoff from X-62, and RS-09 submits.
   - Tests: a teammate follows the web setup on a clean checkout, quoted.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation)
-  - Progress (2026-10-04): draft of `apps/web/README.md` written from the web code on main 3e54f50
-    plus web/reports (browser path and proxy rules, route table, pages, labels, failure states,
-    sign-in as a development demonstration, test coverage, known limitations). Completed after
-    SH-34 so it matches the submitted build; `packages/ui/README.md`, `docs/architecture.md` and
-    `README.md` still describe the baseline and are placed by integration.
+  - Completed (2026-10-04): `apps/web/README.md` rewritten from the web code on main 39d5899:
+    browser path and proxy allowlist, route table, pages, truthful labels, failure states, sign-in as
+    a development demonstration, test coverage and limitations. Checks: `pnpm --filter web run test`
+    42 files, 409 tests passed; browser check on the merged build: signed in as the demo operator,
+    `/api/auth/me` 200 and `/api/runs/options` 200, and `/tasks/new` stayed on `/tasks/new` with the
+    task form loaded (before the fix it redirected to `/login`). Not verified: a teammate's setup on
+    a clean checkout (this task's test), and a re-read at the freeze (SH-34). `packages/ui/README.md`,
+    `docs/architecture.md` and the root `README.md` still describe the baseline; integration places
+    them.
   - Blocked by: nothing
 
 ## Coverage
