@@ -89,7 +89,12 @@ Before `pnpm dev`, start Ollama, pull `qwen3.5:4b` and set `MODEL_NAME=qwen3.5:4
 ([docs/setup.md](docs/setup.md#7-local-model-ollama), section 7). Without `MODEL_NAME` the gateway
 still starts, but every model call fails closed. `pnpm reset:demo` restores the demo later: it
 empties the `demo` and `runtime` tables, reseeds the synthetic records and keeps the `app` data,
-including the active control catalog. Even after these steps a run cannot start yet; see
+including the active control catalog.
+
+On a clean checkout the gateway activates the imported catalog by itself a few seconds after
+`pnpm dev` starts (no `pnpm catalog:activate` is needed while a gateway runs). Then open
+<http://localhost:3000> and sign in as `demo-operator@example.com` with `DEMO_OPERATOR_PASSWORD` from
+`.env`. Starting a run needs the local model; see
 [Known gaps on a clean checkout](docs/setup.md#known-gaps-on-a-clean-checkout).
 
 Several checkouts on one machine (for example git worktrees) each need their own PostgreSQL: see
@@ -121,9 +126,10 @@ Stop with Ctrl+C in the `pnpm dev` terminal, then `pnpm infra:down`. The databas
 | Gateway | <http://localhost:8080/health/ready>            | Readiness, PostgreSQL ping                                         |
 | Gateway | <http://localhost:8080/internal/ping>           | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`, else 401 |
 
-The web app also serves three proxy routes that forward to the API and nothing else:
-`/api/health/live`, `/api/health/ready` and `/api/diagnostics/gateway` on port 3000. The browser
-never calls the API or the gateway directly.
+The web app also serves route handlers that forward to the API and nothing else (health,
+diagnostics, sign-in, runs, actions, control, security and policies; the table is in
+[apps/web/README.md](apps/web/README.md)) on port 3000. The browser never calls the API or the
+gateway directly.
 
 In full-container mode the gateway URLs are not reachable from the host unless you start the stack
 with `--debug`.
