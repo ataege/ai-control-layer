@@ -36,13 +36,16 @@ type contentRule struct {
 	accept  func(value string) bool
 }
 
+// The keyword rules start after the beginning of the text or any character that is not a letter or
+// digit, so DB_PASSWORD=... and access_token=... match while a keyword inside a longer word
+// (adminPassword) does not.
 // The rule set covers the secret kinds of fixtures/semantic-corpus.json. Go's regexp is RE2,
 // so matching time is linear in the input; the patterns are fixed code, not catalog data.
 var contentRules = []contentRule{
 	{
 		id:      "secret_password_keyword_v1",
 		kind:    SecretPassword,
-		pattern: regexp.MustCompile(`(?i)\b(?:password|passwd|passcode|pwd)\b\s*(?:[:=]|is\b)?\s*([^\s,;]+)`),
+		pattern: regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:password|passwd|passcode|pwd)\b\s*(?:[:=]|is\b)?\s*([^\s,;]+)`),
 		accept:  credentialShape(8),
 	},
 	{
@@ -54,7 +57,7 @@ var contentRules = []contentRule{
 	{
 		id:      "secret_api_token_keyword_v1",
 		kind:    SecretAPIToken,
-		pattern: regexp.MustCompile(`(?i)\b(?:token|api[_-]?key|secret|bearer)\b\s*(?:[:=]|is\b)?\s*([^\s,;]+)`),
+		pattern: regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:token|api[_-]?key|secret|bearer)\b\s*(?:[:=]|is\b)?\s*([^\s,;]+)`),
 		accept:  credentialShape(16),
 	},
 	{
