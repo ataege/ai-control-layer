@@ -93,7 +93,7 @@ func TestPostgresCatalogStatusShowsTheActiveRevisionControlsAndLastError(t *test
 	if status.ActiveRevisionID == nil || *status.ActiveRevisionID != revisionID || status.PolicyDigest == nil || *status.PolicyDigest != strings.Repeat("c", 64) {
 		t.Fatalf("active revision %+v, want %d", status, revisionID)
 	}
-	if status.FeedRevision == nil || *status.FeedRevision != "feed_v1" || status.FeedDigest == nil || len(*status.FeedDigest) != 64 ||
+	if status.FeedRevision == nil || *status.FeedRevision != "feed_v2" || status.FeedDigest == nil || len(*status.FeedDigest) != 64 ||
 		status.FeedRuleCount == nil || *status.FeedRuleCount < 1 || status.LastError != nil {
 		t.Fatalf("feed or last error wrong: %+v", status)
 	}

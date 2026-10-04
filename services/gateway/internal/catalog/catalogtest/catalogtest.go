@@ -29,12 +29,12 @@ const PolicyContent = `{
 			"boundaries": ["model_input", "tool_result", "action_proposal"]},
 		"signature_match": {"enabled": true, "boundaries": ["model_input", "tool_result", "action_proposal"]}
 	},
-	"signatures": {"path": "attack-signatures.json", "revision": "feed_v1", "disabled_rules": []},
+	"signatures": {"path": "attack-signatures.json", "revision": "feed_v2", "disabled_rules": []},
 	"reports": {"enabled_templates": ["internal_investigation_v1", "vendor_reconciliation_v1"]}
 }`
 
 // InsertFeed stores the repository's config/attack-signatures.json as the trusted issuer's
-// feed_v1 with its real digest (or reuses an imported one) and returns its id.
+// feed_v2 with its real digest (or reuses an imported one) and returns its id.
 func InsertFeed(t *testing.T, transaction pgx.Tx) int64 {
 	t.Helper()
 	_, thisFile, _, _ := runtime.Caller(0)
@@ -47,13 +47,13 @@ func InsertFeed(t *testing.T, transaction pgx.Tx) int64 {
 	// The trusted issuer and revision are unique; an imported row is reused as it is.
 	if _, err := transaction.Exec(context.Background(), `INSERT INTO app.signature_feed_revisions
 		(issuer, revision, source_file_name, source_text, file_digest, content, import_source)
-		VALUES ('task-passport-security', 'feed_v1', 'attack-signatures.json', $1, $2, '{}', 'command')
+		VALUES ('task-passport-security', 'feed_v2', 'attack-signatures.json', $1, $2, '{}', 'command')
 		ON CONFLICT (issuer, revision) DO NOTHING`, string(feedBytes), hex.EncodeToString(digest[:])); err != nil {
 		t.Fatalf("insert the signature feed: %v", err)
 	}
 	var feedID int64
 	if err := transaction.QueryRow(context.Background(), `SELECT id FROM app.signature_feed_revisions
-		WHERE issuer = 'task-passport-security' AND revision = 'feed_v1'`).Scan(&feedID); err != nil {
+		WHERE issuer = 'task-passport-security' AND revision = 'feed_v2'`).Scan(&feedID); err != nil {
 		t.Fatalf("read the signature feed: %v", err)
 	}
 	return feedID

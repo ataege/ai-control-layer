@@ -66,7 +66,7 @@ func TestPostgresInvalidRequestedRevisionKeepsTheLastGoodOne(t *testing.T) {
 	}{
 		"invalid limits":        {strings.Replace(policyContent, `"calls_agent": 12`, `"calls_agent": 30`, 1), rejectionInvalid},
 		"unknown disabled rule": {strings.Replace(policyContent, `"disabled_rules": []`, `"disabled_rules": ["no_such_rule_v1"]`, 1), rejectionInvalid},
-		"feed not imported":     {strings.Replace(policyContent, `"revision": "feed_v1"`, `"revision": "feed_v9"`, 1), rejectionFeedMissing},
+		"feed not imported":     {strings.Replace(policyContent, `"revision": "feed_v2"`, `"revision": "feed_v9"`, 1), rejectionFeedMissing},
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestPostgresFirstRevisionActivatesAndDisabledSignaturesNeedNoFeed(t *testin
 		t.Fatal(err)
 	}
 	requested := catalogtest.Request(t, world.outer, strings.Replace(strings.Replace(policyContent,
-		`"signature_match": {"enabled": true`, `"signature_match": {"enabled": false`, 1), `"revision": "feed_v1"`, `"revision": "feed_none"`, 1))
+		`"signature_match": {"enabled": true`, `"signature_match": {"enabled": false`, 1), `"revision": "feed_v2"`, `"revision": "feed_none"`, 1))
 	if outcome, err := ActivateRequested(context.Background(), world.outer); err != nil || outcome != ActivationActivated {
 		t.Fatalf("outcome %s err %v", outcome, err)
 	}

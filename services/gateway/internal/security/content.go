@@ -36,13 +36,17 @@ type contentRule struct {
 	accept  func(value string) bool
 }
 
+// The keyword rules start after the beginning of the text or any character that is not a letter or
+// digit, so DB_PASSWORD=... and access_token=... match while a keyword inside a longer word
+// (adminPassword) does not. An optional quote after the keyword and before the value lets JSON and
+// quoted assignments ("password": "...") match, masking only the value.
 // The rule set covers the secret kinds of fixtures/semantic-corpus.json. Go's regexp is RE2,
 // so matching time is linear in the input; the patterns are fixed code, not catalog data.
 var contentRules = []contentRule{
 	{
 		id:      "secret_password_keyword_v1",
 		kind:    SecretPassword,
-		pattern: regexp.MustCompile(`(?i)\b(?:password|passwd|passcode|pwd)\b\s*(?:[:=]|is\b)?\s*([^\s,;]+)`),
+		pattern: regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:password|passwd|passcode|pwd)\b["']?\s*(?:[:=]|is\b)?\s*["']?([^\s,;]+)`),
 		accept:  credentialShape(8),
 	},
 	{
@@ -54,13 +58,13 @@ var contentRules = []contentRule{
 	{
 		id:      "secret_api_token_keyword_v1",
 		kind:    SecretAPIToken,
-		pattern: regexp.MustCompile(`(?i)\b(?:token|api[_-]?key|secret|bearer)\b\s*(?:[:=]|is\b)?\s*([^\s,;]+)`),
+		pattern: regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:token|api[_-]?key|secret|bearer)\b["']?\s*(?:[:=]|is\b)?\s*["']?([^\s,;]+)`),
 		accept:  credentialShape(16),
 	},
 	{
 		id:      "secret_iban_v1",
 		kind:    SecretBankAccount,
-		pattern: regexp.MustCompile(`\b([A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?)\b`),
+		pattern: regexp.MustCompile(`(?i)\b([A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?)\b`),
 		accept:  validIBAN,
 	},
 	{
@@ -195,7 +199,12 @@ func ApplyContentRules(field Field, boundary Boundary, settings Settings) (Conte
 		return finish(OutcomeNotApplicable, "", "", nil)
 	}
 
-	spans, err := FindSecrets(field.Text)
+	// Invisible format characters (zero-width spaces, soft hyphens) must not split a keyword or a
+	// value, so the rules read a copy without them. The spans are mapped back onto the original
+	// text, so a masked field changes only where a secret was and keeps every other character,
+	// including the joiners of emoji and the marks of right-to-left scripts.
+	scanned, offsets := stripFormatCharacters(field.Text)
+	spans, err := FindSecrets(scanned)
 	if err != nil {
 		return finish(OutcomeError, "", "", err)
 	}
@@ -205,12 +214,45 @@ func ApplyContentRules(field Field, boundary Boundary, settings Settings) (Conte
 	if settings.SecretPattern.Mode == ModeBlock {
 		return finish(OutcomeBlock, ReasonContentBlocked, spans[0].RuleID, nil)
 	}
+	spans = mapSpans(spans, offsets)
 	masked, err := MaskText(field.Text, spans)
 	if err != nil {
 		return finish(OutcomeError, "", "", err)
 	}
 	result.Text, result.Spans = masked, spans
 	return finish(OutcomeRedact, ReasonContentRedacted, spans[0].RuleID, nil)
+}
+
+// stripFormatCharacters drops the invisible format characters (Unicode category Cf) that
+// NormalizeText also ignores for signature matching. offsets[i] is the byte offset in text of byte i
+// of the result, so a span found in the result can be mapped back; the text must be valid UTF-8.
+func stripFormatCharacters(text string) (stripped string, offsets []int) {
+	var builder strings.Builder
+	builder.Grow(len(text))
+	offsets = make([]int, 0, len(text))
+	for index, character := range text {
+		if unicode.Is(unicode.Cf, character) {
+			continue
+		}
+		width := utf8.RuneLen(character)
+		builder.WriteRune(character)
+		for step := range width {
+			offsets = append(offsets, index+step)
+		}
+	}
+	return builder.String(), offsets
+}
+
+// mapSpans moves spans found in the stripped copy onto the original text. A span starts at its
+// first character and ends after its last one, so format characters inside it are masked with it
+// and the ones just outside it are kept.
+func mapSpans(spans []Span, offsets []int) []Span {
+	mapped := make([]Span, 0, len(spans))
+	for _, span := range spans {
+		span.Start, span.End = offsets[span.Start], offsets[span.End-1]+1
+		mapped = append(mapped, span)
+	}
+	return mapped
 }
 
 // credentialShape accepts a value of at least minimumLength that mixes letters and digits, so
@@ -226,10 +268,27 @@ func credentialShape(minimumLength int) func(string) bool {
 	}
 }
 
-// validIBAN checks the ISO 13616 length and mod-97 checksum, ignoring spaces.
+// ibanLengths is the IBAN registry (ISO 13616, SWIFT): the exact length of an IBAN of each country,
+// country code and check digits included. A country that is not listed is not an IBAN, so a hex
+// identifier that happens to start with two letters and two digits is never taken for one. Add a
+// country here when the registry does.
+var ibanLengths = map[string]int{
+	"AD": 24, "AE": 23, "AL": 28, "AT": 20, "AZ": 28, "BA": 20, "BE": 16, "BG": 22, "BH": 22, "BI": 27,
+	"BR": 29, "BY": 28, "CH": 21, "CR": 22, "CY": 28, "CZ": 24, "DE": 22, "DJ": 27, "DK": 18, "DO": 28,
+	"EE": 20, "EG": 29, "ES": 24, "FI": 18, "FK": 18, "FO": 18, "FR": 27, "GB": 22, "GE": 22, "GI": 23,
+	"GL": 18, "GR": 27, "GT": 28, "HR": 21, "HU": 28, "IE": 22, "IL": 23, "IQ": 23, "IS": 26, "IT": 27,
+	"JO": 30, "KW": 30, "KZ": 20, "LB": 28, "LC": 32, "LI": 21, "LT": 20, "LU": 20, "LV": 21, "LY": 25,
+	"MC": 27, "MD": 24, "ME": 22, "MK": 19, "MN": 20, "MR": 27, "MT": 31, "MU": 30, "NI": 28, "NL": 18,
+	"NO": 15, "OM": 23, "PK": 24, "PL": 28, "PS": 29, "PT": 25, "QA": 29, "RO": 24, "RS": 22, "RU": 33,
+	"SA": 24, "SC": 31, "SD": 18, "SE": 24, "SI": 19, "SK": 24, "SM": 27, "SO": 23, "ST": 25, "SV": 28,
+	"TL": 23, "TN": 24, "TR": 26, "UA": 29, "VA": 22, "VG": 24, "XK": 20, "YE": 30,
+}
+
+// validIBAN checks the registered country and its exact length, then the ISO 13616 mod-97 checksum,
+// ignoring spaces and letter case.
 func validIBAN(value string) bool {
-	compact := strings.ReplaceAll(value, " ", "")
-	if len(compact) < 15 || len(compact) > 34 {
+	compact := strings.ToUpper(strings.ReplaceAll(value, " ", ""))
+	if len(compact) < 4 || ibanLengths[compact[:2]] != len(compact) {
 		return false
 	}
 	rearranged := compact[4:] + compact[:4]

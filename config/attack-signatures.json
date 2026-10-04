@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "issuer": "task-passport-security",
-  "revision": "feed_v1",
+  "revision": "feed_v2",
   "description": "Sample managed attack-signature feed for the Task Passport control layer. Every rule is inert data: a plain substring matched against normalized text at the inspected boundaries. Nothing in this file is executed.",
   "scope": "Text matches at the control layer's inspected boundaries (model input, tool results, action proposals) only. Task Passport does not download models, load model files or deserialize data, so these rules do not protect model-loading, deserialization or supply-chain infrastructure, and a paraphrased or encoded attack is not matched. Legitimate text quoting a pattern is blocked and recorded as a false positive.",
   "rules": [
@@ -11,6 +11,90 @@
       "description": "The report's harmless sample rule: a known instruction-redirection phrase.",
       "pattern_type": "normalized_substring",
       "pattern": "ignore previous instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "prompt_ignore_all_previous_v1",
+      "attack_class": "instruction_redirection",
+      "description": "A common wording of the same instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "ignore all previous instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "prompt_ignore_the_previous_v1",
+      "attack_class": "instruction_redirection",
+      "description": "A common wording of the same instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "ignore the previous instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "prompt_ignore_prior_v1",
+      "attack_class": "instruction_redirection",
+      "description": "A common wording of the same instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "ignore prior instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "prompt_ignore_all_prior_v1",
+      "attack_class": "instruction_redirection",
+      "description": "A common wording of the same instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "ignore all prior instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "prompt_disregard_previous_v1",
+      "attack_class": "instruction_redirection",
+      "description": "A common wording of the same instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "disregard previous instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "prompt_disregard_all_previous_v1",
+      "attack_class": "instruction_redirection",
+      "description": "A common wording of the same instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "disregard all previous instructions",
+      "boundaries": ["model_input", "tool_result", "action_proposal"],
+      "response": "block",
+      "sources": [
+        "Task Passport project report 1.2, Hybrid security controls and managed attack signatures"
+      ]
+    },
+    {
+      "id": "prompt_disregard_prior_v1",
+      "attack_class": "instruction_redirection",
+      "description": "A common wording of the same instruction-redirection phrase.",
+      "pattern_type": "normalized_substring",
+      "pattern": "disregard prior instructions",
       "boundaries": ["model_input", "tool_result", "action_proposal"],
       "response": "block",
       "sources": [
