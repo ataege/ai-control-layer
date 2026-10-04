@@ -91,6 +91,12 @@ describe("EvaluationResult", () => {
     expect(html).toContain("&lt;b&gt;");
   });
 
+  it("explains run_expired as an expired passport and offers a new judge run", () => {
+    const html = render({ ...baseResponse, reasonCode: "run_expired" });
+    expect(html).toContain("passport has expired");
+    expect(html).toContain("start a new dedicated judge run");
+  });
+
   it("explains run_not_active as a decision about the run", () => {
     expect(render({ ...baseResponse, reasonCode: "run_not_active" })).toContain(
       "start a new dedicated judge run",
