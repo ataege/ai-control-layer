@@ -5,6 +5,7 @@
 
 import type { StartRunRequest, TaskFormOptions } from "@workspace/contracts";
 
+import { classifyFailure, type Failure } from "./errors/failure";
 import type { FetchJsonError } from "./fetch-json";
 
 /**
@@ -190,33 +191,21 @@ export function buildStartRunRequest(state: TaskFormState): StartRunRequest {
   return request;
 }
 
-const SAFE_CODE = /^[a-z0-9_]{1,64}$/;
+// The gateway answers 503 when it has no active control catalog, so nothing may start. That is a state
+// the operator can act on, so it gets its own words instead of the generic "gateway unavailable".
+const NO_ACTIVE_CATALOG_WORDS = {
+  title: "No active control catalog",
+  description:
+    "The gateway has no policy to enforce, so no task can start. An operator must import and activate a policy (pnpm policy:import, then pnpm catalog:activate).",
+};
 
-/**
- * Why the options could not be read, in words an operator can act on. A 503 is the gateway saying it has
- * no active control catalog: nothing may start until one is activated, and the form says so instead of
- * offering anything.
- */
-export function describeOptionsFailure(error: FetchJsonError): string {
-  switch (error.kind) {
-    case "network":
-      return "The server could not be reached, so no task options are available.";
-    case "timeout":
-      return "The server did not answer in time, so no task options are available.";
-    case "aborted":
-      return "Loading the task options was cancelled.";
-    case "invalid_json":
-      return "The server's reply to the task options request was not valid, so nothing is offered.";
-    case "http": {
-      if (error.status === 401) return "Your session has expired. Sign in again.";
-      if (error.status === 503) {
-        return "No active control catalog: the gateway has no policy to enforce, so no task can start. An operator must import and activate a policy (pnpm policy:import, then pnpm catalog:activate).";
-      }
-      const code = (error.body as { error?: { code?: unknown } } | null | undefined)?.error?.code;
-      const codeNote = typeof code === "string" && SAFE_CODE.test(code) ? `, ${code}` : "";
-      return `The server could not provide task options (HTTP ${error.status}${codeNote}), so nothing is offered.`;
-    }
-  }
+/** Why the options could not be read, as one classified failure (a read, so it is not a command). */
+export function classifyOptionsFailure(error: FetchJsonError): Failure {
+  const isNoActiveCatalog = error.kind === "http" && error.status === 503;
+  return classifyFailure(
+    error,
+    isNoActiveCatalog ? { overrides: { upstream_unavailable: NO_ACTIVE_CATALOG_WORDS } } : {},
+  );
 }
 
 /** A reason the form cannot be used although the options loaded: a list it needs came back empty. */
@@ -229,30 +218,4 @@ export function describeEmptyOffers(options: TaskFormOptions): string | null {
   return missing.length === 0
     ? null
     : `The server offered no ${missing.join(", no ")}, so no task can be started.`;
-}
-
-/**
- * Why starting the task failed for a reason other than an admission rejection (which the rejection
- * notice explains). A timeout is reported as unknown: the server may have admitted the task.
- */
-export function describeStartFailure(error: FetchJsonError): string {
-  switch (error.kind) {
-    case "network":
-      return "The server could not be reached; the task was not started.";
-    case "timeout":
-      return "The server did not answer in time, so it is not known whether the task was started.";
-    case "aborted":
-      return "Starting the task was cancelled.";
-    case "invalid_json":
-      return "The server's reply was not valid, so it is not known whether the task was started.";
-    case "http": {
-      if (error.status === 401) return "Your session has expired. Sign in again.";
-      if (error.status === 503) {
-        return "No active control catalog: the gateway has no policy to enforce, so no task can start.";
-      }
-      const code = (error.body as { error?: { code?: unknown } } | null | undefined)?.error?.code;
-      const codeNote = typeof code === "string" && SAFE_CODE.test(code) ? `, ${code}` : "";
-      return `The server refused to start the task (HTTP ${error.status}${codeNote}).`;
-    }
-  }
 }

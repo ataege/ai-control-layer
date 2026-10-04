@@ -3,11 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TaskFormOptions } from "@workspace/contracts";
 import { describe, expect, it, vi } from "vitest";
 
+import { classifyFailure } from "@/lib/errors/failure";
 import { TaskFormView } from "./task-form";
 import type { TaskFormState } from "@/lib/task-form-model";
 
 // The form reads the router only in the stateful container; the view under test never calls it.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: () => {} }),
+  usePathname: () => "/tasks/new",
+}));
 
 const options: TaskFormOptions = {
   templates: [{ id: "reconcile_atlas_v1", name: "Reconcile Atlas invoices" }],
@@ -49,6 +53,7 @@ const render = (overrides: Partial<Parameters<typeof TaskFormView>[0]> = {}) =>
       onSubmit: () => {},
       isSubmitting: false,
       problem: null,
+      failure: null,
       rejection: null,
       ...overrides,
     }),
@@ -104,11 +109,37 @@ describe("TaskFormView", () => {
     expect(html).toContain('value="999"');
   });
 
-  it("shows a non-admission problem as a plain alert, not as an admission rejection", () => {
-    const html = render({ problem: "The server could not be reached; the task was not started." });
-    expect(html).toContain("The server could not be reached; the task was not started.");
+  it("shows a local problem with the choices as a plain alert, not as an admission rejection", () => {
+    const html = render({ problem: "Select at least one invoice." });
+    expect(html).toContain("Select at least one invoice.");
     expect(html).not.toContain("data-admission-rejection");
-    expect(html).not.toContain("Admission Rejected");
+  });
+
+  it("shows a failed start in its own truthful state, unconfirmed with no retry when no answer came", () => {
+    const html = render({
+      failure: {
+        failure: classifyFailure({ kind: "timeout", timeoutMs: 1000 }, { command: true }),
+        requestId: "req_42",
+      },
+    });
+    expect(html).toContain('data-failure-kind="timeout"');
+    expect(html).toContain("Outcome unconfirmed.");
+    expect(html).toContain("Request ID: req_42");
+    expect(html).not.toContain("Try again");
+    expect(html).not.toContain("data-admission-rejection");
+  });
+
+  it("offers a retry for a failed start that is known not to have been carried out", () => {
+    const html = render({
+      failure: {
+        failure: classifyFailure(
+          { kind: "http", status: 502, body: { error: { code: "upstream_unreachable" } } },
+          { command: true },
+        ),
+      },
+    });
+    expect(html).toContain('data-failure-kind="upstream_unreachable"');
+    expect(html).toContain("Try again");
   });
 
   it("does not call onSubmit or onChange by rendering", () => {
