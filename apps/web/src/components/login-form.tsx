@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ProductClient, getSafeMessage } from "@/lib/product-client";
+import { safeCallbackPath } from "@/lib/safe-callback";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
@@ -29,13 +30,8 @@ export function LoginForm() {
         return;
       }
 
-      // Check for a callback URL from middleware
-      const callbackUrl = searchParams.get("callbackUrl");
-      if (callbackUrl) {
-        router.push(callbackUrl);
-      } else {
-        router.push("/");
-      }
+      // Return to the page the middleware sent the visitor from, but only a path inside this app.
+      router.push(safeCallbackPath(searchParams.get("callbackUrl")));
 
       router.refresh();
     } catch {
