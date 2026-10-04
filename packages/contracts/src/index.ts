@@ -115,7 +115,16 @@ export interface OperatorContext {
 export interface TaskFormOptions {
   templates: { id: string; name: string }[];
   vendors: { id: string; name: string }[];
-  invoices: { id: string; number: string; date: string; amount: number; vendorId: string }[];
+  invoices: {
+    id: string;
+    number: string;
+    date: string;
+    /** Total in minor units of `currency`. */
+    amount: number;
+    /** ISO 4217 alphabetic code, for example "EUR". */
+    currency: string;
+    vendorId: string;
+  }[];
   destinations: { id: string; name: string }[];
   approvalRequirements: { id: string; description: string }[];
   limits: { maxModelCalls: number; maxTimeoutSeconds: number };
