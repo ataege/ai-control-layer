@@ -401,6 +401,12 @@ limit. Local inference has no tariff, so no cost is recorded.
 
 ### Known limitations
 
+- **A report is queued once per run.** After a `queue_report` of a report has succeeded (its outbox
+  row exists), another `queue_report` for that report is denied `tool_not_allowed` before review, again
+  at execution, and in the queue adapter under a lock on the run, so a second approval can never send it
+  twice. The scope, destination and export checks run first, so their reasons win (the beat 5 and 9
+  replays keep `report_export_restricted` and `destination_not_allowed`). After the queue, every agent
+  request ends with the finish message.
 - **One gateway process per database and model host.** Job leases and the executor's claim prevent a
   double effect, and the ledger's row lock a double reservation, but not a double model request: two
   gateways on one database (for example `pnpm dev` next to `pnpm stack:up`) can each claim a job of

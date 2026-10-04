@@ -12,7 +12,9 @@ October 2026 with the live `qwen3.5:4b`, and all passed (results in the roadmap 
 code changed after that run in four ways, covered by their tests and not by a rerun of all twelve
 checks: judge runs start without an agent, the `/security` panel polls on its own, counts agree with
 their nouns, and a final answer with prose or a code fence around its one JSON object is accepted. The
-pitch rehearsal on the final build is still open (SH-33), which sets the pitch timing. Commands and
+final build is 9c5f7ef: its evidence (the live e2e, 2 rounds, 0 failed; verify:controls live; the
+replays; the audit export) was recaptured on it (SH-32), and the rehearsal (SH-33) is recorded in the
+roadmap. Commands and
 expected output below were taken from the code and from recorded runs; timings are observations from one
 developer machine, not targets. The steps marked "checked" were run once on lane w3's machine at `main`
 93e1c96 (load average 15 to 18, not idle).
@@ -511,8 +513,7 @@ E2E_POSTGRES_CONTAINER=<postgres container> E2E_ROUNDS=2 \
 Passes when the summary lists no failed check, every model-dependent mismatch is a NOTE, round 2's
 business counts equal round 1's after the reset, and the summary ends with the list of things that
 only a browser can show (checks 3 to 8 above). Save the whole summary. Evidence for **WEB-18**
-(ticked), **WEB-20** and **WEB-24** (both still open: they ask for a by-hand repeat and a twelve-beat
-walk-through).
+(ticked), **WEB-20** and **WEB-24** (ticked from the lead's browser test and the final-build e2e).
 
 **Read beat 10's secret check.** In session 08's e2e run (`main` 39d5899 plus docs, a loaded machine,
 `qwen3.5:4b`) the check "a secret is redacted and its value never returned" failed in both rounds:
@@ -587,14 +588,12 @@ Point to these limitations in `services/gateway/README.md` instead of claiming m
 
 ## Gaps to close before the pitch
 
-- A rehearsal on the final build with recorded timings (SH-33), and a run kept for beat 5 (the replay
-  only works within that run's 15-minute window, so "kept" means the screenshots and the printed
-  output, not the run).
-- The "Final live checks" above were run once, on `main` 1365d63 on 4 October, and not on an idle
-  machine (load 6 to 19); every live number in this file is an observation from that machine under that
-  load. They have not been rerun on the frozen build, c70492d.
-- The by-hand repeat after a reset (WEB-20) and the twelve-beat walk-through with screenshots (WEB-24)
-  are still open.
+- Keep a run for beat 5 on the presentation day (the replay only works within that run's 15-minute
+  window, so "kept" means the screenshots and the printed output, not the run).
+- The "Final live checks" above were run once in full, on `main` 1365d63 on 4 October, and not on an
+  idle machine (load 6 to 19); every live number in this file is an observation from that machine under
+  that load. On the final build 9c5f7ef the live e2e, verify:controls live, the replays and the judge
+  inputs were rerun (docs/evidence, CHECKSUMS-9c5f7ef.txt), not every check one by one.
 
 Done on `main` since the first version: the feed import in `pnpm policy:import` with
 `pnpm catalog:activate` (no hand load anywhere), `pnpm verify:controls` (SH-47), the API and web pages
