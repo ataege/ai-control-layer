@@ -64,7 +64,7 @@ var contentRules = []contentRule{
 	{
 		id:      "secret_iban_v1",
 		kind:    SecretBankAccount,
-		pattern: regexp.MustCompile(`\b([A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?)\b`),
+		pattern: regexp.MustCompile(`(?i)\b([A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?)\b`),
 		accept:  validIBAN,
 	},
 	{
@@ -245,9 +245,9 @@ func credentialShape(minimumLength int) func(string) bool {
 	}
 }
 
-// validIBAN checks the ISO 13616 length and mod-97 checksum, ignoring spaces.
+// validIBAN checks the ISO 13616 length and mod-97 checksum, ignoring spaces and letter case.
 func validIBAN(value string) bool {
-	compact := strings.ReplaceAll(value, " ", "")
+	compact := strings.ToUpper(strings.ReplaceAll(value, " ", ""))
 	if len(compact) < 15 || len(compact) > 34 {
 		return false
 	}

@@ -94,13 +94,13 @@ var secretAttempts = []attempt{
 	{"digits only value", "password: 5375703372536563726574393", "5375703372536563726574393", bypass, "a credential must mix letters and digits, so a numeric password passes"},
 
 	// Account numbers.
-	{"iban lower case", strings.ToLower(ibanGB), "5698", bypass, "the pattern is upper case only"},
+	{"iban lower case", strings.ToLower(ibanGB), "5698", caught, "the pattern and the checksum ignore letter case"},
 	{"iban with hyphens", "GB82-WEST-1234-5698-7654-32", "5698", bypass, "only single spaces are separators"},
 	{"iban over lines", strings.ReplaceAll(ibanGB, " ", "\n"), "5698", bypass, "same cause"},
 	{"iban with a zero-width space", "GB82 WEST 1234\u200b 5698 7654 32", "5698", caught, "invisible format characters are dropped before the secret rules"},
 	{"iban glued to letters", "refGB82WEST12345698765432", "5698", bypass, "needs a word boundary before the country code"},
 	{"iban grouped, second country", ibanGB, "5698", caught, ""},
-	{"iban lower case, digits pass the card check", strings.ToLower(iban), "1981 2874", partial, "only by coincidence: the card rule masks the middle digits, the country code and the tail stay"},
+	{"iban lower case, digits pass the card check", strings.ToLower(iban), "1981 2874", caught, "the IBAN rule now matches the whole number, so the card rule's overlap is merged"},
 	{"iban with hyphens, digits pass the card check", "PL61-1090-1014-0000-0712-1981-2874", "1981-2874", partial, "same coincidence"},
 	{"card with dots", "4111.1111.1111.1111", "1111.1111", bypass, "only spaces and hyphens separate groups"},
 	{"card over lines", "4111\n1111\n1111\n1111", "1111", bypass, "same cause"},
@@ -347,6 +347,38 @@ func TestRedTeamQuotedJSONSecretIsMaskedInPlace(t *testing.T) {
 			if !strings.HasPrefix(value, "[REDACTED:") {
 				t.Errorf("masked text %q keeps the value %q", result.Text, value)
 			}
+		}
+	}
+}
+
+// The loosened rules (snake_case keywords, optional quotes, IBAN case) must not start masking
+// ordinary business text.
+func TestRedTeamBenignTextIsNotMasked(t *testing.T) {
+	benign := []string{
+		"Password policy: use at least 12 characters.",
+		"The token of thanks was delivered on Friday.",
+		"password_reset_link was sent to the vendor",
+		"Secret Santa list for 2026",
+		"the apikey field is required",
+		"a bearer of bad news",
+		"Reference INV104 dated 2026-10-31, amount EUR 1250.00, due in 30 days",
+		"Call +48 600 700 800 or write to reports@atlas.example.com",
+		"sha256 3f2a9c1e8b7d6f504a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f",
+		"ab12 cdef ghij klmn is a part number, not an account",
+		"the gb82 invoice batch was closed",
+		"Our pwd command printed the folder name",
+		"The user_password column is hashed in the database schema",
+	}
+	settings := sampleSettings(t)
+	for _, text := range benign {
+		result, err := security.ApplyContentRules(security.Field{Name: security.FieldModelInputText, Text: text},
+			security.BoundaryModelInput, settings)
+		if err != nil || result.Record.Outcome != security.OutcomePass || result.Text != text {
+			t.Errorf("%q: outcome %s err %v text %q, want it unchanged", text, result.Record.Outcome, err, result.Text)
+		}
+		record, err := security.MatchSignatures(text, security.BoundaryModelInput, security.FieldModelInputText, settings)
+		if err != nil || record.Outcome == security.OutcomeBlock {
+			t.Errorf("%q: signature outcome %s err %v, want no match", text, record.Outcome, err)
 		}
 	}
 }
