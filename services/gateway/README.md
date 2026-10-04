@@ -291,9 +291,13 @@ this list calls the model; the live checks are in `docs/demo-runbook.md` ("Final
    leniency, lead decision after live run fa417b6b, where the model put text around the JSON and the
    run stopped at its corrections); the object itself is checked as strictly as before. Two top-level
    objects, or none, are rejected, an object inside an array does not count, and the stored reference
-   never contains the surrounding text. After a successful `queue_report` the model's context ends
-   with a fixed message (`reportQueuedMessage`: the task is finished, call no more tools, and the exact
-   final format), because in that run it proposed a tool that does not exist (`status`) instead.
+   never contains the surrounding text. Once the run has a successful `queue_report` (a stored
+   result of that tool), every later request ends with a fixed message (`reportQueuedMessage`: the task
+   is finished, call no more tools, and the exact final format), however many stray proposals and
+   corrections follow, and every correction feedback adds that the report is already queued
+   (`reportQueuedFeedback`); both are derived from the stored steps. In live runs the model proposed a
+   tool that does not exist (`status`), then `queue_report` again for the internal and for the vendor
+   report.
    `runresult.Cause` names a rejection with a fixed kind for the log and
    `maskedSummary.rejectionCause` (`not_json`, `extra_text` for more than one object, `wrong_status`,
    `wrong_fields`; `unknown_report` for another run's report; `code_fence` is a contract value Parse no
