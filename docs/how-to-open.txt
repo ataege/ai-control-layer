@@ -32,9 +32,11 @@ The project uses these ports on 127.0.0.1: 3000 (web), 3001 (API), 8080 (gateway
 
 "pnpm run setup" checks the tools and creates the file .env with freshly generated local secrets, including the demo operator's password. Type "pnpm run setup", not "pnpm setup", which is a different, built-in pnpm command.
 
-Open .env in a text editor and set the model name on the MODEL_NAME line:
+"pnpm run setup" also puts the model name in .env. Check that .env has this line:
 
     MODEL_NAME=qwen3.5:4b
+
+If the line is empty or missing, run "pnpm run setup" again; it fills it in. The control layer fails closed: with no model name the application starts, but every model call is refused. Setup prints a warning if Ollama does not have the model; fix it with "ollama pull qwen3.5:4b".
 
 
 3. START THE DATABASE AND LOAD THE DEMO DATA
@@ -196,7 +198,7 @@ Other checks:
 12. IF SOMETHING GOES WRONG
 
 - A run pauses with "Operator attention required" or "The local model did not answer in time". The model was too slow because the machine was busy or the model was not loaded. Close other heavy programs, repeat the warm-up and start a new run. The control layer fails closed by design.
-- Every run fails at once. MODEL_NAME is missing in .env, or Ollama is not running. Check with "ollama ps" and "curl http://localhost:11434/api/tags", fix it and restart "pnpm dev".
+- Every run fails at once. MODEL_NAME is empty in .env (it must be qwen3.5:4b; run "pnpm run setup" to fill it in), the model has not been pulled ("ollama pull qwen3.5:4b"), or Ollama is not running. Check with "ollama list", "ollama ps" and "curl http://localhost:11434/api/tags", fix it and restart "pnpm dev".
 - The task form says "No active control catalog". Run "pnpm db:seed" (or "pnpm policy:import"), then "pnpm catalog:activate".
 - "EADDRINUSE" on port 3000, 3001 or 8080, or port 5432 already in use. Another program holds the port. Stop it, or change the port in .env ("Changing ports" in README.md).
 - Pages answer 404 after you ran a build. Do not run "pnpm verify" or a build while "pnpm dev" is running. Stop "pnpm dev", delete the folder apps/web/.next and start "pnpm dev" again.
