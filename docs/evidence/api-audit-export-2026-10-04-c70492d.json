@@ -1,0 +1,57 @@
+{
+  "capturedAt": "2026-10-04T06:59:54.106Z",
+  "codeCommit": "c70492d950e612c3ec0809e0dd4c16b969d462da",
+  "source": "Real authenticated API and Go gateway on a private synthetic demonstration database (freeze recapture, live local model)",
+  "organizationId": "0b9a3c2e-5d4f-4a61-9b7e-3f2d1c0a9e01",
+  "summaryGeneratedAt": "2026-10-04T06:59:53.873179Z",
+  "events": {
+    "records": 43,
+    "pages": 6,
+    "groups": 16,
+    "countsMatchSummary": true,
+    "noDuplicateIds": true
+  },
+  "assessments": {
+    "records": 172,
+    "pages": 19,
+    "groups": 6,
+    "countsMatchSummary": true,
+    "noDuplicateIds": true
+  },
+  "csv": {
+    "events": {
+      "status": 200,
+      "rows": 10,
+      "columns": 10,
+      "cursorHeaderPresent": true,
+      "fieldsExactlyMatchSharedContract": true
+    },
+    "assessments": {
+      "status": 200,
+      "rows": 10,
+      "columns": 18,
+      "cursorHeaderPresent": true,
+      "fieldsExactlyMatchSharedContract": true
+    }
+  },
+  "judgeEventsPresent": true,
+  "judgeAssessmentRecords": 24,
+  "judgeSecurityCallsInSummary": 8,
+  "stableCountsBeforeAndAfter": true,
+  "authorizationEvidence": {
+    "command": "pnpm test:db --fresh",
+    "result": "api 82 passed, 0 failed, 0 skipped (build c70492d)",
+    "scope": "Real session and membership checks; foreign-object denial uses explicitly labelled Go contract fixtures because no second-organization operator is seeded"
+  },
+  "formulaNeutralizationEvidence": {
+    "command": "pnpm verify:controls",
+    "result": "api unit 484 passed, 0 failed, 0 skipped (build c70492d)",
+    "scope": "CSV formula trigger tests and strict response schema rejection tests"
+  },
+  "limitations": [
+    "Not an atomic snapshot across requests; aggregate counts were compared before and after this capture.",
+    "Judge probes were made with the live model on this machine; no semantic detection-quality claim.",
+    "Cross-organization rejection is shown with labelled Go contract fixtures and at the Go boundary, not with a second seeded operator.",
+    "The export was fetched by API calls; the download through the web page is a separate screenshot."
+  ]
+}

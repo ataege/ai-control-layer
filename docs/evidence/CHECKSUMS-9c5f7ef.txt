@@ -1,0 +1,13 @@
+# build 9c5f7ef1419d0aab12d7384e41038790b344599b: sha256 of the final-build evidence files in docs/evidence (screenshots are kept outside the repository, see screens-9c5f7ef.sha256; the verify-controls JSON was formatted with prettier after the run, content unchanged)
+cd1c0567c0ff3f90b8e70075bf170cde5bfec104a092cbf2bab301e0def51366  api-audit-export-2026-10-04-9c5f7ef.json
+801966e3444405e6a7344f3a6c9bb4365bfa5547d62002bf68116e60660385d0  benchmark-live-9c5f7ef.json
+08aec5223834949f0c583ef86b5565ff88541e3e637ed99e9af8dfa1ba1d3404  build-9c5f7ef.txt
+fb5cfd138705ec00446dca7c6b6d30ea31d49c250a35bf5a5e75b0f3bfe04776  e2e-9c5f7ef.txt
+067d83d07f943a8e177e106fa47f3bde98474edf834b83dfb732c4686edec5ce  judge-9c5f7ef.txt
+db3f8bb4b2810d8a4801fc01d90877b672102ddd4e2bcb8a5f200cabcd431b20  modelcheck-9c5f7ef.txt
+d43dfbf0d1ddbdd0fd1fbadebdddbbe0fc41e45dd3d1263f89a1c63074ab1b70  replay-9c5f7ef.txt
+f5f0202e87798605a04bb137275b709171e6dea6af5c29ccb4b26ce46bb729b5  screens-9c5f7ef.sha256
+2034a4eea1d8e11f2e9a1c1577ed2f7b3cc316cd6c092320786225da74f89114  smoke-9c5f7ef.txt
+07230a689d2ec142d4f7f440a5201e76a95fbe75f9c4392a1216391fd14b0b59  test-db-9c5f7ef.txt
+b7945515aa70f8739fe33fcb0ff9b8bf9d8af465b9ceaa30589a10e169ebebff  verify-9c5f7ef.txt
+725c49022ef0e3495f7b3fea0b30ab13ca419b136a3aee1ce6c296377f9e84b6  verify-controls-2026-10-04T07-08-39Z.json

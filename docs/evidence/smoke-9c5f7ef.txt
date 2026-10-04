@@ -1,0 +1,52 @@
+build 9c5f7ef1419d0aab12d7384e41038790b344599b
+$ node scripts/smoke.mjs
+Smoke test (host mode): web http://localhost:3170, api http://localhost:3171
+
+Smoke test summary
+CHECK                                                                          RESULT   DETAIL
+-----------------------------------------------------------------------------  -------  ------
+api: GET /api/health/live                                                      PASS     HTTP 200
+api: GET /api/health/ready (database)                                          PASS     HTTP 200
+api: GET /api/diagnostics/gateway                                              PASS     HTTP 200
+api: GET /api/docs-json                                                        PASS     HTTP 200
+web: GET / without a session redirects to /login                               PASS     HTTP 307
+web: GET /components without a session redirects to /login                     PASS     HTTP 307
+web: GET /login                                                                PASS     HTTP 200
+web: POST /api/auth/sign-in with a wrong password -> 401                       PASS     HTTP 401
+web: POST /api/auth/sign-in as the demo operator -> 200 with a session cookie  PASS     HTTP 200, session cookie set
+web: GET / (signed in)                                                         PASS     HTTP 200
+web: GET /components (signed in)                                               PASS     HTTP 200
+web: GET /diagnostics (signed in)                                              PASS     HTTP 200
+leak check: no database password in web pages and assets                       SKIPPED  value is shorter than 16 characters
+leak check: no gateway database role password in web pages and assets          PASS     4 pages and 24 assets scanned (signed in)
+leak check: no service token in web pages and assets                           PASS     4 pages and 24 assets scanned (signed in)
+leak check: no session signing secret in web pages and assets                  PASS     4 pages and 24 assets scanned (signed in)
+leak check: no operator-context signing key in web pages and assets            PASS     4 pages and 24 assets scanned (signed in)
+leak check: no demo operator password in web pages and assets                  PASS     4 pages and 24 assets scanned (signed in)
+web: POST /api/auth/sign-out ends the session -> 200                           PASS     HTTP 200
+web proxy: GET /api/health/live                                                PASS     HTTP 200, same as the API
+web proxy: GET /api/health/ready                                               PASS     HTTP 200, same as the API
+web proxy: GET /api/diagnostics/gateway                                        PASS     HTTP 200, same as the API
+request id echoed: api                                                         PASS     HTTP 200
+request id echoed: web proxy                                                   PASS     HTTP 200
+request id echoed: gateway                                                     PASS     HTTP 200
+gateway: GET /health/live                                                      PASS     HTTP 200
+gateway: GET /health/ready (database)                                          PASS     HTTP 200
+gateway: /internal/ping without token -> 401                                   PASS     HTTP 401
+gateway: /internal/ping with wrong token -> 401                                PASS     HTTP 401
+gateway: /internal/ping with service token -> 200                              PASS     HTTP 200
+leak check: no database password in API and gateway responses                  SKIPPED  value is shorter than 16 characters
+leak check: no gateway database role password in API and gateway responses     PASS     18 responses scanned (bodies and headers)
+leak check: no service token in API and gateway responses                      PASS     18 responses scanned (bodies and headers)
+leak check: no session signing secret in API and gateway responses             PASS     18 responses scanned (bodies and headers)
+leak check: no operator-context signing key in API and gateway responses       PASS     18 responses scanned (bodies and headers)
+leak check: no demo operator password in API and gateway responses             PASS     18 responses scanned (bodies and headers)
+leak check: no database password in service logs                               SKIPPED  service logs are not captured in host mode
+leak check: no gateway database role password in service logs                  SKIPPED  service logs are not captured in host mode
+leak check: no service token in service logs                                   SKIPPED  service logs are not captured in host mode
+leak check: no session signing secret in service logs                          SKIPPED  service logs are not captured in host mode
+leak check: no operator-context signing key in service logs                    SKIPPED  service logs are not captured in host mode
+leak check: no demo operator password in service logs                          SKIPPED  service logs are not captured in host mode
+
+34 passed, 0 failed, 8 skipped
+exit 0

@@ -1,0 +1,219 @@
+{
+  "kind": "task-passport-benchmark",
+  "method": [
+    "Monotonic durations per sample, one sample at a time (concurrency 1), after unmeasured warmup samples; the configurations without a live model are interleaved sample by sample.",
+    "policy_lookup: read the active catalog revision and its security settings from PostgreSQL, as each inspection does.",
+    "deterministic: the inspection minus the semantic evaluator; semantic: the evaluator including its model call; provider: the model time the provider reports; total: policy_lookup plus the inspection.",
+    "Percentiles are nearest-rank over the measured samples; a statistic without observations is null.",
+    "Semantic on and off are derived in process from the active revision's settings; the catalog itself is not changed."
+  ],
+  "environment": {
+    "startedAt": "2026-10-04T06:45:31.634762Z",
+    "gitCommit": "c70492d950e612c3ec0809e0dd4c16b969d462da",
+    "gitDirty": false,
+    "goVersion": "go1.27.1",
+    "operatingSystem": "darwin",
+    "architecture": "arm64",
+    "cpuCount": 10,
+    "cpuModel": "Apple M1 Pro",
+    "loadAverage": "5.12 6.72 7.31",
+    "database": "localhost:55570/starter",
+    "activeCatalogRevisionId": 1,
+    "feedRevision": "feed_v2",
+    "concurrency": 1
+  },
+  "workload": {
+    "operation": "policy lookup and hybrid tool-result inspection of one permitted read_invoice result",
+    "tool": "read_invoice",
+    "fixture": "synthetic Atlas invoice INV104 with a benign internal note",
+    "payloadBytes": 421,
+    "untrustedNoteBytes": 172
+  },
+  "configurations": [
+    {
+      "name": "semantic_off",
+      "description": "Deterministic controls only: the semantic check is disabled in process.",
+      "semanticCheck": "off",
+      "model": null,
+      "warmup": 20,
+      "samples": 300,
+      "errors": 0,
+      "outcomes": {
+        "pass": 300
+      },
+      "wallSeconds": 0.300303788,
+      "throughputPerSecond": 998.9883977087894,
+      "phases": {
+        "deterministic": {
+          "count": 300,
+          "medianMicroseconds": 69,
+          "p95Microseconds": 98,
+          "maxMicroseconds": 319,
+          "meanMicroseconds": 76
+        },
+        "policy_lookup": {
+          "count": 300,
+          "medianMicroseconds": 855,
+          "p95Microseconds": 1152,
+          "maxMicroseconds": 8522,
+          "meanMicroseconds": 923
+        },
+        "provider": {
+          "count": 0,
+          "medianMicroseconds": null,
+          "p95Microseconds": null,
+          "maxMicroseconds": null,
+          "meanMicroseconds": null
+        },
+        "semantic": {
+          "count": 0,
+          "medianMicroseconds": null,
+          "p95Microseconds": null,
+          "maxMicroseconds": null,
+          "meanMicroseconds": null
+        },
+        "total": {
+          "count": 300,
+          "medianMicroseconds": 929,
+          "p95Microseconds": 1316,
+          "maxMicroseconds": 8687,
+          "meanMicroseconds": 1000
+        }
+      },
+      "gatewayOverhead": {
+        "count": 300,
+        "medianMicroseconds": 929,
+        "p95Microseconds": 1316,
+        "maxMicroseconds": 8687,
+        "meanMicroseconds": 1000
+      }
+    },
+    {
+      "name": "semantic_on_fixture",
+      "description": "Semantic check on, answered by a labelled fixture caller with no model: gateway overhead.",
+      "semanticCheck": "fixture",
+      "model": null,
+      "warmup": 20,
+      "samples": 300,
+      "errors": 0,
+      "outcomes": {
+        "pass": 300
+      },
+      "wallSeconds": 0.312050955,
+      "throughputPerSecond": 961.3814513081685,
+      "phases": {
+        "deterministic": {
+          "count": 300,
+          "medianMicroseconds": 69,
+          "p95Microseconds": 95,
+          "maxMicroseconds": 434,
+          "meanMicroseconds": 77
+        },
+        "policy_lookup": {
+          "count": 300,
+          "medianMicroseconds": 857,
+          "p95Microseconds": 1141,
+          "maxMicroseconds": 12238,
+          "meanMicroseconds": 956
+        },
+        "provider": {
+          "count": 0,
+          "medianMicroseconds": null,
+          "p95Microseconds": null,
+          "maxMicroseconds": null,
+          "meanMicroseconds": null
+        },
+        "semantic": {
+          "count": 300,
+          "medianMicroseconds": 4,
+          "p95Microseconds": 11,
+          "maxMicroseconds": 110,
+          "meanMicroseconds": 6
+        },
+        "total": {
+          "count": 300,
+          "medianMicroseconds": 931,
+          "p95Microseconds": 1303,
+          "maxMicroseconds": 12409,
+          "meanMicroseconds": 1039
+        }
+      },
+      "gatewayOverhead": {
+        "count": 300,
+        "medianMicroseconds": 931,
+        "p95Microseconds": 1303,
+        "maxMicroseconds": 12409,
+        "meanMicroseconds": 1039
+      }
+    },
+    {
+      "name": "semantic_on_live",
+      "description": "Semantic check on with the live local model: actual semantic and provider delay.",
+      "semanticCheck": "live",
+      "model": "qwen3.5:4b",
+      "warmup": 1,
+      "samples": 10,
+      "errors": 0,
+      "outcomes": {
+        "blocked": 2,
+        "pass": 8
+      },
+      "wallSeconds": 20.618182292,
+      "throughputPerSecond": 0.48500880719635847,
+      "phases": {
+        "deterministic": {
+          "count": 10,
+          "medianMicroseconds": 289,
+          "p95Microseconds": 889,
+          "maxMicroseconds": 889,
+          "meanMicroseconds": 352
+        },
+        "policy_lookup": {
+          "count": 10,
+          "medianMicroseconds": 6177,
+          "p95Microseconds": 7622,
+          "maxMicroseconds": 7622,
+          "meanMicroseconds": 5930
+        },
+        "provider": {
+          "count": 10,
+          "medianMicroseconds": 2049027,
+          "p95Microseconds": 2164775,
+          "maxMicroseconds": 2164775,
+          "meanMicroseconds": 2054512
+        },
+        "semantic": {
+          "count": 10,
+          "medianMicroseconds": 2050532,
+          "p95Microseconds": 2165946,
+          "maxMicroseconds": 2165946,
+          "meanMicroseconds": 2055533
+        },
+        "total": {
+          "count": 10,
+          "medianMicroseconds": 2057558,
+          "p95Microseconds": 2171481,
+          "maxMicroseconds": 2171481,
+          "meanMicroseconds": 2061815
+        }
+      },
+      "gatewayOverhead": {
+        "count": 10,
+        "medianMicroseconds": 6987,
+        "p95Microseconds": 9129,
+        "maxMicroseconds": 9129,
+        "meanMicroseconds": 7303
+      }
+    }
+  ],
+  "recordedTimings": {
+    "source": "runtime.timing_records, written by the gateway during real runs (GO-80); empty until runs have recorded spans",
+    "phases": []
+  },
+  "limitations": [
+    "The passport, gate, tool effect and commit are not inside the measured operation.",
+    "The fixture configuration answers instantly: it measures gateway overhead, never detection quality or model latency.",
+    "Results describe this machine and this run only.",
+    "The live run reserves tokens in an in-memory ledger, not against any run's allowance."
+  ]
+}

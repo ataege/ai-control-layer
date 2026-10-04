@@ -1,0 +1,4 @@
+build 9c5f7ef1419d0aab12d7384e41038790b344599b
+{"label":"diagnostic provider call","purpose":"agent","status":"PASS","usage":{"input_tokens":38,"output_tokens":6},"duration_ns":3660989583,"provider_duration_ns":3656576500}
+{"label":"diagnostic provider call","purpose":"security","status":"PASS","usage":{"input_tokens":38,"output_tokens":6},"duration_ns":198579542,"provider_duration_ns":197780209}
+exit 0
