@@ -33,7 +33,10 @@ describe("Judge run admission", () => {
       : { success: false, reason: "invalid_response" };
   });
   const post = (body: unknown = input) =>
-    request(app.getHttpServer()).post("/api/runs/judge").set("Cookie", "session=test").send(body as object);
+    request(app.getHttpServer())
+      .post("/api/runs/judge")
+      .set("Cookie", "session=test")
+      .send(body as object);
 
   beforeAll(async () => {
     app = await createTestApp(
