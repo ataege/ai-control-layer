@@ -120,15 +120,15 @@ as down. `pnpm reset:demo` runs the same step.
 pnpm db:seed
 ```
 
-An explicit command (SH-18, still a draft); nothing seeds at startup. It loads the synthetic vendors
+An explicit command (SH-18); nothing seeds at startup. It loads the synthetic vendors
 and invoices of `fixtures/demo-records.json` into the `demo` tables, then runs `pnpm policy:import`
 to import `config/policy.yaml` together with its signature feed `config/attack-signatures.json`
 as the requested control-catalog revision when the catalog is still empty. The import only
 requests the revision: the gateway validates and activates it within a second or two of starting,
 or run `pnpm catalog:activate` once to activate it without a gateway. It is idempotent: a second
-run inserts nothing and never replaces a later catalog revision. It does not seed organizations,
-users or memberships (see "Known gaps on a clean checkout" below). Details: the README,
-"`pnpm db:seed`".
+run inserts nothing and never replaces a later catalog revision. It also seeds the demonstration
+organization, the operator `demo-operator@example.com` (password `DEMO_OPERATOR_PASSWORD` from `.env`)
+and its `operator` and `reviewer` membership (SH-19). Details: the README, "`pnpm db:seed`".
 
 Later, `pnpm reset:demo` restores the demo data: it empties every `demo` and `runtime` table,
 reseeds the synthetic records in the same transaction and keeps the `app` data, including the
@@ -369,9 +369,9 @@ Either way the server listens on `http://localhost:11434`, Ollama's default port
 
 ### Pull a model
 
-The model is not fixed yet (decision 6 in `docs/product/README.md`). The provisional model for both
-the agent and the security purpose is `qwen3.5:4b` (Apache 2.0), probed on the presentation machine
-(see "Hardware" below):
+Decision 6 in `docs/product/README.md` fixes the model: `qwen3.5:4b` (Apache 2.0) for both the agent and
+the security purpose, with `think: false`. It was probed on the presentation machine (see "Hardware"
+below):
 
 ```sh
 ollama pull qwen3.5:4b
@@ -416,14 +416,13 @@ the local network included. Docker Desktop on macOS reaches a loopback-bound Oll
 
 ### Hardware
 
-The presentation machine is the lead's MacBook Pro (M1 Pro, 16 GB); the Go implementer develops on
-an M2 with 8 GB. Pick a model that runs on both, and record on each machine which model and
-version it ran (SH-45):
+The presentation machine is the lead's MacBook Pro (M1 Pro, 16 GB), and the Go side is built on it.
+The model and version it ran on are recorded here (SH-45); the load of a shared machine changes the
+timings (see "What must not run during the demonstration" in section 8):
 
-| Machine                     | Hardware      | Model tag                                      | Ollama version   | Result                         |
-| --------------------------- | ------------- | ---------------------------------------------- | ---------------- | ------------------------------ |
-| Lead (presentation machine) | M1 Pro, 16 GB | `qwen3.5:4b` (ID `2a654d98e6fb`, 4.7B, Q4_K_M) | 0.35.1           | Probe on 2026-10-03, see below |
-| Go implementer              | M2, 8 GB      | not yet recorded                               | not yet recorded | not yet recorded               |
+| Machine                     | Hardware      | Model tag                                      | Ollama version | Result                         |
+| --------------------------- | ------------- | ---------------------------------------------- | -------------- | ------------------------------ |
+| Lead (presentation machine) | M1 Pro, 16 GB | `qwen3.5:4b` (ID `2a654d98e6fb`, 4.7B, Q4_K_M) | 0.35.1         | Probe on 2026-10-03, see below |
 
 `ollama list` shows the pulled tags and their IDs; `ollama --version` shows the version.
 
@@ -446,6 +445,8 @@ provisional model for both purposes; the M2 8 GB machine still has to run it bef
 The demonstration runs on the lead's MacBook Pro (Apple M1 Pro, 10 cores, 16 GB), the machine the
 probe in section 7 ran on. Everything runs locally: web, API and gateway on the host, PostgreSQL in
 Docker, and Ollama on the host. Nothing is deployed to a remote server and no paid service is used.
+The plain-text guide for the judges, [how-to-open.txt](how-to-open.txt), follows the same order; when one
+changes, change the other.
 This is the whole procedure, in the order to follow it; the rehearsal record is "SH-30" under
 "Verification status" in the README.
 

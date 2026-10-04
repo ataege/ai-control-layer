@@ -151,14 +151,13 @@ migration yet.
 
 ## Verification and handoff limits
 
-Checked on 2026-10-04 on `api/w2`, which is main efaae10 plus this branch's commits (not a frozen
-submission build): API lint and typecheck exit 0; `pnpm --filter api run test` 441 passed;
-`pnpm test:db --fresh` api 71 passed, gateway 965 passed, 0 failed, 0 skipped; `pnpm verify` 6 passed,
-0 failed, 0 skipped; `pnpm smoke` (host mode) 36 passed, 0 failed, 6 skipped (the service-log leak
-checks are skipped because host mode does not capture logs). The real sign-in, profile, sign-out and
-revoked-profile flow returned 200/200/200/401, and a signed-in operator stays on `/tasks/new` with the
-task form loaded. Nothing here called the live model. The sanitized audit evidence and its build
-identifier are linked in the handoff.
+Checked on the submitted build (commit `<FINAL>`): API lint and typecheck exit <FINAL>;
+`pnpm --filter api run test` <FINAL>; `pnpm test:db --fresh` api <FINAL>, gateway <FINAL>; `pnpm verify`
+<FINAL>; `pnpm smoke` (host mode) <FINAL> (the service-log leak checks are skipped because host mode
+does not capture logs). On 2026-10-04 the real sign-in, profile, sign-out and revoked-profile flow
+returned 200/200/200/401, and a signed-in operator stayed on `/tasks/new` with the task form loaded.
+Those checks did not call the live model. The sanitized audit evidence and its build identifier are
+linked in the handoff.
 
 API-12 form options forward GET /internal/task-options unchanged through the shared schema;
 real Go/API/web-proxy reads returned 200 with identical bodies.
@@ -185,8 +184,8 @@ Known limits:
   A live two-operator check is missing because no second-organization operator is seeded (API-23).
 - Free-text fields the contract allows (for example an event's `safeMessage`) are relayed as Go sends
   them; the API cannot recognise a protected value inside them (API-24).
-- Teammate clean-checkout setup, Docker, and a new live-model approval/outbox rehearsal were not
-  verified in this API work. Fixtures prove contract and authorization behavior, not semantic
+- The Quick start was run by a second session on a fresh clone (API-27). Full-container mode and a
+  new live-model approval/outbox rehearsal were not verified in this API work. Fixtures prove contract and authorization behavior, not semantic
   detection quality. Cookie auth has no production identity federation, onboarding or hardening claim.
 
 ### Known limits (review of api/3c, 2026-10-04)

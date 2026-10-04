@@ -38,9 +38,9 @@ A 200 control-evaluation denial is a recorded deny decision and never an approva
 
 For X-91, send all five fields: `runId`, `kind`, `text`, `tool`, `arguments`. `model_input`
 uses non-null text with null tool/arguments; `tool_result` uses text/tool with null arguments;
-`action_proposal` uses null text and non-null tool/arguments. The draft judge client (`pnpm judge`)
-still sends `run_id` and omits the null fields, so the API refuses its requests until the lead updates
-it; do not add compatibility defaults to the API.
+`action_proposal` uses null text and non-null tool/arguments. The judge client (`pnpm judge`) sends this
+frozen body, and `pnpm test:judge` validates every body it builds against the contract schema; do not add
+compatibility defaults to the API.
 
 Verification: `pnpm --filter api run lint`, `typecheck`, `test`, `build`, `pnpm test:db api`,
 and `pnpm verify`. The sanitized real API/Go audit capture is
@@ -69,6 +69,5 @@ and their ownership are documented in packages/contracts/README.md.
 `CatalogStatus` unchanged (active revision, digests, last rejected activation, the controls' settings). A gateway
 failure or a body outside the contract gives a sanitized 503, never an empty catalog.
 The web run page reads the separate shared `RunState`, `RunUsage` and events (`after` parameter),
-not the earlier draft combined run view. Host smoke on `api/w2` (main 31cff75 plus this branch)
-reported `36 passed, 0 failed, 6 skipped`; the skipped checks are the service-log leak checks, which
-host mode cannot run. This is the API owner's own run on 2026-10-04, not a frozen build.
+not the earlier draft combined run view. Host smoke on the submitted build (commit `<FINAL>`) reported
+`<FINAL>`; the skipped checks are the service-log leak checks, which host mode cannot run.

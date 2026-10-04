@@ -3,7 +3,7 @@
 **Status.** This file plans the Go side of Task Passport: the GO tasks. It is derived from the
 project report, `docs/product/task-passport-project-report.docx` (version 1.2, "Official requirements and hybrid security controls", 3 October 2026; lines marked
 "Report 1.2 change" amend a task and win over older text and "Report 1.1 change" lines), the architecture specification
-`docs/product/project-architecture.md`, and the repository at commit `789bcd7`. Lines marked
+`docs/product/project-architecture.md`, and the repository as it stood at commit `789bcd7` (the plan's baseline, not the current state). Lines marked
 "Report 1.1 change" amend the task they sit in; where they disagree with the older fields, they win. The task statuses below record implementation progress; unticked tasks and unrecorded sync
 points remain open. Sizes are estimates, not a schedule. The
 spine, `docs/roadmap/README.md`, is the contract for this file: its milestones, tiers, sync points
@@ -74,6 +74,8 @@ created (AGENTS.md, "Repository map and ownership").
   `form options`, `stored report read`, `review payload read`) says so in Work and becomes
   "Dropped: reason" when the other outcome is chosen. The records the other outcome would read are
   written by unconditional tasks.
+- **Update: the authentication hold is lifted.** Decision 7 is settled (a server-side stored session in an
+  HttpOnly `session` cookie; `docs/product/README.md`, decision 7). The note below is history.
 - **The authentication hold.** Decision 7 is on hold, and decisions 3 and 4 wait on it (spine,
   "Milestones"). On this side it blocks GO-13 (its "Done when" needs the operator's verified
   authority), GO-14, GO-21, GO-41, GO-44, GO-57, GO-60 and GO-62 (the X-14 mirror), and through

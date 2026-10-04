@@ -1,6 +1,6 @@
 # @workspace/contracts
 
-Wire contracts shared by the services. The baseline defines the generic ones: health, service diagnostics and the error envelope. Product contracts are added here by the nestjs role (the web + API implementer), contract first.
+Wire contracts shared by the services: the generic ones (health, service diagnostics, the error envelope) and the product contracts (run, passport, action, approval, safe event, report, security reads, control evaluation, policy reload). The nestjs role (the web + API implementer) lands every change here, contract first; Go-owned contracts are listed in the tables below.
 
 | Piece                   | Location                                                                                                                                                                               |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

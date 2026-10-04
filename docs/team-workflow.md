@@ -161,14 +161,19 @@ separate metered purposes (report 1.2), hybrid deterministic and semantic contro
 `policy.yaml` imported into a versioned control catalog, an automated test suite, a security summary
 and audit export, performance telemetry, two report classifications and two fixed report templates with report
 provenance in Go, organization-scoped authentication in NestJS with a seeded demo
-operator, and synthetic data in the `demo` schema. Still open for the whole team: which local
-model, the authentication mechanism, and the other open decisions in
-[docs/product/README.md](product/README.md), including the open items between the report and the
-architecture specification. Demo data
+operator, and synthetic data in the `demo` schema. Settled since: the local model (`qwen3.5:4b`, decision 6)
+and the authentication mechanism (a stored session in an HttpOnly cookie, decision 7). The other open
+decisions, including the open items between the report and the architecture specification, are in
+[docs/product/README.md](product/README.md). Demo data
 is an explicit, documented command, never loaded at application startup, and labelled as sample
 data in the UI.
 
 ## Before implementation starts
+
+> **History.** These steps were taken before the implementation phase began and are kept for the
+> record; the open decisions they mention are now tracked in
+> [docs/product/README.md](product/README.md). For a new checkout, follow the Quick start in the
+> root `README.md`.
 
 1. **Commit the baseline.** Done: the starter baseline is on `main` in the team repository.
 2. **Each person, once:** install Go 1.27 or newer and Docker with the Compose plugin, then run the
@@ -241,10 +246,10 @@ pnpm check:instructions
   first.
 - Only the integration owner edits these files.
 
-## Adding the first entity and migration
+## Adding an entity and a migration
 
-When the team needs its first
-table:
+Migrations and entities already exist (`apps/api/src/database/migrations`, the `app` entities in
+`apps/api/src/identity`, `registry` and `policies`). To add a table:
 
 1. **Agree on it.** The owner of the feature and the migration owner (integration) agree that a
    migration is added now and where it sits in the order.

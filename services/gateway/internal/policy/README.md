@@ -1,7 +1,8 @@
 # Action gate (`internal/policy`)
 
 The enforcement package: it canonicalizes proposed actions, decides allow, deny or approval
-required, and owns exact-action approvals. It is filled task by task (GO-12 first).
+required, and owns exact-action approvals. It was built task by task (GO-12 first); each section
+names the task it implements.
 
 ## Canonical arguments and the action digest (GO-12)
 
@@ -17,7 +18,9 @@ digest").
   uuid, `template` a registered name; prose inside an id is `invalid_arguments`. Recipient
   references stay bounded, not pattern-strict, so a redirected recipient is stored and denied
   with `destination_not_allowed` by the passport and run-scope checks. Values are kept
-  byte-for-byte: nothing is trimmed, case-folded or Unicode-normalized.
+  byte-for-byte: nothing is trimmed, case-folded or Unicode-normalized. The hostile-input tables
+  (look-alike characters, URL-encoding, duplicate and case-variant keys, nesting bombs, near misses of
+  every reference) are `redteam_arguments_test.go` and `redteam_gate_test.go`.
 - `CanonicalArguments` encodes typed arguments as one compact JSON form with a fixed field order,
   so input field order, whitespace and equivalent escapes do not matter. Lists keep their order.
 - `CanonicalAction.Digest()` is SHA-256 over the versioned canonical action:

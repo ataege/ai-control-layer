@@ -5,6 +5,11 @@ runs the bounded agent loop against the local model, gates and executes every to
 the hybrid security controls and report provenance, and serves the private operator reads. Start
 with "Technical handoff (GO-61)".
 
+How this file is organised: "Routes" to "Technical handoff (GO-61)" (with its "Known limitations",
+"Evidence commands" and "Check results") describe the gateway as built. From "Ollama transport
+(GO-06 progress)" onward each section is the record of one task or review, dated, kept for its
+evidence; where a record says "draft" or "not on main", the handoff section and the code win.
+
 ## Routes
 
 | Route                                           | Purpose                                                                                                                                                                                                                                                                                                               |
@@ -475,6 +480,10 @@ one run on one machine, not reliability measures.
 
 ### Check results (lane f3, 4 October 2026)
 
+Final build (commit `<FINAL>`): `pnpm verify` <FINAL>; `pnpm test:db --fresh` gateway <FINAL>;
+`pnpm smoke` <FINAL>; `pnpm verify:controls` <FINAL>. The results below are the earlier dated record
+of lane f3 and are not the final figures.
+
 Run by lane f3 itself, each on its own exit code, in a clean worktree of `main` 1c07e78 (a fresh
 `pnpm install`, a recreated test database); none of it is a teammate's dry run.
 
@@ -711,6 +720,10 @@ Verification commands on the isolated test database:
   empty test database. Reverting the ledger preserved the existing catalog tables.
 
 ## Integration handoff review (2026-10-03)
+
+> **History.** The catalog storage, the activation protocol (`internal/catalog`, GO-72/73) and the
+> operator-context verification (`internal/operatorcontext`, GO-21) described here as drafts are built;
+> read their sections above for the current behaviour.
 
 Read-only review of `origin/feat/fd-catalog-and-tests` at `538fed4`: `config/README.md`,
 `config/policy.yaml`, the catalog entities and their migration. These are draft inputs to GO-72/73,
@@ -1724,6 +1737,9 @@ PostgreSQL) and 6 API tests passed, none skipped. No smoke was run for GO-20 bec
 support, the test wrapper and documentation changed.
 
 ## Runtime schema review input accepted with the user
+
+> **History.** The runtime schema was reviewed, aligned with the token ledger and migrated
+> (`docs/contracts/runtime-schema-alignment.md`); the answers below record the 3 October decisions.
 
 On 3 October 2026 the user accepted these responses to the lead's five questions:
 

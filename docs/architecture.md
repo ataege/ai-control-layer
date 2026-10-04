@@ -1,10 +1,10 @@
-# Starter architecture
+# Architecture
 
-This document describes the wiring of the starter baseline: three small applications, one
-database and the connections between them. Product modules are added on top of it during the
-implementation phase. Each one is recorded in [Product modules](#product-modules) when its first
-code lands, so the document keeps describing what exists. Sections other than that one describe the
-baseline.
+This document describes the wiring of the system: the web app, the API, the gateway and the
+database, and the connections between them. The sections up to "Contracts" and the health and
+error semantics were written for the starter baseline and still describe it accurately; the product
+modules built on top of it are recorded in [Product modules](#product-modules), one row per module.
+The index of the whole handoff is [technical-handoff.md](technical-handoff.md).
 
 ## Wiring
 
@@ -292,14 +292,9 @@ waiting on PostgreSQL answers 503 at once instead of holding up the drain.
 
 ## Product modules
 
-`apps/api/src/actions` (NestJS): reviewer-only frozen action review and approval forwarding through private Go routes, preserving the Go-owned review contract and writing no grants.
-
-`apps/api/src/security` (NestJS): authorized security summary and reviewer-only sanitized audit export through private Go reads; uses shared security read contracts and writes no runtime records.
-
-The first implemented product module is the Ollama transport below. The intended product design
-is the report (version 1.2) and the architecture specification,
+The product design is the report (version 1.2) and the architecture specification,
 [docs/product/project-architecture.md](product/project-architecture.md) (overview in
-[docs/product](product/README.md)); it is a design, not implemented code. The specification's
+[docs/product](product/README.md)); the table below lists what is implemented. The specification's
 repository structure differs from this repository: migrations stay in
 `apps/api/src/database/migrations`, Compose is `infra/compose.yaml` and design files are in
 `docs/product` (open item `repository layout`); its private service network is open item
@@ -358,7 +353,7 @@ in [AGENTS.md](../AGENTS.md).
 
 All npm versions are exact (no ranges) and locked in `pnpm-lock.yaml`; Go modules are locked in
 `services/gateway/go.sum`. Versions shared by several workspaces come from the `catalog` in
-`pnpm-workspace.yaml`.
+`pnpm-workspace.yaml`. These versions were last compared with the lockfiles and `.nvmrc` at commit `<FINAL>`.
 
 ### Runtimes, tooling and images
 

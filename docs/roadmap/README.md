@@ -5,10 +5,11 @@
 architecture specification `docs/product/project-architecture.md` (the version 1.1 Mermaid source; the report's figures are the
 current diagrams), the
 competition rules `docs/product/competition-rules.pdf`, the challenge criteria
-`docs/product/competition-criteria.pdf` and the repository at commit `c413d7d`. Tasks that report 1.1
+`docs/product/competition-criteria.pdf` and the repository as it stood at commit `c413d7d` (the plan's baseline, not the current state). Tasks that report 1.1
 or 1.2 changed carry a "Report 1.1 change" or "Report 1.2 change" line; where such a line and the
-older task text disagree, the change line wins, and a 1.2 line wins over a 1.1 line. Nothing in it is implemented: every task is open and every
-sync point is unreached. Sizes are estimates, not a schedule. The milestone windows are relative to
+older task text disagree, the change line wins, and a 1.2 line wins over a 1.1 line. Progress is recorded in the task blocks: a ticked
+task carries its "Completed" line with the quoted check results; the freeze, handoff and rehearsal tasks (SH-31 to SH-35) stay open until
+the final build. Sizes are estimates, not a schedule. The milestone windows are relative to
 the report's 24-hour coding window, which the competition rules fix at 11:00 on 3 October 2026 to
 11:00 on 4 October 2026 (see "Milestones").
 The plan changes when the report changes.

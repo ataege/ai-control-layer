@@ -181,7 +181,7 @@ container image runs the same server directly (see `infra/docker/web.Dockerfile`
 
 ## What the tests cover
 
-`pnpm --filter web run test` runs 42 files, 409 tests (2026-10-04, main 39d5899): Vitest in the
+`pnpm --filter web run test` runs <FINAL> files, <FINAL> tests (commit `<FINAL>`): Vitest in the
 node environment, so every test is a pure function or a server-rendered string. Covered:
 
 - the proxy (allowlist, cookie and header forwarding, request ids, the four failure codes), the
@@ -204,8 +204,8 @@ stack, and the roadmap blocks (WEB-12, WEB-23, WEB-27, WEB-28) quote what was se
 - The `session` cookie check in the middleware is existence only; a forged cookie reaches the page
   shell and is refused by the API on the first data read.
 - Polling, not push: the run page refreshes every 3 s while the run is not terminal.
-- Failure states are applied on the report page; other pages that still print a short message
-  (`getSafeMessage`) do not yet use `@/components/errors`.
+- Failure states (`@/components/errors`) are applied on the report page, the task form and the security
+  dashboard; the run page and the judge console still print a short message from `getSafeMessage`.
 - No dark/light toggle test, no mobile layout check, no accessibility audit.
 - Not verified on Linux or WSL; Windows is untested.
 

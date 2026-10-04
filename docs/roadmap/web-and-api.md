@@ -1,14 +1,16 @@
 # Next.js and NestJS side roadmap
 
-**Status.** Plan only: every task is open and nothing in it is implemented. Derived from the
+**Status.** The task blocks record implementation progress: a ticked task carries its "Completed" line with
+the quoted check results, and an unticked one is still open (for example the freeze, handoff and
+rehearsal tasks, or a task closed only by a decision). Derived from the
 project report, `docs/product/task-passport-project-report.docx` (version 1.2, "Official requirements and hybrid security controls", 3 October 2026; lines marked
 "Report 1.2 change" amend a task and win over older text and "Report 1.1 change" lines), from the architecture specification
 `docs/product/project-architecture.md`, from the spine `docs/roadmap/README.md` and from the
-repository at commit `789bcd7`. Lines marked "Report 1.1 change" amend the task they sit in; where
+repository as it stood at commit `789bcd7` (the plan's baseline, not the current state). Lines marked "Report 1.1 change" amend the task they sit in; where
 they disagree with the older fields, they win. Sizes are estimates, not a schedule. The milestone windows are relative to the report's
 24-hour coding window; the organizers' confirmed rules and deadline take precedence. The
-authentication design is on hold (decision 7), so the M1 exit cannot be reached until the hold is
-lifted (see "The authentication hold").
+authentication design was on hold (decision 7) and is settled (stored session cookie, `docs/product/README.md`
+decision 7); "The authentication hold" below is history.
 
 ## Who is on this side
 
@@ -88,7 +90,10 @@ default) and the researcher track (not assigned) are in the spine.
 
 ### The authentication hold
 
-The authentication design (decision 7) is on hold by the user's decision of 2026-10-03, and nothing
+> **Lifted.** Decision 7 is settled: a server-side stored session in an HttpOnly `session` cookie, with a
+> real credential check (`docs/product/README.md`, decision 7). The rest of this section is history.
+
+The authentication design (decision 7) was on hold by the user's decision of 2026-10-03, and nothing
 about its mechanism is decided. Decisions 3 and 4 wait on it (SH-02, SH-03). The spine: "While the
 hold stands, the M1 exit cannot be reached, and by the 'Depends on' column of 'Sync points' neither
 can X-14, X-22, X-23, X-26, X-27, X-28, X-31, X-40, X-42, X-43, X-55 and X-56 (it needs the second
@@ -441,12 +446,14 @@ must enforce and show, so that any gap reaches the document owner in the same se
     the M0 exit's "agreed contract example for each command and event" covers the screens the report
     names.
   - Tests: none (a review of the examples).
-  - Evidence (2026-10-04, branch `web/audit-01-02`): `docs/web-contract-audit.md`. A reading review,
-    not a live run (the API does not compile on that day's merged `main`). Open items recorded there:
+  - Evidence (2026-10-04, branch `web/audit-01-02`): a reading review of the web against the frozen
+    fixtures, kept in the git history (the review file `docs/web-contract-audit.md` was removed in the
+    final documentation pass). It was not a live run (the API did not compile on that day's merged
+    `main`). Open items it recorded:
     task goal text, correction count, estimated cost, report types and internal evidence in the task
     form. The page-level mismatches (legacy `RunView` and `SanitizedEvent` shapes against the frozen
-    `RunState` and `SafeEvent`) are listed there as blocking the demonstration; they are follow-up
-    work, not part of this review.
+    `RunState` and `SafeEvent`) were blocking the demonstration; the run page was rebuilt on the real
+    contracts afterwards (`de1f227`).
   - Report: "Users operating model and proposed user journeys" (Journeys 1 to 3); "Live
     demonstration storyboard and proof checks"; "Atomic allowances hard limits and estimated cost"
   - Blocked by: `contract owners`

@@ -1,8 +1,12 @@
-# Monorepo starter
+# Task Passport
 
-A monorepo with a Next.js web app, a NestJS API, a Go service and one PostgreSQL instance, wired
-together with health checks, diagnostics, shared contracts and development tooling. The team is
-building Task Passport on top of it at HackYeah.
+Task Passport is a control layer for an AI agent, built for the HackYeah 2026 "AI Control Layer"
+challenge. A Go gateway issues each task an immutable passport, checks every model request and every
+proposed action against it with deterministic and AI-based controls, and lets a report inherit
+restrictions from its sources. It is a monorepo with a Next.js web app, a NestJS API, a Go service and
+one PostgreSQL instance, wired together with health checks, diagnostics, shared contracts and
+development tooling. To run it as a judge, follow [docs/how-to-open.txt](docs/how-to-open.txt); the
+index of the technical handoff is [docs/technical-handoff.md](docs/technical-handoff.md).
 
 **Status: implementation phase.** Product work is under way on top of the starter baseline, each
 feature in the service that owns its responsibility: TypeORM migrations for the `app`, `runtime`
@@ -24,6 +28,8 @@ unverified are listed under [Verification status](#verification-status).
 | Shared configuration  | TypeScript, ESLint and Prettier configuration           | `packages/config`    |
 | Local infrastructure  | Docker Compose, three Dockerfiles                       | `infra`              |
 | Helper scripts        | Setup, development runner, verification, smoke test     | `scripts`            |
+| Control policy        | `policy.yaml` and the attack-signature feed             | `config`             |
+| Synthetic data        | Demo records, hostile notes, semantic corpus            | `fixtures`           |
 | Migration notes       | README only; migrations live in the API                 | `db/migrations`      |
 | Team and agent guides | `AGENTS.md`, `CLAUDE.md`, project agents                | `.claude/agents`     |
 
@@ -615,6 +621,12 @@ No script removes the volume for you: `infra:down` and `stack:down` always keep 
 
 ## Verification status
 
+**Submitted build.** Results of the final build (commit `<FINAL>`): `pnpm verify` <FINAL>, `pnpm test:db --fresh`
+<FINAL>, `pnpm smoke` <FINAL>, `pnpm verify:controls` <FINAL>. Per-task results with their commands are
+quoted in the "Completed" lines of [docs/roadmap](docs/roadmap/README.md) and indexed in
+[docs/technical-handoff.md](docs/technical-handoff.md) ("Evidence"). The rest of this section records the
+starter baseline and is kept as history.
+
 Verified on the preparation machine on 2026-10-03 (macOS arm64, Node.js 24.18.0, pnpm 11.10.0).
 Go and Docker were not installed there. A Go 1.27.1 toolchain was unpacked into a temporary
 directory (not installed) for the Go checks, and PostgreSQL 18.4 was provided by the
@@ -793,10 +805,15 @@ describes.
 
 | Document                                                 | Content                                                                                                                                                                                            |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/how-to-open.txt](docs/how-to-open.txt)             | Plain-text guide for the judges: install, run, sign in, walk through the scenario, change the rules, run the tests                                                                                 |
 | [docs/technical-handoff.md](docs/technical-handoff.md)   | The technical handoff index: where each part is, the run order, the known limits in one place and the evidence pointers                                                                            |
 | [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service, local model, deployment on the presentation machine                                                            |
+| [docs/demo-runbook.md](docs/demo-runbook.md)             | The presenter's step-by-step for the demonstration beats and the final live checks                                                                                                                 |
+| [docs/api-facade-handoff.md](docs/api-facade-handoff.md) | Every public API route with its contract and access check                                                                                                                                          |
+| [config/README.md](config/README.md)                     | `policy.yaml` and the signature feed: every field, import, reload, rejected files                                                                                                                  |
+| [fixtures/README.md](fixtures/README.md)                 | The synthetic records, hostile notes and semantic corpus, and what they do not prove                                                                                                               |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                                                                                                        |
-| [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                                                                                                    |
+| [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, adding an entity and a migration                                                                                              |
 | [docs/roadmap/README.md](docs/roadmap/README.md)         | Implementation roadmap: shared spine, then the Go side (`go.md`) and the Next.js and NestJS side (`web-and-api.md`)                                                                                |
 | [docs/product/README.md](docs/product/README.md)         | Project report (version 1.2), the architecture specification with its three Mermaid diagrams, the competition rules and criteria, contracts to freeze and the decisions between design and starter |
 | [docs/preparation-record.md](docs/preparation-record.md) | Baseline record: what was prepared, third-party resources and licenses, decisions, deferred areas                                                                                                  |
