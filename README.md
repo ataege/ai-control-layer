@@ -39,12 +39,13 @@ More detail: [docs/setup.md](docs/setup.md), [docs/architecture.md](docs/archite
 
 ## Prerequisites
 
-| Tool    | Version                               | Notes                                                                                        |
-| ------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Node.js | `>=24.15.0 <25` (`.nvmrc`: `24.18.0`) | Enforced at install time (`engineStrict: true`).                                             |
-| pnpm    | `11.10.0`                             | Pinned through `packageManager` in the root `package.json`.                                  |
-| Go      | `1.27` or newer                       | Needed to run, test and build the gateway on the host. Not needed for `dev:web` / `dev:api`. |
-| Docker  | Engine with the Compose plugin        | `docker compose version` must work. Needed for `infra:*` and `stack:*`.                      |
+| Tool    | Version                               | Notes                                                                                                                                                                                  |
+| ------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js | `>=24.15.0 <25` (`.nvmrc`: `24.18.0`) | Enforced at install time (`engineStrict: true`).                                                                                                                                       |
+| pnpm    | `11.10.0`                             | Pinned through `packageManager` in the root `package.json`.                                                                                                                            |
+| Go      | `1.27` or newer                       | Needed to run, test and build the gateway on the host. Not needed for `dev:web` / `dev:api`.                                                                                           |
+| Docker  | Engine with the Compose plugin        | `docker compose version` must work. Needed for `infra:*` and `stack:*`.                                                                                                                |
+| Ollama  | current release (0.35.1 was used)     | Serves the local model `qwen3.5:4b`; needed to start a run and for `pnpm verify:controls` ([docs/setup.md](docs/setup.md), section 7). `pnpm run setup` only warns when it is missing. |
 
 Getting pnpm 11.10.0 is your choice of method; the starter does not change any machine setting:
 
@@ -54,12 +55,12 @@ Getting pnpm 11.10.0 is your choice of method; the starter does not change any m
 - An existing pnpm 11 of another version: pnpm's default behaviour is to download and switch to
   the pinned version. That path was not exercised during preparation.
 
-Nothing in this repository installs Go, Docker or any global tool. `pnpm run setup` only reports
+Nothing in this repository installs Go, Docker, Ollama or any global tool. `pnpm run setup` only reports
 what is missing.
 
 ### macOS and Linux
 
-Install the four tools with the method you normally use (version manager, OS packages, official
+Install the tools above with the method you normally use (version manager, OS packages, official
 installers). If you use a Node version manager, `.nvmrc` selects 24.18.0.
 
 ### Windows: use WSL 2
@@ -120,18 +121,24 @@ Stop with Ctrl+C in the `pnpm dev` terminal, then `pnpm infra:down`. The databas
 
 ## URLs
 
-| Service | URL                                             | What it is                                                         |
-| ------- | ----------------------------------------------- | ------------------------------------------------------------------ |
-| Web     | <http://localhost:3000/>                        | Home page                                                          |
-| Web     | <http://localhost:3000/components>              | Component showcase                                                 |
-| Web     | <http://localhost:3000/diagnostics>             | Live service diagnostics                                           |
-| API     | <http://localhost:3001/api/health/live>         | Liveness, no dependencies                                          |
-| API     | <http://localhost:3001/api/health/ready>        | Readiness, `SELECT 1` against PostgreSQL                           |
-| API     | <http://localhost:3001/api/diagnostics/gateway> | Authenticated ping and readiness of the gateway                    |
-| API     | <http://localhost:3001/api/docs>                | Swagger UI (OpenAPI JSON at `/api/docs-json`)                      |
-| Gateway | <http://localhost:8080/health/live>             | Liveness, no dependencies                                          |
-| Gateway | <http://localhost:8080/health/ready>            | Readiness, PostgreSQL ping                                         |
-| Gateway | <http://localhost:8080/internal/ping>           | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`, else 401 |
+| Service | URL                                             | What it is                                                                                    |
+| ------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Web     | <http://localhost:3000/>                        | Task form (sign-in required)                                                                  |
+| Web     | <http://localhost:3000/login>                   | Sign in                                                                                       |
+| Web     | <http://localhost:3000/tasks/new>               | Task form                                                                                     |
+| Web     | `http://localhost:3000/runs/<run id>`           | Run page; report at `/runs/<id>/reports/<reportId>`, review at `/runs/<id>/review/<actionId>` |
+| Web     | <http://localhost:3000/judge>                   | Judge console: submit your own input to the control layer                                     |
+| Web     | <http://localhost:3000/security>                | Security posture and active controls                                                          |
+| Web     | <http://localhost:3000/security/export>         | Audit export (JSON or CSV, reviewers only)                                                    |
+| Web     | <http://localhost:3000/components>              | Component showcase                                                                            |
+| Web     | <http://localhost:3000/diagnostics>             | Live service diagnostics                                                                      |
+| API     | <http://localhost:3001/api/health/live>         | Liveness, no dependencies                                                                     |
+| API     | <http://localhost:3001/api/health/ready>        | Readiness, `SELECT 1` against PostgreSQL                                                      |
+| API     | <http://localhost:3001/api/diagnostics/gateway> | Authenticated ping and readiness of the gateway                                               |
+| API     | <http://localhost:3001/api/docs>                | Swagger UI (OpenAPI JSON at `/api/docs-json`)                                                 |
+| Gateway | <http://localhost:8080/health/live>             | Liveness, no dependencies                                                                     |
+| Gateway | <http://localhost:8080/health/ready>            | Readiness, PostgreSQL ping                                                                    |
+| Gateway | <http://localhost:8080/internal/ping>           | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`, else 401                            |
 
 The web app also serves route handlers that forward to the API and nothing else (health,
 diagnostics, sign-in, runs, actions, control, security and policies; the table is in
@@ -162,8 +169,10 @@ Services reach each other through `localhost` (`API_UPSTREAM_URL=http://localhos
 
 `pnpm dev` and `pnpm dev:web` start the web process without `GATEWAY_SERVICE_TOKEN`,
 `AUTH_JWT_SECRET`, `OPERATOR_CONTEXT_SIGNING_KEY`, any `POSTGRES_*` or any `MODEL_*` variable, the same
-rule the `web` container follows. The API gets everything except `MODEL_*`; the gateway gets
-everything except `AUTH_JWT_SECRET`.
+rule the `web` container follows. The API gets everything except `MODEL_*`,
+`POSTGRES_GATEWAY_PASSWORD` and `DEMO_OPERATOR_PASSWORD`; the gateway gets everything except
+`AUTH_JWT_SECRET`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and `DEMO_OPERATOR_PASSWORD`. None of the
+three gets `DEMO_OPERATOR_PASSWORD`.
 
 ### 2. Full-container mode
 
@@ -217,41 +226,44 @@ One file: the root `.env`, created by `pnpm run setup` from `.env.example`. It i
 readable by your user only. Real environment variables always win over the file. There are no
 `NEXT_PUBLIC_*` variables.
 
-| Variable                       | Default                  | Read by                                     | Notes                                                                                                                                                                                                                         |
-| ------------------------------ | ------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POSTGRES_HOST`                | `localhost`              | API, gateway                                | Compose sets `postgres` for the containers.                                                                                                                                                                                   |
-| `POSTGRES_PORT`                | `5432`                   | API, gateway, Compose                       | Also the published host port of the `postgres` container.                                                                                                                                                                     |
-| `POSTGRES_USER`                | `starter`                | API, Compose, migrations, `db:roles`        | The owner of the schema. Applied by the PostgreSQL image only when the volume is first created. Not given to the gateway.                                                                                                     |
-| `POSTGRES_PASSWORD`            | generated by setup       | API, Compose, migrations, `db:roles`        | 32 random characters. Same first-creation rule as above. Not passed to the web or the gateway.                                                                                                                                |
-| `POSTGRES_GATEWAY_PASSWORD`    | generated by setup       | gateway, `db:roles`, Compose (gateway only) | The gateway connects as its own role `task_passport_gateway` with this password (GO-38); `pnpm db:roles` sets it on the role after the migrations. Without it the gateway refuses to start. Not passed to the web or the API. |
-| `POSTGRES_DB`                  | `starter`                | API, gateway, Compose                       | Same first-creation rule.                                                                                                                                                                                                     |
-| `WEB_PORT`                     | `3000`                   | web launchers, Compose, smoke               | Host port of the web app. A whole number from 1 to 65535.                                                                                                                                                                     |
-| `API_PORT`                     | `3001`                   | API, Compose, smoke                         | Host port of the API.                                                                                                                                                                                                         |
-| `GATEWAY_PORT`                 | `8080`                   | gateway, Compose (`--debug`), smoke         | Host port of the gateway.                                                                                                                                                                                                     |
-| `API_UPSTREAM_URL`             | `http://localhost:3001`  | web (server side)                           | Where the Next.js server reaches the API. Validated at request time, not at build time.                                                                                                                                       |
-| `GATEWAY_URL`                  | `http://localhost:8080`  | API                                         | Where the API reaches the gateway.                                                                                                                                                                                            |
-| `CORS_ALLOWED_ORIGINS`         | `http://localhost:3000`  | API                                         | Comma-separated explicit origins. `*` and values with a path are rejected.                                                                                                                                                    |
-| `GATEWAY_SERVICE_TOKEN`        | generated by setup       | API, gateway                                | 48 random characters, minimum 32. Held by the two backends only. The smoke script reads it for its checks.                                                                                                                    |
-| `AUTH_JWT_SECRET`              | generated by setup       | API                                         | 64 random characters. Signs the operator's session JWT in the HttpOnly cookie (decision 7). The API only; never the gateway, the web app or the browser.                                                                      |
-| `DEMO_OPERATOR_PASSWORD`       | set locally in `.env`    | explicit `db:seed` command only             | Required development demonstration password (1–256 characters), hashed with the API scrypt helper. Never committed or printed; excluded from dev service environments and absent from Compose.                                |
-| `OPERATOR_CONTEXT_SIGNING_KEY` | generated by setup       | API, gateway                                | 64 random characters. Signs the short-lived operator-context JWT the API sends in the `X-Operator-Context` header (decision 4). Never the web app or the browser.                                                             |
-| `GATEWAY_TIMEOUT_MS`           | `3000`                   | API                                         | Upper bound for one API to gateway call. Whole milliseconds, 100-20000.                                                                                                                                                       |
-| `DATABASE_TIMEOUT_MS`          | `3000`                   | API, gateway                                | Upper bound for one connection attempt or readiness check. Both accept whole milliseconds, 100-20000.                                                                                                                         |
-| `LOG_LEVEL`                    | `info`                   | API, gateway                                | `debug`, `info`, `warn` or `error`.                                                                                                                                                                                           |
-| `MODEL_BASE_URL`               | `http://localhost:11434` | gateway                                     | Ollama URL (host, not Compose). The gateway container gets `host.docker.internal`.                                                                                                                                            |
-| `MODEL_NAME`                   | `qwen3.5:4b`             | gateway                                     | Ollama model tag for the local model alias: the decided model (decision 6, provisional), which the active catalog must allow. Pull it once with `ollama pull`. Empty: the gateway starts, but every model call fails closed.  |
+| Variable                       | Default                  | Read by                                            | Notes                                                                                                                                                                                                                                                                            |
+| ------------------------------ | ------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_HOST`                | `localhost`              | API, gateway                                       | Compose sets `postgres` for the containers.                                                                                                                                                                                                                                      |
+| `POSTGRES_PORT`                | `5432`                   | API, gateway, Compose                              | Also the published host port of the `postgres` container.                                                                                                                                                                                                                        |
+| `POSTGRES_USER`                | `starter`                | API, Compose, migrations, `db:roles`               | The owner of the schema. Applied by the PostgreSQL image only when the volume is first created. Not given to the gateway.                                                                                                                                                        |
+| `POSTGRES_PASSWORD`            | generated by setup       | API, Compose, migrations, `db:roles`               | 32 random characters. Same first-creation rule as above. Not passed to the web or the gateway.                                                                                                                                                                                   |
+| `POSTGRES_GATEWAY_PASSWORD`    | generated by setup       | gateway, `db:roles`, Compose (gateway only)        | The gateway connects as its own role `task_passport_gateway` with this password (GO-38); `pnpm db:roles` sets it on the role after the migrations. Without it the gateway refuses to start. Not passed to the web or the API.                                                    |
+| `POSTGRES_DB`                  | `starter`                | API, gateway, Compose                              | Same first-creation rule.                                                                                                                                                                                                                                                        |
+| `WEB_PORT`                     | `3000`                   | web launchers, Compose, smoke                      | Host port of the web app. A whole number from 1 to 65535.                                                                                                                                                                                                                        |
+| `API_PORT`                     | `3001`                   | API, Compose, smoke                                | Host port of the API.                                                                                                                                                                                                                                                            |
+| `GATEWAY_PORT`                 | `8080`                   | gateway, Compose (`--debug`), smoke                | Host port of the gateway.                                                                                                                                                                                                                                                        |
+| `API_UPSTREAM_URL`             | `http://localhost:3001`  | web (server side)                                  | Where the Next.js server reaches the API. Validated at request time, not at build time.                                                                                                                                                                                          |
+| `GATEWAY_URL`                  | `http://localhost:8080`  | API                                                | Where the API reaches the gateway.                                                                                                                                                                                                                                               |
+| `CORS_ALLOWED_ORIGINS`         | `http://localhost:3000`  | API                                                | Comma-separated explicit origins. `*` and values with a path are rejected.                                                                                                                                                                                                       |
+| `GATEWAY_SERVICE_TOKEN`        | generated by setup       | API, gateway                                       | 48 random characters, minimum 32. Held by the two backends only. The smoke script reads it for its checks.                                                                                                                                                                       |
+| `AUTH_JWT_SECRET`              | generated by setup       | API                                                | 64 random characters, generated by setup and kept API-only. Reserved for session signing; the current sessions are stored server-side (a hashed random id in the HttpOnly `session` cookie, decision 7) and no code reads it yet. Never the gateway, the web app or the browser. |
+| `DEMO_OPERATOR_PASSWORD`       | generated by setup       | `db:seed` command; `pnpm smoke` (signed-in checks) | Required development demonstration password (1–256 characters), hashed with the API scrypt helper. Never committed or printed; excluded from dev service environments and absent from Compose.                                                                                   |
+| `OPERATOR_CONTEXT_SIGNING_KEY` | generated by setup       | API, gateway                                       | 64 random characters. Signs the short-lived operator-context JWT the API sends in the `X-Operator-Context` header (decision 4). Never the web app or the browser.                                                                                                                |
+| `GATEWAY_TIMEOUT_MS`           | `3000`                   | API                                                | Upper bound for one API to gateway call. Whole milliseconds, 100-20000.                                                                                                                                                                                                          |
+| `DATABASE_TIMEOUT_MS`          | `3000`                   | API, gateway                                       | Upper bound for one connection attempt or readiness check. Both accept whole milliseconds, 100-20000.                                                                                                                                                                            |
+| `LOG_LEVEL`                    | `info`                   | API, gateway                                       | `debug`, `info`, `warn` or `error`.                                                                                                                                                                                                                                              |
+| `MODEL_BASE_URL`               | `http://localhost:11434` | gateway                                            | Ollama URL (host, not Compose). The gateway container gets `host.docker.internal`.                                                                                                                                                                                               |
+| `MODEL_NAME`                   | `qwen3.5:4b`             | gateway                                            | Ollama model tag for the local model alias: the model frozen for the demonstration (decision 6), which the active catalog must allow. Pull it once with `ollama pull`. Empty: the gateway starts, but every model call fails closed.                                             |
 
-Optional variables that are not in `.env.example`:
+Optional variables (commented out in `.env.example`, or absent from it):
 
-| Variable       | Default       | Read by                        | Notes                                                                                                                                     |
-| -------------- | ------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `API_HOST`     | `127.0.0.1`   | API                            | Bind address. The API image and Compose set `0.0.0.0`.                                                                                    |
-| `GATEWAY_HOST` | `127.0.0.1`   | gateway                        | Bind address. The gateway image and Compose set `0.0.0.0`.                                                                                |
-| `NODE_ENV`     | `development` | API                            | `development`, `test` or `production`. The API image and Compose set `production`.                                                        |
-| `WEB_HOST`     | `127.0.0.1`   | web launchers (`dev`, `start`) | Bind address of the web server started on the host (`next dev` and the standalone server). An inherited `HOSTNAME` is ignored on purpose. |
+| Variable             | Default       | Read by                        | Notes                                                                                                                                     |
+| -------------------- | ------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_HOST`           | `127.0.0.1`   | API                            | Bind address. The API image and Compose set `0.0.0.0`.                                                                                    |
+| `GATEWAY_HOST`       | `127.0.0.1`   | gateway                        | Bind address. The gateway image and Compose set `0.0.0.0`.                                                                                |
+| `COMMAND_TIMEOUT_MS` | `10000`       | API                            | Upper bound for one API to gateway command call (start run, cancel, approval, evaluate). Whole milliseconds, 100-20000.                   |
+| `NODE_ENV`           | `development` | API                            | `development`, `test` or `production`. The API image and Compose set `production`.                                                        |
+| `WEB_HOST`           | `127.0.0.1`   | web launchers (`dev`, `start`) | Bind address of the web server started on the host (`next dev` and the standalone server). An inherited `HOSTNAME` is ignored on purpose. |
 
-The gateway also rejects a `GATEWAY_SERVICE_TOKEN` that starts or ends with whitespace and blank
-`POSTGRES_USER`, `POSTGRES_PASSWORD` or `POSTGRES_DB` values.
+The gateway also rejects a `GATEWAY_SERVICE_TOKEN` that starts or ends with whitespace or is
+shorter than 32 characters, an `OPERATOR_CONTEXT_SIGNING_KEY` shorter than 32 characters, and a
+blank `POSTGRES_DB` or `POSTGRES_GATEWAY_PASSWORD`. It reads neither `POSTGRES_USER` nor
+`POSTGRES_PASSWORD`: it connects as its own role.
 
 ### Changing ports
 
@@ -332,7 +344,7 @@ migration and whether it ran; `pnpm db:migration:run` applies the pending ones i
 After `run`, `pnpm db:roles` sets the gateway role's password (see "Command reference").
 
 Generated files are not formatted; run `pnpm format` afterwards. How to add an entity and its
-migration: [docs/team-workflow.md](docs/team-workflow.md#adding-the-first-entity-and-migration).
+migration: [docs/team-workflow.md](docs/team-workflow.md#adding-an-entity-and-a-migration).
 
 ## Testing and verification
 
@@ -346,11 +358,9 @@ Static quality gate. Needs no `.env`, no database and no running service, but it
 2. `format:check`: Prettier and `gofmt`.
 3. `lint`: ESLint, `go vet`.
 4. `typecheck`: TypeScript and Go compile checks.
-5. `test`: contracts fixtures against their JSON Schemas, and one typed sample per schema compared
-   with its fixture file; web tests (fetch helper, proxy allowlist and failure mapping, check
-   interpretation); API tests (readiness failure and connection release, gateway timeout and
-   failure mapping, error envelope, environment validation, database connection retries); Go tests
-   (configuration, token rejection, readiness, shutdown, log redaction, contract fixtures).
+5. `test`: every workspace's tests: the contracts fixtures against their JSON Schemas, the web and
+   API Vitest suites and the gateway's `go test ./...` (database-backed tests skip visibly without
+   a database; see `pnpm test:db`).
    The step then runs `pnpm test:scripts`, the scripts' own tests (judge client, smoke session
    helper, local model preflight, evidence audit), so the summary still counts six steps.
 6. `build`: contracts, web, API, gateway binary.
@@ -661,7 +671,7 @@ view of the diagnostics page was not repeated after the review round.
   20 assets) and the token rejection checks.
 - No tables after both backends started. The five migration commands behaved as listed under
   [Migrations](#migrations).
-- `/api/docs-json` lists exactly the three API routes.
+- At that baseline, `/api/docs-json` listed exactly the three baseline API routes (health live, health ready, diagnostics gateway); the product routes were added later.
 - The service token and the database password do not appear in any service log of the dev run.
 - The diagnostics page was viewed in a browser: four cards rendered from real responses.
 - `pnpm check:instructions` passes; `AGENTS.md` and `CLAUDE.md` are identical.
@@ -733,7 +743,8 @@ the same machine was not touched (see [infra/README.md](infra/README.md)).
   it. That is acceptable for these two secrets because the API reads both; a secret the API must
   not hold needs SH-13's approach.
 - No code reads either secret yet; the readers land with the authentication and operator-context
-  work.
+  work. (Update 2026-10-04: the API and the gateway now read `OPERATOR_CONTEXT_SIGNING_KEY`; no code
+  reads `AUTH_JWT_SECRET`, because sessions are stored server-side.)
 
 **SH-09: container path**
 
@@ -756,7 +767,7 @@ the same machine was not touched (see [infra/README.md](infra/README.md)).
   `--network container:<gateway>`, because the gateway image has no HTTP client),
   `GET http://host.docker.internal:11434/api/tags` returned 200 and listed the host's Ollama models,
   `qwen3.5:4b` among them. Docker Desktop for macOS reaches the loopback-bound Ollama without any
-  change. The gateway itself does not call the model yet. Linux was not tested.
+  change. At the time of this check the gateway did not call the model yet (it does now: the agent loop and the semantic evaluator). Linux was not tested.
 - `pnpm stack:down`: removed the containers and the network and kept the volume.
 - `pnpm stack:up --debug` published the gateway on `127.0.0.1:8080`; `pnpm smoke` in host mode
   against it passed 21 of 21, including the five gateway checks. `pnpm stack:down --debug` removed
@@ -781,7 +792,7 @@ describes.
 - `pnpm stack:up`: exit 0, all four containers healthy after 2 min 29 s, including the first image
   builds of this clone.
 - `pnpm db:migration:run` from the host against the published port: created the bookkeeping table,
-  "No migrations are pending" (none exist yet).
+  "No migrations are pending" (none existed at that commit; there are 21 now).
 - `pnpm smoke --mode=container`: 24 passed, 0 failed, 6 skipped; Ollama reachable from the Compose
   network (HTTP 200).
 - Fallback: `pnpm stack:down`, `pnpm infra:up`, `pnpm dev` and `pnpm smoke`: 26 passed, 0 failed,
