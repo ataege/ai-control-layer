@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -91,9 +92,20 @@ func TestCommandBodiesRefuseDuplicateAndCaseVariantKeys(t *testing.T) {
 			if recorder.Code != http.StatusBadRequest {
 				t.Fatalf("status %d", recorder.Code)
 			}
+			// Only the error's own fields are checked: the envelope also carries a random request id
+			// (hex) and a timestamp, which can contain any short digit run such as "999" by chance.
+			var envelope struct {
+				Error struct{ Code, Message string } `json:"error"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+				t.Fatalf("not an error envelope: %v", err)
+			}
+			if envelope.Error.Code != "bad_request" || envelope.Error.Message != "The request body is not a valid command." {
+				t.Fatalf("error = %+v, want the fixed bad_request text", envelope.Error)
+			}
 			for _, echoed := range []string{"approve", "reject", "999", "invoice_B01", "DECISION", "MODELCALLS"} {
-				if strings.Contains(recorder.Body.String(), echoed) {
-					t.Fatalf("the 400 echoes %q: %s", echoed, recorder.Body.String())
+				if strings.Contains(envelope.Error.Code+envelope.Error.Message, echoed) {
+					t.Fatalf("the 400 echoes %q: %+v", echoed, envelope.Error)
 				}
 			}
 		})
