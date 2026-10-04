@@ -1048,7 +1048,12 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     finish and leave an inspectable report in application state")
   - Blocked by: `stored report read`; `final result format`; `decision 7 in docs/product/README.md`; `report storage`
 
-- [ ] **API-28 · Add the report template and projection rule records**
+- [x] **API-28 · Add the report template and projection rule records**
+  - Dropped (2026-10-04, lead confirmed): the templates and the vendor projection rule are Go constants
+    in `services/gateway/internal/provenance` (`InternalInvestigationV1`, `VendorReconciliationV1`,
+    `VendorInvoiceFieldsV1`; `docs/product/README.md` decisions 4 and 5), and Go already reads them with
+    their versions. No `report_templates` or `projection_rules` table, entity or migration is added.
+    X-68 in `docs/roadmap/README.md` now names the Go constants.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-4 h)
   - Depends on: API-04, SH-10 · Needs: X-06, X-24 · Provides: X-68 (part: entities)
   - Paths: `apps/api/src` (the policies module from API-04)
@@ -1064,7 +1069,11 @@ M2 exit across the services, and the interface shows its denied proposal (WEB-09
     template manifests)
   - Blocked by: `vendor projection fields` (rule content)
 
-- [ ] **API-29 · Record trusted source classifications and recipient rules, if `source classification storage` chooses `app`**
+- [x] **API-29 · Record trusted source classifications and recipient rules, if `source classification storage` chooses `app`**
+  - Dropped (2026-10-04, lead confirmed): `source classification storage` chose demo records
+    (`docs/product/README.md` decision 6): `demo.invoices.internal_note_classification` and
+    `demo.vendors.registered_reporting_address`, migration `1791060000000`. Nothing is added in `app`.
+    X-70 in `docs/roadmap/README.md` now names those columns.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: API-04 · Needs: X-24 · Provides: X-70 (part)
   - Paths: `apps/api/src` (the policies module from API-04)
@@ -1624,6 +1633,14 @@ sit here, before the final build's evidence is captured, and are cut first.
 
 - [ ] **API-23 · Record organization access evidence on the public path**
   - **Report 1.1 change:** Adds the report and source trail reads; no restricted source content in general views.
+  - Progress (2026-10-04): the public-path part with a labelled Go fixture exists in
+    `apps/api/src/auth/product-access.db-spec.ts` (second organization's operator gets 404 on every
+    run, event, report, review, approval, cancel and evaluate route; removed membership 401; reviewer
+    role from the database, not the browser): 71 database tests passed in `pnpm test:db --fresh`.
+    Missing: the live requests by hand as the seeded second organization's operator, and the
+    no-mutation check through the run view and events. No second-organization operator is seeded
+    (`pnpm db:seed` creates only the demo operator), and creating one with a credential needs the
+    lead's decision. Not ticked.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1.5-3 h)
   - Depends on: API-16, API-18, API-19, API-20, API-21 · Needs: X-24, X-34 · Provides: X-56 (part:
     public path)
@@ -1643,8 +1660,28 @@ sit here, before the final build's evidence is captured, and are cut first.
     internal service boundary; a hidden URL is not a protection")
   - Blocked by: nothing
 
-- [ ] **API-24 · Record field minimization evidence for the activity views**
+- [x] **API-24 · Record field minimization evidence for the activity views**
   - **Report 1.1 change:** Adds the report and source trail reads; no restricted source content in general views.
+  - Completed (2026-10-04, build: main 39d5899 merged into `api/w2`; the live scan ran on 90a5e41, which has no code change since):
+    the protected values of the synthetic policy fixture are the invoice_A01 internal note (whole text and
+    two fragments) and the registered reporting address of `vendor_Atlas` (`fixtures/demo-records.json`).
+    `field-minimization.spec.ts` (5 tests; the Go side is a labelled fixture, so it proves what the API
+    relays and refuses, not what Go decides) serves a full run's state, usage, events and vendor report
+    through the real controllers and error filter and scans every serialized body; checks the scan is
+    not vacuous; refuses an upstream view that adds a protected key (state, usage, events, report) with
+    no echo of the value; shows an upstream error code carrying the note is never relayed; and shows the
+    review content (recipient address, canonical arguments) is served only to a reviewer (403 and no Go
+    call otherwise) and appears on no other view. The same scan on a real run (read-only, no model call;
+    run `f1912314-...`, 17 events over the public API as the demo operator): state, usage, passport,
+    all 17 events, both reports, the 7 review reads (1 served, 6 not found because those actions are not reviewable) and 4 error bodies (unknown run 404, malformed id
+    400, bad cursor 400, no session 401): protected hits none, except the internal report
+    (`internal_investigation_v1`, `internal_only`, shown to an authorized internal viewer: note text) and
+    the one existing review view (`queue_report`: the recipient address, reviewer read); the vendor
+    report `vendor_reconciliation_v1` has none. Known limit: free-text fields the contract allows
+    (`safeMessage` up to 512 characters) are relayed as Go sends them; the API cannot recognise a
+    protected value in them, so their content stays Go's duty. Checks: `pnpm --filter api run lint` exit
+    0; typecheck exit 0; `pnpm --filter api run test` "26 passed" files, "428 passed" tests; `GOFLAGS=-p=3 pnpm test:db --fresh`: gateway
+    "965 passed, 0 failed, 0 skipped", api "71 passed, 0 failed, 0 skipped".
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 1-2.5 h)
   - Depends on: API-14, API-19 · Needs: X-06, X-12, X-34 · Provides: X-50 (part: safe activity
     views)
@@ -1963,7 +2000,7 @@ handoff from X-62, and RS-09 submits.
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-26 · Supply the Next.js part of the technical handoff**
+- [x] **WEB-26 · Supply the Next.js part of the technical handoff**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: SH-34 · Needs: X-59 · Provides: X-62 (part)
   - Paths: `apps/web/README.md`, `packages/ui/README.md`, `docs/architecture.md`, `README.md`
@@ -1978,11 +2015,15 @@ handoff from X-62, and RS-09 submits.
   - Tests: a teammate follows the web setup on a clean checkout, quoted.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation)
-  - Progress (2026-10-04): draft of `apps/web/README.md` written from the web code on main 3e54f50
-    plus web/reports (browser path and proxy rules, route table, pages, labels, failure states,
-    sign-in as a development demonstration, test coverage, known limitations). Completed after
-    SH-34 so it matches the submitted build; `packages/ui/README.md`, `docs/architecture.md` and
-    `README.md` still describe the baseline and are placed by integration.
+  - Completed (2026-10-04): `apps/web/README.md` rewritten from the web code on main 39d5899:
+    browser path and proxy allowlist, route table, pages, truthful labels, failure states, sign-in as
+    a development demonstration, test coverage and limitations. Checks: `pnpm --filter web run test`
+    42 files, 409 tests passed; browser check on the merged build: signed in as the demo operator,
+    `/api/auth/me` 200 and `/api/runs/options` 200, and `/tasks/new` stayed on `/tasks/new` with the
+    task form loaded (before the fix it redirected to `/login`). Not verified: a teammate's setup on
+    a clean checkout (this task's test), and a re-read at the freeze (SH-34). `packages/ui/README.md`,
+    `docs/architecture.md` and the root `README.md` still describe the baseline; integration places
+    them.
   - Blocked by: nothing
 
 ## Coverage
