@@ -32,7 +32,7 @@ browser -> src/lib/fetch-json.ts -> route handler -> proxyUpstream -> API (${API
 | 500    | `configuration_error`        | `API_UPSTREAM_URL` is missing or invalid, or bad path |
 | 502    | `upstream_unreachable`       | The API refused or dropped the connection             |
 | 502    | `upstream_invalid_response`  | The API answered with something that is not JSON      |
-| 504    | `upstream_timeout`           | No complete answer within 10 seconds (45 s for judge) |
+| 504    | `upstream_timeout`           | No complete answer within 12 seconds (45 s for judge) |
 | 403    | `cross_site_request_refused` | A command came from another site or origin            |
 | 415    | `unsupported_media_type`     | A command body was not `application/json`             |
 
