@@ -8,7 +8,12 @@ import type {
 import { fetchJson, postJson, type FetchJsonResult } from "../fetch-json";
 
 export const EVALUATE_PATH = "/api/control/evaluate";
-export const MAX_TEXT_LENGTH = 4096;
+// The server limits the text in UTF-8 bytes, not UTF-16 units, so the client counts bytes too.
+export const MAX_TEXT_BYTES = 4096;
+export const MAX_ARGUMENTS_BYTES = 4096;
+
+const textEncoder = new TextEncoder();
+export const utf8ByteLength = (value: string): number => textEncoder.encode(value).length;
 
 /**
  * The seeded Atlas scenario (fixtures/demo-records.json), started as the judge's own run so an
@@ -63,6 +68,12 @@ export function buildEvaluationRequest(input: JudgeFormInput): BuildRequestResul
 
   if (input.kind === "action_proposal") {
     if (input.tool === "") return { ok: false, message: "Choose the proposed tool." };
+    if (utf8ByteLength(input.argumentsJson) > MAX_ARGUMENTS_BYTES) {
+      return {
+        ok: false,
+        message: `The arguments are too long: ${MAX_ARGUMENTS_BYTES} bytes at most.`,
+      };
+    }
     let parsedArguments: unknown;
     try {
       parsedArguments = JSON.parse(input.argumentsJson);
@@ -89,8 +100,11 @@ export function buildEvaluationRequest(input: JudgeFormInput): BuildRequestResul
   }
 
   if (input.text.length === 0) return { ok: false, message: "Enter the text to evaluate." };
-  if (input.text.length > MAX_TEXT_LENGTH) {
-    return { ok: false, message: `The text is limited to ${MAX_TEXT_LENGTH} characters.` };
+  if (utf8ByteLength(input.text) > MAX_TEXT_BYTES) {
+    return {
+      ok: false,
+      message: `The text is too long: ${MAX_TEXT_BYTES} bytes at most (UTF-8; accented and non-Latin characters take 2 to 4 bytes each).`,
+    };
   }
   if (input.kind === "tool_result" && input.tool === "") {
     return { ok: false, message: "Choose the tool this result is attributed to." };

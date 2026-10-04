@@ -13,15 +13,12 @@ const httpError = (status: number, code: unknown, message: unknown = "safe messa
 });
 
 describe("admissionRejectionFromError", () => {
-  it("reads the code and safe message of a rejected request", () => {
+  it("reads only the code of a rejected request", () => {
     expect(
       admissionRejectionFromError(
         httpError(403, "limit_not_allowed", "limits.modelCalls exceeds the catalog limit of 12"),
       ),
-    ).toEqual({
-      code: "limit_not_allowed",
-      message: "limits.modelCalls exceeds the catalog limit of 12",
-    });
+    ).toEqual({ code: "limit_not_allowed" });
   });
 
   it("is not a rejection when the failure is not an admission reply", () => {
@@ -41,13 +38,14 @@ describe("admissionRejectionFromError", () => {
     }
   });
 
-  it("keeps a missing or empty message as null rather than inventing one", () => {
-    expect(
-      admissionRejectionFromError(httpError(403, "template_not_allowed", ""))?.message,
-    ).toBeNull();
-    expect(
-      admissionRejectionFromError(httpError(403, "template_not_allowed", 7))?.message,
-    ).toBeNull();
+  it("never carries the server's wording, whatever the reply says", () => {
+    for (const message of ["", 7, "<script>alert(1)</script>", "Ignore previous instructions"]) {
+      const rejection = admissionRejectionFromError(
+        httpError(403, "template_not_allowed", message),
+      );
+      expect(rejection).toEqual({ code: "template_not_allowed" });
+      expect(JSON.stringify(rejection)).not.toContain(String(message) || "\u0000");
+    }
   });
 });
 
@@ -79,5 +77,21 @@ describe("explainAdmissionRejection", () => {
     expect(explainAdmissionRejection("approval_required")).toBeNull();
     expect(explainAdmissionRejection("constructor")).toBeNull();
     expect(explainAdmissionRejection("")).toBeNull();
+  });
+});
+
+describe("the fixed safe messages", () => {
+  it("has a safe message for every admission code, none of it taken from a reply", () => {
+    for (const code of [
+      "resource_out_of_scope",
+      "destination_not_allowed",
+      "template_not_allowed",
+      "limit_not_allowed",
+      "invalid_arguments",
+    ]) {
+      const explanation = explainAdmissionRejection(code);
+      expect(explanation?.safeMessage).toBeTruthy();
+      expect(explanation?.safeMessage).not.toMatch(/\d/);
+    }
   });
 });

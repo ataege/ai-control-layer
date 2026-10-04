@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { OperatorContext } from "@workspace/contracts";
 import state from "@workspace/contracts/fixtures/run-state.completed.json" with { type: "json" };
 import usage from "@workspace/contracts/fixtures/run-usage.ledger.json" with { type: "json" };
+import options from "@workspace/contracts/fixtures/task-form-options.atlas.json" with { type: "json" };
 import events from "@workspace/contracts/fixtures/run-events-page.export-denied.json" with { type: "json" };
 import report from "@workspace/contracts/fixtures/report-view.vendor.json" with { type: "json" };
 import review from "@workspace/contracts/fixtures/review-view.queue-report.json" with { type: "json" };
@@ -221,10 +222,62 @@ it("uses current database roles rather than session age or browser claims", asyn
   expect(getRead).not.toHaveBeenCalled();
   expect(postCommand).not.toHaveBeenCalled();
 });
-it("refuses a removed membership before any Go call", async () => {
+it.each(routes)("refuses a removed membership before $method $path reaches Go", async (route) => {
+  await transaction.manager.getRepository(Membership).delete({ userId: ownUser.id });
+  const client = request(app.getHttpServer());
+  await (route.method === "get" ? client.get(route.path) : client.post(route.path).send(route.body))
+    .set("Cookie", cookies[0]!)
+    .expect(401);
+  expect(getRead).not.toHaveBeenCalled();
+  expect(postCommand).not.toHaveBeenCalled();
+});
+it("ignores browser organization and forwarded identity claims with a real stored session", async () => {
+  const membership = await transaction.manager
+    .getRepository(Membership)
+    .findOneByOrFail({ userId: foreignUser.id });
+  await request(app.getHttpServer())
+    .get(
+      `/api/runs/${state.runId}?organizationId=${membership.organizationId}&userId=${foreignUser.id}`,
+    )
+    .set("Cookie", cookies[0]!)
+    .set("X-Operator-Context", "browser-forged-context")
+    .set("X-Forwarded-User", foreignUser.id)
+    .expect(200);
+  expect(getRead.mock.calls[0]?.at(-1)).toEqual({
+    userId: ownUser.id,
+    organizationId: ownerOrganization,
+    roles: ["operator", "reviewer"],
+  });
+});
+
+it("scopes task options to each real session's organization through the labelled Go fixture", async () => {
+  const foreignOptions = {
+    ...options,
+    vendors: [],
+    invoices: [],
+    destinations: [],
+  };
+  for (const [index, fixture] of [options, foreignOptions].entries()) {
+    getRead.mockImplementationOnce((_path, _id, schema) => {
+      const parsed = schema.safeParse(fixture);
+      return parsed.success
+        ? { success: true, data: parsed.data }
+        : { success: false, reason: "invalid_response" };
+    });
+    const response = await request(app.getHttpServer())
+      .get(`/api/runs/options?organizationId=${ownerOrganization}`)
+      .set("Cookie", cookies[index]!)
+      .expect(200);
+    expect(response.body).toEqual(fixture);
+    const operator = getRead.mock.calls.at(-1)?.at(-1) as OperatorContext;
+    expect(operator.userId).toBe(index === 0 ? ownUser.id : foreignUser.id);
+    expect(operator.organizationId === ownerOrganization).toBe(index === 0);
+  }
+});
+it("refuses task options after current membership is removed", async () => {
   await transaction.manager.getRepository(Membership).delete({ userId: ownUser.id });
   await request(app.getHttpServer())
-    .get(`/api/runs/${state.runId}`)
+    .get("/api/runs/options")
     .set("Cookie", cookies[0]!)
     .expect(401);
   expect(getRead).not.toHaveBeenCalled();

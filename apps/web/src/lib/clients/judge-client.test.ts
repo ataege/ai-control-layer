@@ -57,6 +57,12 @@ describe("buildEvaluationRequest", () => {
     });
   });
 
+  it("accepts multibyte text of exactly 4096 bytes and says too long beyond it", () => {
+    expect(buildEvaluationRequest({ ...baseInput, text: "é".repeat(2048) }).ok).toBe(true);
+    const refused = buildEvaluationRequest({ ...baseInput, text: "é".repeat(2049) });
+    expect(!refused.ok && refused.message).toContain("too long");
+  });
+
   it("drops a stale tool from a model_input request", () => {
     const built = buildEvaluationRequest({ ...baseInput, tool: "read_invoice" });
     expect(built.ok && built.request.tool).toBeNull();
@@ -104,6 +110,15 @@ describe("buildEvaluationRequest", () => {
     ["a run id that is not a UUID", { runId: "run-1" }],
     ["empty text", { text: "" }],
     ["text over the limit", { text: "x".repeat(4097) }],
+    ["multibyte text within 4096 characters but over 4096 bytes", { text: "é".repeat(2049) }],
+    [
+      "action arguments over the size limit",
+      {
+        kind: "action_proposal" as const,
+        tool: "read_invoice" as const,
+        argumentsJson: JSON.stringify({ note: "x".repeat(4100) }),
+      },
+    ],
     ["a tool_result without a tool", { kind: "tool_result" as const }],
     [
       "an action_proposal without a tool",

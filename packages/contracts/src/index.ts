@@ -5,6 +5,36 @@
 /** Header used to correlate one request across web, API and gateway. */
 export const REQUEST_ID_HEADER = "x-request-id";
 
+/** API-33: reviewer reloads the fixed repository policy; no uploads or identity fields. */
+export type PolicyReloadRequest = Record<string, never>;
+export type PolicyReloadResponse =
+  | {
+      status: "requested";
+      requestedRevisionId: string;
+      fileDigest: string;
+      feedRevision: string | null;
+    }
+  | { status: "unchanged"; revisionId: string };
+
+/** Sanitized NestJS policy validation failure; no configuration content or arbitrary fields. */
+export interface PolicyReloadErrorResponse extends ErrorResponse {
+  error: ErrorResponse["error"] & { issues?: { path: string; message: string }[] };
+}
+
+/** API-33: global catalog pointer read by an authenticated reviewer; bigint IDs are decimal strings. */
+export interface PolicyStatusResponse {
+  requestedRevisionId: string | null;
+  validatedRevisionId: string | null;
+  activeRevisionId: string | null;
+  activeFeedRevisionId: string | null;
+  lastError: {
+    code: string;
+    message: string;
+    revisionId: string | null;
+    stage: "gateway_validation" | "import_validation";
+  } | null;
+}
+
 /** Services that expose health endpoints. */
 export type ServiceName = "api" | "gateway";
 
@@ -115,7 +145,16 @@ export interface OperatorContext {
 export interface TaskFormOptions {
   templates: { id: string; name: string }[];
   vendors: { id: string; name: string }[];
-  invoices: { id: string; number: string; date: string; amount: number; vendorId: string }[];
+  invoices: {
+    id: string;
+    number: string;
+    date: string;
+    /** Total in minor units of `currency`. */
+    amount: number;
+    /** ISO 4217 alphabetic code, for example "EUR". */
+    currency: string;
+    vendorId: string;
+  }[];
   destinations: { id: string; name: string }[];
   approvalRequirements: { id: string; description: string }[];
   limits: { maxModelCalls: number; maxTimeoutSeconds: number };

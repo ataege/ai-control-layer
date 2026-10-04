@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "policy-reload-response.schema.json",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "requestedRevisionId", "fileDigest", "feedRevision"],
+      "properties": {
+        "status": {
+          "const": "requested"
+        },
+        "requestedRevisionId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "fileDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "feedRevision": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "revisionId"],
+      "properties": {
+        "status": {
+          "const": "unchanged"
+        },
+        "revisionId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        }
+      }
+    }
+  ]
+}

@@ -493,7 +493,7 @@ func TestTaskOptionsServeTheVerifiedOrganizationAndFailClosed(t *testing.T) {
 	want := contracts.TaskFormOptions{
 		Templates:            []contracts.TaskFormOption{{ID: "reconcile_atlas_v1", Name: "Reconcile Atlas invoices"}},
 		Vendors:              []contracts.TaskFormOption{{ID: "vendor_Atlas", Name: "Atlas"}},
-		Invoices:             []contracts.TaskFormInvoice{{ID: "invoice_A01", Number: "INV104", Date: "2026-09-01", Amount: 125000, VendorID: "vendor_Atlas"}},
+		Invoices:             []contracts.TaskFormInvoice{{ID: "invoice_A01", Number: "INV104", Date: "2026-09-01", Amount: 125000, Currency: "EUR", VendorID: "vendor_Atlas"}},
 		Destinations:         []contracts.TaskFormOption{{ID: "vendor_Atlas", Name: "Atlas"}},
 		ApprovalRequirements: []contracts.TaskFormApprovalRequirement{{ID: "review_queue_report", Description: "Review."}},
 		Limits:               contracts.TaskFormLimits{MaxModelCalls: 24, MaxTimeoutSeconds: 900},
