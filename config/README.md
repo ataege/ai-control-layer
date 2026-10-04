@@ -277,6 +277,36 @@ storage`.
 Go derives every classification from trusted records; no setting here classifies or declassifies a
 report.
 
+### Known limitations of the deterministic rules
+
+A red team of the secret rules and the signature feed, as a judge's ad-hoc input would try them, is
+pinned row by row in `services/gateway/internal/security/redteam_test.go`. The rules match normalized
+substrings and keyword-anchored patterns. These inputs are **not** caught by a deterministic control; only
+the semantic check could still object, and it is not complete detection:
+
+- **Encodings are not decoded.** Base64, hex, URL-encoded keywords, HTML entities, literal `\u` escapes,
+  ROT13 and reversed text pass.
+- **Lookalike letters from other scripts are not folded.** A Cyrillic letter inside a keyword or a feed
+  phrase passes. Compatibility forms (full-width, mathematical, circled and accented letters) are folded
+  for signature matching only; the secret rules read the characters as written, except that they ignore
+  invisible format characters.
+- **Signature rules match one normalized phrase.** Paraphrase and leetspeak, words joined by hyphens,
+  underscores or punctuation, letter-spaced text, a missing space, and wordings the feed does not list
+  (`forget previous instructions`, `ignore previous directions`) pass. `feed_v2` lists the common wordings
+  that end in `instructions`.
+- **Secret keywords.** A keyword must be one word at the start of a word or after a non-alphanumeric
+  character (`adminPassword` is missed), the value must follow it directly (`the password for the vault is
+...` is missed), and the keyword list is `password`, `passwd`, `passcode`, `pwd`, `token`, `api key`,
+  `secret` and `bearer` (`passphrase` is missed). A value that is only digits or only letters is not taken
+  for a credential, and a vendor key without a keyword (`sk_live_...`) is not recognised.
+- **A value split by whitespace** is masked only up to the split.
+- **Account numbers.** An IBAN with hyphen, dot or newline separators, or glued to letters, and a card
+  number with dots or newlines, glued to letters, in full-width digits or failing the Luhn check, are not
+  masked. An IBAN also needs a registered country and its exact length.
+- **Tool-result JSON.** Only string values are inspected, one at a time: a key name, a number, and text
+  split across two values are not. Tool code, not the source record, names the keys.
+- `secret_pattern` is not configured at `action_proposal` (it is not in its supported boundaries).
+
 ## Boundaries no setting can remove
 
 Report: "Strictness changes optional detection behavior; they never remove tenant checks, immutable
