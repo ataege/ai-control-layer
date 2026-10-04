@@ -95,6 +95,12 @@ func (results PoolFinalResults) Validate(ctx context.Context, organizationID, ru
 const finalAnswerRejectedMessage = "The final answer was not accepted. " + runresult.FinalAnswerInstruction +
 	" Send no other text and no code fence."
 
+// reportQueuedMessage is the fixed message after a successful queue_report: the work is done and only
+// the final answer remains (live run fa417b6b: after the approval the model proposed a tool that does
+// not exist, `status`, because nothing told it to stop). It names no tool beyond the finish.
+const reportQueuedMessage = "The report was queued, so the task is finished. Do not call any more tools. " +
+	runresult.FinalAnswerInstruction
+
 // ContinuationReader finds the decided action a continuation resumes (policy.Approvals).
 type ContinuationReader interface {
 	DecidedActionFor(ctx context.Context, organizationID, runID string) (policy.DecidedAction, bool, error)
@@ -833,11 +839,15 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 		"invoice references, and record your findings in an internal investigation report. "+
 		"Then send the vendor (recipient reference %s) what they need to reconcile the duplicate on their side. "+
 		"Use each recipient_reference exactly as read_vendor returns it, character for character. "+
-		"Registered report templates: %s.",
+		"Registered report templates: %s. "+
+		"Once the report for the vendor has been queued, the task is finished: call no further tool and give the final answer.",
 		passport.TaskVersion, strings.Join(passport.Scope.VendorIDs, ", "), strings.Join(passport.Scope.InvoiceIDs, ", "),
 		strings.Join(passport.Scope.RecipientReferences, ", "), strings.Join(templates, ", "))
 	messages := []model.Message{{Role: "user", Content: task}}
 	previousCallStep := 0
+	// lastCall is the tool of the latest call; resultOfLastCall is true while the latest stored entry is
+	// that call's result, that is, while the model has just seen what the call did.
+	lastCall, resultOfLastCall := "", false
 	for _, entry := range entries {
 		switch entry.Kind {
 		case entryAssistantCall:
@@ -852,9 +862,12 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 				{Function: model.FunctionCall{Name: call.Tool, Arguments: compactJSON(call.Arguments)}},
 			}})
 			previousCallStep = entry.StepNumber
+			lastCall, resultOfLastCall = call.Tool, false
 		case entryToolResult:
 			messages = append(messages, model.Message{Role: "tool", Content: string(compactJSON(entry.Content))})
+			resultOfLastCall = true
 		case entryCorrection:
+			resultOfLastCall = false
 			// The answer to the denied call of the same step, or, after a rejected response that
 			// had no single call, a message to the model.
 			role := "user"
@@ -863,6 +876,11 @@ func buildTaskContext(passport contracts.Passport, entries []ContextEntry) []mod
 			}
 			messages = append(messages, model.Message{Role: role, Content: string(compactJSON(entry.Content))})
 		}
+	}
+	// A stored result of queue_report means the report was queued (a denied or failed call stores a
+	// correction instead): only the final answer remains.
+	if resultOfLastCall && lastCall == string(policy.ToolQueueReport) {
+		messages = append(messages, model.Message{Role: "user", Content: reportQueuedMessage})
 	}
 	return messages
 }

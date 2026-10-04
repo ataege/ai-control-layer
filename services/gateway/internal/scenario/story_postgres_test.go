@@ -416,6 +416,13 @@ func TestStoryAfterApproval(t *testing.T) {
 	if problems := liveStoryProblems(t, world, status, reason, false); len(problems) > 0 {
 		t.Fatalf("the completed story fails the outcome check: %s", strings.Join(problems, "; "))
 	}
+	// The request that produced the final answer carried the fixed message that the report was queued and
+	// only the final answer remains (live run fa417b6b: without it the model proposed a tool that does not
+	// exist and the run stopped at its corrections).
+	finishRequests, _ := world.provider.requests()
+	if lastRequest := string(finishRequests[len(finishRequests)-1]); !strings.Contains(lastRequest, "The report was queued, so the task is finished.") {
+		t.Fatalf("the final-answer request did not carry the finish message: %s", lastRequest)
+	}
 	events := []string{}
 	rows, err := world.pool.Query(context.Background(), `SELECT event_type || coalesce(' ' || reason_code, '') FROM runtime.audit_events
 		WHERE organization_id = $1 AND run_id = $2 ORDER BY id`, world.organizationID, world.passport.RunID)
