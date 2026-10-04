@@ -20,6 +20,7 @@ export const UPSTREAM_PREFIXES = [
   "/api/auth",
   "/api/control",
   "/api/security",
+  "/api/policies",
 ] as const;
 
 // Longer than the API's own upstream timeouts, so its mapped status arrives first.

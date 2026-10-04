@@ -96,10 +96,10 @@ describe("classification and source trail", () => {
 });
 
 describe("describeReportFailure", () => {
-  it("says a missing report was not found", () => {
-    expect(describeReportFailure({ kind: "http", status: 404, body: undefined }).title).toBe(
-      "Report not found",
-    );
+  it("says a missing report was not found, without offering a retry", () => {
+    const failure = describeReportFailure({ kind: "http", status: 404, body: undefined });
+    expect(failure.title).toBe("Report not found");
+    expect(failure.action).toBe("none");
   });
 
   it("shows a report outside its registered template as an error, not text", () => {
@@ -108,9 +108,18 @@ describe("describeReportFailure", () => {
     expect(failure.description).toContain("registered template");
   });
 
-  it("names a network failure without exposing its detail", () => {
-    const failure = describeReportFailure({ kind: "network", message: "ECONNREFUSED 10.0.0.1" });
-    expect(failure.title).toBe("Report unavailable");
-    expect(failure.description).not.toContain("10.0.0.1");
+  it("uses the shared states for every other failure", () => {
+    const offline = describeReportFailure({ kind: "network", message: "ECONNREFUSED 10.0.0.1" });
+    expect(offline.title).toBe("You appear to be offline");
+    expect(offline.description).not.toContain("10.0.0.1");
+    expect(describeReportFailure({ kind: "http", status: 401, body: undefined }).action).toBe(
+      "sign_in",
+    );
+    const apiDown = describeReportFailure({
+      kind: "http",
+      status: 502,
+      body: { error: { code: "upstream_unreachable" } },
+    });
+    expect(apiDown).toMatchObject({ kind: "upstream_unreachable", scope: "api" });
   });
 });
