@@ -75,8 +75,9 @@ The script:
 
 - prints an `[OK]`, `[WARN]` or `[FAIL]` line for Node.js, pnpm, Go and Docker with Compose;
 - creates `.env` from `.env.example` if it does not exist, with file mode 0600;
-- generates `POSTGRES_PASSWORD` (32 characters), `GATEWAY_SERVICE_TOKEN` (48 characters),
-  `AUTH_JWT_SECRET` and `OPERATOR_CONTEXT_SIGNING_KEY` (64 characters each) when they are empty, and prints only the names of the keys it generated;
+- generates `POSTGRES_PASSWORD` and `POSTGRES_GATEWAY_PASSWORD` (32 characters each),
+  `GATEWAY_SERVICE_TOKEN` (48 characters), `AUTH_JWT_SECRET` and `OPERATOR_CONTEXT_SIGNING_KEY`
+  (64 characters each) and `DEMO_OPERATOR_PASSWORD` (16 characters) when they are empty, and prints only the names of the keys it generated;
 - on later runs keeps every existing non-empty value untouched and appends keys that are new in
   `.env.example`;
 - exits 1 only when Node.js is outside the supported range, pnpm is not on `PATH`, `.env.example`
@@ -209,14 +210,14 @@ remains:
 There is one environment file, `.env` in the repository root. Workspaces have no `.env` files of
 their own.
 
-| Entry point                                         | How it gets the variables                                                                                                                                                                                                                                                                                         |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`, `pnpm dev:web\|api\|gateway`            | `scripts/dev.mjs` reads `.env` and passes the merged environment to the gateway without `AUTH_JWT_SECRET`; the API gets it without `MODEL_*`; the web process gets it without `GATEWAY_SERVICE_TOKEN`, `AUTH_JWT_SECRET`, `OPERATOR_CONTEXT_SIGNING_KEY`, `POSTGRES_*` and `MODEL_*`. Fails if `.env` is missing. |
-| `pnpm db:migration:*`                               | `scripts/with-env.mjs` reads `.env`, then runs the command. Fails if `.env` is missing.                                                                                                                                                                                                                           |
-| `pnpm infra:*`, `pnpm stack:*`                      | `scripts/compose.mjs` passes `--env-file .env` to `docker compose`. Fails if `.env` is missing.                                                                                                                                                                                                                   |
-| `pnpm smoke`                                        | Reads `.env` for the ports and for the two secrets it searches for and sends.                                                                                                                                                                                                                                     |
-| API started directly (`node dist/main.js`)          | The API itself loads the repository-root `.env` if present. A missing file is fine when the variables are set.                                                                                                                                                                                                    |
-| `pnpm lint`, `typecheck`, `test`, `build`, `verify` | Need no `.env`. Turborepo runs tasks in strict environment mode, so only `NODE_ENV` and the Go variables pass through from your shell.                                                                                                                                                                            |
+| Entry point                                         | How it gets the variables                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`, `pnpm dev:web\|api\|gateway`            | `scripts/dev.mjs` reads `.env` and passes the merged environment to each child minus its forbidden variables: the gateway without `AUTH_JWT_SECRET`, `POSTGRES_USER` and `POSTGRES_PASSWORD`; the API without `MODEL_*` and `POSTGRES_GATEWAY_PASSWORD`; the web process without `GATEWAY_SERVICE_TOKEN`, `AUTH_JWT_SECRET`, `OPERATOR_CONTEXT_SIGNING_KEY`, `POSTGRES_*` and `MODEL_*`. None of them gets `DEMO_OPERATOR_PASSWORD`. Fails if `.env` is missing. |
+| `pnpm db:migration:*`                               | `scripts/with-env.mjs` reads `.env`, then runs the command. Fails if `.env` is missing.                                                                                                                                                                                                                                                                                                                                                                          |
+| `pnpm infra:*`, `pnpm stack:*`                      | `scripts/compose.mjs` passes `--env-file .env` to `docker compose`. Fails if `.env` is missing.                                                                                                                                                                                                                                                                                                                                                                  |
+| `pnpm smoke`                                        | Reads `.env` for the ports, for `GATEWAY_SERVICE_TOKEN` (sent), for every generated secret it searches the responses for, and for `DEMO_OPERATOR_PASSWORD` (signed-in checks are skipped without it).                                                                                                                                                                                                                                                            |
+| API started directly (`node dist/main.js`)          | The API itself loads the repository-root `.env` if present. A missing file is fine when the variables are set.                                                                                                                                                                                                                                                                                                                                                   |
+| `pnpm lint`, `typecheck`, `test`, `build`, `verify` | Need no `.env`. Turborepo runs tasks in strict environment mode, so only `NODE_ENV` and the Go variables pass through from your shell.                                                                                                                                                                                                                                                                                                                           |
 
 Rules:
 
@@ -231,7 +232,7 @@ Rules:
 - **Containers do not read `.env` directly.** Compose interpolates the values it needs and
   overrides the wiring variables with service names (see the README, "Full-container mode"). The
   `web` container receives neither the service token nor any `POSTGRES_*` variable. Only the
-  `gateway` service lists `MODEL_BASE_URL` and `MODEL_NAME` (see section 6).
+  `gateway` service lists `MODEL_BASE_URL` and `MODEL_NAME` (see section 7).
 - **The web process on the host follows the same rule.** `pnpm dev` and `pnpm dev:web` remove
   `GATEWAY_SERVICE_TOKEN`, `AUTH_JWT_SECRET`, `OPERATOR_CONTEXT_SIGNING_KEY`, every `POSTGRES_*`
   variable and every `MODEL_*` variable from the environment of the web child, including ones set in your shell. `scripts/with-env.mjs` does not
@@ -239,9 +240,9 @@ Rules:
 - **`MODEL_*` reach the gateway child only.** `pnpm dev` and `pnpm dev:api` also remove every
   `MODEL_*` variable from the environment of the API child. Known gap: the API then loads the root
   `.env` itself (`apps/api/src/config/app-config.module.ts`) for every key not already set, so on
-  the host the running API process still holds `MODEL_BASE_URL` and `MODEL_NAME` when they are in
-  `.env`. Both are non-secret, so no credential is exposed; how the API stops loading Go-only keys
-  is open in SH-13. The API container has no `.env`, so this gap does not apply there.
+  the host the running API process still holds `MODEL_BASE_URL` and `MODEL_NAME` (non-secret) and
+  also `POSTGRES_GATEWAY_PASSWORD` and `DEMO_OPERATOR_PASSWORD` (secrets the API never reads) when
+  they are in `.env`; how the API stops loading Go-only keys is open in SH-13. The API container has no `.env`, so this gap does not apply there.
 - **`AUTH_JWT_SECRET` reaches the API only.** `pnpm dev` and `pnpm dev:gateway` remove it from the
   gateway child; the gateway does not load `.env` itself. In Compose only the `api` service lists it,
   and `OPERATOR_CONTEXT_SIGNING_KEY` is listed for `api` and `gateway` only.
@@ -257,11 +258,11 @@ pnpm dev:gateway    # Go only; compiles bin/gateway-dev and runs it (restart to 
 
 What to expect when the neighbours are not running:
 
-| Running alone | Behaviour                                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------ |
-| web           | Pages load. The proxy routes answer 502 `upstream_unreachable`; the diagnostics page shows that state. |
-| API           | Liveness 200. Readiness depends on PostgreSQL. `/api/diagnostics/gateway` answers 502 `unavailable`.   |
-| gateway       | Liveness 200. Readiness depends on PostgreSQL. `/internal/ping` works with the token from `.env`.      |
+| Running alone | Behaviour                                                                                                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| web           | Pages load. The proxy routes answer 502 `upstream_unreachable`; the diagnostics page shows that state.                                                                           |
+| API           | Liveness 200. Readiness depends on PostgreSQL. `/api/diagnostics/gateway` answers 502 `unavailable`.                                                                             |
+| gateway       | Liveness 200. Readiness depends on PostgreSQL, the worker loop and an active control catalog (503 until all three are ready). `/internal/ping` works with the token from `.env`. |
 
 Calling the gateway by hand without printing the token:
 
@@ -392,7 +393,7 @@ ollama run <model> "hello"
 
 ### Point the gateway at it
 
-`.env.example` sets `MODEL_NAME=qwen3.5:4b`, the decided model (decision 6, provisional), so `pnpm run
+`.env.example` sets `MODEL_NAME=qwen3.5:4b`, the model frozen in decision 6, so `pnpm run
 setup` puts it in `.env`; on an existing `.env` it also fills `MODEL_NAME` in when the value is empty
 and never overwrites a value you set. Change it only to use another tag you pulled: it must be the
 exact tag, without whitespace, and one of the active catalog's `allowed_models`. Setup runs
@@ -416,7 +417,7 @@ the local network included. Docker Desktop on macOS reaches a loopback-bound Oll
 
 ### Hardware
 
-The presentation machine is the lead's MacBook Pro (M1 Pro, 16 GB), and the Go side is built on it.
+The planned presentation machine is the lead's MacBook Pro (M1 Pro, 16 GB; the user still has to confirm it, SH-45 and SH-50), and the Go side is built on it.
 The model and version it ran on are recorded here (SH-45); the load of a shared machine changes the
 timings (see "What must not run during the demonstration" in section 8):
 
@@ -438,12 +439,13 @@ note with a JSON schema for `risk_category`, `score` (0 to 1) and `reason_code`.
 
 Ollama did not enforce the schema's numeric range for `qwen2.5:3b`, so Go must validate every
 verdict itself (report 1.2: "Go rejects unsupported fields and malformed scores"). `qwen3.5:4b` is the
-provisional model for both purposes; the M2 8 GB machine still has to run it before it is fixed.
+frozen model for both purposes (decision 6); on an 8 GB machine it ran, but agent calls can exceed
+the gateway's 20 s request timeout.
 
 ## 8. Deployment on the presentation machine (SH-30)
 
-The demonstration runs on the lead's MacBook Pro (Apple M1 Pro, 10 cores, 16 GB), the machine the
-probe in section 7 ran on. Everything runs locally: web, API and gateway on the host, PostgreSQL in
+The demonstration is planned for the lead's MacBook Pro (Apple M1 Pro, 10 cores, 16 GB), the machine the
+probe in section 7 ran on (confirming it as the presentation machine is open: SH-45, SH-50). Everything runs locally: web, API and gateway on the host, PostgreSQL in
 Docker, and Ollama on the host. Nothing is deployed to a remote server and no paid service is used.
 The plain-text guide for the judges, [how-to-open.txt](how-to-open.txt), follows the same order; when one
 changes, change the other.
@@ -627,7 +629,7 @@ browsers with many tabs and every other session first.
   runs pause with `outcome_unknown` and the run page says "Operator attention required". The
   presentation machine's Ollama serves nothing else (`ollama ps`, `uptime`), or
   `request_timeout_seconds` in `config/policy.yaml` is raised for the day.
-- **A second checkout's stack** on the same ports, or on the same Compose project (section 2).
+- **A second checkout's stack** on the same ports, or on the same Compose project (step 2 above).
   Sessions on one machine need their own ports and PostgreSQL, and one gateway process per
   database: two gateways on one database can send two model requests for one run (leases prevent
   double effects, not double requests).
@@ -701,10 +703,10 @@ its digest. To change the feed, follow "Signature feed matching and catalog sett
 - [ ] The checkout is at the submission commit; `git status` is clean.
 - [ ] `ollama list` shows `qwen3.5:4b` with the recorded ID; the warm-up answered and `ollama ps`
       lists the model.
-- [ ] The quiet checks of section 7 pass (load below the core count, warm call about 1 s).
+- [ ] The quiet checks of step 7 pass (load below the core count, warm call about 1 s).
 - [ ] `pnpm infra:up` and `pnpm dev` are running; `pnpm smoke` passed; the gateway is ready.
 - [ ] `WEB_HOST` is unset, so the web app listens on `127.0.0.1` only.
 - [ ] Migrations, roles and seed ran; the catalog is active (`activated revision` or the gateway log).
 - [ ] The workflow was rehearsed once and `pnpm reset:demo` restored the data (outbox and reports 0).
 - [ ] The control suite ran on this build and its result is saved.
-- [ ] Nothing from section 8 is running; the laptop is on power and does not sleep.
+- [ ] Nothing from step 8 is running; the laptop is on power and does not sleep.

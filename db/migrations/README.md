@@ -8,8 +8,9 @@ TypeORM migrations live in the API package, in `apps/api/src/database/migrations
 They cannot live here: the TypeORM CLI and `tsc` cannot compile migration classes outside the API
 package (verified: `TS6059` "file is not under rootDir", and the `typeorm` import cannot be resolved
 from outside the package under pnpm's strict `node_modules`). The architecture specification shows
-`db/migrations/` and `db/seeds/`; migrations still cannot live here for that reason, and where seeds
-live is not decided (open item `repository layout`).
+`db/migrations/` and `db/seeds/`; migrations still cannot live here for that reason, and the seeds are
+not in `db/seeds` either: the synthetic records are in `fixtures/demo-records.json` and are loaded by
+`pnpm db:seed` (`scripts/seed-demo.mjs`).
 
 There is one migration owner and one toolchain for the shared PostgreSQL instance. The Go gateway
 adds no migration framework; schema changes for tables it reads also go through the API migrations.
@@ -30,7 +31,7 @@ pnpm db:migration:revert            # undo the most recent migration
 They need the root `.env` (`pnpm run setup`) and, except for `create`, a running PostgreSQL
 (`pnpm infra:up`).
 
-## Adding the first entity and migration
+## Adding an entity and its migration
 
 1. Create the entity class in the API module that owns it (`apps/api/src/<module>/<name>.entity.ts`),
    with `schema: "app"`. Only `app` tables become entities; `runtime` and `demo` tables get
@@ -44,8 +45,7 @@ They need the root `.env` (`pnpm run setup`) and, except for `create`, a running
 
 ## Expected behaviour with no entity change
 
-When the entities and the migrated database already agree (also the case with zero entities, as in the
-starter baseline), `pnpm db:migration:generate <Name>` prints
+When the entities and the migrated database already agree, `pnpm db:migration:generate <Name>` prints
 
 ```
 No changes in database schema were found - cannot generate a migration. To create a new empty migration use "typeorm migration:create" command
@@ -60,8 +60,9 @@ TypeORM keeps its bookkeeping in a table named `migrations` in the `public` sche
 ## Model token ledger (GO-06)
 
 `1791043000000-AddModelTokenBudgets.ts` adds `runtime.model_token_budgets` and
-`runtime.model_token_reservations`. Go owns every balance mutation; NestJS only supplies this
-migration through the shared toolchain. This task adds no runtime TypeORM entities or startup
-schema changes. The migration's down step drops only its own two tables and retains the schema.
-Go package behavior, test commands and the future service-role/run relationship are documented
-in `services/gateway/internal/budget/README.md` and `services/gateway/README.md`.
+`runtime.model_token_reservations`; `1791130000000-AlignTokenLedger.ts` (GO-39) then aligns them with
+`runtime.runs` and `runtime.model_calls` (organization-safe foreign keys, per-purpose limits). Go owns
+every balance mutation; NestJS only supplies the migrations through the shared toolchain. Neither adds
+runtime TypeORM entities or startup schema changes. Go package behavior, the tables and the test
+commands are documented in `services/gateway/internal/budget/README.md` and
+`services/gateway/README.md`.
