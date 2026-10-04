@@ -200,9 +200,10 @@ func ApplyContentRules(field Field, boundary Boundary, settings Settings) (Conte
 	}
 
 	// Invisible format characters (zero-width spaces, soft hyphens) must not split a keyword or a
-	// value, so the rules read a copy without them. A value that passes is returned as it came;
-	// a masked one is the masked copy, so its spans index that copy.
-	scanned := stripFormatCharacters(field.Text)
+	// value, so the rules read a copy without them. The spans are mapped back onto the original
+	// text, so a masked field changes only where a secret was and keeps every other character,
+	// including the joiners of emoji and the marks of right-to-left scripts.
+	scanned, offsets := stripFormatCharacters(field.Text)
 	spans, err := FindSecrets(scanned)
 	if err != nil {
 		return finish(OutcomeError, "", "", err)
@@ -213,7 +214,8 @@ func ApplyContentRules(field Field, boundary Boundary, settings Settings) (Conte
 	if settings.SecretPattern.Mode == ModeBlock {
 		return finish(OutcomeBlock, ReasonContentBlocked, spans[0].RuleID, nil)
 	}
-	masked, err := MaskText(scanned, spans)
+	spans = mapSpans(spans, offsets)
+	masked, err := MaskText(field.Text, spans)
 	if err != nil {
 		return finish(OutcomeError, "", "", err)
 	}
@@ -222,14 +224,35 @@ func ApplyContentRules(field Field, boundary Boundary, settings Settings) (Conte
 }
 
 // stripFormatCharacters drops the invisible format characters (Unicode category Cf) that
-// NormalizeText also ignores for signature matching.
-func stripFormatCharacters(text string) string {
-	return strings.Map(func(character rune) rune {
+// NormalizeText also ignores for signature matching. offsets[i] is the byte offset in text of byte i
+// of the result, so a span found in the result can be mapped back; the text must be valid UTF-8.
+func stripFormatCharacters(text string) (stripped string, offsets []int) {
+	var builder strings.Builder
+	builder.Grow(len(text))
+	offsets = make([]int, 0, len(text))
+	for index, character := range text {
 		if unicode.Is(unicode.Cf, character) {
-			return -1
+			continue
 		}
-		return character
-	}, text)
+		width := utf8.RuneLen(character)
+		builder.WriteRune(character)
+		for step := range width {
+			offsets = append(offsets, index+step)
+		}
+	}
+	return builder.String(), offsets
+}
+
+// mapSpans moves spans found in the stripped copy onto the original text. A span starts at its
+// first character and ends after its last one, so format characters inside it are masked with it
+// and the ones just outside it are kept.
+func mapSpans(spans []Span, offsets []int) []Span {
+	mapped := make([]Span, 0, len(spans))
+	for _, span := range spans {
+		span.Start, span.End = offsets[span.Start], offsets[span.End-1]+1
+		mapped = append(mapped, span)
+	}
+	return mapped
 }
 
 // credentialShape accepts a value of at least minimumLength that mixes letters and digits, so

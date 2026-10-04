@@ -395,3 +395,51 @@ func TestRedTeamBenignTextIsNotMasked(t *testing.T) {
 		}
 	}
 }
+
+// Masking changes only the secret: the other invisible format characters of the field are kept,
+// because they carry meaning (emoji sequences, Persian word shaping, text direction).
+func TestRedTeamMaskKeepsOtherFormatCharacters(t *testing.T) {
+	const (
+		emoji   = "\U0001f469\u200d\U0001f4bb"                       // woman technologist: joined with a zero-width joiner
+		persian = "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645" // a word shaped with a zero-width non-joiner
+		mark    = "\u200f"                                           // right-to-left mark
+	)
+	settings := sampleSettings(t)
+	for name, testCase := range map[string]struct{ text, want string }{
+		"plain keyword": {
+			text: emoji + " " + persian + mark + " password: " + password + " " + persian,
+			want: emoji + " " + persian + mark + " password: [REDACTED:password] " + persian,
+		},
+		"format character inside the keyword": {
+			text: emoji + " pass\u200bword: " + password + mark,
+			want: emoji + " pass\u200bword: [REDACTED:password]" + mark,
+		},
+		"format character inside the value": {
+			text: persian + " password: Sup3r\u200bSecret99 " + emoji,
+			want: persian + " password: [REDACTED:password] " + emoji,
+		},
+		"card split by a format character": {
+			text: mark + "4111 1111\u200b 1111 1111" + emoji,
+			want: mark + "[REDACTED:payment_card]" + emoji,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := security.ApplyContentRules(security.Field{Name: security.FieldModelInputText, Text: testCase.text},
+				security.BoundaryModelInput, settings)
+			if err != nil || result.Record.Outcome != security.OutcomeRedact {
+				t.Fatalf("outcome %s err %v", result.Record.Outcome, err)
+			}
+			if result.Text != testCase.want {
+				t.Errorf("masked text %q, want %q", result.Text, testCase.want)
+			}
+			// The spans index the original text, not the copy the rules read.
+			if len(result.Spans) != 1 || result.Spans[0].End > len(testCase.text) {
+				t.Fatalf("spans %+v do not fit %q", result.Spans, testCase.text)
+			}
+			covered := testCase.text[result.Spans[0].Start:result.Spans[0].End]
+			if !strings.Contains(covered, "Secret99") && !strings.Contains(covered, "1111") {
+				t.Errorf("span %+v covers %q, not the secret", result.Spans[0], covered)
+			}
+		})
+	}
+}
