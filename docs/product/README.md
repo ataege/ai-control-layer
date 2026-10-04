@@ -43,9 +43,10 @@ requests, 15-minute expiry, a semantic threshold of 0.75): "illustrative team se
 
 One Go implementer, one web + API implementer, and the lead, who helps both sides when needed. The
 report's six roles are responsibility areas mapped onto these people; the mapping is in
-[AGENTS.md](../../AGENTS.md), "Repository map and ownership". Two staffing items are open: who holds
-the researcher, document owner and presenter role, and confirmation of the default shared-track
-assignment (both listed under "Open items" below).
+[AGENTS.md](../../AGENTS.md), "Repository map and ownership". The staffing items (shared-track
+assignment, researcher and document owner role) are decided: see "Staffing and contract ownership
+(SH-07)" below. Since 2026-10-04 the web + API implementer who wrote most of NestJS is unavailable and
+the lead coordinates every contract change.
 
 ## Ownership
 
@@ -119,6 +120,30 @@ also building GO-06, the web + API side drafts the Go-owned contracts in `packag
 branch for the Go implementer's approval. A contract is frozen when its owner approves the draft and
 it is merged into `main` through SH-11; until then it is a draft, and nothing built on it counts as
 done. The M0 freeze (SH-10) is this per-contract approval, not one meeting.
+
+**Versioning rule (SH-10), decided by the lead's delegate 2026-10-04.** A contract is frozen when its
+owner approves it and it is merged through SH-11. After that, changes are additive only, each with a
+change-log line in `packages/contracts/README.md`; a breaking change needs a new version. The change
+log in that file ("Change log (additive only; existing fields keep their meaning)") is where the
+lines go.
+
+**Frozen task definition and policy fixture (X-06), recorded 2026-10-04 by the lead's delegate from the
+files that hold them.** The values live in the files below; this paragraph says where, so the record
+and the files cannot disagree silently.
+
+- Task: `reconcile_atlas_v1` (item 12 of "Decisions recorded by the lead's delegate"), the Atlas reconciliation of `invoice_A01` and
+  `invoice_A02` (same external reference INV104 and total) for `vendor_Atlas`; `invoice_B01` is
+  outside the task (`fixtures/demo-records.json`, `task_scope`).
+- Tools: `read_invoice`, `read_vendor`, `create_report`, `queue_report`; the approval rule requires a
+  reviewer for `queue_report` (the passport fixture's `approvalRequiredTools`).
+- Destination: the vendor's registered reporting address, reached only through an opaque recipient
+  reference, never an address in model-visible data.
+- Field rules: the internal note of `invoice_A01` is `internal_only` and readable for investigation;
+  the vendor report uses `vendor_invoice_fields_v1` (item 5 of the same list).
+- Classifications and templates: `Internal only` and `Vendor shareable`; `internal_investigation_v1`
+  and `vendor_reconciliation_v1`.
+- Limits and controls: `config/policy.yaml` (item 29 for `tokens_total: 40000`), documented in
+  `config/README.md`; the signature feed is `config/attack-signatures.json`.
 
 Proposed reason vocabulary (reports 1.1 and 1.2): `resource_out_of_scope`, `destination_not_allowed`,
 `report_export_restricted`, `report_lineage_missing`, `source_policy_changed`, `template_not_allowed`,
@@ -479,7 +504,7 @@ Each item is open until the document owner records the outcome here; the roadmap
   `catalog activation protocol` is decided too (item 15), `measurement method` (item 22) and the
   classifier prompt (item 23, measured on its fixture set only). Nothing in this group is still open.
 - `judge access`: how judges reach the running layer, the test suite and the configuration files.
-- `researcher role` and `shared-track assignment`: the two staffing items above.
+- `researcher role` and `shared-track assignment`: **decided by the lead's delegate 2026-10-04**, "Staffing and contract ownership (SH-07)".
 
 ### Status of the roadmap's open items named on 3 October 2026
 
@@ -521,11 +546,24 @@ All existing Go packages (`cmd/gateway`, `internal/config`, `internal/logging`, 
 Future packages inherit this responsibility assignment and receive their package row when real
 code lands. No empty packages are created by this update.
 
-This records the Go ownership portion of SH-07. The lead has since recorded shared contract
-owners in the table above; contracts remain drafts until owner approval and the SH-11 merge.
-SH-07 remains open for the shared-track assignment and researcher role. NestJS contract coordination and shared migration, database-role,
-infrastructure and document responsibilities remain with their recorded roles; owning Go adapters
-does not automatically transfer that shared work to the user.
+This records the Go ownership portion of SH-07. The rest of SH-07 is decided in the next section.
+
+### Staffing and contract ownership (SH-07)
+
+**Decided by the lead's delegate 2026-10-04.**
+
+- **Contract owners.** The owners are the roles in the table under "Contracts to freeze first". The
+  nestjs role lands every contract change in `packages/contracts`; the go role mirrors it in the Go
+  DTOs and holds the authority for action canonicalization, artifact classification and execution.
+  Since 2026-10-04 the web + API implementer (Noyan) is unavailable, so the lead coordinates every
+  contract change and lands it in the nestjs role's place.
+- **Shared-track assignment.** The lead's Claude sessions, since 2026-10-03, hold the shared track: the
+  migrations, seeds, database roles, fixtures, reset and judge tooling, smoke checks and evidence.
+  This replaces the default (migrations and seeds by the web + API implementer).
+- **Researcher role.** The lead's researcher session holds the researcher role (requirements sheet,
+  demo specification and storyboard, claim-to-proof list, source register, submission checklist), and
+  the lead is the document owner. The presenter role stays with the lead.
+- **Go modules.** Recorded above, in the Go ownership update.
 
 ### GO-01: multiple-action model responses
 
@@ -640,7 +678,7 @@ and execution boundary. The canonicalization and digest are implemented (`intern
 Go implementer recorded in the SH-07 Go ownership update above.
 Source: report, "Live demonstration storyboard and proof checks" (Reliable demonstrations without
 invented behavior) and "Illustrative invoice scenario and future domain adaptations" (Scene 2).
-Replay and contract ownership are recorded. The shared-track assignment and researcher role remain open;
+Replay and contract ownership are recorded; the shared-track assignment and researcher role are decided (SH-07);
 X-09 and X-12 still need their freeze before replay implementation.
 
 Chosen approach: a labelled Go runtime scenario test substitutes one stored prohibited proposal
