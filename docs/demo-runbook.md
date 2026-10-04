@@ -453,6 +453,17 @@ business counts equal round 1's after the reset, and the summary ends with the l
 only a browser can show (checks 3 to 8 above). Save the whole summary. Ticks **WEB-18**, **WEB-20**
 and **WEB-24**.
 
+**Re-run beat 10's secret check live, and read it.** In session 08's e2e run (`main` 39d5899 plus docs,
+a loaded machine, `qwen3.5:4b`) the check "a secret is redacted and its value never returned"
+failed in both rounds: round 1 with "decision is deny" (the live path denied where the check expects
+redact), round 2 with "evaluate answered 504" (a model timeout); an earlier run also answered 504 for
+that check and for "hard negative...". It is not diagnosed. Beat 10's other checks passed in that run
+(a signature fires before any semantic call, benign input gets a live metered verdict, a hostile note is
+denied, evaluations are recorded as judge input). On the quiet machine this check must pass in both
+rounds with no 504: a 504 is a model timeout, so first confirm the machine is quiet; a second `deny`
+where `redact` is expected is a finding for lane c1 (the secret-pattern control and the evaluator's
+verdict), written down with the exact output, not retried until it passes.
+
 ### 10. The control test suite, live (about 2 minutes, _model_)
 
 ```sh
