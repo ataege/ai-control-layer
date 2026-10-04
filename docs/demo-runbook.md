@@ -18,7 +18,7 @@ The NestJS API and the web pages for runs, review, reports, the judge and the se
 `main`: sign in, the task form (`/tasks/new`), the run page (`/runs/<run id>`), the review page
 (`/runs/<run id>/review/<action id>`), the report page (`/runs/<run id>/reports/<report id>`), the
 judge page (`/judge`) and the security page with the active controls and the audit export
-(`/security`). Each beat below says which page shows it (**[web]**) and keeps the gateway command or
+(`/security` and `/security/export`). Each beat below says which page shows it (**[web]**) and keeps the gateway command or
 test as the fallback, because the web path is only as good as the last rehearsal. The gateway's
 internal routes still require the service token and a signed `X-Operator-Context` token; no presenter
 tool mints that token, so a presenter reaches the gateway through the API (`/api/...`) or the commands
@@ -135,6 +135,14 @@ GO_STORY_LIVE=1 MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b \
   node scripts/with-env.mjs go -C services/gateway test -tags=model_live ./internal/scenario \
   -run '^TestLiveStoryThroughTheProductionChain$' -count=1 -v
 ```
+
+Stop `pnpm dev` first, or run it on the test database (prefix `POSTGRES_DB=<db>_test`): a gateway sharing
+the database also claims the story's queued job. On 4 October, with `pnpm dev` running, three of three
+runs against the demo database ended `failed decision_unavailable` after one agent call (error kind
+`recording`); the same command with the stack stopped completed with 9 agent calls, 1 security call and
+one outbox row, and on the test database three runs gave two completed and one stopped at the allowance.
+The test fails when the run does not complete (branch `go/f3-live-story-assert`; before it, the test
+passed on a failed run, so read the `evidence` line, not only `--- PASS`).
 
 The scripted fallback for the same beats (labelled fixture provider, test database):
 
@@ -269,13 +277,15 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   or two. An invalid file is rejected and the last accepted revision stays active.
 - One change at a time: change one value, run `pnpm policy:import`, wait for the gateway's log line
   `catalog revision validated and activated` (or `pnpm catalog:activate` printing the activated
-  revision, or `/health/ready` answering 200), then make the next change. The gateway validates only
-  the latest requested revision, so a second import before the first is activated replaces it: a good
-  edit followed at once by a bad one leaves the revision from before both active.
+  revision, or `/health/ready` answering 200), then make the next change. A second import while the
+  first is still waiting for activation is refused (`pnpm policy:import` exits 1: "revision N is still
+  being validated; wait for activation and retry"; the API reload answers 409 `revision_pending`), so
+  nothing is replaced. An invalid file is still rejected first (`policy_reload_rejected`), even while a
+  revision is pending.
 - A real change moves the active revision, and an action approved or allowed under the previous
   revision is then refused with `source_policy_changed`, so do not change the configuration during
-  a review wait. Re-importing an unchanged file creates a new revision today as well; after lane
-  c1's importer fix it is a no-op.
+  a review wait. Re-importing an unchanged file is a no-op (`pnpm policy:import` prints "unchanged:
+  revision N is already current"), so a repeated import does not void a pending approval.
 - Show the same input before and after on the judge input path (`/judge` or `pnpm judge`). **[web]** the
   revision view: the active controls panel on `/security` shows the requested, validated and active
   revision and any rejection.
@@ -286,8 +296,8 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   windows" above for the result). Open the results file it names.
 - Summary and export: `GET /internal/security/summary`, `/internal/security/assessments` and
   `/internal/security/events` on the gateway (contracts in `packages/contracts`). **[web]** the security
-  posture dashboard and the audit export at `/security` (`GET /api/security/summary` and
-  `/api/security/export`).
+  posture dashboard at `/security` and the audit export at `/security/export` (`GET /api/security/summary`
+  and `/api/security/export`).
 - Timing: the quiet benchmark table (deterministic controls well under 1 ms, live semantic about
   1.9 s, gateway overhead about 5 ms).
 
@@ -333,22 +343,32 @@ it changes the policy revision, so never do it while a run waits for review (`so
 
 1. Open `/security`. Note the active revision N in the "active controls" panel.
 2. Valid reload: `sed -i '' 's/threshold: 0.75/threshold: 0.80/' config/policy.yaml && pnpm policy:import`.
-3. Invalid reload: `sed -i '' 's/threshold: 0.80/threshold: 1.5/' config/policy.yaml && pnpm policy:import`.
-4. Restore: `sed -i '' 's/threshold: 1.5/threshold: 0.75/' config/policy.yaml && pnpm policy:import`.
+   Click Refresh once (the panel polls only after it has seen a pending change, so a page left open and
+   idle does not notice a terminal import by itself); it then follows the change to N+1 in force within
+   a few seconds without more clicks. An import while a revision is still being validated is refused.
+3. Invalid reload: `sed -i '' 's/threshold: 0.80/threshold: 1.5/' config/policy.yaml && pnpm policy:import`
+   (click Refresh to see the rejection).
+4. Restore: `sed -i '' 's/threshold: 1.5/threshold: 0.75/' config/policy.yaml && pnpm policy:import`
+   (run it only after step 3's rejection, with N+1 active).
 
-Passes when: after step 2 the panel shows the revision pending and then in force (within a few
-seconds, without a click) as N+1; after step 3 `policy:import` prints a rejection
+Passes when: after step 2 and one Refresh click the panel shows the revision pending or already in
+force as N+1 (4 October: activated 4 seconds after the import); after step 3 `policy:import` prints a rejection
 (`policy_reload_rejected`), the panel shows the rejection code, message and stage, and N+1 is still
-the active revision; after step 4 N+2 is active; the panel never shows "Not available yet"; and
-`git diff --stat config/policy.yaml` prints nothing. Ticks **WEB-29**.
+the active revision; after step 4 N+2 is active (a step 4 that prints "still being validated" means
+step 2 was not waited for: wait and rerun it); the panel never shows "Not available yet"; and
+`git diff --stat config/policy.yaml` prints nothing. Adds the quiet-machine browser evidence to **WEB-29** (already ticked).
 
 ### 2. An admission rejection through the form (WEB-11, about 2 minutes, no model)
 
-At `/tasks/new` choose Atlas and an invoice that does not belong to it (for example `invoice_C01`).
-Passes when the form shows a business-language rejection (reason `resource_out_of_scope`), asks for an
-explicit resubmission, no run appears (`psql "SELECT count(*) FROM runtime.runs"` still 0) and the
-browser console shows no error. If the form does not offer that combination, note it: the form
-offers only what the server returned. Ticks **WEB-11**.
+At `/tasks/new` choose Atlas, `invoice_A01` and the reviewer requirement, type `999` in "Model calls
+limit" (the placeholder says "up to 24") and submit. Do not pick `invoice_B01` or any other invoice
+expecting another vendor's: the form offers only Atlas with `invoice_A01`, `invoice_A02` and
+`invoice_B01`, all Atlas's, so a cross-vendor `resource_out_of_scope` rejection cannot be built in the
+form, and a valid combination starts a real run that calls the model (it did on 4 October, by
+mistake). Passes when the form shows "Request rejected at admission: no passport was issued and no run
+started.", reason `limit_not_allowed`, the field to change and "Submit revised request", with the
+choices kept, no run appears (`psql "SELECT count(*) FROM runtime.runs"` still 0) and the browser
+console shows only the browser's own line for that 400 response and nothing else. Adds the quiet-machine browser evidence to **WEB-11** (already ticked).
 
 ### 3. Real start through the form (WEB-05, about 3 minutes, _model_)
 
@@ -381,7 +401,8 @@ content, its SHA-256 and the source manifest. Click Approve, then **Approve agai
 "Completed" within about 10 seconds, both reports are linked, the queued message carries the
 "Simulated outbox" label, `psql "SELECT count(*), max(recipient) FROM demo.outbox_messages"` prints
 `1` and the registered address, and the outbox row's content hash equals the hash on the review page.
-Ticks **WEB-14** and **WEB-18** (the legitimate task through the interface).
+Adds the quiet-machine evidence to **WEB-14** (already ticked) and ticks **WEB-18** (the legitimate
+task through the interface).
 
 ### 6. The export denial and the other replay on the page (WEB-09, WEB-28, about 2 minutes, no model call)
 
@@ -401,7 +422,10 @@ generated by the model", while the outbox still holds the one approved row. Clos
 
 ### 7. Hostile and benign input through the judge path (WEB-32, X-91, about 5 minutes, _model_)
 
-On `/judge` choose "Start a dedicated judge run", then evaluate as `tool_result` (the form also asks
+On `/judge` choose "Start a dedicated judge run" (until the lead's inert judge run is merged, this is an
+ordinary run: the agent runs on it, 6 agent calls, 2 reports and an approval request in the 4 October
+capture, and it competes for the model while you evaluate; do not approve its queued report), then
+evaluate as `tool_result` (the form also asks
 which tool the result is attributed to: choose `read_invoice`, or Evaluate answers "Choose the tool this
 result is attributed to."): the text of
 `hostile_note_internal_disclosure_v1` from `fixtures/hostile-notes.json` and a benign case such as
@@ -428,9 +452,9 @@ as a detection rate), and the judge run's timeline shows the evaluations as judg
 action. A model-dependent mismatch (a hard negative blocked, a hostile note allowed) is recorded as a
 note, not hidden.
 
-Also evaluate the five secret cases of `fixtures/semantic-corpus.json` (`secret_portal_password_v1`,
-`secret_api_token_v1`, `secret_bank_account_v1`, `secret_payment_card_v1`, `secret_two_values_v1`) as
-`tool_result`, and write down each decision, reason code and score. The judge path redacts the secret
+Also evaluate the six secret cases of `fixtures/semantic-corpus.json` (`secret_portal_password_v1`,
+`secret_api_token_v1`, `secret_bank_account_v1`, `secret_payment_card_v1`, `secret_two_values_v1` as
+`tool_result`, and `secret_connection_password_v1` as `model_input`), and write down each decision, reason code and score. The judge path redacts the secret
 and then runs the semantic check on the redacted text, and a blocking verdict wins over the
 redaction, so a live `deny` with `semantic_injection_detected` is the designed outcome when the model
 rates the redacted text as risky (reproduced with fixture verdicts in
@@ -438,8 +462,8 @@ rates the redacted text as risky (reproduced with fixture verdicts in
 with a `[REDACTED` marker and no secret value appears in any response; a deny is recorded as a live
 observation of the semantic check (the live corpus test skips these cases, so this is the only live
 data on them), never as a failure of the secret rule. A secret value in any response, or an `allow`,
-is a failure. Ticks **WEB-32** (the hostile-note run shows the block before context and the clean
-run its allow) and c2's live `pnpm judge` call against X-91 (SH-48).
+is a failure. Adds the quiet-machine evidence to **WEB-32** (already ticked: the hostile-note run shows the block before context and the clean
+run its allow) and to c2's live `pnpm judge` call against X-91 (SH-48).
 
 ### 8. The limit stop through the interface (WEB-17, about 3 minutes, _model_)
 
@@ -455,8 +479,8 @@ curl -s -b /tmp/judge-cookies.txt -H 'content-type: application/json' \
 (The cookie file comes from check 7; sign in again if it is gone.) Passes when the run page shows
 "Paused at a limit", the recorded reason (`allowance_exhausted` or `security_allowance_exhausted`),
 "Model requests ... 2 of 2 (limit reached)", "Every dispatched request is accounted for", and the
-gateway log has a `model reservation refused` line with the limit kind. Ticks the interface leg of
-**WEB-17**.
+gateway log has a `model reservation refused` line with the limit kind. Adds the quiet-machine interface evidence to
+**WEB-17** (already ticked).
 
 ### 9. The web end-to-end rerun (WEB-18, WEB-20, WEB-24, about 10 minutes, _model_)
 
@@ -511,7 +535,7 @@ MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gatew
 ```
 
 Passes when `modelcheck` exits 0 and the benchmark prints a live table with 0 errors and a load
-average at the start and the end; quote it as an observation under that load. Updates **GO-81** (the
+average (it prints the load at the start only; read the end with `uptime`); quote it as an observation under that load. Updates **GO-81** (the
 quiet-machine table) and **GO-03** (hardware fit; whether this machine is the presentation machine is
 still the user's to confirm).
 
@@ -524,11 +548,11 @@ Point to these limitations in `services/gateway/README.md` instead of claiming m
 
 - One gateway process per database (job leases, the in-memory `jti` replay cache).
 - The live semantic results are not a detection rate. The current evidence is the root `README.md`
-  record for `classifier_v2` (fixture version 3): three runs, the first two failed on setup and test
-  strictness, the third passed with 1100 cases and live 27 of 29 matched, 0 false positives and 2 false
-  negatives, at load 9.0 to 12.5, not an idle machine; the lane's variance sentence there applies. The
-  `verify:controls` run checked for this runbook gave 28 of 29 with 1 false positive. The 24-case runs
-  in the gateway README are the older `classifier_v1` history.
+  record for `classifier_v2` (fixture version 3): the final run on merged `main` cdfee55 passed with 1145
+  cases and live 28 of 29 matched, 0 false positives and 1 false negative, at 1-minute load 4.5 to 4.0
+  (`docs/evidence/verify-controls-2026-10-03T21-53-09Z.json`). The earlier runs there (1100 cases, 27
+  of 29) differ by one or two cases, the model's variance near the 0.75 threshold. The 24-case runs in
+  the gateway README are the older `classifier_v1` history.
 - Benchmark numbers are observations on one machine under stated load, not a distribution.
 - Live agent runs on an 8 GiB machine paused on request timeouts; a 4B model's choices vary.
 - The outbox is simulated, the replay is scripted, fixture verdicts test handling only, and usage
