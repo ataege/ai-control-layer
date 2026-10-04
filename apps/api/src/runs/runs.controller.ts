@@ -180,7 +180,10 @@ export class RunsController {
         after: z
           .string()
           .regex(/^(0|[1-9][0-9]{0,18})$/)
-          .refine((cursor) => BigInt(cursor) <= 9223372036854775807n)
+          .refine(
+            (cursor) =>
+              /^(0|[1-9][0-9]{0,18})$/.test(cursor) && BigInt(cursor) <= 9223372036854775807n,
+          )
           .optional(),
         limit: z
           .string()
