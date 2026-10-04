@@ -21,6 +21,8 @@ import type {
   RunState,
   RunUsage,
   ReportView,
+  TaskFormOptions,
+  Passport,
 } from "@workspace/contracts";
 import type { Request } from "express";
 import { z } from "zod";
@@ -28,6 +30,8 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { GatewayClientService } from "../gateway-client/gateway-client.service.js";
 import { StartRunSchema } from "./dto/start-run.dto.js";
 import startResponseContract from "@workspace/contracts/schemas/start-run-response.schema.json" with { type: "json" };
+import passportContract from "@workspace/contracts/schemas/passport.schema.json" with { type: "json" };
+import optionsContract from "@workspace/contracts/schemas/task-form-options.schema.json" with { type: "json" };
 import { RunEventsSchema } from "./run-events.schema.js";
 import { RunStateSchema, RunUsageSchema } from "./run-read.schemas.js";
 import { ReportViewSchema } from "./report-view.schema.js";
@@ -40,11 +44,33 @@ import {
 const StartRunResponseSchema = z.fromJSONSchema(
   startResponseContract as Parameters<typeof z.fromJSONSchema>[0],
 );
+const TaskFormOptionsSchema = z.fromJSONSchema(
+  optionsContract as Parameters<typeof z.fromJSONSchema>[0],
+);
+
+const PassportSchema = z.fromJSONSchema(passportContract as Parameters<typeof z.fromJSONSchema>[0]);
 
 @ApiTags("runs")
 @Controller("runs")
 export class RunsController {
   constructor(private readonly gateway: GatewayClientService) {}
+
+  // Register before :id so "options" is never interpreted as a run reference.
+  @Get("options")
+  @ApiOperation({ summary: "Read organization-scoped task choices from the active Go catalog" })
+  @ApiResponse({ status: 200, description: "The unchanged shared TaskFormOptions response." })
+  @ApiResponse({ status: 401, description: "Verified session and membership required." })
+  @ApiResponse({ status: 503, description: "Catalog or gateway unavailable; no default options." })
+  async options(@Req() request: Request): Promise<TaskFormOptions> {
+    return gatewayData(
+      await this.gateway.getRead(
+        "/internal/task-options",
+        request.requestId,
+        TaskFormOptionsSchema,
+        verifiedOperator(request),
+      ),
+    ) as TaskFormOptions;
+  }
 
   @Get(":id/reports/:reportId")
   @ApiOperation({ summary: "Read a stored report with its server classification and source trail" })
@@ -86,6 +112,24 @@ export class RunsController {
     if (state.runId !== runId)
       throw new ServiceUnavailableException("Invalid gateway run reference");
     return state;
+  }
+
+  @Get(":id/passport")
+  @ApiOperation({ summary: "Read the stored immutable passport of an authorized run" })
+  async passport(@Param("id") runId: string, @Req() request: Request): Promise<Passport> {
+    const operator = verifiedOperator(request);
+    requireRecordId(runId);
+    const passport = gatewayData(
+      await this.gateway.getRead(
+        `/internal/runs/${runId}/passport`,
+        request.requestId,
+        PassportSchema,
+        operator,
+      ),
+    ) as Passport;
+    if (passport.runId !== runId || passport.organizationId !== operator.organizationId)
+      throw new ServiceUnavailableException("Invalid gateway passport reference");
+    return passport;
   }
 
   @Get(":id/usage")
@@ -158,7 +202,10 @@ export class RunsController {
         after: z
           .string()
           .regex(/^(0|[1-9][0-9]{0,18})$/)
-          .refine((cursor) => BigInt(cursor) <= 9223372036854775807n)
+          .refine(
+            (cursor) =>
+              /^(0|[1-9][0-9]{0,18})$/.test(cursor) && BigInt(cursor) <= 9223372036854775807n,
+          )
           .optional(),
         limit: z
           .string()

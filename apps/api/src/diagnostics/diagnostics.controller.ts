@@ -45,7 +45,8 @@ export class DiagnosticsController {
   @Get("gateway")
   @Header("Cache-Control", "no-store")
   @ApiOperation({
-    summary: "Checks the gateway: authenticated ping and its database readiness.",
+    summary:
+      "Checks the gateway: authenticated ping and aggregate database/worker/catalog readiness.",
   })
   @ApiOkResponse({ type: GatewayDiagnosticsResponseDto, description: "Both checks passed." })
   @ApiServiceUnavailableResponse({

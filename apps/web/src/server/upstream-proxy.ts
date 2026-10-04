@@ -20,6 +20,7 @@ export const UPSTREAM_PREFIXES = [
   "/api/auth",
   "/api/control",
   "/api/security",
+  "/api/policies",
 ] as const;
 
 // Longer than the API's own upstream timeouts, so its mapped status arrives first.
@@ -232,7 +233,9 @@ export async function proxyUpstream(
         );
       }
 
-      return new Response(upstreamBodyText, {
+      // A 204, 205 or 304 has no body: a Response refuses even an empty string for them.
+      const hasNoBodyStatus = [204, 205, 304].includes(upstreamResponse.status);
+      return new Response(hasNoBodyStatus ? null : upstreamBodyText, {
         status: upstreamResponse.status,
         headers: responseHeaders,
       });

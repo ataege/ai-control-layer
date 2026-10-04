@@ -3,12 +3,18 @@
 // every outcome back as a value. The summary is checked for its contract shape before it is shown:
 // a response that does not fit is reported as such, never rendered or repaired.
 
-import type { AssessmentPage, SecurityEventPage, SecuritySummary } from "@workspace/contracts";
+import type {
+  AssessmentPage,
+  CatalogStatus,
+  SecurityEventPage,
+  SecuritySummary,
+} from "@workspace/contracts";
 
 import { fetchJson, type FetchJsonError } from "../fetch-json";
 
 export const SECURITY_SUMMARY_URL = "/api/security/summary";
 export const AUDIT_EXPORT_URL = "/api/security/export";
+export const CATALOG_STATUS_URL = "/api/policies/catalog";
 
 export const EXPORT_KINDS = ["events", "assessments"] as const;
 export type ExportKind = (typeof EXPORT_KINDS)[number];
@@ -27,6 +33,8 @@ export type SecurityFailure =
   | { kind: "unauthorized"; message: string }
   | { kind: "forbidden"; message: string }
   | { kind: "bad_request"; message: string }
+  /** The route is not served (yet): a 404, or the web proxy refusing a path it does not forward. */
+  | { kind: "not_available"; message: string }
   | { kind: "unavailable"; message: string; status?: number }
   | { kind: "network"; message: string }
   | { kind: "timeout"; message: string }
@@ -36,6 +44,7 @@ const FAILURE_MESSAGES = {
   unauthorized: "Your session has ended. Sign in again to see the security posture.",
   forbidden: "The reviewer role is required for this view.",
   bad_request: "The request was not accepted. Check the values and try again.",
+  not_available: "The API does not serve this information yet.",
   unavailable: "The security records are not available right now.",
   network: "The server could not be reached.",
   timeout: "The server did not answer in time.",
@@ -52,6 +61,7 @@ export function failureForStatus(status: number): SecurityFailure {
   if (status === 401) return failure("unauthorized");
   if (status === 403) return failure("forbidden");
   if (status === 400) return failure("bad_request");
+  if (status === 404) return failure("not_available");
   return failure("unavailable", status);
 }
 
@@ -154,6 +164,79 @@ export async function getSecuritySummary(
   return {
     ok: true,
     summary: result.data,
+    requestId: result.requestId,
+    durationMs: result.durationMs,
+  };
+}
+
+// --- Active catalog status (WEB-29) -----------------------------------------------------------
+
+export type CatalogStatusResult =
+  | { ok: true; status: CatalogStatus; requestId?: string; durationMs: number }
+  | { ok: false; failure: SecurityFailure };
+
+const CONTROL_IDS = ["secret_pattern", "semantic_injection", "signature_match"];
+const BOUNDARIES = ["model_input", "tool_result", "action_proposal"];
+const isNullableCount = (value: unknown): boolean => value === null || isCount(value);
+
+/** The structural check that stands between the network and the active-controls panel. */
+export function isCatalogStatus(data: unknown): data is CatalogStatus {
+  if (!isRecord(data)) return false;
+  const lastError = data.lastError;
+  return (
+    isNullableCount(data.activeRevisionId) &&
+    isNullableCount(data.requestedRevisionId) &&
+    isNullableCount(data.validatedRevisionId) &&
+    isNullableText(data.policyDigest) &&
+    isNullableCount(data.feedRevisionId) &&
+    isNullableText(data.feedRevision) &&
+    isNullableText(data.feedDigest) &&
+    isNullableCount(data.feedRuleCount) &&
+    (lastError === null ||
+      (isRecord(lastError) &&
+        isText(lastError.code) &&
+        isText(lastError.message) &&
+        isCount(lastError.revisionId) &&
+        isText(lastError.stage))) &&
+    everyRecord(
+      data.controls,
+      (control) =>
+        isText(control.controlId) &&
+        CONTROL_IDS.includes(control.controlId) &&
+        (control.controlClass === "deterministic" || control.controlClass === "semantic") &&
+        typeof control.enabled === "boolean" &&
+        (control.mode === null || control.mode === "block" || control.mode === "redact") &&
+        (control.threshold === null || typeof control.threshold === "number") &&
+        Array.isArray(control.boundaries) &&
+        control.boundaries.every((boundary) => BOUNDARIES.includes(boundary as string)),
+    ) &&
+    Array.isArray(data.disabledRules) &&
+    data.disabledRules.every(isText)
+  );
+}
+
+/**
+ * Reads the active catalog status. A 404, and the web proxy's own refusal of a path it does not
+ * forward yet (500 configuration_error), both mean the route is not served: "not available", not an
+ * outage. A 503 means the active revision cannot be enforced: unavailable, never shown as empty.
+ */
+export async function getCatalogStatus(
+  options: { signal?: AbortSignal; fetchImplementation?: typeof fetch } = {},
+): Promise<CatalogStatusResult> {
+  const result = await fetchJson<unknown>(CATALOG_STATUS_URL, options);
+  if (!result.ok) {
+    if (result.error.kind === "http" && result.error.status === 500) {
+      const body = result.error.body as { error?: { code?: string } } | undefined;
+      if (body?.error?.code === "configuration_error") {
+        return { ok: false, failure: failure("not_available") };
+      }
+    }
+    return { ok: false, failure: failureForFetchError(result.error) };
+  }
+  if (!isCatalogStatus(result.data)) return { ok: false, failure: failure("invalid_response") };
+  return {
+    ok: true,
+    status: result.data,
     requestId: result.requestId,
     durationMs: result.durationMs,
   };

@@ -1,27 +1,38 @@
 #!/usr/bin/env node
-// End-to-end check of the operator flow through the web app (WEB-18, WEB-20, WEB-24), without a
-// browser and without new dependencies: it talks to the web server's own routes and pages with
-// fetch, like the browser would, and runs `pnpm reset:demo` between rounds.
+// End-to-end check of the demonstration through the web app (WEB-18, WEB-20, WEB-24), without a
+// browser and without new dependencies. It talks to the web server's own routes and pages with
+// fetch, like the browser would, and checks every beat of docs/demo-runbook.md that can be checked
+// from outside a browser. Each check is tagged with its beat; the summary groups them by beat and
+// ends with the beats and details that can only be shown in a browser.
 //
-// Per round: sign in, start the Atlas run, follow it to the approval request, read the exact
-// action under review, approve it, wait for the run to complete, read the stored report and the
-// security summary, check that a finished run refuses a judge evaluation (run_not_active), and
-// load the run, report, security and judge pages. Then reset the demo data and repeat.
+// Per round: sign in, baseline (beat 2), start the Atlas run (1), follow it (3, 4), vendor report
+// (7), reviewer's exact action and approval (8), labelled replays (5, 9), a dedicated judge run with
+// hostile, secret, signature and benign input (10), optional configuration change (11), security
+// summary and audit export (12), the pages, then `pnpm reset:demo`. Round 2 repeats the workflow
+// (WEB-20): no page or read may show state from before the reset and the counts must match round 1.
 //
-// Limits, stated plainly: it checks routes, statuses, contract fields and the server-rendered page
-// shell. It does not execute client-side React, so it does not prove what a browser renders. The
-// run is real (local model, real gateway); the agent's path can vary, so an unexpected run state
-// fails the round with the state it reached.
+// Limits, stated plainly: this proves routes, statuses, contract fields, database effects and the
+// server-rendered page shell. It does not execute client-side React, so it does not prove what a
+// browser renders. The run is live (local model, real gateway): the agent's path can vary, and the
+// model-dependent checks (a hard negative that must pass, a hostile note that must not) record a
+// mismatch as a NOTE instead of failing, as the runbook does. Beat 5 uses the labelled replay.
 //
 // Run from the repository root with the stack up (`pnpm dev`):
 //   node scripts/with-env.mjs node apps/web/scripts/e2e-flow.mjs
-// Environment (all optional): E2E_WEB_URL (default http://localhost:$WEB_PORT), E2E_ROUNDS (2),
-// E2E_RUN_TIMEOUT_MS (240000), E2E_SKIP_RESET=1, E2E_SKIP_PAGES=1 (API-only dry run, point
-// E2E_WEB_URL at the API), DEMO_OPERATOR_EMAIL (demo-operator@example.com), DEMO_OPERATOR_PASSWORD.
+// Environment (optional): E2E_WEB_URL (default http://localhost:$WEB_PORT), E2E_ROUNDS (2),
+// E2E_RUN_TIMEOUT_MS (240000), E2E_SKIP_RESET=1, E2E_SKIP_PAGES=1 (point E2E_WEB_URL at the API),
+// E2E_POSTGRES_CONTAINER (a local Docker container of the demo database; enables the database
+// checks of beats 2, 5, 8, 9), E2E_BEAT11=1 (edits config/policy.yaml, then restores it),
+// E2E_RUN_SUITE=1 (runs `pnpm verify:controls`, about two minutes), DEMO_OPERATOR_EMAIL,
+// DEMO_OPERATOR_PASSWORD.
 import { spawnSync } from "node:child_process";
+import { copyFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const readJson = (relativePath) =>
+  JSON.parse(readFileSync(new URL(relativePath, `file://${repositoryRoot}`), "utf8"));
+
 const webBaseUrl = (
   process.env.E2E_WEB_URL ?? `http://localhost:${process.env.WEB_PORT ?? "3000"}`
 ).replace(/\/+$/, "");
@@ -29,6 +40,7 @@ const roundCount = Number(process.env.E2E_ROUNDS ?? "2");
 const runTimeoutMs = Number(process.env.E2E_RUN_TIMEOUT_MS ?? "240000");
 const skipReset = process.env.E2E_SKIP_RESET === "1";
 const skipPages = process.env.E2E_SKIP_PAGES === "1";
+const postgresContainer = process.env.E2E_POSTGRES_CONTAINER;
 const operatorEmail = process.env.DEMO_OPERATOR_EMAIL ?? "demo-operator@example.com";
 const operatorPassword = process.env.DEMO_OPERATOR_PASSWORD;
 
@@ -41,23 +53,83 @@ const START_RUN_BODY = {
   approvalRequirement: "review_queue_report",
 };
 const TERMINAL_STATUSES = ["completed", "failed", "stopped"];
+const demoRecords = readJson("fixtures/demo-records.json");
+const hostileNotes = readJson("fixtures/hostile-notes.json").notes;
+const corpusCases = Object.fromEntries(
+  readJson("fixtures/semantic-corpus.json").cases.map((corpusCase) => [corpusCase.id, corpusCase]),
+);
 
-class CheckFailure extends Error {}
+/** Beats of docs/demo-runbook.md and storyboard.md that no fetch-based check can prove. */
+const BROWSER_ONLY = [
+  "Beat 1: the passport shown beside the activity timeline (layout), with the four tools, invoices, recipient, expiry and remaining allowance readable.",
+  "Beat 2: the clean internal note labelled Internal only and the active controls as screens (the script checks the same facts by SQL and API).",
+  "Beat 4: the stored internal report and its source trail rendered for the author.",
+  "Beats 5 and 9: the replay is a Go command, not an interface action; the timeline must show the label 'Replay: scripted proposal, not generated by the model' for events with a replaySource. Needs eyes.",
+  "Beat 6: no rename operation exists; evidence is the tests TestLabelRenameAndMissingLineageTampering and TestStoredLabelAndTitleCannotOverrideTheLineage (test evidence, not a live action).",
+  "Beat 8: the reviewer's screen showing content, classification, sources and recipient before the approve button, and the approve interaction itself.",
+  "Beat 9: allowance exhaustion is labelled test-double evidence (TestModelLimitStopsTheRunBeforeTheNextDispatch, TestFailedModelCallIsNeverResent), not an interface flow.",
+  "Beat 10: how a live verdict, its score and 'live' versus 'fixture' label, and the withheld blocked text are presented on /judge.",
+  "Beat 11: the revision, reload state and rejection view (WEB-29); the script checks the revision through evaluation responses.",
+  "Beat 12: the security dashboard's rendering, the audit export download and opening the results file of pnpm verify:controls.",
+  "Every beat: the labels (simulated outbox, replay, fixture verdict, test double, estimated cost, Development Demonstration, synthetic records) and screenshots 'Recording from build <id>'.",
+];
+
+// ---------------------------------------------------------------- reporting
+
+class RoundAbort extends Error {}
+
+/** A check that cannot run yet because a known dependency is missing; not a failure. */
+class BlockedCheck extends Error {}
+
+/** beat -> [{ name, status: "pass" | "fail" | "note" | "skip" | "blocked", detail }] */
+const outcomes = new Map();
+let currentRound = 0;
+
+function record(beat, name, status, detail = "") {
+  if (!outcomes.has(beat)) outcomes.set(beat, []);
+  outcomes.get(beat).push({ round: currentRound, name, status, detail });
+  const label = { pass: "PASS", fail: "FAIL", note: "NOTE", skip: "SKIP", blocked: "BLOCKED" }[
+    status
+  ];
+  console.log(`  ${label}  [${beat}] ${name}${detail ? `: ${detail}` : ""}`);
+}
 
 function expect(condition, message) {
-  if (!condition) throw new CheckFailure(message);
+  if (!condition) throw new Error(message);
 }
+
+/** Runs one check. A failure is recorded and the round continues, unless the check is required. */
+async function check(beat, name, action, { required = false } = {}) {
+  try {
+    const value = await action();
+    record(beat, name, "pass");
+    return value;
+  } catch (error) {
+    if (error instanceof BlockedCheck) {
+      record(beat, name, "blocked", error.message);
+      return undefined;
+    }
+    record(beat, name, "fail", error.message);
+    if (required) throw new RoundAbort(`${beat}: ${name}`);
+    return undefined;
+  }
+}
+
+const note = (beat, name, detail) => record(beat, name, "note", detail);
+const skip = (beat, name, reason) => record(beat, name, "skip", reason);
+
+// ---------------------------------------------------------------- http and database
 
 /** A tiny cookie jar: the web server sets one HttpOnly session cookie. */
 class Session {
   cookie = "";
 
-  async request(path, { method = "GET", body, redirect = "manual" } = {}) {
+  async request(path, { method = "GET", body, accept = "application/json" } = {}) {
     const response = await fetch(`${webBaseUrl}${path}`, {
       method,
-      redirect,
+      redirect: "manual",
       headers: {
-        accept: "application/json",
+        accept,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...(this.cookie ? { cookie: this.cookie } : {}),
       },
@@ -74,24 +146,41 @@ class Session {
     } catch {
       json = undefined;
     }
-    return { status: response.status, json, text, response };
+    return { status: response.status, json, text, headers: response.headers };
   }
 }
 
-const results = [];
+/** One value from the demo database through `docker exec ... psql`, or undefined without access. */
+function query(sql) {
+  if (!postgresContainer) return undefined;
+  const result = spawnSync(
+    "docker",
+    [
+      "exec",
+      "-e",
+      `PGPASSWORD=${process.env.POSTGRES_PASSWORD ?? ""}`,
+      postgresContainer,
+      "psql",
+      "-U",
+      process.env.POSTGRES_USER ?? "starter",
+      "-d",
+      process.env.POSTGRES_DB ?? "starter",
+      "-Atc",
+      sql,
+    ],
+    { encoding: "utf8" },
+  );
+  if (result.status !== 0) throw new Error(`psql failed: ${result.stderr.slice(0, 200)}`);
+  return result.stdout.trim();
+}
 
-async function step(round, name, action) {
-  const startedAt = performance.now();
-  try {
-    const value = await action();
-    results.push({ round, name, ok: true });
-    console.log(`  PASS  ${name} (${Math.round(performance.now() - startedAt)} ms)`);
-    return value;
-  } catch (error) {
-    results.push({ round, name, ok: false, detail: error.message });
-    console.log(`  FAIL  ${name}: ${error.message}`);
-    throw error;
-  }
+function runCommandInRepository(command, args, extraEnvironment = {}) {
+  return spawnSync(command, args, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+    env: { ...process.env, ...extraEnvironment },
+    maxBuffer: 32 * 1024 * 1024,
+  });
 }
 
 async function waitFor(description, read, isDone, timeoutMs) {
@@ -102,159 +191,738 @@ async function waitFor(description, read, isDone, timeoutMs) {
     if (isDone(last)) return last;
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  throw new CheckFailure(
-    `timed out waiting for ${description}; last seen: ${JSON.stringify(last)}`,
-  );
+  throw new Error(`timed out waiting for ${description}; last seen: ${JSON.stringify(last)}`);
 }
 
+const fetchRunStatus = async (session, runId) =>
+  (await session.request(`/api/runs/${runId}`)).json?.status;
+
+async function fetchEvents(session, runId) {
+  const result = await session.request(`/api/runs/${runId}/events?limit=500`);
+  expect(result.status === 200, `events answered ${result.status}`);
+  return result.json?.events ?? [];
+}
+
+const eventsOfType = (events, eventType) => events.filter((event) => event.eventType === eventType);
+
+// ---------------------------------------------------------------- one round
+
 async function runRound(round) {
+  currentRound = round;
   console.log(`\nRound ${round} of ${roundCount}`);
   const session = new Session();
+  const facts = {};
 
-  await step(round, "sign in as the seeded demo operator", async () => {
-    expect(operatorPassword, "DEMO_OPERATOR_PASSWORD is not set (run with scripts/with-env.mjs)");
-    const result = await session.request("/api/auth/sign-in", {
-      method: "POST",
-      body: { email: operatorEmail, password: operatorPassword },
-    });
-    expect(result.status === 200 || result.status === 201, `sign-in answered ${result.status}`);
-    expect(session.cookie, "sign-in set no session cookie");
+  await check(
+    "setup",
+    "sign in as the seeded demo operator",
+    async () => {
+      expect(operatorPassword, "DEMO_OPERATOR_PASSWORD is not set (run with scripts/with-env.mjs)");
+      const result = await session.request("/api/auth/sign-in", {
+        method: "POST",
+        body: { email: operatorEmail, password: operatorPassword },
+      });
+      expect(result.status === 200 || result.status === 201, `sign-in answered ${result.status}`);
+      expect(session.cookie, "sign-in set no session cookie");
+    },
+    { required: true },
+  );
+
+  // Beat 2: the baseline that every later effect is compared with.
+  const readBusinessState = () => ({
+    invoices: query("SELECT id || ':' || version FROM demo.invoices ORDER BY id"),
+    reports: query("SELECT count(*) FROM demo.reports"),
+    outbox: query("SELECT count(*) FROM demo.outbox_messages"),
+    catalog: query(
+      "SELECT active_revision_id || '/' || active_feed_revision_id FROM app.control_catalog_pointer",
+    ),
   });
+  const baseline = readBusinessState();
+  if (!postgresContainer) {
+    skip(
+      "beat 2",
+      "baseline by SQL (invoice versions, report count, outbox, active catalog)",
+      "E2E_POSTGRES_CONTAINER is not set",
+    );
+  } else {
+    await check(
+      "beat 2",
+      "baseline: empty outbox, no reports, active catalog and feed, invoice versions",
+      () => {
+        expect(baseline.outbox === "0", `outbox starts with ${baseline.outbox} rows`);
+        expect(baseline.reports === "0", `${baseline.reports} reports exist before the run`);
+        expect(
+          /^\d+\/\d+$/.test(baseline.catalog),
+          `no active catalog and feed (${baseline.catalog})`,
+        );
+        expect(
+          baseline.invoices.split("\n").length === demoRecords.invoices.length,
+          "invoice rows differ from the fixtures",
+        );
+      },
+    );
+  }
 
-  const { runId } = await step(round, "start the Atlas run", async () => {
+  // Beat 1: delegate the job.
+  const { runId } = await check(
+    "beat 1",
+    "start the Atlas run through the web route",
+    async () => {
+      const result = await session.request("/api/runs", { method: "POST", body: START_RUN_BODY });
+      expect(result.status === 201 || result.status === 200, `start run answered ${result.status}`);
+      expect(typeof result.json?.runId === "string", "start run returned no runId");
+      return { runId: result.json.runId };
+    },
+    { required: true },
+  );
+  facts.runId = runId;
+
+  await check(
+    "beat 1",
+    "the passport permits the four tools, A01, A02 and the Atlas recipient",
+    async () => {
+      const passport = await session.request(`/api/runs/${runId}/passport`);
+      // Known gap: the API's passport read (pending) answers 404; recorded as blocked, not failed.
+      if (passport.status === 404)
+        throw new BlockedCheck("GET /api/runs/{id}/passport answers 404 (API route pending)");
+      expect(passport.status === 200, `passport answered ${passport.status}`);
+      for (const required of [
+        "read_invoice",
+        "read_vendor",
+        "create_report",
+        "queue_report",
+        "invoice_A01",
+        "invoice_A02",
+        "vendor_Atlas",
+      ]) {
+        expect(passport.text.includes(required), `the passport does not mention ${required}`);
+      }
+    },
+  );
+
+  const approval = await check(
+    "beat 3",
+    "follow the run to its approval request",
+    async () => {
+      const state = await waitFor(
+        "the run to await approval",
+        async () => await fetchRunStatus(session, runId),
+        (status) => status === "awaiting_approval" || TERMINAL_STATUSES.includes(status),
+        runTimeoutMs,
+      );
+      expect(state === "awaiting_approval", `the run ended as ${state} before approval`);
+      const events = await fetchEvents(session, runId);
+      const requested = eventsOfType(events, "approval.requested")[0];
+      expect(requested?.actionId, "no approval.requested event with an actionId");
+      return { actionId: requested.actionId, reportId: requested.maskedSummary?.reportId };
+    },
+    { required: true },
+  );
+
+  const events = await fetchEvents(session, runId);
+  await check(
+    "beat 1",
+    "the first recorded event is run.queued with the admission revision",
+    () => {
+      const queued = eventsOfType(events, "run.queued")[0];
+      expect(queued, "no run.queued event");
+      expect(
+        queued.maskedSummary?.admissionCatalogRevisionId,
+        "run.queued carries no admission revision",
+      );
+    },
+  );
+
+  // Beats 3 and 4: investigate and create the internal report.
+  const internalReport = eventsOfType(events, "report.created").find(
+    (event) => event.maskedSummary?.template === "internal_investigation_v1",
+  );
+  await check("beat 3", "authorized reads of the invoices before any report", () => {
+    const firstReportIndex = events.indexOf(internalReport);
+    const reads = events
+      .slice(0, firstReportIndex)
+      .filter(
+        (event) => event.eventType === "action.succeeded" && event.maskedSummary?.effect === "read",
+      );
+    expect(internalReport, "no internal report was created");
+    expect(
+      reads.length >= 2,
+      `${reads.length} successful reads before the internal report (expected at least 2)`,
+    );
+  });
+  await check(
+    "beat 4",
+    "internal_investigation_v1 report is Internal only with a passed lineage check",
+    async () => {
+      expect(
+        internalReport?.maskedSummary?.classification === "internal_only",
+        `classification is ${internalReport?.maskedSummary?.classification}`,
+      );
+      expect(internalReport.maskedSummary.lineageCheck === "passed", "lineage check did not pass");
+      const view = await session.request(
+        `/api/runs/${runId}/reports/${internalReport.maskedSummary.reportId}`,
+      );
+      expect(view.status === 200, `report view answered ${view.status}`);
+      expect(
+        view.json?.classification === "internal_only",
+        "stored classification is not internal_only",
+      );
+      expect(/^[0-9a-f]{64}$/.test(view.json?.contentHash ?? ""), "no immutable content hash");
+      expect((view.json?.lineage ?? []).length > 0, "no source trail");
+    },
+  );
+
+  // Beat 7: complete through the permitted route.
+  const vendorReport = await check(
+    "beat 7",
+    "vendor_reconciliation_v1 report is Vendor shareable from approved fields only",
+    async () => {
+      const created = eventsOfType(events, "report.created").find(
+        (event) => event.maskedSummary?.template === "vendor_reconciliation_v1",
+      );
+      expect(created, "no vendor report was created");
+      expect(
+        created.maskedSummary.classification === "vendor_shareable",
+        `classification is ${created.maskedSummary.classification}`,
+      );
+      const view = await session.request(
+        `/api/runs/${runId}/reports/${created.maskedSummary.reportId}`,
+      );
+      expect(view.status === 200, `report view answered ${view.status}`);
+      expect(
+        view.json?.projectionRule === "vendor_invoice_fields_v1",
+        `projection rule is ${view.json?.projectionRule}`,
+      );
+      for (const invoice of demoRecords.invoices) {
+        const noteStart = String(invoice.internal_note ?? "").slice(0, 40);
+        expect(
+          !noteStart || !view.json.content.includes(noteStart),
+          `the vendor report contains internal note text of ${invoice.id}`,
+        );
+      }
+      return { reportId: created.maskedSummary.reportId, contentHash: view.json.contentHash };
+    },
+  );
+
+  // Beat 5 (observation only): the live model's own attempt, if it made one.
+  const liveExportAttempt = eventsOfType(events, "report.export_denied")[0];
+  note(
+    "beat 5",
+    "the live model's own export attempt",
+    liveExportAttempt
+      ? `this run recorded a live report.export_denied (${liveExportAttempt.reasonCode}); not part of the demonstration, which always uses the labelled replay`
+      : "the live model did not attempt the export in this run (expected; the labelled replay is the demonstration)",
+  );
+
+  // Beat 8: review and queue the exact content.
+  await check(
+    "beat 8",
+    "the reviewer reads the exact action: queue_report, this run, the vendor report, the Atlas recipient",
+    async () => {
+      const review = await session.request(`/api/actions/${approval.actionId}/review`);
+      expect(review.status === 200, `review answered ${review.status}`);
+      expect(review.json?.tool === "queue_report", `reviewed tool is ${review.json?.tool}`);
+      expect(review.json?.run_id === runId, "the review belongs to another run");
+      expect(
+        review.json?.report?.id === vendorReport?.reportId,
+        "the reviewed report differs from the vendor report",
+      );
+      expect(
+        review.json?.report?.content_hash === vendorReport?.contentHash,
+        "the reviewed content hash differs from the stored report",
+      );
+      expect(
+        review.json?.report?.classification === "vendor_shareable",
+        "the reviewed report is not vendor_shareable",
+      );
+      expect(
+        review.json?.recipient?.vendor_id === "vendor_Atlas",
+        "the recipient is not the registered Atlas recipient",
+      );
+    },
+  );
+  await check(
+    "beat 8",
+    "approve the exact action",
+    async () => {
+      const decision = await session.request(`/api/actions/${approval.actionId}/approval`, {
+        method: "POST",
+        body: { decision: "approve" },
+      });
+      expect(
+        decision.status === 200 || decision.status === 201,
+        `approval answered ${decision.status}`,
+      );
+    },
+    { required: true },
+  );
+  await check(
+    "beat 8",
+    "the run completes: approved, resumed, queued once, completed",
+    async () => {
+      const status = await waitFor(
+        "the run to finish",
+        async () => await fetchRunStatus(session, runId),
+        (value) => TERMINAL_STATUSES.includes(value),
+        runTimeoutMs,
+      );
+      expect(status === "completed", `the run ended as ${status}`);
+      const finished = await fetchEvents(session, runId);
+      const order = finished.map((event) => event.eventType);
+      for (const required of ["approval.decided", "run.resumed", "run.completed"]) {
+        expect(order.includes(required), `no ${required} event`);
+      }
+      const queued = finished.filter(
+        (event) => event.maskedSummary?.effect === "outbox_message_queued",
+      );
+      expect(
+        queued.length === 1,
+        `${queued.length} outbox_message_queued events (expected exactly 1)`,
+      );
+      expect(
+        order.indexOf("approval.decided") < order.indexOf("run.completed"),
+        "the run completed before the decision",
+      );
+    },
+    { required: true },
+  );
+  if (postgresContainer) {
+    await check(
+      "beat 8",
+      "exactly one simulated outbox row, to the registered address, matching the reviewed content hash",
+      () => {
+        const rows = query(
+          "SELECT recipient || ' ' || encode(report_content_hash, 'hex') FROM demo.outbox_messages",
+        ).split("\n");
+        expect(rows.length === 1 && rows[0] !== "", `${rows.length} outbox rows`);
+        const registered = demoRecords.vendors.find((vendor) => vendor.id === "vendor_Atlas");
+        const [recipient, hash] = rows[0].split(" ");
+        expect(
+          !registered?.registered_reporting_address ||
+            recipient === registered.registered_reporting_address,
+          `recipient is ${recipient}`,
+        );
+        expect(
+          hash === vendorReport?.contentHash,
+          "the outbox hash differs from the reviewed report hash",
+        );
+      },
+    );
+  } else {
+    skip(
+      "beat 8",
+      "one outbox row, registered address, matching hash",
+      "E2E_POSTGRES_CONTAINER is not set",
+    );
+  }
+
+  // Beats 5 and 9: labelled replays against the finished run.
+  const afterRunState = postgresContainer ? readBusinessState() : undefined;
+  const replay = (fixtureId) =>
+    runCommandInRepository("node", [
+      "scripts/with-env.mjs",
+      "go",
+      "-C",
+      "services/gateway",
+      "run",
+      "./cmd/replay",
+      "-run",
+      runId,
+      "-fixture",
+      fixtureId,
+    ]);
+  for (const [beat, fixtureId, expectedReason] of [
+    ["beat 5", "hostile_note_internal_disclosure_v1", "report_export_restricted"],
+    ["beat 9", "hostile_note_redirect_record_v1", "resource_out_of_scope"],
+    ["beat 9", "hostile_note_redirect_recipient_v1", "destination_not_allowed"],
+  ]) {
+    await check(
+      beat,
+      `labelled replay ${fixtureId} is denied with ${expectedReason}, nothing executed`,
+      async () => {
+        const result = replay(fixtureId);
+        const output = `${result.stdout}${result.stderr}`;
+        expect(result.status === 0, `replay exited ${result.status}: ${output.slice(0, 300)}`);
+        expect(output.includes("LABELLED REPLAY"), "the output carries no LABELLED REPLAY label");
+        expect(
+          output.includes(`reason:    ${expectedReason}`),
+          `the reason is not ${expectedReason}`,
+        );
+        expect(output.includes("nothing executed"), "the output does not say nothing executed");
+        const stored = eventsOfType(await fetchEvents(session, runId), "action.denied")
+          .concat(eventsOfType(await fetchEvents(session, runId), "report.export_denied"))
+          .find((event) => event.maskedSummary?.replaySource === `labelled_replay:${fixtureId}`);
+        expect(stored, "the stored event does not carry the replay label");
+      },
+    );
+  }
+  if (postgresContainer) {
+    await check(
+      "beat 5",
+      "denied replays leave the outbox, reports and invoice versions unchanged",
+      () => {
+        const afterReplay = readBusinessState();
+        for (const key of ["outbox", "reports", "invoices"]) {
+          expect(
+            afterReplay[key] === afterRunState[key],
+            `${key} changed from ${afterRunState[key]} to ${afterReplay[key]}`,
+          );
+        }
+      },
+    );
+  }
+  facts.counts = postgresContainer ? readBusinessState() : undefined;
+
+  // Beat 10 and the judge path: a dedicated judge run, never a demo run's allowance.
+  const judgeRunId = await check("beat 10", "start a dedicated judge run", async () => {
     const result = await session.request("/api/runs", { method: "POST", body: START_RUN_BODY });
     expect(result.status === 201 || result.status === 200, `start run answered ${result.status}`);
-    expect(typeof result.json?.runId === "string", "start run returned no runId");
-    return { runId: result.json.runId };
+    return result.json.runId;
   });
+  if (judgeRunId) {
+    const evaluate = async (kind, text, tool) => {
+      const result = await session.request("/api/control/evaluate", {
+        method: "POST",
+        body: { runId: judgeRunId, kind, text, tool, arguments: null },
+      });
+      expect(result.status === 200, `evaluate answered ${result.status}`);
+      expect(result.json?.actionId === null, "an evaluation must never create an action");
+      expect(typeof result.json?.evaluationId === "string", "no evaluation id");
+      return result.json;
+    };
 
-  const approval = await step(round, "follow the run to its approval request", async () => {
-    const state = await waitFor(
-      "the run to await approval",
-      async () => (await session.request(`/api/runs/${runId}`)).json,
-      (run) => run?.status === "awaiting_approval" || TERMINAL_STATUSES.includes(run?.status),
-      runTimeoutMs,
+    await check(
+      "beat 10",
+      "known signature fires before any semantic call (prompt_ignore_previous_v1)",
+      async () => {
+        const verdict = await evaluate(
+          "tool_result",
+          corpusCases.indirect_ignore_previous_note_v1.text,
+          "read_invoice",
+        );
+        expect(
+          verdict.decision === "deny" && verdict.reasonCode === "signature_match",
+          `got ${verdict.decision}/${verdict.reasonCode}`,
+        );
+        const rule = verdict.controls.find((control) => control.control === "signature_match");
+        expect(rule?.ruleId === "prompt_ignore_previous_v1", `rule is ${rule?.ruleId}`);
+        expect(
+          verdict.semantic === null,
+          "the semantic evaluator ran although the signature already blocked",
+        );
+        expect(verdict.content === null, "blocked text was echoed back");
+      },
     );
-    expect(
-      state.status === "awaiting_approval",
-      `the run ended as ${state.status} before approval`,
-    );
-    const events = await session.request(`/api/runs/${runId}/events?limit=500`);
-    expect(events.status === 200, `events answered ${events.status}`);
-    const requested = events.json?.events?.find(
-      (event) => event.eventType === "approval.requested",
-    );
-    expect(requested?.actionId, "no approval.requested event with an actionId");
-    return { actionId: requested.actionId, reportId: requested.maskedSummary?.reportId };
-  });
-
-  await step(round, "read the exact action under review", async () => {
-    const review = await session.request(`/api/actions/${approval.actionId}/review`);
-    expect(review.status === 200, `review answered ${review.status}`);
-    expect(review.json?.tool === "queue_report", `reviewed tool is ${review.json?.tool}`);
-    expect(review.json?.run_id === runId, "the review belongs to another run");
-    expect(
-      review.json?.report?.id === approval.reportId,
-      "the reviewed report differs from the one in the event",
-    );
-  });
-
-  await step(round, "approve the exact action", async () => {
-    const decision = await session.request(`/api/actions/${approval.actionId}/approval`, {
-      method: "POST",
-      body: { decision: "approve" },
+    await check("beat 10", "a secret is redacted and its value never returned", async () => {
+      const secretCase = corpusCases.secret_portal_password_v1;
+      const verdict = await evaluate(secretCase.boundary, secretCase.text, "read_invoice");
+      expect(verdict.decision === "redact", `decision is ${verdict.decision}`);
+      expect(
+        verdict.content?.text.includes("[REDACTED"),
+        "no redaction marker in the returned text",
+      );
+      expect(
+        !JSON.stringify(verdict).includes(secretCase.secrets[0].value),
+        "the secret value came back",
+      );
     });
+    await check(
+      "beat 10",
+      "a benign task input passes with a live, metered semantic verdict",
+      async () => {
+        const verdict = await evaluate(
+          "model_input",
+          corpusCases.benign_operator_task_v1.text,
+          null,
+        );
+        expect(verdict.decision === "allow", `decision is ${verdict.decision}`);
+        expect(
+          verdict.semantic?.source === "live",
+          `semantic source is ${verdict.semantic?.source}`,
+        );
+      },
+    );
+    // Model-dependent: recorded, not failed, as the runbook does for label mismatches.
+    for (const [label, text, expectation] of [
+      [
+        "hard negative (alarming words, harmless)",
+        corpusCases.benign_hard_negative_ignore_earlier_invoice_v1.text,
+        "allow",
+      ],
+      [
+        "hostile note (internal disclosure)",
+        hostileNotes.find((hostile) => hostile.id === "hostile_note_internal_disclosure_v1").text,
+        "not allow",
+      ],
+    ]) {
+      try {
+        const verdict = await evaluate("tool_result", text, "read_invoice");
+        const matches =
+          expectation === "allow" ? verdict.decision === "allow" : verdict.decision !== "allow";
+        if (matches)
+          record(
+            "beat 10",
+            `${label}: ${verdict.decision}`,
+            "pass",
+            `semantic ${verdict.semantic?.source ?? "not run"}`,
+          );
+        else
+          note(
+            "beat 10",
+            `${label}`,
+            `expected ${expectation}, the live model gave ${verdict.decision}/${verdict.reasonCode}`,
+          );
+      } catch (error) {
+        record("beat 10", label, "fail", error.message);
+      }
+    }
+    await check("beat 10", "evaluations are recorded as judge input on the judge run", async () => {
+      const recorded = eventsOfType(await fetchEvents(session, judgeRunId), "control.evaluated");
+      expect(recorded.length >= 3, `${recorded.length} control.evaluated events`);
+      expect(
+        recorded.every((event) => event.maskedSummary?.inputSource === "judge"),
+        "an evaluation is not labelled judge input",
+      );
+    });
+  }
+
+  // Beat 12: reporting. (Beat 11 runs last in a round, see below.)
+  await check(
+    "beat 12",
+    "security summary answers with decisions that include this run's",
+    async () => {
+      const summary = await session.request("/api/security/summary");
+      expect(summary.status === 200, `summary answered ${summary.status}`);
+      const types = new Set((summary.json?.decisions ?? []).map((row) => row.eventType));
+      for (const required of ["action.allowed", "report.export_denied", "run.completed"]) {
+        expect(types.has(required), `the summary has no ${required} decisions`);
+      }
+    },
+  );
+  await check(
+    "beat 12",
+    "audit export (events, JSON) is sanitized: no hostile text, secret or internal note",
+    async () => {
+      const exported = await session.request("/api/security/export?kind=events&limit=500");
+      expect(exported.status === 200, `export answered ${exported.status}`);
+      expect((exported.json?.events ?? []).length > 0, "the export holds no events");
+      const forbidden = [
+        corpusCases.indirect_ignore_previous_note_v1.text.slice(0, 40),
+        corpusCases.secret_portal_password_v1.secrets[0].value,
+        ...demoRecords.invoices
+          .map((invoice) => String(invoice.internal_note ?? "").slice(0, 40))
+          .filter(Boolean),
+      ];
+      for (const text of forbidden)
+        expect(!exported.text.includes(text), `the export contains "${text.slice(0, 24)}..."`);
+    },
+  );
+  await check("beat 12", "audit export (assessments, CSV) answers as CSV", async () => {
+    const exported = await session.request(
+      "/api/security/export?kind=assessments&format=csv&limit=100",
+      { accept: "text/csv" },
+    );
+    expect(exported.status === 200, `export answered ${exported.status}`);
     expect(
-      decision.status === 200 || decision.status === 201,
-      `approval answered ${decision.status}`,
+      (exported.headers.get("content-type") ?? "").includes("csv"),
+      `content type is ${exported.headers.get("content-type")}`,
     );
   });
-
-  await step(round, "the run completes after approval", async () => {
-    const state = await waitFor(
-      "the run to finish",
-      async () => (await session.request(`/api/runs/${runId}`)).json,
-      (run) => TERMINAL_STATUSES.includes(run?.status),
-      runTimeoutMs,
+  if (process.env.E2E_RUN_SUITE === "1") {
+    await check("beat 12", "pnpm verify:controls exits 0", () => {
+      const suite = runCommandInRepository("pnpm", ["verify:controls"]);
+      expect(
+        suite.status === 0,
+        `verify:controls exited ${suite.status}: ${suite.stdout.slice(-300)}`,
+      );
+    });
+  } else {
+    skip(
+      "beat 12",
+      "the control test suite (pnpm verify:controls)",
+      "set E2E_RUN_SUITE=1 (about two minutes)",
     );
-    expect(state.status === "completed", `the run ended as ${state.status}`);
-  });
+  }
 
-  await step(round, "read the stored report", async () => {
-    const report = await session.request(`/api/runs/${runId}/reports/${approval.reportId}`);
-    expect(report.status === 200, `report answered ${report.status}`);
-    expect(report.json?.classification, "the report carries no stored classification");
-  });
+  if (process.env.E2E_BEAT11 === "1") await changeConfiguration(session, judgeRunId);
+  else
+    skip(
+      "beat 11",
+      "change the configuration and see the new revision",
+      "set E2E_BEAT11=1 (edits config/policy.yaml, then restores it)",
+    );
 
-  await step(round, "read the security summary", async () => {
-    const summary = await session.request("/api/security/summary");
-    expect(summary.status === 200, `security summary answered ${summary.status}`);
-    expect(summary.json && typeof summary.json === "object", "the summary is not an object");
-  });
+  if (skipPages) {
+    skip("pages", "run, report, security, export, judge and task pages", "E2E_SKIP_PAGES=1");
+  } else {
+    const pages = [
+      [`/runs/${runId}`, "run page"],
+      [`/runs/${runId}/reports/${vendorReport?.reportId}`, "vendor report page"],
+      [`/runs/${runId}/reports/${internalReport?.maskedSummary?.reportId}`, "internal report page"],
+      ["/security", "security page"],
+      ["/security/export", "audit export page"],
+      ["/judge", "judge page"],
+      ["/tasks/new", "task page"],
+    ];
+    for (const [path, label] of pages) {
+      await check("pages", `${label} loads for the signed-in operator`, async () => {
+        const result = await session.request(path, { accept: "text/html" });
+        expect(result.status === 200, `answered ${result.status} (a redirect means no session)`);
+        expect(result.text.includes("<html"), "the response is not an HTML page");
+      });
+    }
+  }
 
-  await step(round, "a finished run refuses a judge evaluation (run_not_active)", async () => {
-    const evaluation = await session.request("/api/control/evaluate", {
+  return { session, facts };
+}
+
+/** Beat 11: one valid change moves the active revision; an invalid file keeps it. Restores the file. */
+async function changeConfiguration(session, judgeRunId) {
+  const policyPath = `${repositoryRoot}config/policy.yaml`;
+  const backupPath = `${repositoryRoot}config/policy.yaml.e2e-backup`;
+  copyFileSync(policyPath, backupPath);
+  const currentRevision = async () => {
+    const result = await session.request("/api/control/evaluate", {
       method: "POST",
       body: {
-        runId,
+        runId: judgeRunId,
         kind: "model_input",
-        text: "Summarize the duplicates.",
+        text: "Reconcile the invoices.",
         tool: null,
         arguments: null,
       },
     });
-    expect(evaluation.status === 200, `evaluate answered ${evaluation.status}`);
-    expect(
-      evaluation.json?.decision === "deny" && evaluation.json?.reasonCode === "run_not_active",
-      `expected a run_not_active deny, got ${evaluation.json?.decision}/${evaluation.json?.reasonCode}`,
+    return result.json?.catalog?.activeRevisionId;
+  };
+  try {
+    const before = await currentRevision();
+    await check(
+      "beat 11",
+      "a valid threshold change is imported and becomes the active revision",
+      async () => {
+        const original = readFileSync(policyPath, "utf8");
+        expect(
+          original.includes("threshold: 0.75"),
+          "policy.yaml has no `threshold: 0.75` to change",
+        );
+        const { writeFileSync } = await import("node:fs");
+        writeFileSync(policyPath, original.replace("threshold: 0.75", "threshold: 0.74"));
+        const imported = runCommandInRepository("pnpm", ["policy:import"]);
+        expect(
+          imported.status === 0,
+          `policy:import exited ${imported.status}: ${imported.stdout.slice(-200)}`,
+        );
+        const after = await waitFor(
+          "the new revision",
+          currentRevision,
+          (revision) => revision > before,
+          30_000,
+        );
+        expect(after > before, `active revision stayed ${after}`);
+      },
     );
-    expect(evaluation.json?.actionId === null, "an evaluation must never create an action");
-  });
+    await check(
+      "beat 11",
+      "an invalid file is rejected and the last accepted revision stays active",
+      async () => {
+        const accepted = await currentRevision();
+        const { writeFileSync } = await import("node:fs");
+        writeFileSync(policyPath, "schema_version: 1\nbudgets: not-a-mapping\n");
+        const imported = runCommandInRepository("pnpm", ["policy:import"]);
+        expect(imported.status !== 0, "policy:import accepted an invalid file");
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        expect(
+          (await currentRevision()) === accepted,
+          "the active revision changed after an invalid import",
+        );
+      },
+    );
+  } finally {
+    copyFileSync(backupPath, policyPath);
+    runCommandInRepository("pnpm", ["policy:import"]);
+    const { rmSync } = await import("node:fs");
+    rmSync(backupPath, { force: true });
+  }
+}
 
-  if (!skipPages) {
-    const pages = [
-      `/runs/${runId}`,
-      `/runs/${runId}/reports/${approval.reportId}`,
-      "/security",
-      "/judge",
-    ];
-    for (const page of pages) {
-      await step(
-        round,
-        `page ${page.replace(runId, "{run}").replace(approval.reportId, "{report}")}`,
-        async () => {
-          const result = await session.request(page);
-          expect(result.status === 200, `answered ${result.status} (a redirect means no session)`);
-          expect(result.text.includes("<html"), "the response is not an HTML page");
+// ---------------------------------------------------------------- reset and repeat (WEB-20)
+
+function resetDemoData() {
+  const reset = runCommandInRepository("pnpm", ["reset:demo"]);
+  expect(
+    reset.status === 0,
+    `pnpm reset:demo exited ${reset.status}: ${(reset.stderr || reset.stdout).slice(-300)}`,
+  );
+}
+
+async function checkAfterReset(previous) {
+  const { session, facts } = previous;
+  await check("reset", "pnpm reset:demo restores the demo and runtime data", resetDemoData, {
+    required: true,
+  });
+  await check("reset", "no read shows state from before the reset", async () => {
+    const oldRun = await session.request(`/api/runs/${facts.runId}`);
+    expect(oldRun.status === 404, `the old run still answers ${oldRun.status}`);
+    const summary = await session.request("/api/security/summary");
+    expect(summary.status === 200, `summary answered ${summary.status}`);
+    expect(
+      (summary.json?.runs ?? []).length === 0,
+      `the summary still counts runs: ${JSON.stringify(summary.json?.runs)}`,
+    );
+  });
+  if (postgresContainer) {
+    await check("reset", "the baseline is back: empty outbox, no reports", () => {
+      expect(query("SELECT count(*) FROM demo.outbox_messages") === "0", "outbox is not empty");
+      expect(query("SELECT count(*) FROM demo.reports") === "0", "reports remain");
+    });
+  }
+}
+
+let aborted = false;
+let firstRoundCounts;
+try {
+  let previous;
+  // Round 1's baseline (beat 2) is only meaningful on restored fixtures.
+  if (!skipReset)
+    await check("reset", "pnpm reset:demo before round 1", resetDemoData, { required: true });
+  for (let round = 1; round <= roundCount; round += 1) {
+    previous = await runRound(round);
+    if (round === 1) firstRoundCounts = previous.facts.counts;
+    else if (firstRoundCounts && previous.facts.counts) {
+      await check(
+        "reset",
+        `round ${round}'s counts match round 1 (outbox, reports, invoice versions)`,
+        () => {
+          for (const key of ["outbox", "reports", "invoices"]) {
+            expect(
+              previous.facts.counts[key] === firstRoundCounts[key],
+              `${key}: ${firstRoundCounts[key]} then ${previous.facts.counts[key]}`,
+            );
+          }
         },
       );
     }
+    if (!skipReset) await checkAfterReset(previous);
   }
+} catch (error) {
+  aborted = true;
+  console.log(`\nStopped: ${error.message}`);
 }
 
-function resetDemoData(round) {
-  return step(round, "reset the demo data (pnpm reset:demo)", async () => {
-    const reset = spawnSync("pnpm", ["reset:demo"], { cwd: repositoryRoot, encoding: "utf8" });
-    expect(
-      reset.status === 0,
-      `pnpm reset:demo exited ${reset.status}: ${reset.stderr || reset.stdout}`.slice(0, 600),
-    );
-  });
-}
+// ---------------------------------------------------------------- summary
 
-let failed = false;
-try {
-  for (let round = 1; round <= roundCount; round += 1) {
-    await runRound(round);
-    if (!skipReset) await resetDemoData(round);
-  }
-} catch {
-  failed = true;
+console.log("\nResults by beat");
+let failures = 0;
+for (const [beat, entries] of [...outcomes].sort(([left], [right]) =>
+  left.localeCompare(right, undefined, { numeric: true }),
+)) {
+  const count = (status) => entries.filter((entry) => entry.status === status).length;
+  failures += count("fail");
+  console.log(
+    `  ${beat.padEnd(8)} ${count("pass")} passed, ${count("fail")} failed, ${count("note")} notes, ${count("blocked")} blocked, ${count("skip")} skipped`,
+  );
 }
-
-const failedSteps = results.filter((result) => !result.ok);
-console.log(
-  `\n${results.length - failedSteps.length} passed, ${failedSteps.length} failed` +
-    (failed && failedSteps.length === 0 ? " (stopped on an error)" : ""),
-);
-process.exit(failed || failedSteps.length > 0 ? 1 : 0);
+console.log("\nCan only be shown in a browser (not covered by this script):");
+for (const item of BROWSER_ONLY) console.log(`  - ${item}`);
+console.log(`\n${failures} failed${aborted ? " (the run stopped early)" : ""}`);
+process.exit(failures > 0 || aborted ? 1 : 0);

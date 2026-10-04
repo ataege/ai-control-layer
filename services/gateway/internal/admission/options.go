@@ -3,6 +3,7 @@ package admission
 import (
 	"context"
 	"errors"
+	"regexp"
 
 	"github.com/jackc/pgx/v5"
 
@@ -15,6 +16,9 @@ const (
 	reconcileAtlasName           = "Reconcile Atlas invoices"
 	reviewQueueReportDescription = "A reviewer approves the exact report and recipient before the report is queued."
 )
+
+// currencyPattern is an ISO 4217 alphabetic code, as demo.invoices.currency stores it.
+var currencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
 
 // OptionsDatabase reads the organization's demo records and the active catalog; the gateway pool.
 type OptionsDatabase interface {
@@ -73,17 +77,18 @@ func TaskOptions(ctx context.Context, database OptionsDatabase, loader *catalog.
 	}
 
 	invoiceRows, err := database.Query(ctx, `SELECT id, external_reference, to_char(issued_on, 'YYYY-MM-DD'),
-		total_minor_units, vendor_id FROM demo.invoices WHERE organization_id = $1 ORDER BY issued_on, id`, organizationID)
+		total_minor_units, currency, vendor_id FROM demo.invoices WHERE organization_id = $1 ORDER BY issued_on, id`, organizationID)
 	if err != nil {
 		return contracts.TaskFormOptions{}, ErrOptionsUnavailable
 	}
 	for invoiceRows.Next() {
 		var invoice contracts.TaskFormInvoice
-		if err := invoiceRows.Scan(&invoice.ID, &invoice.Number, &invoice.Date, &invoice.Amount, &invoice.VendorID); err != nil {
+		if err := invoiceRows.Scan(&invoice.ID, &invoice.Number, &invoice.Date, &invoice.Amount, &invoice.Currency, &invoice.VendorID); err != nil {
 			invoiceRows.Close()
 			return contracts.TaskFormOptions{}, ErrOptionsUnavailable
 		}
-		if contracts.ValidInvoiceID(invoice.ID) && contracts.ValidVendorID(invoice.VendorID) {
+		// An amount is only shown with a well-formed ISO 4217 code, never as bare minor units.
+		if contracts.ValidInvoiceID(invoice.ID) && contracts.ValidVendorID(invoice.VendorID) && currencyPattern.MatchString(invoice.Currency) {
 			options.Invoices = append(options.Invoices, invoice)
 		}
 	}

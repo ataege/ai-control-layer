@@ -39,12 +39,10 @@ export function AdmissionRejectionNotice({
           <dt className="font-medium">Reason code</dt>
           <dd className="font-mono">{rejection.code}</dd>
         </div>
-        {rejection.message !== null && (
-          <div className="flex gap-2">
-            <dt className="font-medium">Admission said</dt>
-            <dd>{rejection.message}</dd>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <dt className="font-medium">Admission said</dt>
+          <dd>{explanation.safeMessage}</dd>
+        </div>
         <div className="flex gap-2">
           <dt className="font-medium">Change</dt>
           <dd>

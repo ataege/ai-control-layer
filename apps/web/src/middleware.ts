@@ -1,19 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { isPublicPath } from "@/lib/public-paths";
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Paths that do not require authentication
-  const isPublicPath =
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/health") ||
-    pathname.startsWith("/diagnostics") ||
-    pathname === "/favicon.ico";
+  // Paths that do not require authentication (exact or below, never a longer name: see public-paths)
+  const isPublic = isPublicPath(pathname);
 
-  if (isPublicPath) {
+  if (isPublic) {
     return NextResponse.next();
   }
 
