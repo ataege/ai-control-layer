@@ -1768,7 +1768,7 @@ estimates. Every size is a planning estimate, never a schedule.
 ### M5 (hours 18-21)
 
 - [ ] **SH-32 · Recapture the evidence from the final build**
-  - **Progress (2026-10-04, recapture checklist, prepared for the freeze; nothing here has been run on a final build):** The recapture is mechanical: every file below is named for the build, begins with or contains the full commit id, is audited by the script in the appendix "Evidence audit script (SH-32)" at the end of this file, and is committed once. Commands run from the repository root of a clean checkout of the frozen `main`, on the quiet presentation machine, in the order of the runbook's "Final live checks" (`docs/demo-runbook.md`; its check numbers are in brackets). Every capture made with a scripted provider is labelled "scripted provider (labelled stub), not the live model" and is not a final-build capture of a live check.
+  - **Progress (2026-10-04, recapture checklist, prepared for the freeze; nothing here has been run on a final build):** The recapture is mechanical: every file below is named for the build, begins with or contains the full commit id, is audited by `scripts/audit-evidence.mjs`, and is committed once. Commands run from the repository root of a clean checkout of the frozen `main`, on the quiet presentation machine, in the order of the runbook's "Final live checks" (`docs/demo-runbook.md`; its check numbers are in brackets). Every capture made with a scripted provider is labelled "scripted provider (labelled stub), not the live model" and is not a final-build capture of a live check.
     1. **Preconditions.** Freeze announced; `git status --porcelain` prints nothing; `uptime` load average under about 4 and `ollama ps` idle (runbook Setup); `set -a; . ./.env; set +a` (never print it). Then `BUILD=$(git rev-parse --short=7 HEAD); FULL=$(git rev-parse HEAD); STAMP=$(date -u +%Y-%m-%dT%H-%M-%SZ); mkdir -p docs/evidence`.
     2. **Build record** -> `docs/evidence/build-$BUILD.txt`: `{ echo "build $FULL"; echo "tree-clean: $([ -z "$(git status --porcelain)" ] && echo yes || echo NO)"; echo "node $(node -v) pnpm $(pnpm -v) $(go version 2>&1)"; echo "ollama $(ollama --version 2>&1 | tail -1)"; curl -s localhost:11434/api/tags | MODEL_NAME="$MODEL_NAME" node -e 'const m=JSON.parse(require("fs").readFileSync(0,"utf8")).models.find(x=>x.name===process.env.MODEL_NAME);console.log("model",m?m.name+" "+m.digest:"NOT FOUND "+process.env.MODEL_NAME)'; shasum -a 256 config/policy.yaml config/attack-signatures.json fixtures/*.json; uptime; } > docs/evidence/build-$BUILD.txt`. Must say `tree-clean: yes`, the model name and digest `2a654d98e6fb…` (decision 6) and the policy and feed hashes; the policy and feed revisions in force come from the security page (runbook 1). This block was run on 2026-10-04 and produced the expected lines.
     3. **`pnpm verify`** -> `docs/evidence/verify-$BUILD.txt`: `pnpm verify > /tmp/v.log 2>&1; VERIFY_EXIT=$?; { echo "build $FULL exit $VERIFY_EXIT"; sed -n '/Verification summary/,$p' /tmp/v.log; } > docs/evidence/verify-$BUILD.txt`. Must say `exit 0` and `6 passed, 0 failed, 0 skipped`.
@@ -1780,7 +1780,7 @@ estimates. Every size is a planning estimate, never a schedule.
     9. **Replays [runbook 6] and judge inputs [runbook 7]** -> `docs/evidence/replay-$BUILD.txt` and `docs/evidence/judge-$BUILD.txt`: run the `cmd/replay` commands and the `pnpm judge` commands of those checks the same way (`{ echo "build $FULL"; <commands>; } > file 2>&1`). The replay file must show `deny` with `report_export_restricted` and `resource_out_of_scope` (and `destination_not_allowed` if that replay is run); the judge file must show the hostile case denied and the benign case allowed, with the verdict source `live`.
     10. **Audit export and security summary (X-104)** -> `docs/evidence/api-audit-export-<date>.json`, captured with the method of the 2026-10-04 file (same keys: `capturedAt`, `codeCommit`, `source`, `events`, `assessments`, `csv`, `judgeEventsPresent`, `stableCountsBeforeAndAfter`, `authorizationEvidence`, `formulaNeutralizationEvidence`, `limitations`); `codeCommit` must equal `$FULL`; the download through the web page is a separate screenshot (step 11).
     11. **Screenshots (runbook: one full-page screenshot per page, kept out of the repository)** -> a directory outside the repository, `~/evidence-$BUILD/screens/<page>.png`, taken with the headless browser script of session f3 (`/private/tmp/shared-f3/browse.mjs`) or by hand; only the hashes go into the repository: `(cd ~/evidence-$BUILD/screens && shasum -a 256 *.png) > docs/evidence/screens-$BUILD.sha256`. Look at every image: no password or token on screen, no local path, the "Development Demonstration" and replay or stub labels present, and "Recording from build $BUILD" noted for each. A screenshot made with a scripted provider says so in its file name (`-stub`).
-    12. **Audit every new file.** Save the appendix script as `/tmp/audit-evidence.mjs` and run `node /tmp/audit-evidence.mjs docs/evidence/*-$BUILD* docs/evidence/verify-controls-$STAMP.json docs/evidence/api-audit-export-<date>.json`; it must exit 0. It prints names only, never values. It checks: no value of any `.env` entry named PASSWORD, SECRET, TOKEN, KEY or SIGNING (8 characters or more); no local path (`/Users/`, `/home/`, `/private/`, `/tmp/`, `/var/folders`, drive letters); no URL other than `example.*`, localhost or 127.0.0.1, no `Bearer` value, JWT or `session=` value; none of the first 30 characters of any corpus text, hostile note, internal note or registered address in `fixtures/`; JSON files parse. It was run on 2026-10-04 against the three existing evidence files (all PASS) and against a deliberately bad file (FAIL with the secret, path, URL and fixture-text findings).
+    12. **Audit every new file.** Run `node scripts/audit-evidence.mjs docs/evidence/*-$BUILD* docs/evidence/verify-controls-$STAMP.json docs/evidence/api-audit-export-<date>.json`; it must exit 0. It prints names only, never values (`--root <dir>` points it at another checkout). It checks: no value of any `.env` entry named PASSWORD, SECRET, TOKEN, KEY or SIGNING (8 characters or more); no local path (`/Users/`, `/home/`, `/private/`, `/tmp/`, `/var/folders`, drive letters); no URL other than `example.*`, localhost or 127.0.0.1, no `Bearer` value, JWT or `session=` value; none of the first 30 characters of any corpus text, hostile note, internal note or registered address in `fixtures/`; JSON files parse. Its test (`node --test scripts/audit-evidence.test.mjs`, 5 passed on 2026-10-04) builds a temporary root with a passing file and a planted bad file; on 2026-10-04 the script printed PASS for the three existing evidence files.
     13. **Every entry names the build (the SH-32 Done-when).** `grep -L "$FULL" docs/evidence/*-$BUILD* docs/evidence/verify-controls-$STAMP.json docs/evidence/api-audit-export-<date>.json` must print nothing (text files start with `build $FULL`; JSON files carry the full commit in `commit`, `codeCommit` or `gitCommit`; the screenshot hash file is named for the build and listed in step 14).
     14. **Checksums, then one commit.** `shasum -a 256 docs/evidence/*-$BUILD* docs/evidence/verify-controls-$STAMP.json docs/evidence/api-audit-export-<date>.json > docs/evidence/CHECKSUMS-$BUILD.txt`; `git diff --stat $FULL HEAD -- . ':!docs'` must print nothing (no code changed since the build); `git add docs/evidence && git commit -m "SH-32: Recapture the evidence from build $BUILD"`; push. The evidence commit follows the build commit and changes only documentation; the files name `$BUILD`, not the evidence commit.
     15. **After the recapture.** In SH-28, SH-31, SH-51 and SH-50, replace each earlier evidence reference that predates the build with the new file; keep a failed or unverified check visible as such; update the README "Evidence reruns" paragraph to point at the new files. After any material fix, repeat from step 1 with the new `$BUILD`; the old files stay in the history under their own build name. Tick SH-32 when steps 12 and 13 pass for the final build.
@@ -2230,66 +2230,3 @@ ticks the box.
    every denied action, "Compare business state and execution records before and after every denied
    action": record versions, report count, outbox count and execution records. "Happy-path screenshots
    alone are insufficient." "Keep failed or unverified checks visible."
-
-## Evidence audit script (SH-32)
-
-Save as `/tmp/audit-evidence.mjs` and run from the repository root as step 12 of SH-32's checklist describes. It prints names only, never values, and exits 1 when any file fails.
-
-```js
-// Evidence audit: node audit-evidence.mjs <file>...   (run from the repository root; prints names only, never values)
-import { readFileSync } from "node:fs";
-const root = process.cwd();
-const env = Object.fromEntries(
-  readFileSync(`${root}/.env`, "utf8")
-    .split("\n")
-    .filter((l) => l.includes("=") && !l.startsWith("#"))
-    .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
-);
-const secrets = Object.entries(env).filter(
-  ([k, v]) => /(PASSWORD|SECRET|TOKEN|KEY|SIGNING)/.test(k) && v.length >= 8,
-);
-const corpus =
-  JSON.parse(readFileSync(`${root}/fixtures/semantic-corpus.json`, "utf8")).cases ?? [];
-const notes = JSON.parse(readFileSync(`${root}/fixtures/hostile-notes.json`, "utf8")).notes ?? [];
-const records = JSON.parse(readFileSync(`${root}/fixtures/demo-records.json`, "utf8"));
-const promptTexts = [
-  ...corpus.map((c) => c.text),
-  ...notes.map((n) => n.text),
-  ...records.invoices.map((i) => i.internal_note),
-  ...records.vendors.map((v) => v.registered_reporting_address),
-]
-  .filter((t) => typeof t === "string" && t.length >= 12)
-  .map((t) => t.slice(0, 30));
-const rules = [
-  ["path", /(\/Users\/|\/home\/|\/private\/|\/var\/folders|\/tmp\/|[A-Za-z]:\\)/],
-  ["url", /https?:\/\/(?!example\.|localhost|127\.0\.0\.1)/],
-  ["token", /(Bearer\s+\S+|eyJ[A-Za-z0-9_-]{10,}|session=[A-Za-z0-9-]{8,})/],
-];
-let failed = 0;
-for (const file of process.argv.slice(2)) {
-  const text = readFileSync(file, "utf8");
-  const problems = [];
-  for (const [name, value] of secrets)
-    if (text.includes(value)) problems.push(`secret value of ${name}`);
-  for (const [name, pattern] of rules) {
-    const m = text.match(pattern);
-    if (m) problems.push(`${name}: ${m[0].slice(0, 24)}`);
-  }
-  promptTexts.forEach((fragment, i) => {
-    if (text.includes(fragment)) problems.push(`fixture or note text #${i}`);
-  });
-  if (file.endsWith(".json")) {
-    try {
-      JSON.parse(text);
-    } catch {
-      problems.push("not valid JSON");
-    }
-  }
-  console.log(
-    `${problems.length === 0 ? "PASS" : "FAIL"} ${file}${problems.length ? " -> " + problems.join("; ") : ""}`,
-  );
-  failed += problems.length > 0 ? 1 : 0;
-}
-console.log(`secrets checked: ${secrets.length} names; fixture fragments: ${promptTexts.length}`);
-process.exit(failed ? 1 : 0);
-```
