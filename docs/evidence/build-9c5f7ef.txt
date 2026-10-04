@@ -1,0 +1,11 @@
+build 9c5f7ef1419d0aab12d7384e41038790b344599b
+tree-clean: yes
+node v24.18.0 pnpm 11.10.0 go version go1.27.1 darwin/arm64
+ollama ollama version is 0.35.1
+model qwen3.5:4b 2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd
+59646760bc2a39a0db1f4e0c33f84e274eae6e5753ce75e84bf6fa67546dfece  config/policy.yaml
+ff6ff4fef7e7091a50c1e416fab5a7b1aa825b55d783ada38de43b42a399d98c  config/attack-signatures.json
+b590551c8c9f713d3b55d3e5c838a81b9b213c9b22cccc1d63aacfec6c7ad146  fixtures/demo-records.json
+c63d9711ca8be313f7540973622cf9406d54e69abc3a3de18a7f32e2aece7aad  fixtures/hostile-notes.json
+54d3a9bc73d2e9601547aefe581ea70510cc507f9f53a97ca6fedd77cb4c6a2a  fixtures/semantic-corpus.json
+ 9:06  up 7 days,  5:09, 11 users, load averages: 3.55 5.09 5.60

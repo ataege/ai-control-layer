@@ -1,0 +1,12 @@
+build c70492d950e612c3ec0809e0dd4c16b969d462da exit 0 (turbo cache bypassed: TURBO_FORCE=true)
+Verification summary
+STEP                RESULT   DETAIL
+------------------  -------  ------
+check:instructions  PASS     0.5s
+format:check        PASS     7.2s
+lint                PASS     7.2s
+typecheck           PASS     6.5s
+test                PASS     9.7s
+build               PASS     12.0s
+
+6 passed, 0 failed, 0 skipped

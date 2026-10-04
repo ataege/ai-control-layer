@@ -4,10 +4,7 @@ The index of the technical handoff (SH-35). It links to the text each side owns 
 it, and it holds three things nobody else holds: the run order, the known limits in one place and
 the pointers to the evidence.
 
-**Status.** Assembled on 2026-10-04 from `main` 639f40b and re-checked in the documentation pass
-against `main` 9372862 (code frozen at c70492d). It is not tied to the submitted build yet: the build
-identifier and the evidence recapture (X-59) wait for the freeze (SH-34, SH-32), and the figures in the
-linked text are written as `<FINAL>` until then. Where a statement below needs that recheck it says so.
+**Status.** Assembled on 2026-10-04 and tied to the submitted build `9c5f7ef` (`9c5f7ef1419d0aab12d7384e41038790b344599b`, the freeze). The evidence of that build is in `docs/evidence/` (`CHECKSUMS-9c5f7ef.txt`); the Go part was checked against it under GO-61. The earlier freeze candidate `c70492d` and its two failed end-to-end runs are kept in the same folder as the record of what the queue-once fix addressed. Where the linked text still writes `<FINAL>`, quote the figures from `docs/evidence/` (SH-32).
 
 ## What the handoff contains
 
@@ -66,6 +63,11 @@ also stated where it applies.
 - A 4B model's choices vary between runs: it proposed the internal-report export in 1 of 3 live runs,
   so the export-denial step is always a labelled, scripted replay and needs a run younger than the
   15-minute passport.
+- After an approved send a 4B model may propose `queue_report` for the same report again (seen live on
+  `c70492d`, where it stopped or stalled the run). Since `9c5f7ef` the gate denies a second `queue_report`
+  of an already queued report with `tool_not_allowed` before review and the executor refuses it again at
+  execution; the scope, destination and export reasons still win, so the replays keep their reasons. The
+  Go section of the handoff does not state this rule yet.
 - Model calls are slow when the machine is shared (request deadline 20 s); a timed-out call pauses
   the run as `outcome_unknown`, with usage unknown and held. Calls are never retried.
 - Live results (detection counts, latencies, benchmark numbers) are observations of single runs on

@@ -1,0 +1,10 @@
+build c70492d950e612c3ec0809e0dd4c16b969d462da exit 0
+Database test summary
+CHECK          RESULT   DETAIL
+-------------  -------  ------
+database       PASS     localhost:55570 reachable
+test database  PASS     starter_test recreated, migrated and seeded
+gateway        PASS     1740 passed, 0 failed, 0 skipped; 386 need the database
+api            PASS     82 passed, 0 failed, 0 skipped
+
+4 passed, 0 failed, 0 skipped
