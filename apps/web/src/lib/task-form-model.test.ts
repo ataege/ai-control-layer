@@ -273,17 +273,15 @@ describe("describeEmptyOffers", () => {
 });
 
 describe("formatInvoiceAmount", () => {
-  it("shows money, in the invoice's own currency, only when the invoice names one", () => {
+  it("shows money in the invoice's own currency, with that currency's minor-unit digits", () => {
     expect(formatInvoiceAmount(125000, "EUR")).toBe("€1,250.00 (EUR)");
     expect(formatInvoiceAmount(125000, "USD")).toBe("$1,250.00 (USD)");
     // A zero-decimal currency has no minor units to divide out.
     expect(formatInvoiceAmount(1250, "JPY")).toBe("¥1,250 (JPY)");
   });
 
-  it("shows the raw figure and says so when the currency is missing or not a code", () => {
-    const raw = "125000 (minor units, currency not stated)";
-    expect(formatInvoiceAmount(125000, undefined)).toBe(raw);
-    expect(formatInvoiceAmount(125000, "euro")).toBe(raw);
-    expect(formatInvoiceAmount(125000, "ZZZ9")).toBe(raw);
+  it("shows the raw figure with its code when the platform cannot format the code", () => {
+    expect(formatInvoiceAmount(125000, "euro")).toBe("125000 (minor units of euro)");
+    expect(formatInvoiceAmount(125000, "")).toBe("125000 (minor units of )");
   });
 });
