@@ -138,6 +138,7 @@ func run() error {
 	}()
 
 	runtimeRepository := repository.New(pool)
+	admitter := admission.New(runtimeRepository, catalogLoader)
 	handler := httpserver.NewHandler(httpserver.Options{
 		Logger: logger,
 		Health: health.Handler{Database: pool, DatabaseTimeout: loadedConfig.DatabaseTimeout, Logger: logger,
@@ -145,7 +146,8 @@ func run() error {
 		ServiceToken:    loadedConfig.ServiceToken,
 		OperatorContext: operatorContextVerifier,
 		InternalCommands: api.Commands(api.Dependencies{
-			Admitter:  admission.New(runtimeRepository, catalogLoader),
+			Admitter:  admitter,
+			Judges:    admitter,
 			Options:   admission.NewOptionsReader(pool, catalogLoader),
 			Canceller: runtimeRepository,
 			Approvals: policy.NewApprovals(pool),
