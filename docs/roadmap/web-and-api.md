@@ -587,7 +587,7 @@ services) and SH-23 (smoke and leak checks). While the hold stands, the M1 exit 
     (Journey 1 create and delegate a task)
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
+- [x] **API-07 · Accept authenticated browser calls on the path chosen in decision 3**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: API-06, SH-02 · Needs: nothing · Provides: X-31 (part)
   - Paths: `apps/api/src/app.setup.ts`, `apps/api/src/config/environment.ts`,
@@ -620,8 +620,21 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     204, 205 or 304 from the API became a 502. `pnpm verify`: 6 passed, 0 failed.
   - Not covered: service logs for secrets (host mode); a browser (checks used curl). The events route's
     `buffer: false` and the query string on `POST /api/runs` were reported to the owner of those files.
+  - Completed (2026-10-04, lane 3c on api/3c): decision 3 = the same-origin forwarder (lead as
+    document-owner delegate, 2026-10-04; the researcher records it in docs/product/README.md). The
+    browser calls only the web app, whose route handlers forward the session cookie and a fixed set of
+    headers (`apps/web/src/server/upstream-proxy.ts`); the API reads the operator's credential from that
+    forwarded request (`auth/session-cookie.ts`, `auth/default-deny.guard.ts`), trusts no
+    `x-forwarded-*` header (Express `trust proxy` stays off) and keeps CORS to GET, HEAD and OPTIONS
+    without credentials for the explicit origins only. Tests: `app.setup.spec.ts` (forged
+    `x-forwarded-for` and `x-forwarded-host` change neither the client address nor the host); new
+    `common/cors-forwarder.spec.ts` (a preflight from another origin gets no CORS headers; the
+    configured origin gets no POST and no credentials; an unauthenticated command is refused whatever
+    origin and forwarded host it claims). Evidence for the authenticated path: WEB-14/WEB-15 browser
+    checks on 2026-10-04 (approve, reject and cancel through `/api/actions/…` and `/api/runs/…` on the
+    forwarder with the demo operator's session). `pnpm --filter api run test` (see the commit).
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
-  - Blocked by: `decision 3 in docs/product/README.md`; `decision 7 in docs/product/README.md`
+  - Blocked by: `decision 3 in docs/product/README.md` (forwarder, lead 2026-10-04); `decision 7 in docs/product/README.md`
 
 - [x] **API-08 · Resolve the operator context and check organization membership**
   - Done (2026-10-04): the stored session resolves the user and the global guard loads the current membership and roles from app records on each request. Browser organization/user claims and forged operator headers cannot replace that context. Database-backed public-route tests remove membership before each of eight read/command operations and observe 401 with neither gateway method called; a real stored session with another organization's query/header claims still forwards only its own verified membership. API-16 already covers current role changes. Checks: API lint, typecheck and build exited 0; API unit tests: "367 passed"; `pnpm test:db api`: "67 passed, 0 failed, 0 skipped"; `pnpm verify`: "6 passed, 0 failed, 0 skipped". Go responses in these authorization tests are explicitly labelled fixtures, not live runtime evidence. The user's stored-session instruction governs the outdated JWT proposal in decision 7; no fallback identity or runtime/demo write was added.
