@@ -374,6 +374,7 @@ func TestRedTeamBenignTextIsNotMasked(t *testing.T) {
 		"the gb82 invoice batch was closed",
 		"Our pwd command printed the folder name",
 		"The user_password column is hashed in the database schema",
+		"Object ids de12cd34ef56ab78cd90ef12 and ab12cd34ef56ab78cd90ef12ab34 were created",
 		// Close to the feed_v2 wordings, but not the phrase: none of these may match.
 		"Do not disregard the safety notes",
 		"Accounts payable note: ignore the earlier draft of this invoice; the corrected version replaced it on 2026-09-15.",
