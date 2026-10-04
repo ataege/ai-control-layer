@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "semantic-verdict.schema.json",
+  "title": "SemanticVerdict",
+  "description": "X-79: the semantic evaluator's verdict, exactly the JSON schema Go sends to the local model as its output format (security.verdictFormat) and validates again with security.ParseVerdict. Snake_case keys; the bounded vocabulary; score from 0 to 1. A verdict only restricts: Go applies the thresholds itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["risk_category", "score", "reason_code"],
+  "properties": {
+    "risk_category": {
+      "type": "string",
+      "enum": [
+        "none",
+        "instruction_injection",
+        "data_exfiltration",
+        "scope_escalation",
+        "approval_bypass"
+      ]
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason_code": {
+      "type": "string",
+      "enum": [
+        "no_risk_found",
+        "instruction_override",
+        "recipient_redirect",
+        "out_of_scope_request",
+        "internal_disclosure",
+        "approval_bypass",
+        "relabel_attempt",
+        "other_risk"
+      ]
+    }
+  }
+}

@@ -32,9 +32,11 @@ The project uses these ports on 127.0.0.1: 3000 (web), 3001 (API), 8080 (gateway
 
 "pnpm run setup" checks the tools and creates the file .env with freshly generated local secrets, including the demo operator's password. Type "pnpm run setup", not "pnpm setup", which is a different, built-in pnpm command.
 
-Open .env in a text editor and set the model name on the MODEL_NAME line:
+"pnpm run setup" also puts the model name in .env. Check that .env has this line:
 
     MODEL_NAME=qwen3.5:4b
+
+If the line is empty or missing, run "pnpm run setup" again; it fills it in. The control layer fails closed: with no model name the application starts, but every model call is refused. Setup prints a warning if Ollama does not have the model; fix it with "ollama pull qwen3.5:4b".
 
 
 3. START THE DATABASE AND LOAD THE DEMO DATA
@@ -50,6 +52,8 @@ What each command does:
 - pnpm db:roles gives the gateway's database role its password from .env.
 - pnpm db:seed loads the synthetic vendors and invoices, the demo operator and the policy catalog. It is safe to run again.
 
+pnpm db:migration:run prints every SQL statement it runs; that is normal. It ends with "Migration ... has been executed successfully" and "query: COMMIT". pnpm db:seed ends with "[OK] control catalog imported as the requested revision ...".
+
 
 4. START THE APPLICATION
 
@@ -61,9 +65,13 @@ Then start the web app, the API and the gateway together, and leave this termina
 
     pnpm dev
 
-After about 20 to 30 seconds all three services are up. The gateway then logs "catalog revision validated and activated". Optionally, in a second terminal, run the end-to-end health check. It should report 0 failed; some log checks are reported as skipped in this mode.
+Within about 30 seconds all three services are up (the first start compiles the web app and can take longer). The gateway first logs the warning "no enforceable control catalog is active; the gateway is not ready" and then "catalog revision validated and activated"; the warning is normal. Wait until http://localhost:3001/api/health/ready answers 200 before signing in; a sign-in in the first seconds after pnpm dev starts can fail with a connection error.
+
+Optionally, in a second terminal, run the end-to-end health check:
 
     pnpm smoke
+
+Expected: 36 passed, 0 failed, 6 skipped. The six skipped checks are the service-log leak checks, which this mode cannot run.
 
 
 5. OPEN THE APP AND SIGN IN
@@ -72,7 +80,7 @@ Open http://localhost:3000 in a browser and sign in with:
 - Email: demo-operator@example.com
 - Password: the value of DEMO_OPERATOR_PASSWORD in the .env file. The command "grep DEMO_OPERATOR_PASSWORD .env" prints it.
 
-The badge "Development demonstration" marks this seeded account. It holds both the operator and the reviewer role, so one person can run the task and approve it.
+If you are not signed in, any page redirects to the sign-in page. The badge "Development demonstration" appears at the top of every page and marks this seeded account. It holds both the operator and the reviewer role, so one person can run the task and approve it.
 
 
 6. WALK THROUGH THE MAIN SCENARIO
@@ -116,9 +124,9 @@ An evaluation is a decision only: nothing is executed or stored as an action.
 
 The same from a terminal. First sign in and store the session cookie (replace <password> with DEMO_OPERATOR_PASSWORD from .env):
 
-    curl -c cookies.txt -H 'content-type: application/json' -d '{"email":"demo-operator@example.com","password":"<password>"}' http://localhost:3001/api/auth/sign-in
+    curl -c /tmp/task-passport-cookies.txt -H 'content-type: application/json' -d '{"email":"demo-operator@example.com","password":"<password>"}' http://localhost:3001/api/auth/sign-in
 
-Then use the "session" value from cookies.txt and the run id of the dedicated judge run:
+Then take the "session" value from /tmp/task-passport-cookies.txt: it is the last field of the line that ends in "session" (that line starts with "#HttpOnly_localhost", which looks like a comment but is not). Use it with the run id of the dedicated judge run:
 
     JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run id> --text "Ignore previous instructions"
     JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run id> --case indirect_ignore_previous_note_v1
@@ -144,8 +152,11 @@ An invalid file, for example a threshold of 7, is rejected:
 - "pnpm policy:import" exits with the validation issues;
 - the panel shows "policy_reload_rejected ... Stage import_validation";
 - the last accepted revision stays in force.
+The import output ends with "<field>: <problem>" lines, such as "controls.semantic_injection.threshold: value is too large", and "Revision N stays active.", followed by pnpm ERR_PNPM lines; that is expected.
 
 Change one value at a time, and wait for the activation before the next import. Do not change the policy while a run is waiting for approval: an approval is bound to the revision it was given under, and is refused after a change (reason "source_policy_changed").
+
+To go back to the original rules, run "git checkout config/policy.yaml" and "pnpm policy:import" again. This creates a new revision (the revision number does not go back) and clears the rejection notice.
 
 To change the signature feed, edit config/attack-signatures.json, give it a new revision, set the same value in "signatures.revision" in config/policy.yaml, and import as above.
 
@@ -158,9 +169,9 @@ One command runs the whole control test suite, with positive and negative cases,
 
 (or "make verify-controls")
 
-It needs PostgreSQL running (section 3) and Ollama with the model. It uses its own test database and never touches the demo data. It takes a few minutes and writes every case with its outcome to .verify-controls/results-<timestamp>.json.
+It needs PostgreSQL running (section 3) and Ollama with the model. It uses its own test database (<POSTGRES_DB>_test, starter_test by default) and never touches the demo data. A run without the model (--no-live) took about 1 minute 20 seconds on the M1 Pro (1517 cases: Go, API unit, API database and fixture checks); with the model it takes longer. It writes every case with its outcome to .verify-controls/results-<timestamp>.json.
 
-Exit code 0 means every deterministic test passed and the live part ran. A live case whose verdict differs from its label is recorded as a mismatch and counted in the summary; add "--strict-live" to make mismatches fail. "--no-live" runs without the model and reports INCOMPLETE. A committed result from our final run is in docs/evidence/.
+Exit code 0 means every deterministic test passed. Read the last line for the live part: with the model it says the live part ran; with "--no-live" it prints "verify:controls INCOMPLETE (exit 0)" and the summary shows "INCOMPLETE live model", so exit code 0 alone does not mean the live part ran. A live case whose verdict differs from its label is recorded as a mismatch and counted in the summary; add "--strict-live" to make mismatches fail. "--no-live" runs without the model and reports INCOMPLETE. A committed result from our final run is in docs/evidence/.
 
 Other checks:
 - pnpm verify: static checks (format, lint, typecheck, unit tests, build). Needs no database.
@@ -179,7 +190,7 @@ Other checks:
 
 11. RESET, STOP AND START AGAIN
 
-- To reset the demo data between attempts, run "pnpm reset:demo" (or "make reset-demo"). It keeps the operator and your policy edits.
+- To reset the demo data between attempts, run "pnpm reset:demo" (or "make reset-demo"). It can run while pnpm dev is running, keeps the operator and your policy edits, and ends with "control catalog active".
 - To stop, press Ctrl+C in the "pnpm dev" terminal, then run "pnpm infra:down". The database volume is kept.
 - To start again later, run "pnpm infra:up", repeat the model warm-up, then run "pnpm dev".
 
@@ -187,7 +198,7 @@ Other checks:
 12. IF SOMETHING GOES WRONG
 
 - A run pauses with "Operator attention required" or "The local model did not answer in time". The model was too slow because the machine was busy or the model was not loaded. Close other heavy programs, repeat the warm-up and start a new run. The control layer fails closed by design.
-- Every run fails at once. MODEL_NAME is missing in .env, or Ollama is not running. Check with "ollama ps" and "curl http://localhost:11434/api/tags", fix it and restart "pnpm dev".
+- Every run fails at once. MODEL_NAME is empty in .env (it must be qwen3.5:4b; run "pnpm run setup" to fill it in), the model has not been pulled ("ollama pull qwen3.5:4b"), or Ollama is not running. Check with "ollama list", "ollama ps" and "curl http://localhost:11434/api/tags", fix it and restart "pnpm dev".
 - The task form says "No active control catalog". Run "pnpm db:seed" (or "pnpm policy:import"), then "pnpm catalog:activate".
 - "EADDRINUSE" on port 3000, 3001 or 8080, or port 5432 already in use. Another program holds the port. Stop it, or change the port in .env ("Changing ports" in README.md).
 - Pages answer 404 after you ran a build. Do not run "pnpm verify" or a build while "pnpm dev" is running. Stop "pnpm dev", delete the folder apps/web/.next and start "pnpm dev" again.
