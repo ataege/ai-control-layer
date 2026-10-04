@@ -18,6 +18,8 @@ type accountingFixtureStore struct {
 	paused                    bool
 	unknown                   bool
 	reserveError, settleError error
+	// markUnknownError makes marking a call as unknown fail, as a slow or lost database does.
+	markUnknownError error
 }
 
 func (store *accountingFixtureStore) Reserve(_ context.Context, _, _, _ string, tokens int64) (budget.Reservation, error) {
@@ -33,6 +35,9 @@ func (store *accountingFixtureStore) Reserve(_ context.Context, _, _, _ string, 
 	return budget.Reservation{Tokens: tokens}, nil
 }
 func (store *accountingFixtureStore) MarkUnknown(ctx context.Context, _, _ string) error {
+	if store.markUnknownError != nil {
+		return store.markUnknownError
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -235,5 +240,32 @@ func TestReconcileRejectsNilContext(t *testing.T) {
 	caller := fixtureAccountedCaller(t, &accountingFixtureStore{}, func(context.Context, Request) (Result, error) { return Result{}, nil })
 	if _, err := caller.Reconcile(nil, "run", "call", 1, 1); !errors.Is(err, ErrRequest) {
 		t.Fatal("nil context accepted")
+	}
+}
+
+// A dispatched call whose unknown usage could not be persisted is still an unknown outcome: the
+// error says so (ErrUsageUnknown) next to the accounting failure, so the run pauses for attention
+// instead of failing as if no request had been sent.
+func TestUnpersistedUnknownUsageIsStillUnknownUsage(t *testing.T) {
+	for _, scenario := range []string{"provider timeout", "settlement fails"} {
+		t.Run(scenario, func(t *testing.T) {
+			store := &accountingFixtureStore{limit: 10000, markUnknownError: errors.New("private database details")}
+			if scenario == "settlement fails" {
+				store.settleError = errors.New("private database details")
+			}
+			caller := fixtureAccountedCaller(t, store, func(context.Context, Request) (Result, error) {
+				if scenario == "provider timeout" {
+					return Result{}, ErrTimeout
+				}
+				return fixtureResult(2, 3), nil
+			})
+			result, err := caller.Call(context.Background(), "run", "call", accountedFixtureRequest())
+			if !errors.Is(err, ErrUsageUnknown) || !errors.Is(err, ErrAccounting) || !result.UsageUnknown || result.Provider.Message.Content != "" {
+				t.Fatalf("err %v, usage unknown %v", err, result.UsageUnknown)
+			}
+			if store.reserved == 0 {
+				t.Fatal("the reservation was released although the usage is unknown")
+			}
+		})
 	}
 }
