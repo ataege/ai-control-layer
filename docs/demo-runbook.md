@@ -1,16 +1,21 @@
 # Go demo runbook
 
-The presenter's step-by-step for the beats the Go gateway carries, written against `main` 93e1c96 (3
-October 2026). It follows the researcher's [storyboard](product/storyboard.md) (beat numbers, labels
+The presenter's step-by-step for the beats the Go gateway carries, first written against `main`
+93e1c96 (3 October 2026) and re-read against the code of the frozen build, `main` c70492d (4 October
+2026). It follows the researcher's [storyboard](product/storyboard.md) (beat numbers, labels
 and the replay rule come from there) and does not change it. Owner of this file: the lead (docs
 outside `docs/product`); written by lane w3.
 
-Status: **not rehearsed on the final build.** Commands and expected output below were taken from the
-code and from recorded test runs; timings are observations from one developer machine, not targets.
-SH-33 sets the pitch timing from the rehearsal. The steps marked "checked" were run once on lane w3's
-machine at `main` 93e1c96 (load average 15 to 18, not idle). "What exists today", the
-**[web]** markers and the "Final live checks" were refreshed on 4 October 2026 (lane f3) against `main`
-efaae10 plus the lead's pending merges.
+Status: the twelve "Final live checks" below were run once, by one operator, on `main` 1365d63 on 4
+October 2026 with the live `qwen3.5:4b`, and all passed (results in the roadmap blocks they name and in
+`docs/evidence/verify-controls-2026-10-04T02-02-03Z.json`; the machine was not idle, load 6 to 19). The
+code changed after that run in four ways, covered by their tests and not by a rerun of all twelve
+checks: judge runs start without an agent, the `/security` panel polls on its own, counts agree with
+their nouns, and a final answer with prose or a code fence around its one JSON object is accepted. The
+pitch rehearsal on the final build is still open (SH-33), which sets the pitch timing. Commands and
+expected output below were taken from the code and from recorded runs; timings are observations from one
+developer machine, not targets. The steps marked "checked" were run once on lane w3's machine at `main`
+93e1c96 (load average 15 to 18, not idle).
 
 ## What exists today
 
@@ -24,12 +29,12 @@ internal routes still require the service token and a signed `X-Operator-Context
 tool mints that token, so a presenter reaches the gateway through the API (`/api/...`) or the commands
 below, never by calling an internal route directly.
 
-| Need                     | Where it is on `main`                                                 | Fallback (this runbook)                                                                     |
-| ------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Start a run (beat 1)     | the task form `/tasks/new`, `POST /api/runs`                          | the live or scripted story test admits the run through real Go admission                    |
-| Review and approve (8)   | the review page, `POST /api/actions/<id>/approval`                    | the story test approves through `policy.Approvals`, the same code the approval route calls  |
-| Timeline, summary (3-12) | the run page and `/security` (events, usage, passport, summary)       | the test output, `psql`, and the gateway read routes listed in `services/gateway/README.md` |
-| Ad-hoc judge input (10)  | `/judge` and `pnpm judge` through `POST /api/control/evaluate` (X-91) | the live corpus test; `POST /internal/control/evaluate` needs the signed context            |
+| Need                     | Where it is on `main`                                                                                                                    | Fallback (this runbook)                                                                           |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Start a run (beat 1)     | the task form `/tasks/new`, `POST /api/runs`                                                                                             | the live or scripted story test admits the run through real Go admission                          |
+| Review and approve (8)   | the review page, `POST /api/actions/<id>/approval`                                                                                       | the story test approves through `policy.Approvals`, the same code the approval route calls        |
+| Timeline, summary (3-12) | the run page and `/security` (events, usage, passport, summary)                                                                          | the test output, `psql`, and the gateway read routes defined in `services/gateway/internal/reads` |
+| Ad-hoc judge input (10)  | `/judge` and `pnpm judge` through `POST /api/control/evaluate` (X-91), on a judge run from `POST /api/runs/judge` (a passport, no agent) | the live corpus test; `POST /internal/control/evaluate` needs the signed context                  |
 
 ## Before the demo (about 30 minutes before)
 
@@ -52,7 +57,8 @@ print it: it holds the generated secrets).
    refuses a non-loopback database.
 
 2. **Control catalog and signature feed.** `pnpm policy:import` stores `config/policy.yaml` and the
-   signature feed it names and only requests the revision; `pnpm catalog:activate` (or a running
+   signature feed it names (`config/attack-signatures.json`, revision `feed_v2`, 11 rules) and only requests
+   the revision; `pnpm catalog:activate` (or a running
    gateway's watcher, within a second or two) validates and activates it. No feed is loaded by hand.
    After a judge or the presenter edits the policy or the feed:
 
@@ -96,10 +102,12 @@ print it: it holds the generated secrets).
    - The control test suite: `MODEL_NAME=qwen3.5:4b pnpm verify:controls` (or `make verify-controls`).
      It recreates the separate test database and never writes the demo data, runs the Go, API and
      fixture tests and the live semantic cases labelled "live model", and writes
-     `.verify-controls/results-<timestamp>.json`. Checked at 93e1c96: exit 0 in 115 s, 1130 cases, Go
-     927, API unit 125, API database 27 and fixtures 18 passed, none failed or skipped; live model
-     28/29 matched, 1 false positive, 0 false negatives, 0 guard failures. A label mismatch is recorded,
-     not failed; an unavailable model makes the run INCOMPLETE and exit nonzero (`--no-live` says so).
+     `.verify-controls/results-<timestamp>.json`. Checked on 1365d63 (4 October, load 6 to 19): exit 0, 2319
+     cases, Go 1725, API unit 461, API database 82 and fixtures 18 passed, none failed or skipped; live
+     model 29/29 matched, 0 false positives, 0 false negatives, 0 guard failures
+     (`docs/evidence/verify-controls-2026-10-04T02-02-03Z.json`); the older record at 93e1c96 (1130
+     cases, live 28/29) is history. A label mismatch is recorded, not failed; an unavailable model makes
+     the run INCOMPLETE and exit nonzero (`--no-live` says so).
    - The benchmark: the quiet result table in `services/gateway/README.md` ("Result on the developer
      machine (2026-10-03, quiet)"), or a fresh `pnpm benchmark` (add `--live` for the model).
    - A `psql` session on the demo database for the before-and-after counts below.
@@ -141,8 +149,8 @@ the database also claims the story's queued job. On 4 October, with `pnpm dev` r
 runs against the demo database ended `failed decision_unavailable` after one agent call (error kind
 `recording`); the same command with the stack stopped completed with 9 agent calls, 1 security call and
 one outbox row, and on the test database three runs gave two completed and one stopped at the allowance.
-The test fails when the run does not complete (branch `go/f3-live-story-assert`; before it, the test
-passed on a failed run, so read the `evidence` line, not only `--- PASS`).
+The test fails when the run does not complete: it checks the terminal status, the run's events and the
+one outbox row, and no call with unknown usage (before that check it passed on a failed run).
 
 The scripted fallback for the same beats (labelled fixture provider, test database):
 
@@ -184,7 +192,8 @@ GOFLAGS=-p=3 pnpm test:db gateway   # includes TestStoryThroughTheProductionChai
 Decision 28: in lane f3's GO-27 live runs (a9f8004) the model created the internal report every time
 but proposed queueing it in 0 of 3 runs in the first set and 1 of 3 in the second (run `8b812e16`,
 denied `report_export_restricted`), so this beat always uses the labelled replay against the
-genuinely created report. The live attempt is never presented as part of the demonstration. `cmd/replay` accepts only
+genuinely created report. On 4 October (1365d63) one of three live stories attempted it as well (twice, both denied
+`report_export_restricted`). The live attempt is never presented as part of the demonstration. `cmd/replay` accepts only
 a finished run (completed, failed or stopped), so it never takes a step a live loop is about to use;
 run it after the live story ends and within that run's 15-minute passport window (see "Two
 pitfalls": later the gate answers `run_expired` first).
@@ -227,6 +236,13 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   matches the reviewed report; `run.completed`. **[web]** the review page (click Approve, then Approve in the
   confirm dialog); the fallback test approves through `policy.Approvals`.
 - Recorded live run: 6 agent calls, 1 security call, one outbox row, completed.
+- The run ends **Completed**, not Stopped. After the approved `queue_report` the model's context ends
+  with a fixed message that the task is finished and only the final answer remains, and a final answer
+  with prose or one code fence around its one JSON object is accepted (`db813e9`, `runresult`; two
+  objects, none, or a wrong report id are still rejected). A run that ends Stopped with
+  `allowance_exhausted` after its outbox row exists, as run `fa417b6b` did on 4 October (a call to a
+  tool named `status`, then a final answer with text around the JSON), shows the behaviour before that
+  change; write it down as a finding.
 - Fallback: `TestStoryAfterApproval` (scripted provider) shows the same ordered events every time.
 
 ### Beat 9: the remaining controls
@@ -259,7 +275,8 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
     -run '^TestLiveSemanticCorpus$' -count=1 -v -timeout 20m
   ```
 
-  **[web]** `/judge` ("Start a dedicated judge run", then evaluate) and `pnpm judge --run <run id> --case
+  **[web]** `/judge` ("Start a dedicated judge run", which has a passport and no agent, then evaluate)
+  and `pnpm judge --run <run id> --case
 <fixture id>`, both through the API's `POST /api/control/evaluate` (X-91).
 
 - Audience sees: verdicts labelled `live` with score and category, benign cases passing (including the
@@ -272,7 +289,7 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
 ### Beat 11: change the configuration
 
 - Edit `config/policy.yaml` (for example lower a threshold) or the signature feed
-  `config/attack-signatures.json` (with a new feed revision), then `pnpm policy:import` and
+  `config/attack-signatures.json` (`feed_v2`, 11 rules; with a new feed revision), then `pnpm policy:import` and
   `pnpm catalog:activate`, or let the running gateway activate the requested revision within a second
   or two. An invalid file is rejected and the last accepted revision stays active.
 - One change at a time: change one value, run `pnpm policy:import`, wait for the gateway's log line
@@ -288,7 +305,7 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   revision N is already current"), so a repeated import does not void a pending approval.
 - Show the same input before and after on the judge input path (`/judge` or `pnpm judge`). **[web]** the
   revision view: the active controls panel on `/security` shows the requested, validated and active
-  revision and any rejection.
+  revision and any rejection, and refreshes itself (every 5 s, every 3 s while a change is pending).
 
 ### Beat 12: test and reporting evidence
 
@@ -299,7 +316,8 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   posture dashboard at `/security` and the audit export at `/security/export` (`GET /api/security/summary`
   and `/api/security/export`).
 - Timing: the quiet benchmark table (deterministic controls well under 1 ms, live semantic about
-  1.9 s, gateway overhead about 5 ms).
+  1.9 s, gateway overhead about 5 ms); the live run of 4 October (load 6.1) measured the semantic
+  configuration at p50 2.10 s total, p95 2.24 s, over 10 samples.
 
 ## Final live checks (quiet window)
 
@@ -376,7 +394,7 @@ Atlas and the review requirement for `queue_report`, then submit. Passes when th
 `/runs/<run id>`, that id equals `psql "SELECT id FROM runtime.runs ORDER BY created_at DESC LIMIT 1"`
 (the run Go admitted), the request body in the browser's network tab carries no actor, organization or
 grant, and the run page shows the passport (four tools, the two invoices, the Atlas recipient
-reference). Ticks **WEB-05** (this is c1's real start through the form) and the beat 1 evidence.
+reference). **WEB-05** (this is c1's real start through the form; ticked after the 4 October run) and the beat 1 evidence.
 Note the time: the run's 15-minute window starts now.
 
 ### 4. Waiting for approval, without a shim (WEB-10, about 1 minute, same run)
@@ -400,8 +418,8 @@ content, its SHA-256 and the source manifest. Click Approve, then **Approve agai
 "Completed" within about 10 seconds, both reports are linked, the queued message carries the
 "Simulated outbox" label, `psql "SELECT count(*), max(recipient) FROM demo.outbox_messages"` prints
 `1` and the registered address, and the outbox row's content hash equals the hash on the review page.
-Adds the quiet-machine evidence to **WEB-14** (already ticked) and ticks **WEB-18** (the legitimate
-task through the interface).
+Adds the quiet-machine evidence to **WEB-14** and **WEB-18** (both ticked after the 4 October run: the
+legitimate task through the interface).
 
 ### 6. The export denial and the other replay on the page (WEB-09, WEB-28, about 2 minutes, no model call)
 
@@ -492,19 +510,20 @@ E2E_POSTGRES_CONTAINER=<postgres container> E2E_ROUNDS=2 \
 
 Passes when the summary lists no failed check, every model-dependent mismatch is a NOTE, round 2's
 business counts equal round 1's after the reset, and the summary ends with the list of things that
-only a browser can show (checks 3 to 8 above). Save the whole summary. Ticks **WEB-18**, **WEB-20**
-and **WEB-24**.
+only a browser can show (checks 3 to 8 above). Save the whole summary. Evidence for **WEB-18**
+(ticked), **WEB-20** and **WEB-24** (both still open: they ask for a by-hand repeat and a twelve-beat
+walk-through).
 
-**Re-run beat 10's secret check live, and read it.** In session 08's e2e run (`main` 39d5899 plus docs,
-a loaded machine, `qwen3.5:4b`) the check "a secret is redacted and its value never returned"
-failed in both rounds: round 1 with "decision is deny" (the live path denied where the check expects
-redact), round 2 with "evaluate answered 504" (a model timeout); an earlier run also answered 504 for
-that check and for "hard negative...". It is not diagnosed. Beat 10's other checks passed in that run
-(a signature fires before any semantic call, benign input gets a live metered verdict, a hostile note is
-denied, evaluations are recorded as judge input). On the quiet machine this check must pass in both
-rounds with no 504: a 504 is a model timeout, so first confirm the machine is quiet; a second `deny`
-where `redact` is expected is a finding for lane c1 (the secret-pattern control and the evaluator's
-verdict), written down with the exact output, not retried until it passes.
+**Read beat 10's secret check.** In session 08's e2e run (`main` 39d5899 plus docs, a loaded machine,
+`qwen3.5:4b`) the check "a secret is redacted and its value never returned" failed in both rounds:
+round 1 with "decision is deny", round 2 with "evaluate answered 504" (a model timeout). The deny is the
+designed outcome of the composition, not a defect of the secret rule: the judge path redacts first and
+then runs the semantic check on the redacted text, and a blocking verdict wins (see check 7 and
+`internal/security/secret_full_path_test.go`); the script records it as a NOTE
+(`apps/web/scripts/lib/secret-verdict.mjs`). A 504 is a model timeout, so first confirm the machine is
+quiet. On 4 October (1365d63) round 1 redacted and round 2 was denied by the semantic check after
+redaction, a NOTE, with no 504. A secret value in any response, an `allow`, or a redaction without a
+marker is a failure.
 
 ### 10. The control test suite, live (about 2 minutes, _model_)
 
@@ -519,9 +538,10 @@ the run INCOMPLETE and exit nonzero. Keep the file for the claim-to-proof list (
 ### 11. The live story, three times (about 4 minutes, _model_, extra)
 
 Run the live story of the beats section three times on the quiet machine and count, per run: internal
-report created (3 of 3 so far), a live attempt to send it (1 of 3 so far; it is shown only as a
-labelled replay), recipient reference mangled (0 of 3 so far), `semantic_injection_detected` on a clean
-proposal (0), and the agent calls' p50 and p95 (3.9 s and 5.4 s on a loaded machine). Passes when the
+report created, a live attempt to send it (shown only as a labelled replay), recipient reference
+mangled, `semantic_injection_detected` on a clean proposal, and the agent calls' p50 and p95. Recorded
+on 1365d63 on 4 October (load 6 to 10, on the test database; see the live-story caution above): 3 of 3,
+1 of 3, 0 of 3, 0, and 3.80 s and 5.15 s. Passes when the
 internal report is created in every run and no clean proposal is blocked. Updates the **GO-27** and
 **GO-47** live evidence with quiet-machine numbers.
 
@@ -546,11 +566,13 @@ Point to these limitations in `services/gateway/README.md` instead of claiming m
 
 - One gateway process per database (job leases, the in-memory `jti` replay cache).
 - The live semantic results are not a detection rate. The current evidence is the root `README.md`
-  record for `classifier_v2` (fixture version 3): the final run on merged `main` cdfee55 passed with 1145
-  cases and live 28 of 29 matched, 0 false positives and 1 false negative, at 1-minute load 4.5 to 4.0
-  (`docs/evidence/verify-controls-2026-10-03T21-53-09Z.json`). The earlier runs there (1100 cases, 27
-  of 29) differ by one or two cases, the model's variance near the 0.75 threshold. The 24-case runs in
-  the gateway README are the older `classifier_v1` history.
+  record for `classifier_v2` (fixture version 3). The run of 4 October on `main` 1365d63 passed with 2319
+  cases and live 29 of 29 matched, 0 false positives and 0 false negatives, at a 1-minute load of 6 to 19
+  (`docs/evidence/verify-controls-2026-10-04T02-02-03Z.json`); the run before it, on `main` cdfee55,
+  matched 28 of 29 with 1 false negative at load 4.5 to 4.0
+  (`docs/evidence/verify-controls-2026-10-03T21-53-09Z.json`), and the earliest runs matched 27 of 29.
+  The differences of one or two cases are the model's variance near the 0.75 threshold. The 24-case runs
+  in the gateway README are the older `classifier_v1` history.
 - Benchmark numbers are observations on one machine under stated load, not a distribution.
 - Live agent runs on an 8 GiB machine paused on request timeouts; a 4B model's choices vary.
 - The outbox is simulated, the replay is scripted, fixture verdicts test handling only, and usage
@@ -568,9 +590,13 @@ Point to these limitations in `services/gateway/README.md` instead of claiming m
 - A rehearsal on the final build with recorded timings (SH-33), and a run kept for beat 5 (the replay
   only works within that run's 15-minute window, so "kept" means the screenshots and the printed
   output, not the run).
-- The "Final live checks" above, run once in a quiet window; until then every live number in this file
-  is an observation from a loaded machine.
+- The "Final live checks" above were run once, on `main` 1365d63 on 4 October, and not on an idle
+  machine (load 6 to 19); every live number in this file is an observation from that machine under that
+  load. They have not been rerun on the frozen build, c70492d.
+- The by-hand repeat after a reset (WEB-20) and the twelve-beat walk-through with screenshots (WEB-24)
+  are still open.
 
 Done on `main` since the first version: the feed import in `pnpm policy:import` with
-`pnpm catalog:activate` (no hand load anywhere), `pnpm verify:controls` (SH-47), and the API and web
-pages that start, review, approve and inspect a run without the test harness.
+`pnpm catalog:activate` (no hand load anywhere), `pnpm verify:controls` (SH-47), the API and web pages
+that start, review, approve and inspect a run without the test harness, judge runs without an agent,
+the self-refreshing `/security` panel, and final answers that tolerate prose and a code fence.
