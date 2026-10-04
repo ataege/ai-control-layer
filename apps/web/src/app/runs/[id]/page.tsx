@@ -18,19 +18,12 @@ import { terminalSafeMessage } from "@/components/run/event-model";
 import { RunEventTimeline } from "@/components/run/run-event-timeline";
 import { RunStatePanel } from "@/components/run/run-state-panel";
 import { RunUsagePanel } from "@/components/run/run-usage-panel";
-import {
-  awaitingActionId,
-  isTerminalStatus,
-  newEventsAfter,
-  reportsOfRun,
-} from "@/components/run/run-page-model";
+import { awaitingActionId, reportsOfRun } from "@/components/run/run-page-model";
+import { createRunPoller } from "@/components/run/run-poller";
 import { fetchPassport } from "@/lib/clients/passport-client";
-import { getSafeMessage, ProductClient } from "@/lib/product-client";
+import { getSafeMessage } from "@/lib/product-client";
 
 const POLL_INTERVAL_MS = 3000;
-// The API's page size for events; a full page means there may be more.
-const EVENTS_PAGE_LIMIT = 500;
-const MAXIMUM_EVENT_PAGES_PER_POLL = 5;
 
 function reportHref(runId: string, reportId: string): string {
   return `/runs/${encodeURIComponent(runId)}/reports/${encodeURIComponent(reportId)}`;
@@ -55,8 +48,7 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
     const abortController = new AbortController();
     const { signal } = abortController;
     let isMounted = true;
-    let cursor: string | undefined;
-    let shown: SafeEvent[] = [];
+    const poller = createRunPoller(id, signal);
     let pollTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
     async function loadPassport() {
@@ -69,43 +61,16 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
       }
     }
 
-    // One refresh: the run state first, then the events and usage read after it, so a terminal state
-    // is never shown without the events that led to it. Returns whether polling should continue.
+    // One refresh of the run (see run-poller.ts). Returns whether polling should continue.
     async function refresh(): Promise<boolean> {
-      const state = await ProductClient.getRun(id, { signal });
-      if (!isMounted) return false;
-      if (!state.ok) {
-        if (state.error.kind !== "aborted") setError(getSafeMessage(state.error));
-        setIsInitialLoading(false);
-        return true;
-      }
-      let failure: string | undefined;
-      for (let pageNumber = 0; pageNumber < MAXIMUM_EVENT_PAGES_PER_POLL; pageNumber += 1) {
-        const page = await ProductClient.getRunEvents(id, cursor, { signal });
-        if (!isMounted) return false;
-        if (!page.ok) {
-          if (page.error.kind !== "aborted") failure = getSafeMessage(page.error);
-          break;
-        }
-        const fresh = newEventsAfter(shown, page.data.events);
-        if (fresh.length > 0) {
-          shown = [...shown, ...fresh];
-          setEvents(shown);
-        }
-        cursor = page.data.nextCursor;
-        if (page.data.events.length < EVENTS_PAGE_LIMIT) break;
-      }
-      const usageResult = await ProductClient.getUsage(id, { signal });
-      if (!isMounted) return false;
-      if (usageResult.ok) {
-        setUsage(usageResult.data);
-      } else if (usageResult.error.kind !== "aborted") {
-        failure = failure ?? getSafeMessage(usageResult.error);
-      }
-      setRun(state.data);
-      setError(failure);
+      const result = await poller.refresh();
+      if (!isMounted || result === null) return false;
+      setEvents(result.events);
+      if (result.usage !== undefined) setUsage(result.usage);
+      if (result.run !== undefined) setRun(result.run);
+      setError(result.error);
       setIsInitialLoading(false);
-      return !isTerminalStatus(state.data.status);
+      return result.keepPolling;
     }
 
     async function poll() {
