@@ -184,20 +184,23 @@ The volume, and therefore the data, is kept.
 
 ### Known gaps on a clean checkout
 
-After the steps above the three services start. These gaps remain on `main`:
+Checked on 2026-10-04 by following this section from a fresh clone of `main` (`efaae10`) with its own
+database, without a model: `pnpm install`, `pnpm run setup`, `pnpm infra:up`, `pnpm db:migration:run`,
+`pnpm db:roles`, `pnpm db:seed`, `pnpm dev`, then `pnpm smoke` (36 passed, 0 failed, 6 skipped). What
+remains:
 
-- **Admission fails closed until the catalog is active.** The seed and `pnpm policy:import` only
-  request a revision; until the gateway (or `pnpm catalog:activate`) validates and activates it,
-  a start-run command answers 503 `decision_unavailable`. A database first seeded by the older
-  import needs one more `pnpm policy:import` before `pnpm catalog:activate` succeeds. There is no
-  supported manual feed load.
-- **Approving needs a reviewer membership that nothing seeds yet.** The gateway accepts an
-  approval only from an operator whose membership in `app.memberships` has the `reviewer` role. The
-  seed of the demonstration operator, organization and membership (SH-19) does not exist yet.
-- **Runs start only through the API's sign-in.** The gateway requires a signed `X-Operator-Context`,
-  which the API produces for a signed-in operator. There is no other supported way to obtain one,
-  and no operator can sign in until SH-19 seeds one, so start runs through the API once SH-19 is on
-  `main`.
+- **The catalog is requested, not active, until a gateway runs.** The seed and `pnpm policy:import`
+  only request a revision. With `pnpm dev` the gateway validates and activates it within seconds
+  (log line "catalog revision validated and activated"); without a gateway use
+  `pnpm catalog:activate`. Until a revision is active, a start-run command answers 503
+  `decision_unavailable`. There is no supported manual feed load; `pnpm policy:import` stores the
+  signature feed with the policy.
+- **The demonstration operator is seeded by `pnpm db:seed`** with `operator` and `reviewer`
+  membership; its password is `DEMO_OPERATOR_PASSWORD` in `.env`. Sign-in, `GET /api/auth/me`,
+  `GET /api/runs/options`, `GET /api/policies/catalog` and `GET /api/security/summary` answered 200
+  for it on the clean clone.
+- **Runs need the local model.** Without `MODEL_NAME` the gateway starts but every model call fails
+  closed. Starting a run was not tried in this check, because it would call the model.
 
 ## 3. How environment loading works
 
@@ -519,8 +522,8 @@ pnpm smoke
 
 - `pnpm db:seed` (SH-18, draft) seeds the synthetic records and imports `config/policy.yaml`; it
   is idempotent, so a second run changes nothing. The demonstration operator, organization and
-  membership (SH-19) and the signature-feed import (API-34) are not on `main` yet, so a run cannot
-  start yet (section 2, "Known gaps on a clean checkout").
+  membership (SH-19) and the signature-feed import (API-34) are on `main`; a run needs the model
+  (section 2, "Known gaps on a clean checkout").
 - The warm-up loads the model into memory (about 30 seconds on the first load in the rehearsal,
   then well under a second). Ollama unloads a model after five idle minutes by default; `ollama ps`
   shows whether it is loaded, so repeat the warm-up shortly before the presentation.
@@ -548,7 +551,7 @@ trust is the authenticated import plus the digest pin, which proves the integrit
 bytes, not who issued them. The file is listed in `.prettierignore`, so formatting never changes
 its digest. To change the feed, follow "Signature feed matching and catalog settings (GO-78)" in
 `services/gateway/README.md`: edit the file, bump its revision, recompute the digest and import
-it with the matching `signatures.revision`. The feed import itself (API-34) is not on `main` yet.
+it with the matching `signatures.revision`. `pnpm policy:import` stores the feed with the policy.
 
 ### Stop
 

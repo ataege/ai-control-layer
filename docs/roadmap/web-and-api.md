@@ -2095,7 +2095,7 @@ handoff from X-62, and RS-09 submits.
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-27 · Supply the NestJS part of the technical handoff**
+- [x] **API-27 · Supply the NestJS part of the technical handoff**
   - Progress (2026-10-04, second pass on `api/w2`): the NestJS text is checked against main 31cff75 plus this
     branch. `apps/api/README.md` "Verification and handoff limits" is rewritten with current results and
     limits; `docs/api-facade-handoff.md` no longer carries the old smoke numbers or the draft combined run
@@ -2104,8 +2104,21 @@ handoff from X-62, and RS-09 submits.
     `pnpm test:db --fresh` api "71 passed", gateway "965 passed", 0 failed, 0 skipped; `pnpm verify`
     "6 passed, 0 failed, 0 skipped"; `pnpm smoke` "36 passed, 0 failed, 6 skipped" (service-log leak
     checks skipped in host mode); `pnpm test:judge` 8 passed (the judge CLI still sends `run_id`, which
-    the API refuses: recorded as a limit). Not done: a teammate's setup on a clean checkout, and the
-    integration owner's final-build incorporation. The task stays open.
+    the API refuses: recorded as a limit).
+  - Completed (2026-10-04): clean-checkout run of the Quick start by the w2 session (not the text's author), from a
+    fresh clone of origin/main `efaae10` in a scratch directory, with its own Compose project
+    (`COMPOSE_PROJECT_NAME`) and ports (database 55550, web 3130, API 3131, gateway 8130), no model and no run
+    started: `pnpm install` exit 0; `pnpm run setup` exit 0; `pnpm infra:up` exit 0 (healthy);
+    `pnpm db:migration:run` exit 0; `pnpm db:roles` exit 0; `pnpm db:seed` exit 0 (demo records, operator and
+    membership, catalog revision 1 and signature feed 1 requested); `pnpm dev`: all three services up after
+    25 s and the gateway logged "catalog revision validated and activated" with no `catalog:activate`;
+    `pnpm smoke`: "36 passed, 0 failed, 6 skipped". Signed in as the demo operator: sign-in 200,
+    `/api/auth/me` 200, `/api/runs/options` 200, `/api/policies/catalog` 200, `/api/security/summary` 200.
+    README gaps found and fixed in the same change (`README.md` Quick start and URLs, `docs/setup.md` "Known
+    gaps on a clean checkout" and two stale lines): the gap list said the operator seed, the feed import and
+    catalog activation did not exist; the URLs paragraph said the web serves three proxy routes. Not
+    verified: starting a run (needs the model), the full-container mode, Linux and WSL. Integration still
+    places the text into the final submission (SH-35).
   - **Report 1.2 change:** Adds the policy file, catalog reload, security summary and audit export.
   - **Report 1.1 change:** Adds the report templates and projection rules.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 0.5-1.5 h)
