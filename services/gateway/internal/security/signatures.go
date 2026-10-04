@@ -152,19 +152,22 @@ func boundedText(text string) bool {
 	return text != "" && len(text) <= maxFeedTextBytes && strings.IndexFunc(text, unicode.IsControl) < 0
 }
 
-// NormalizeText lowercases text, drops invisible format characters (for example zero-width
-// spaces) and collapses every whitespace run to one space, so trivial spacing or case changes
-// do not evade a rule. It is not a defence against paraphrase or encoding.
+// NormalizeText lowercases text, drops characters that render as nothing (format characters such
+// as zero-width spaces, combining and variation marks, and control characters) and collapses every
+// whitespace run, including letters that render blank, to one space, so trivial spacing or case
+// changes do not evade a rule. It is not a defence against paraphrase or encoding.
 func NormalizeText(text string) string {
 	var builder strings.Builder
 	builder.Grow(len(text))
 	pendingSpace := false
 	for _, character := range text {
 		switch {
-		case unicode.Is(unicode.Cf, character):
+		case unicode.Is(unicode.Cf, character), unicode.Is(unicode.Mn, character), unicode.Is(unicode.Me, character):
 			continue
-		case unicode.IsSpace(character):
+		case unicode.IsSpace(character), isBlankLetter(character):
 			pendingSpace = builder.Len() > 0
+			continue
+		case unicode.IsControl(character):
 			continue
 		}
 		if pendingSpace {
@@ -174,6 +177,16 @@ func NormalizeText(text string) string {
 		builder.WriteRune(unicode.ToLower(character))
 	}
 	return builder.String()
+}
+
+// isBlankLetter reports the few characters that are not whitespace in Unicode but render as a
+// blank: the Hangul fillers and the empty braille pattern.
+func isBlankLetter(character rune) bool {
+	switch character {
+	case '\u115f', '\u1160', '\u3164', '\uffa0', '\u2800':
+		return true
+	}
+	return false
 }
 
 // MatchSignatures checks one text against the active feed's rules for the boundary, skipping
