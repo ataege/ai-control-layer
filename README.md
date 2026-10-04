@@ -85,9 +85,10 @@ pnpm db:seed            # load the synthetic demo records and import config/poli
 pnpm dev                # run web, api and gateway on the host (Ctrl+C stops all three)
 ```
 
-Before `pnpm dev`, start Ollama, pull `qwen3.5:4b` and set `MODEL_NAME=qwen3.5:4b` in `.env`
-([docs/setup.md](docs/setup.md#7-local-model-ollama), section 7). Without `MODEL_NAME` the gateway
-still starts, but every model call fails closed. `pnpm reset:demo` restores the demo later: it
+Before `pnpm dev`, start Ollama and pull `qwen3.5:4b`, the decided model that `.env` already names
+as `MODEL_NAME` (`pnpm run setup` writes it, fills it in when an older `.env` has it empty, and warns
+if `ollama list` does not show it; [docs/setup.md](docs/setup.md#7-local-model-ollama), section 7).
+With `MODEL_NAME` empty the gateway still starts, but every model call fails closed. `pnpm reset:demo` restores the demo later: it
 empties the `demo` and `runtime` tables, reseeds the synthetic records and keeps the `app` data,
 including the active control catalog.
 
@@ -232,7 +233,7 @@ readable by your user only. Real environment variables always win over the file.
 | `DATABASE_TIMEOUT_MS`          | `3000`                   | API, gateway                                | Upper bound for one connection attempt or readiness check. Both accept whole milliseconds, 100-20000.                                                                                                                         |
 | `LOG_LEVEL`                    | `info`                   | API, gateway                                | `debug`, `info`, `warn` or `error`.                                                                                                                                                                                           |
 | `MODEL_BASE_URL`               | `http://localhost:11434` | gateway                                     | Ollama URL (host, not Compose). The gateway container gets `host.docker.internal`.                                                                                                                                            |
-| `MODEL_NAME`                   | empty                    | gateway                                     | Ollama model tag for the local model alias; set after `ollama pull`. Model open (decision 6).                                                                                                                                 |
+| `MODEL_NAME`                   | `qwen3.5:4b`             | gateway                                     | Ollama model tag for the local model alias: the decided model (decision 6, provisional), which the active catalog must allow. Pull it once with `ollama pull`. Empty: the gateway starts, but every model call fails closed.  |
 
 Optional variables that are not in `.env.example`:
 
@@ -789,6 +790,7 @@ describes.
 
 | Document                                                 | Content                                                                                                                                                                                            |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/technical-handoff.md](docs/technical-handoff.md)   | The technical handoff index: where each part is, the run order, the known limits in one place and the evidence pointers                                                                            |
 | [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service, local model, deployment on the presentation machine                                                            |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                                                                                                        |
 | [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                                                                                                    |

@@ -1910,8 +1910,16 @@ sit here, before the final build's evidence is captured, and are cut first.
     reservation, not a measured amount and not zero" label, the agent row "Reported tokens 0 + uncertain /
     Reserved tokens (held) 4,428", the allowance "Reported 0 · Reserved 4,428 · Available 35,572" and "1 with
     unknown usage". The database held the reservation as `usage_unknown` with its slot held. This path is a
-    real gateway, API and web; only the provider is the labelled double. Not covered here: a provider that
-    answers without token counts (the missing-usage variant), which needs no model either but was not run.
+    real gateway, API and web; only the provider is the labelled double.
+    The missing-token-counts variant (2026-10-04): a labelled stub that answers at once with a valid chat
+    message and no `prompt_eval_count` or `eval_count` (not a model), real gateway, API and web: run
+    `5e1806ce-671c-4a49-ac06-ba781f0dc677` paused `outcome_unknown` in about 2 s with the recorded
+    explanation "The local model call failed or returned no usage counts; whether it used tokens is unknown, so its
+    allowance stays held and the run is paused."; the page showed "Operator attention required", "Usage is
+    uncertain", "0 + uncertain" reported, 4,428 tokens held, "Available 35,572", "1 with unknown usage", with no
+    console error and no failed /api request. It is the same page path as the timeout case above; only the
+    recorded explanation differs. The Go proof (three answer variants, the reservation held, nothing counted as
+    used) is `TestAnswerWithoutTokenCountsIsUnknownUsageNotZero`, recorded in GO-39 in `docs/roadmap/go.md`.
 - [ ] **WEB-20 · Repeat the workflow through the interface after a reset**
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: B · Size: S (estimate 0.5-1.5 h)
   - Depends on: WEB-18 · Needs: X-48 · Provides: nothing
