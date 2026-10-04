@@ -11,13 +11,13 @@ approves it and it merges into `main` through SH-11.
 
 ## How the file is used
 
-| Step     | What happens                                                                                                                                                                                                                                                                             | Owner         |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| Edit     | An authorized policy owner or judge edits `policy.yaml`.                                                                                                                                                                                                                                 | operator      |
-| Import   | An explicit command (API-32) or the authenticated reload (API-33) parses the whole file against the schema below, records its SHA-256 digest and stores it as a new immutable catalog revision. Nothing imports it at application startup.                                               | NestJS        |
-| Validate | "Go fetches and validates the candidate, acknowledges readiness" (GO-73): Go validates the whole candidate against this shared schema, refuses one it cannot enforce, and also checks that each allowed model is available. The protocol is the open item `catalog activation protocol`. | Go            |
-| Evaluate | Go reads the active revision before each new evaluation and dispatch and records the admission and evaluated revision in every decision (GO-72).                                                                                                                                         | Go            |
-| Reject   | An invalid file never partially activates. The last accepted revision stays active and the rejection reason is visible (`policy_reload_rejected`). With no valid initial revision the gateway is not ready and dispatches nothing.                                                       | NestJS and Go |
+| Step     | What happens                                                                                                                                                                                                                                                                                                  | Owner         |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Edit     | An authorized policy owner or judge edits `policy.yaml`.                                                                                                                                                                                                                                                      | operator      |
+| Import   | An explicit command (API-32) or the authenticated reload (API-33) parses the whole file against the schema below, records its SHA-256 digest and stores it as a new immutable catalog revision. Nothing imports it at application startup.                                                                    | NestJS        |
+| Validate | "Go fetches and validates the candidate, acknowledges readiness" (GO-73): Go validates the whole candidate against this shared schema, and refuses one it cannot enforce. It does not check that a model is installed (see "Known limitations"). The protocol is the open item `catalog activation protocol`. | Go            |
+| Evaluate | Go reads the active revision before each new evaluation and dispatch and records the admission and evaluated revision in every decision (GO-72).                                                                                                                                                              | Go            |
+| Reject   | An invalid file never partially activates. The last accepted revision stays active and the rejection reason is visible (`policy_reload_rejected`). With no valid initial revision the gateway is not ready and dispatches nothing.                                                                            | NestJS and Go |
 
 The file is an import input, "not a second configuration authority": after an import, the stored
 revision is what counts, and editing the file changes nothing until the next accepted import.
@@ -138,8 +138,10 @@ model may serve both metered purposes, agent and security; "Purpose is assigned 
 code" in Go, never by the file or the model.
 
 NestJS validates the syntax of each entry. Whether a model is installed is known only where the
-model runs, so Go checks it when it validates the candidate. A request for a model outside the active
-list is denied before dispatch (`model_not_allowed`), even on a previously admitted run.
+model runs, and nothing checks it at import or activation: a tag the provider does not have activates
+and fails closed at the first model call (see "Known limitations"). Every model call is checked
+against the active list and denied before dispatch (`model_not_allowed`) when its model is not in
+it, even on a previously admitted run.
 
 `budgets`, all positive integers written in plain decimal digits (zero, negative or fractional values, and spellings such as `24.0`, `0x18` or `0o30`, reject the file):
 
@@ -173,7 +175,8 @@ reserved against both the shared ceiling and its purpose ceiling before dispatch
 "cannot escape the task ceiling".
 
 Budget changes apply as current restrictions. Lowering a budget constrains future dispatches of
-running tasks. Raising one never exceeds the ceiling stored in an admitted passport; "an expanded
+running tasks; the one exception is `run_expiry_minutes`, which is fixed into the passport's
+expiry at admission and so applies to the next run (see "Where each setting takes effect"). Raising one never exceeds the ceiling stored in an admitted passport; "an expanded
 resource, destination, model or budget grant requires renewed admission".
 
 ### Controls
@@ -199,7 +202,8 @@ file ("Only registered adapters and supported policy controls would be executabl
 
 The boundaries are the report's "Proposed hybrid evaluation boundaries": before model dispatch
 (`model_input`), tool result to agent context (`tool_result`) and the proposed action
-(`action_proposal`).
+(`action_proposal`). Live agent runs inspect tool results and action proposals; the `model_input`
+boundary runs on the judge's test entry (see "Known limitations").
 
 Notes on each guard:
 
@@ -262,7 +266,9 @@ Report: "Fixed templates/projections; authorized destinations; safe export field
 
 `enabled_templates` can only narrow. It is a current restriction like a lowered budget: removing a
 template forbids new reports from it, and a queue attempt for an existing report from that template
-is denied (`template_not_allowed`). A template listed here still needs the passport to allow it.
+is denied at the gate with `template_not_allowed`, before any review is requested. An action that was
+already approved is refused at execution as `source_policy_changed`, because every catalog change
+after an action was evaluated voids it. A template listed here still needs the passport to allow it.
 
 The other settings the report names for this group are not in the schema yet, and the schema holds no
 values for them:
@@ -276,6 +282,56 @@ storage`.
 
 Go derives every classification from trusted records; no setting here classifies or declassifies a
 report.
+
+## Where each setting takes effect
+
+Audited against the Go code on 2026-10-04 (branch `go/w3-policy-audit`). Go reads the active revision
+again for every decision: the pointer is read on each snapshot read and only the parse is cached per
+immutable revision (`catalog/catalog.go:90`). "Next call" means the next model call or gateway
+decision of a running run; "next run" means the next admission. Every value is validated twice, at
+import (`apps/api/src/policies/policy-file.ts`) and by Go at activation (`catalog/activation.go`
+through `buildSnapshot`, `catalog.go:127`). A value Go cannot parse is `ErrUnavailable`: the revision
+does not activate, and a stored revision that cannot be parsed dispatches nothing. A raised value
+never exceeds the stored passport (`EffectiveFor`, `catalog.go:243`).
+
+| Setting                                                                          | Go reads it                                                                                                  | Takes effect                                                                                     | Invalid value                                                                              | Test                                                                                                                                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version`                                                                 | `ParseLimits`, `catalog.go:171`                                                                              | Activation: a revision not at `1` never activates                                                | Rejected at import and by Go                                                               | `TestParseLimitsFailsClosed` ("wrong schema version")                                                                                                                   |
+| `allowed_models`                                                                 | `ParseLimits`; per call `agent/chain.go:212` and `agent/step.go:100`; passport intersection `EffectiveFor`   | Next call, also for an admitted run                                                              | Empty list rejected. Syntax is checked at import only; installation is not checked (F3)    | `TestTheActiveCatalogNarrowsEveryStep` ("model removed by the catalog"), `TestParseLimitsFailsClosed` ("no models")                                                     |
+| `budgets.calls_total`, `calls_agent`, `calls_security`                           | `ParseLimits`; ledger ceiling `agent/chain.go:224`; agent steps `agent/loop.go:283`                          | Next call, lowered or raised, never above the passport                                           | At least 1, sub-limits at most the total, at most 2^53-1: rejected at import and by Go     | `TestPostgresReserveWithinNarrowsButNeverWidens`, `TestModelGatewayAppliesALoweredCatalogLimitToARunningPassport`, `TestParseLimitsFailsClosed` (sub-limits, range)     |
+| `budgets.tokens_total`                                                           | `ParseLimits`; ledger ceiling `agent/chain.go:225`                                                           | Next call                                                                                        | At least 1: rejected at import and by Go                                                   | `TestPostgresReserveWithinNarrowsButNeverWidens` (token ceiling), `TestParseLimitsFailsClosed` ("zero tokens total")                                                    |
+| `budgets.request_timeout_seconds`                                                | `ParseLimits`; `agent/chain.go:225` and `:233`                                                               | Next call                                                                                        | At least 1 and shorter than `run_expiry_minutes` in seconds: rejected at import and by Go  | `TestPostgresReserveWithinNarrowsButNeverWidens` (timeout ceiling), `TestParseLimitsFailsClosed` ("timeout beyond expiry")                                              |
+| `budgets.local_max_concurrency`                                                  | `ParseLimits`; slot count `agent/chain.go:240`                                                               | Next call                                                                                        | At least 1: rejected at import and by Go                                                   | `TestModelGatewaySlotWaitKeepsTheFullRequestTime` (slots from the snapshot), `TestParseLimitsFailsClosed` ("zero local concurrency")                                    |
+| `budgets.run_expiry_minutes`                                                     | `ParseLimits`; `admission/admission.go:277` and `:313`, `admission/options.go:54`                            | Next run: the passport keeps its own `expires_at` from admission                                 | At least 1: rejected at import and by Go                                                   | `admission_test.go:133` (expiry from admission), `TestParseLimitsFailsClosed` ("zero run expiry")                                                                       |
+| `budgets.tool_attempts`                                                          | `ParseLimits`; `policy/scope.go` `LoadScope` through `EffectiveFor`, used at `policy/executor.go:162`        | Next call, lowered or raised, never above the passport (F1, fixed)                               | At least 1: rejected at import and by Go                                                   | `TestToolAttemptLimitFollowsTheActiveCatalogButNeverWidensThePassport`, `TestParseLimitsFailsClosed` ("zero tool attempts")                                             |
+| `budgets.corrections`                                                            | `ParseLimits`; `agent/loop.go:461` through `EffectiveFor`                                                    | Next call, lowered or raised, never above the passport                                           | Import requires at least 1; Go also accepts 0 and rejects negative or fractional values    | `TestEffectiveLimitsNarrowButNeverWidenThePassport`, `TestParseLimitsFailsClosed`. Not tested: lowering it through the catalog during a run                             |
+| `budgets.agent_output_tokens`, `security_output_tokens`, `input_template_tokens` | Accounting reader per call, `agent/chain.go:203` to `:228`, with a same-revision check                       | Next call                                                                                        | Absent takes the default; present must be a positive integer (null, 0, fractions rejected) | `TestParseLimitsReadsTheAccountingFieldsWithTheirDefaults`, `TestModelGatewayRefusesACallAcrossTwoCatalogRevisions`                                                     |
+| `controls.*.enabled`                                                             | `security.SettingsFromCatalog`, `security/catalog.go:41`; applied by `appliesAt`, `security/security.go:131` | Next step: tool results, action proposals and the judge entry                                    | Missing or non-boolean: rejected at import and by Go (`ErrSettings`)                       | `TestSettingsFromCatalogRejectsUnenforceableCatalogs` ("missing enabled"), the `enabled` cases in `content_test.go`, `signatures_test.go`, `semantic_test.go`           |
+| `controls.secret_pattern.mode`, `controls.semantic_injection.mode`               | `guardFromCatalog`, `security/catalog.go:102`; `security/content.go:205`, `security/semantic.go:312`         | Next step                                                                                        | Only `block` or `redact`; `allow` or a missing mode is rejected                            | `TestSettingsFromCatalogRejectsUnenforceableCatalogs` ("mode allow"), `TestEvaluateAppliesThresholdInGo` (redact masks the field)                                       |
+| `controls.semantic_injection.threshold`                                          | `security/catalog.go:102`; compared at `security/semantic.go:309`: a score at or above it fires              | Next step                                                                                        | Outside 0 to 1, missing or not a number: rejected at import and by Go                      | `TestEvaluateAppliesThresholdInGo` (at the threshold blocks), `TestSettingsFromCatalogRejectsUnenforceableCatalogs` ("threshold out of range")                          |
+| `controls.*.boundaries`                                                          | `security/catalog.go:102`; `appliesAt` at `inspect.go:224`, `action.go:86` and `evaluation.go:209`           | Next step. `model_input` applies on the judge entry only (F4)                                    | Empty, duplicate or unsupported values rejected at import and by Go                        | `TestSettingsFromCatalogRejectsUnenforceableCatalogs` ("empty boundaries", "secret at action proposal"), `Boundaries` cases in `inspect_test.go`, `action_test.go`      |
+| `signatures.path`                                                                | `security/catalog.go:41`: presence only; the importer reads the file                                         | Import only: Go uses the feed bytes stored at import                                             | A URL, a directory part or `..` is rejected at import; a missing key is rejected by Go     | `policy-file.spec.ts` (path cases), `TestSettingsFromCatalogRejectsUnenforceableCatalogs` ("missing signatures")                                                        |
+| `signatures.revision`                                                            | `security/catalog.go:41`: must equal the stored feed's revision                                              | Activation: a mismatch never activates                                                           | Rejected at import and by Go (`ErrFeed`)                                                   | `TestSettingsFromCatalogRejectsUnenforceableCatalogs` ("feed revision differs")                                                                                         |
+| `signatures.disabled_rules`                                                      | `security/catalog.go:41`; skipped per rule at `security/signatures.go:210`                                   | Next step                                                                                        | Unknown or duplicate rule IDs rejected at import and by Go                                 | `TestSettingsFromCatalogRejectsUnenforceableCatalogs` ("disabled rule not in feed", "duplicate disabled rule"), `signatures_test.go`                                    |
+| `reports.enabled_templates`                                                      | `ParseLimits`; `EffectiveFor`; `policy/scope.go` `LoadScope`; queue check in `policy/gate.go`                | Next call: new `create_report` and queue of an existing report are denied `template_not_allowed` | Unknown template rejected at import and by Go; an empty list is allowed                    | `TestTemplateRevokedThroughTheCatalogNarrowsTheScope`, `TestQueueOfAReportFromADisabledTemplateIsDeniedBeforeReview`, `TestParseLimitsFailsClosed` ("unknown template") |
+
+The audit found four behaviours that differed from this file. Two are fixed in code and covered by the
+tests above: F1, `budgets.tool_attempts`, which the catalog did not narrow, and F2,
+`reports.enabled_templates`, which was not applied when queueing an existing report. The other two are
+documented limits: F3 and F4.
+
+### Known limitations
+
+- **F3, allowed models are not probed.** `allowed_models` is checked per call. Neither the import nor
+  the activation asks the provider whether a tag is installed, so an uninstalled tag activates and
+  fails closed at the first model call.
+- **F4, `model_input` runs on the judge's test entry.** The `model_input` boundary runs on
+  `POST /api/control/evaluate`. Live agent runs inspect tool results and action proposals; nothing
+  inspects the task context before it is sent to the model, so removing `model_input` from a guard's
+  `boundaries` changes only what the test entry evaluates.
+- `budgets.corrections` may be 0 in Go but not in the import, so an imported file cannot produce it.
+- Lowering `budgets.corrections` or `budgets.calls_agent` through the catalog during a run has no test
+  of its own; the `calls_total`, `calls_security`, token, timeout and tool-attempt ceilings do.
 
 ## Boundaries no setting can remove
 
@@ -311,5 +367,5 @@ Each of these rejects the whole file and leaves the last accepted revision activ
 | Out-of-range value | `threshold: 1.5`; `mode: allow`; `boundaries: [action_proposal]` on `secret_pattern`      | Allowed values per key                         |
 | Wrong version      | `schema_version: 2`                                                                       | Version must be `1`                            |
 
-A syntactically valid tag for a model that is not installed passes the import and is rejected when
-Go validates the candidate.
+A syntactically valid tag for a model that is not installed passes the import and the activation;
+it fails closed at the first model call (see "Known limitations").

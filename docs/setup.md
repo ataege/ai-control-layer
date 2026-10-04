@@ -136,8 +136,9 @@ active control catalog (README, "`pnpm reset:demo`").
 
 ### Local model
 
-Start Ollama, pull `qwen3.5:4b` and set `MODEL_NAME=qwen3.5:4b` in `.env` before starting the
-applications: section 7. Without `MODEL_NAME` the gateway starts but every model call fails closed.
+Start Ollama and pull `qwen3.5:4b` before starting the applications: section 7. `.env` already names
+it as `MODEL_NAME` (`pnpm run setup` writes it and warns if `ollama list` does not show it). With
+`MODEL_NAME` empty the gateway starts but every model call fails closed.
 
 ### Start the applications
 
@@ -391,9 +392,12 @@ ollama run <model> "hello"
 
 ### Point the gateway at it
 
-Set `MODEL_NAME` in `.env` to the tag you pulled (empty in `.env.example`), for example
-`MODEL_NAME=qwen3.5:4b`; it must be the exact tag, without whitespace. `.env.example` sets
-`MODEL_BASE_URL=http://localhost:11434`, and the gateway uses `http://127.0.0.1:11434` when the
+`.env.example` sets `MODEL_NAME=qwen3.5:4b`, the decided model (decision 6, provisional), so `pnpm run
+setup` puts it in `.env`; on an existing `.env` it also fills `MODEL_NAME` in when the value is empty
+and never overwrites a value you set. Change it only to use another tag you pulled: it must be the
+exact tag, without whitespace, and one of the active catalog's `allowed_models`. Setup runs
+`ollama list` and warns, without failing, when the tag is not listed or Ollama is not running.
+`.env.example` also sets `MODEL_BASE_URL=http://localhost:11434`, and the gateway uses `http://127.0.0.1:11434` when the
 variable is empty; change it only if your Ollama listens elsewhere. It must be an HTTP or HTTPS
 origin without credentials, query or path. Neither variable is a secret, and local Ollama needs no
 credential, so there is no API key variable.
@@ -501,8 +505,9 @@ pnpm install --frozen-lockfile
 pnpm run setup                     # creates .env with generated secrets; values are not printed
 ```
 
-Then set `MODEL_NAME=qwen3.5:4b` in `.env` (without it the gateway starts but every model call
-fails closed). Never write `pnpm setup` (a pnpm built-in that edits the shell profile).
+`.env` already has `MODEL_NAME=qwen3.5:4b`; check that the line is still there and that setup did
+not warn about `ollama list` (with `MODEL_NAME` empty the gateway starts but every model call fails
+closed). Never write `pnpm setup` (a pnpm built-in that edits the shell profile).
 
 If another checkout on this machine has used the default Compose project `starter` (for example the
 everyday working copy), its volume `starter_postgres-data` still holds that checkout's database

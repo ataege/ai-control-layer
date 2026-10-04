@@ -315,6 +315,11 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 			denial.AlternativeTemplate = verdict.AlternativeTemplate
 			denial.DeniedReport = &verdict.Report
 			return denial
+		case !containsString(scope.AllowedTemplates, verdict.Report.Template):
+			// The report's stored template is outside what the passport allows and the active catalog
+			// still enables (reports.enabled_templates): a current restriction, so it is denied here
+			// and never sent to review.
+			return stored(OutcomeDeny, ReasonTemplateNotAllowed)
 		}
 	}
 
