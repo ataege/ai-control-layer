@@ -1464,11 +1464,15 @@ this side starts and reviews.
   - Tests: specs: a non-administrator is refused; a revocation cannot widen authority or change a
     passport; database-backed tests through X-24 for the record; against the real gateway, a run
     waiting for review dispatches nothing after the revocation: `pnpm --filter api run test`.
+  - Deferred (2026-10-04, lead): not done tonight. Tier B, and every prerequisite is missing: the record
+    shape (`revocation reads`, open), the migration (SH-38; no revocation table on main) and the Go
+    reader that enforces it before dispatch and execution (GO-52, blocked on the same items). No
+    migration or entity was added, so nothing claims revocation exists.
   - Report: "Exact action approval versioning and execution rechecks" (Versioned policy and current
     revocation); "Users operating model and proposed user journeys" (Proposed user
     responsibilities); "Threat model limits and unresolved design choices" ("Verify that
     cancellation and revocation prevent future dispatch after a review wait")
-  - Blocked by: `revocation reads`; `decision 7 in docs/product/README.md`
+  - Blocked by: `revocation reads`; SH-38; GO-52; `decision 7 in docs/product/README.md`
 
 - [x] **API-33 · Serve the authenticated policy reload and activation**
   - Done (2026-10-04): lead-approved reviewer-only POST /api/policies/reload accepts exactly {}, reads fixed repository policy/feed files with the CLI's shared bounded reader, imports with reload/verified-user provenance and only sets requested_revision_id. NestJS calls no Go activation endpoint and never waits for activation. Responses: 202 requested with feed version label or null, 200 unchanged, 400 shared-shaped policy error with safe issue pairs, 409 revision_pending and fail-closed 401/403/503. GET /api/policies/status reads app pointer facts and exposes only requested/validated/active/feed IDs and approved code/message/revisionId/stage mapping, rejecting malformed or imprecise stored values. NestJS-owned types/schemas/fixtures land together; the Go-owned error schema is unchanged. API lint/typecheck/build exited 0; API unit tests: "407 passed"; `pnpm test:db api`: "71 passed, 0 failed, 0 skipped"; shared contracts lint/typecheck/build exited 0, tests: "9 passed". Real authenticated API/Go check: unchanged 200; edited policy requested 202, actor recorded and watcher activation observed; invalid policy 400 with issues and prior active revision preserved; status import_validation with null rejected revisionId; original file restored and reactivated. Overall `pnpm verify`: "4 passed, 2 failed, 0 skipped" (merged web formatting and two homepage tests); smoke: "22 passed, 8 failed, 6 skipped" (existing login redirects). These are failed checks; keep local until owners resolve them. Removed the unused obsolete combined run-view DTO that main's contract changes made fail typecheck; no public run response changed. No Docker/browser/live-model quality evidence claimed. The lead's watcher-only flow supersedes this block's older NestJS activation wording.
