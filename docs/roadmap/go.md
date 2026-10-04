@@ -1684,6 +1684,13 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     with the new revision recorded, raised budgets left the passport unchanged, a lowered budget refused
     the next security call); a threshold-only change is shown by
     `TestPostgresActiveSnapshotFollowsThePointer`, not live (the live score was 1.0).
+  - Correction (2026-10-04, lane 3c, found during GO-70): the gate does not narrow report templates by
+    the active catalog. `policy.PassportScopeReader.LoadScope` takes `AllowedTemplates` from the
+    passport alone, while `agent/loop.go` computes `catalog.EffectiveFor` but does not hand its
+    templates to the gate, so a template a judge disables in `reports.enabled_templates` mid-run is
+    still accepted for a new `create_report`. Limits, models and the semantic and signature settings do
+    apply at once; an already approved action is still refused after any catalog change (its approval is
+    bound to the revision). Fixed under GO-70 (lane 3c, with lane w3's and the lead's approval): `LoadScope` now narrows the gate's templates by the active catalog.
   - Report: "Central policy configuration and safe reload"; "Trusted authority and passport invariants"; "Relative implementation milestones and critical dependencies" (Hours 6-10)
   - Blocked by: nothing
 
@@ -2756,7 +2763,7 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     "Live demonstration storyboard and proof checks" (beat 6)
   - Blocked by: `rename operation` (rename part)
 
-- [ ] **GO-70 · Prove source or template policy changes after review**
+- [x] **GO-70 · Prove source or template policy changes after review**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-45, GO-52 · Needs: X-34, X-47 · Provides: X-76
   - Paths: none (scenario tests in the packages above)
@@ -2777,8 +2784,25 @@ policy:import` and the gateway's activation (GO-73), every decision through `POS
     constants, so a running gateway cannot change them during a review; a stored report with an
     unregistered projection version is refused by the adapter test above. Missing: revoking a
     source or template during review, which needs GO-52 and the revocation records (SH-38).
+  - Completed (2026-10-04, lane 3c on go/3c-70): changes during the review wait are rejected by lane
+    w3's `TestApprovedActionRechecksBeforeExecution` (a source version change →
+    `resource_version_changed`; any active catalog revision change → `source_policy_changed`; outbox 0,
+    no attempt) and lane w2's 5ed3b7e (an unregistered projection version → `template_not_allowed`,
+    outbox 0). An approval is bound to the catalog revision, so revoking a template through
+    `reports.enabled_templates` during a review wait rejects the old approval. New: the gate itself now
+    narrows report templates by the active catalog. `policy.PassportScopeReader.LoadScope` sets
+    `AllowedTemplates` to `catalog.EffectiveFor(passport, snapshot).ReportTemplates` (it only narrows)
+    and returns `ErrScopeUnavailable` without an enforceable catalog. Before this, a template disabled
+    mid-run was still accepted for a new `create_report`, which needs no review. Tests
+    (`policy/catalog_revocation_postgres_test.go`, against the stored passport): a template still
+    enabled stays allowed, and a catalog enabling a template the passport lacks adds nothing; after the
+    template is removed it leaves the scope, a new `create_report` with it is denied
+    `template_not_allowed`, and the denial feedback no longer suggests it; without a catalog,
+    `LoadScope` and `ActiveCatalogRevision` fail with `ErrScopeUnavailable` and the gate denies. With
+    the narrowing removed, the revoked case fails. Not covered: revoking a source record, because no
+    revocation record exists (SH-38, GO-52; deferred with API-22).
   - Report: "Validation plan and evidence matrix" (Source or template policy changes)
-  - Blocked by: nothing
+  - Blocked by: nothing (source revocation records: SH-38, GO-52)
 
 - [x] **GO-84 · Prove the live semantic cases, the false-negative boundary and guard failure**
   - Owner: Go implementer (report role: Implementer 4, enforcement) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
