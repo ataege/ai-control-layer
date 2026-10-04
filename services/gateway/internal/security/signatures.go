@@ -13,6 +13,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // The feed grammar (lead's delegate, 3 October 2026): data-only rules whose pattern is a plain
@@ -161,7 +163,9 @@ func NormalizeText(text string) string {
 	var builder strings.Builder
 	builder.Grow(len(text))
 	pendingSpace := false
-	for _, character := range text {
+	// Compatibility decomposition folds full-width, mathematical and circled letters to plain ones
+	// and splits accented letters from their marks, which the loop then drops.
+	for _, character := range norm.NFKD.String(text) {
 		switch {
 		case unicode.Is(unicode.Cf, character), unicode.Is(unicode.Mn, character), unicode.Is(unicode.Me, character):
 			continue
