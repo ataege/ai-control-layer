@@ -148,14 +148,21 @@ func TestEffectiveLimitsNarrowButNeverWidenThePassport(t *testing.T) {
 
 func TestParseLimitsFailsClosed(t *testing.T) {
 	broken := map[string]string{
-		"not json":              `{`,
-		"wrong schema version":  strings.Replace(policyContent, `"schema_version": 1`, `"schema_version": 2`, 1),
-		"missing calls total":   strings.Replace(policyContent, `"calls_total": 24, `, ``, 1),
-		"zero tool attempts":    strings.Replace(policyContent, `"tool_attempts": 12`, `"tool_attempts": 0`, 1),
-		"negative corrections":  strings.Replace(policyContent, `"corrections": 2`, `"corrections": -1`, 1),
-		"timeout beyond expiry": strings.Replace(policyContent, `"request_timeout_seconds": 20`, `"request_timeout_seconds": 900`, 1),
-		"no models":             strings.Replace(policyContent, `["qwen3.5:4b"]`, `[]`, 1),
-		"unknown template":      strings.Replace(policyContent, `"vendor_reconciliation_v1"]`, `"public_v1"]`, 1),
+		"not json":                   `{`,
+		"wrong schema version":       strings.Replace(policyContent, `"schema_version": 1`, `"schema_version": 2`, 1),
+		"missing calls total":        strings.Replace(policyContent, `"calls_total": 24, `, ``, 1),
+		"zero tool attempts":         strings.Replace(policyContent, `"tool_attempts": 12`, `"tool_attempts": 0`, 1),
+		"negative corrections":       strings.Replace(policyContent, `"corrections": 2`, `"corrections": -1`, 1),
+		"timeout beyond expiry":      strings.Replace(policyContent, `"request_timeout_seconds": 20`, `"request_timeout_seconds": 900`, 1),
+		"no models":                  strings.Replace(policyContent, `["qwen3.5:4b"]`, `[]`, 1),
+		"agent calls above total":    strings.Replace(policyContent, `"calls_agent": 12`, `"calls_agent": 30`, 1),
+		"security calls above total": strings.Replace(policyContent, `"calls_security": 12`, `"calls_security": 30`, 1),
+		"zero tokens total":          strings.Replace(policyContent, `"tokens_total": 20000`, `"tokens_total": 0`, 1),
+		"zero local concurrency":     strings.Replace(policyContent, `"local_max_concurrency": 2`, `"local_max_concurrency": 0`, 1),
+		"zero run expiry":            strings.Replace(policyContent, `"run_expiry_minutes": 15`, `"run_expiry_minutes": 0`, 1),
+		"fractional corrections":     strings.Replace(policyContent, `"corrections": 2`, `"corrections": 1.5`, 1),
+		"integer beyond safe range":  strings.Replace(policyContent, `"calls_total": 24`, `"calls_total": 9007199254740992`, 1),
+		"unknown template":           strings.Replace(policyContent, `"vendor_reconciliation_v1"]`, `"public_v1"]`, 1),
 	}
 	for name, content := range broken {
 		if _, err := ParseLimits([]byte(content)); !errors.Is(err, ErrUnavailable) {
