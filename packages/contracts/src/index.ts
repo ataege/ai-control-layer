@@ -774,3 +774,24 @@ export interface ReportView {
   contentWithheld: boolean;
   lineage: LineageSummary[];
 }
+
+/**
+ * X-79: the semantic evaluator's verdict as the local model must return it (Go's
+ * security.verdictFormat, revalidated by security.ParseVerdict). Untrusted model output: Go
+ * applies the thresholds, and a verdict can only restrict.
+ */
+export interface SemanticVerdict {
+  risk_category:
+    "none" | "instruction_injection" | "data_exfiltration" | "scope_escalation" | "approval_bypass";
+  /** From 0 to 1. */
+  score: number;
+  reason_code:
+    | "no_risk_found"
+    | "instruction_override"
+    | "recipient_redirect"
+    | "out_of_scope_request"
+    | "internal_disclosure"
+    | "approval_bypass"
+    | "relabel_attempt"
+    | "other_risk";
+}
