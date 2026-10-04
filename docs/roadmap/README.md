@@ -1407,14 +1407,22 @@ estimates. Every size is a planning estimate, never a schedule.
   - Report: "Data ownership and the transition from starter to product" (Proposed database ownership)
   - Blocked by: nothing
 
-- [ ] **SH-49 · Write the hostile-note, redaction and semantic corpus fixtures**
-  - **Progress:** Not ticked (2026-10-04): `fixtures/hostile-notes.json` and `fixtures/semantic-corpus.json` carry `"synthetic": true` and `pnpm test:fixtures` passes (18 tests), but `pnpm db:seed` does not load them; the gateway tests, the judge client and `verify:controls` read them.
+- [x] **SH-49 · Write the hostile-note, redaction and semantic corpus fixtures**
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-18 · Needs: X-06 · Provides: X-86
   - Paths: the seed location of SH-18
   - Work: A separate hostile-note fixture (redirect to invoice_B01 or another recipient, or include internal information in a vendor message), distinct from the clean authorized note; defined secret-redaction cases; and "a small labeled corpus containing benign text, direct/indirect instruction attacks and secret-redaction cases". Harmless attack strings only.
   - Done when: the fixtures load through the seed command and are labelled synthetic.
   - Tests: run the seed on an empty database and query the fixtures.
+  - Completed (2026-10-04, lane 3c): loading into the database is not required: the corpus is read directly by the Go security tests, the replays, `pnpm verify:controls` and the judge client (accepted by the lead 2026-10-04); `pnpm db:seed` does not load it.
+    `fixtures/hostile-notes.json` (the hostile notes, distinct from the clean authorized note in
+    `demo-records.json`) and `fixtures/semantic-corpus.json` (`fixture_version` 3: benign texts with
+    hard negatives, direct and indirect instruction attacks, 13 secret-redaction cases) both carry
+    `synthetic: true`, a `fixture_set` and a version, and `fixtures/README.md` labels the directory
+    synthetic. Readers: the Go security tests (`content_test.go`, `boundary_test.go`,
+    `corpus_live_test.go`), the labelled replay (`policy/replay.go`), `pnpm verify:controls` and the
+    judge client (`scripts/judge-client.mjs --case`). `pnpm test:fixtures`: 18 tests, 18 pass, 0 fail
+    (2026-10-04). The demo records in `demo-records.json` are the ones `pnpm db:seed` loads.
   - Report: "Illustrative invoice scenario and future domain adaptations" (Supporting rehearsals); "Validation plan and evidence matrix" (One command test contract)
   - Blocked by: nothing
 
@@ -1535,12 +1543,18 @@ estimates. Every size is a planning estimate, never a schedule.
   - Done when: a report row cannot be committed without its lineage rows, and the migration reverts
     cleanly.
   - Tests: a database-backed test through X-24; migration round trip.
+  - Progress (2026-10-04, lane 3c; lead decision: no migration before the freeze): lineage table and FK
+    done (`runtime.report_lineage`, migration 1791060000000: immutable rows, foreign key to
+    `demo.reports` per organization); at-least-one-lineage is enforced by Go (one transaction in
+    `provenance/store.go`, `report_lineage_missing` at export); a deferred DB trigger is a known limit
+    (a `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` on `demo.reports` would enforce it at
+    commit, but the tests that commit a report without lineage on purpose would have to change in the
+    same round).
   - Report: "MVP" (Inherited report restrictions); "Durable state idempotency audit and uncertain
     outcomes"
   - Blocked by: `report storage`; `internal report rendering` (context part)
 
-- [ ] **SH-41 · Write the app-schema migration for templates and projection rules**
-  - **Progress:** Not ticked (2026-10-04): `app.task_templates` holds 0 rows after `pnpm db:seed`; the two templates and the projection rule are not migrated data.
+- [x] **SH-41 · Write the app-schema migration for templates and projection rules** Dropped: the templates and the projection rule are Go constants (lead, 2026-10-04)
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: SH-15 · Needs: X-24, X-68 (part: entities) · Provides: X-68 (part: migration); X-70
     (part, if `source classification storage` chooses `app`)
@@ -1552,6 +1566,12 @@ estimates. Every size is a planning estimate, never a schedule.
   - Done when: the two fixed templates and the projection rule are migrated and readable by Go, and
     the migration reverts cleanly.
   - Tests: migration round trip; a query from the Go side's connection.
+  - Dropped (2026-10-04, lead): the same decision as API-28. The two report templates and the vendor
+    projection rule are Go constants in `services/gateway/internal/provenance`
+    (`InternalInvestigationV1`, `VendorReconciliationV1`, `VendorInvoiceFieldsV1`;
+    `docs/product/README.md` decisions 4 and 5), read by Go with their versions, so there is nothing for
+    NestJS to write or Go to read from the `app` schema. No `report_templates` or `projection_rules`
+    table, entity or migration is added.
   - Report: "MVP" (Trusted template manifests); "Proposed team ownership" (Implementer 2: "Own
     versioned source-policy and projection configuration")
   - Blocked by: nothing
