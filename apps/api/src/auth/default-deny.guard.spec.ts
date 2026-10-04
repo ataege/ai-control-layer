@@ -1,4 +1,5 @@
-import { Controller, Get, UnauthorizedException } from "@nestjs/common";
+import { Controller, Get, Post, Req, UnauthorizedException } from "@nestjs/common";
+import type { Request } from "express";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -23,6 +24,12 @@ class GuardTestController {
   protectedRoute() {
     protectedHandlerCalls.count += 1;
     return { ok: true };
+  }
+
+  // Echoes the organization the guard resolved, to prove the request cannot choose it.
+  @Post("context")
+  context(@Req() request: Request) {
+    return { organizationId: request.operatorContext.organizationId };
   }
 
   @Public()
@@ -108,6 +115,44 @@ describe("DefaultDenyGuard", () => {
     expect((response.body as ErrorBody).error.message).toBe("User has no organization membership");
   });
 
+  it("takes the organization from the membership, never from the query, body or a header", async () => {
+    authProviderMock.authenticate = vi.fn().mockResolvedValue({ subjectId: "user-in-a" });
+    membershipRepoMock.findOne = vi
+      .fn()
+      .mockResolvedValue({ userId: "user-in-a", organizationId: "organization-a", roles: [] });
+
+    const response = await request(app.getHttpServer())
+      .post("/api/guard-test/context?organizationId=organization-b")
+      .set("Cookie", ["session=valid-session-id"])
+      .set("x-organization-id", "organization-b")
+      .send({ organizationId: "organization-b" });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ organizationId: "organization-a" });
+  });
+
+  it("scopes an operator with several memberships to the oldest one (known limit)", async () => {
+    // Known limit: one organization per operator in the demo; there is no organization switch.
+    // The membership table allows a user in several organizations, so the order is pinned here.
+    authProviderMock.authenticate = vi.fn().mockResolvedValue({ subjectId: "user-in-two" });
+    membershipRepoMock.findOne = vi.fn().mockResolvedValue({
+      userId: "user-in-two",
+      organizationId: "oldest-organization",
+      roles: [],
+    });
+
+    const response = await request(app.getHttpServer())
+      .post("/api/guard-test/context")
+      .set("Cookie", ["session=valid-session-id"])
+      .send({});
+
+    expect(membershipRepoMock.findOne).toHaveBeenCalledWith({
+      where: { userId: "user-in-two" },
+      order: { createdAt: "ASC" },
+    });
+    expect(response.body).toEqual({ organizationId: "oldest-organization" });
+  });
+
   it("rejects a wrong, expired or revoked credential with 401", async () => {
     authProviderMock.authenticate = vi
       .fn()
@@ -162,7 +207,7 @@ describe("DefaultDenyGuard", () => {
     expect(protectedHandlerCalls.count).toBe(callsBefore);
   });
 
-  it("still serves the OpenAPI document behind the guard (API-03)", async () => {
+  it("serves the OpenAPI document publicly (a deliberate development exposure) while product routes stay guarded (API-03)", async () => {
     // Built like main.ts: the document is mounted before init, with the same global guard.
     const moduleRef = await Test.createTestingModule({
       controllers: [GuardTestController],

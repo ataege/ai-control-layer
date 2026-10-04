@@ -155,10 +155,6 @@ failure or a body outside the contract gives a sanitized 503, never an empty cat
 
 Known limits:
 
-- The draft judge CLI (`pnpm judge`, `scripts/judge-client.mjs`) still sends `run_id` and omits the
-  null fields; the API's X-91 request needs `runId` plus all of `kind`, `text`, `tool` and
-  `arguments` and refuses unknown keys, so the CLI cannot reach a decision until it is updated.
-  The API adds no compatibility defaults.
 - Activity uses polling, not server-sent events (API-25 was not built).
 - Organization access is proven through the public path with labelled Go response fixtures
   (`src/auth/product-access.db-spec.ts`: a second organization gets 404 on every object route).
@@ -168,3 +164,17 @@ Known limits:
 - Teammate clean-checkout setup, Docker, and a new live-model approval/outbox rehearsal were not
   verified in this API work. Fixtures prove contract and authorization behavior, not semantic
   detection quality. Cookie auth has no production identity federation, onboarding or hardening claim.
+
+### Known limits (review of api/3c, 2026-10-04)
+
+- `/api/docs` and `/api/docs-json` are mounted outside the global guard: a deliberate
+  development-only exposure (smoke asserts docs-json 200). They describe routes, never data;
+  every product route stays behind the session guard.
+- One organization per operator in the demo, with no organization switch. The membership table
+  allows a user in several organizations; the guard uses the oldest membership
+  (`DefaultDenyGuard`, pinned by its spec).
+- The CSRF check lives only in the web proxy. The API port has no Origin check: a cross-origin
+  request gets no CORS headers but is not refused by the API, so browsers must reach the API only
+  through the same-origin forwarder (decision 3).
+- Gateway readiness keeps its schema (worker readiness, option B): a stopped worker or a missing
+  catalog is reported in the check still named `databaseReadiness`, as `not_ready`.
