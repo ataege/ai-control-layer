@@ -830,7 +830,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     implementation milestones and critical dependencies" (Critical path and sensible reductions)
   - Blocked by: `read path`; `decision 7 in docs/product/README.md`
 
-- [ ] **API-15 · Carry the worker readiness change through the diagnostics route and page**
+- [x] **API-15 · Carry the worker readiness change through the diagnostics route and page**
   - API portion verified (2026-10-04): decision 11 explicitly keeps the existing readiness contract. An HTTP fixture sends authenticated ping 200 and readiness 503 with its database check up; the real gateway client and diagnostics controller preserve 503 degraded/not_ready. Swagger now describes aggregate database/worker/catalog readiness. Checks: API lint, typecheck and build exited 0; API unit tests: "367 passed"; `pnpm verify`: "6 passed, 0 failed, 0 skipped"; host smoke: "28 passed, 0 failed, 5 skipped". This HTTP fixture is not a live-worker measurement. The overall task stays open for the web owner's browser presentation/verification; no web or shared contract edits were made.
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: B · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: nothing · Needs: X-32 · Provides: nothing
@@ -847,9 +847,21 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
   - Tests: `gateway-client.service.spec.ts` and `diagnostics.controller.spec.ts` with a worker that
     is not ready; `apps/web/src/lib/service-checks.test.ts`: such a report never yields "healthy":
     `pnpm --filter api run test`; `pnpm --filter web run test`; `pnpm smoke`.
+  - Completed (2026-10-04, lane 3c on api/3c): `worker readiness` was settled with option B (no
+    readiness schema change): the gateway answers `/health/ready` 503 with its real database check
+    whenever the worker loop is not running (GO-09) or no enforceable catalog is active (GO-72). The API
+    already reads any 503 as `not_ready` (`gateway-client.service.ts` `interpretReadinessResponse`), so
+    diagnostics answers 503 `degraded` with the gateway check down, and the web reports it as degraded,
+    never healthy; no code change was needed. Tests: new `gateway-client.service.spec.ts` case with the
+    exact body of a stopped worker or missing catalog (503, `status: "unavailable"`,
+    `checks.database.status: "up"`) → `not_ready`; `diagnostics.controller.spec.ts` "returns 503
+    degraded when the gateway is reachable but not ready"; `apps/web/src/lib/service-checks.test.ts` (a
+    `not_ready` report yields `degraded`, never `healthy`). Health and diagnostics stay public
+    (`@Public()`). Known naming limit: the check is still called `databaseReadiness`, as option B keeps
+    the schema. `pnpm --filter api run test` (see the commit).
   - Report: "Durable state idempotency audit and uncertain outcomes" (durable jobs claimed with a
     lease); the readiness rule is the repository rule of decision 5 in `docs/product/README.md`
-  - Blocked by: `worker readiness`
+  - Blocked by: `worker readiness` (option B, no schema change)
 
 ### Next.js (report role: Implementer 1)
 

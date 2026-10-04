@@ -20,6 +20,7 @@ type StubBehaviour =
   | "server-error"
   | "bad-request"
   | "not-ready"
+  | "worker-not-ready"
   | "slow"
   | "garbage"
   | "redirect";
@@ -77,6 +78,14 @@ describe("GatewayClientService", () => {
           break;
         case "not-ready":
           sendJson(503, { status: "unavailable", service: "gateway" });
+          break;
+        case "worker-not-ready":
+          // GO-09/GO-72: the database is up, but the worker loop or the active catalog is not.
+          sendJson(503, {
+            status: "unavailable",
+            service: "gateway",
+            checks: { database: { status: "up" } },
+          });
           break;
         case "garbage":
           serverResponse.writeHead(200, { "content-type": "text/plain" }).end("not json");
@@ -187,6 +196,16 @@ describe("GatewayClientService", () => {
     stubBehaviour = "not-ready";
 
     await expect(client.checkReadiness("req-ready-2")).resolves.toMatchObject({
+      status: "down",
+      upstreamStatus: 503,
+      reason: "not_ready",
+    });
+  });
+
+  it("maps a not-ready worker or catalog with the database up to not_ready (API-15)", async () => {
+    stubBehaviour = "worker-not-ready";
+
+    await expect(client.checkReadiness("req-ready-3")).resolves.toMatchObject({
       status: "down",
       upstreamStatus: 503,
       reason: "not_ready",
