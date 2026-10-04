@@ -789,6 +789,7 @@ describes.
 
 | Document                                                 | Content                                                                                                                                                                                            |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/technical-handoff.md](docs/technical-handoff.md)   | The technical handoff index: where each part is, the run order, the known limits in one place and the evidence pointers                                                                            |
 | [docs/setup.md](docs/setup.md)                           | Per-OS setup, first-run walkthrough, environment loading, running a single service, local model, deployment on the presentation machine                                                            |
 | [docs/architecture.md](docs/architecture.md)             | Wiring diagram, request ids, health semantics, contracts, selected versions                                                                                                                        |
 | [docs/team-workflow.md](docs/team-workflow.md)           | Implementation workflow, ownership, shared-file rules, dependencies, first entity and migration                                                                                                    |

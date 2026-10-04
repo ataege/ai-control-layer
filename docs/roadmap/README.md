@@ -1775,6 +1775,12 @@ estimates. Every size is a planning estimate, never a schedule.
   - Tests: a teammate follows the setup instructions on a clean checkout.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation)
+  - Progress (2026-10-04): `docs/technical-handoff.md` is the assembled index: where each item the report
+    lists lives (links, no copies), the run order, the known limits of every side in one place and the
+    evidence pointers; `README.md` links to it. The paths in it were checked to exist on `main` 639f40b.
+    Not ticked: "matches the submitted build" needs the freeze (SH-34), the build identifier and the
+    evidence recapture (X-59). Clean-checkout runs by a second session exist for the Quick start (API-27)
+    and for `docs/how-to-open.txt`; the live-model parts of the guide and the final live checks do not.
   - Blocked by: nothing
 
 ## Researcher track
