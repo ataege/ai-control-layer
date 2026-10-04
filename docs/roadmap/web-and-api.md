@@ -627,10 +627,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     forwarded request (`auth/session-cookie.ts`, `auth/default-deny.guard.ts`), trusts no
     `x-forwarded-*` header (Express `trust proxy` stays off) and keeps CORS to GET, HEAD and OPTIONS
     without credentials for the explicit origins only. Tests: `app.setup.spec.ts` (forged
-    `x-forwarded-for` and `x-forwarded-host` change neither the client address nor the host); new
-    `common/cors-forwarder.spec.ts` (a preflight from another origin gets no CORS headers; the
-    configured origin gets no POST and no credentials; an unauthenticated command is refused whatever
-    origin and forwarded host it claims). Evidence for the authenticated path: WEB-14/WEB-15 browser
+    `x-forwarded-for` and `x-forwarded-host` change neither the client address nor the host); new `common/cors-forwarder.spec.ts` (a preflight from another origin gets no CORS headers; the configured origin gets no POST and no credentials; a command without a session is refused with 401 whatever origin and forwarded host it claims). Known limit (review 2026-10-04): the CSRF check lives only in the web proxy and the API port has no Origin check, so a cross-origin request is not refused by the API, it only gets no CORS headers; browsers must reach the API only through the forwarder. Evidence for the authenticated path: WEB-14/WEB-15 browser
     checks on 2026-10-04 (approve, reject and cancel through `/api/actions/…` and `/api/runs/…` on the
     forwarder with the demo operator's session). `pnpm --filter api run test` (see the commit).
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
@@ -731,17 +728,12 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
   - Completed (2026-10-04, lane 3c on api/3c): `POST /api/runs` (`runs/runs.controller.ts`) validates
     the body strictly with `runs/dto/start-run.dto.ts` (a zod `.strict()` object mirroring X-07), takes
     actor and organization only from the verified context, forwards to `POST /internal/runs` with the
-    signed operator context and returns its X-07 response validated against the contract. New here: an
-    admission rejection keeps Go's fixed explanation. `gateway-client.service.ts` keeps the gateway's
-    message on a 4xx failure outcome, and the route passes it through only for a 400 whose code is one
-    of the X-13 reason codes (`reason-code.schema.json`) with a bounded, printable message; every other
-    failure keeps the generic text. Swagger: the route is documented with DTO classes that implement the contract types (`StartRunRequestDto`, `StartRunLimitsDto`, `StartRunResponseDto` in `runs/dto/start-run.dto.ts`) and its 201, 400, 401, 503 and 504 answers (`start-run.openapi.spec.ts`); the title and description in `openapi.ts` are already Task Passport's. Tests
+    signed operator context and returns its X-07 response validated against the contract. New here: an admission rejection keeps Go's fixed explanation. `gateway-client.service.ts` keeps the gateway's 4xx message only when a caller asks (`postCommand(…, { keepErrorMessage: true })`, used only by this route; reads and every other command never carry it), and the route passes it through only for a 400 whose code is one of `resource_out_of_scope`, `destination_not_allowed`, `template_not_allowed`, `limit_not_allowed` or `invalid_arguments` with a bounded, printable message; every other failure, including other X-13 codes such as `approval_required`, keeps the generic text. Swagger: the route is documented with DTO classes that implement the contract types (`StartRunRequestDto`, `StartRunLimitsDto`, `StartRunResponseDto` in `runs/dto/start-run.dto.ts`) and its 201, 400, 401, 503 and 504 answers (`start-run.openapi.spec.ts`); the title and description in `openapi.ts` are already Task Passport's. Tests
     (`start-run.controller.spec.ts`): forged `organizationId`, `actorId` or `roles` and wrong value
     types are refused with 400 before any upstream call; a Go rejection keeps `resource_out_of_scope`
-    and its explanation; an unknown code, a message with control characters or no message keep the
-    generic text; Go statuses 401/403/404/409/503 are preserved; a timeout is 504 `outcome_unconfirmed`,
+    and its explanation; an unknown code, `approval_required`, a message with control characters or DEL, over 300 characters or missing keep the generic text; Go statuses 401/403/404/409/503 are preserved; a timeout is 504 `outcome_unconfirmed`,
     never "started"; an unknown field or malformed id in Go's answer is 503.
-    `gateway-client.service.spec.ts`: the 4xx outcome carries the message. By hand against the real
+    `gateway-client.service.spec.ts`: by default a 4xx outcome carries no message; with `keepErrorMessage` it does; a read never does. By hand against the real
     gateway (api/3c on a private database, demo operator): an over-scope request (an invoice of another
     vendor) answered 400 `resource_out_of_scope` "an invoice in invoiceIds is not available to this
     organization" and the passport count stayed 2; an accepted request answered 201 and the count became 3.
@@ -851,10 +843,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     whenever the worker loop is not running (GO-09) or no enforceable catalog is active (GO-72). The API
     already reads any 503 as `not_ready` (`gateway-client.service.ts` `interpretReadinessResponse`), so
     diagnostics answers 503 `degraded` with the gateway check down, and the web reports it as degraded,
-    never healthy; no code change was needed. Tests: new `gateway-client.service.spec.ts` case with the
-    exact body of a stopped worker or missing catalog (503, `status: "unavailable"`,
-    `checks.database.status: "up"`) → `not_ready`; `diagnostics.controller.spec.ts` "returns 503
-    degraded when the gateway is reachable but not ready"; `apps/web/src/lib/service-checks.test.ts` (a
+    never healthy; no code change was needed. Tests: `diagnostics.controller.spec.ts` "preserves worker/catalog unavailability even when the upstream database check is up" drives the real gateway client against a stub gateway answering the exact body of a stopped worker or missing catalog (503, `status: "unavailable"`, `checks.database.status: "up"`) and now asserts the exact degraded diagnostics body; "returns 503 degraded when the gateway is reachable but not ready"; `apps/web/src/lib/service-checks.test.ts` (a
     `not_ready` report yields `degraded`, never `healthy`). Health and diagnostics stay public
     (`@Public()`). Known naming limit: the check is still called `databaseReadiness`, as option B keeps
     the schema. `pnpm --filter api run test` (see the commit).

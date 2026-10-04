@@ -156,3 +156,17 @@ API-15 browser presentation, teammate clean-checkout setup, Docker, and a new li
 approval/outbox rehearsal were not verified in this API work. Fixtures prove contract and
 authorization behavior, not semantic detection quality. Cookie auth has no production identity
 federation, onboarding or production hardening claim.
+
+### Known limits (review of api/3c, 2026-10-04)
+
+- `/api/docs` and `/api/docs-json` are mounted outside the global guard: a deliberate
+  development-only exposure (smoke asserts docs-json 200). They describe routes, never data;
+  every product route stays behind the session guard.
+- One organization per operator in the demo, with no organization switch. The membership table
+  allows a user in several organizations; the guard uses the oldest membership
+  (`DefaultDenyGuard`, pinned by its spec).
+- The CSRF check lives only in the web proxy. The API port has no Origin check: a cross-origin
+  request gets no CORS headers but is not refused by the API, so browsers must reach the API only
+  through the same-origin forwarder (decision 3).
+- Gateway readiness keeps its schema (worker readiness, option B): a stopped worker or a missing
+  catalog is reported in the check still named `databaseReadiness`, as `not_ready`.

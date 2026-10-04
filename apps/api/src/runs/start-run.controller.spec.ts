@@ -71,6 +71,7 @@ describe("Admission verified context", () => {
       input,
       expect.anything(),
       context,
+      { keepErrorMessage: true },
     );
   });
   it("refuses missing authentication before dispatch", async () => {
@@ -117,7 +118,7 @@ describe("Admission verified context", () => {
       reason: "bad_request",
       statusCode: 400,
       code: "resource_out_of_scope",
-      message: "An invoice in invoiceIds is not available to this organization.",
+      message: "an invoice in invoiceIds is not available to this organization",
     };
     const result = await request(app.getHttpServer())
       .post("/api/runs")
@@ -128,7 +129,7 @@ describe("Admission verified context", () => {
       statusCode: 400,
       error: {
         code: "resource_out_of_scope",
-        message: "An invoice in invoiceIds is not available to this organization.",
+        message: "an invoice in invoiceIds is not available to this organization",
       },
     });
   });
@@ -136,6 +137,9 @@ describe("Admission verified context", () => {
     ["an unknown code", "not_a_reason_code", "Driver said: host db.internal"],
     ["control characters", "resource_out_of_scope", "line one\nline two"],
     ["no explanation", "resource_out_of_scope", undefined],
+    ["an explanation over 300 characters", "resource_out_of_scope", "x".repeat(301)],
+    ["a DEL character", "resource_out_of_scope", "an invoice\u007f is not available"],
+    ["a valid X-13 code that is not an admission rejection", "approval_required", "review needed"],
   ])("keeps the generic text for %s", async (_name, code, message) => {
     failure = { success: false, reason: "bad_request", statusCode: 400, code, message };
     const result = await request(app.getHttpServer())

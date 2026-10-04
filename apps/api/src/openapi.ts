@@ -2,7 +2,11 @@ import type { INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { GLOBAL_PREFIX } from "./app.setup.js";
 
-/** Serves Swagger UI at /api/docs and the OpenAPI document at /api/docs-json. */
+/**
+ * Serves Swagger UI at /api/docs and the OpenAPI document at /api/docs-json. Both are mounted on the
+ * HTTP adapter, outside the global DefaultDenyGuard: a deliberate development-only exposure (smoke
+ * asserts docs-json 200). The document describes routes, never data; product routes stay guarded.
+ */
 export function setupOpenApi(app: INestApplication): void {
   const documentConfig = new DocumentBuilder()
     .setTitle("Task Passport API")

@@ -32,7 +32,6 @@ import { StartRunRequestDto, StartRunResponseDto, StartRunSchema } from "./dto/s
 import startResponseContract from "@workspace/contracts/schemas/start-run-response.schema.json" with { type: "json" };
 import passportContract from "@workspace/contracts/schemas/passport.schema.json" with { type: "json" };
 import optionsContract from "@workspace/contracts/schemas/task-form-options.schema.json" with { type: "json" };
-import reasonCodeContract from "@workspace/contracts/schemas/reason-code.schema.json" with { type: "json" };
 import { RunEventsSchema } from "./run-events.schema.js";
 import { RunStateSchema, RunUsageSchema } from "./run-read.schemas.js";
 import { ReportViewSchema } from "./report-view.schema.js";
@@ -51,8 +50,15 @@ const TaskFormOptionsSchema = z.fromJSONSchema(
 
 const PassportSchema = z.fromJSONSchema(passportContract as Parameters<typeof z.fromJSONSchema>[0]);
 
-// The X-13 reason codes: only these mark an admission rejection whose explanation may be shown.
-const ADMISSION_REASON_CODES: ReadonlySet<string> = new Set(reasonCodeContract.enum);
+// The admission rejections whose fixed explanation names the scope or limit to change (GO-13,
+// lane w3's fixed texts). Any other code, even a valid X-13 one, keeps the generic message.
+const ADMISSION_REASON_CODES: ReadonlySet<string> = new Set([
+  "resource_out_of_scope",
+  "destination_not_allowed",
+  "template_not_allowed",
+  "limit_not_allowed",
+  "invalid_arguments",
+]);
 const MAXIMUM_EXPLANATION_LENGTH = 300;
 
 /** A 400 from admission with a contract reason code and a bounded, printable explanation. */
@@ -313,6 +319,7 @@ export class RunsController {
       startRunRequest,
       StartRunResponseSchema,
       operator,
+      { keepErrorMessage: true },
     );
     // An admission rejection keeps Go's reason code and its fixed explanation, so the operator
     // sees which scope or limit must change; NestJS never narrows the request itself (API-11).
