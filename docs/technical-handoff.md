@@ -5,9 +5,8 @@ it, and it holds three things nobody else holds: the run order, the known limits
 the pointers to the evidence.
 
 **Status.** Assembled on 2026-10-04 from `main` 639f40b and re-checked in the documentation pass
-against `main` 9372862 (code frozen at c70492d). It is not tied to the submitted build yet: the build
-identifier and the evidence recapture (X-59) wait for the freeze (SH-34, SH-32), and the figures in the
-linked text are written as `<FINAL>` until then. Where a statement below needs that recheck it says so.
+against `main` 9372862 (code frozen at c70492d). The submitted build is `9c5f7ef` (code frozen there, SH-34); its evidence
+was recaptured on that commit (SH-32, X-59), and the figures in the linked text are that build's.
 
 ## What the handoff contains
 
@@ -133,9 +132,7 @@ also stated where it applies.
 
 ## Before this is final
 
-- Name the submitted build here and recapture every check's evidence from it (SH-32, X-59); the
-  numbers in the linked text were taken on `main` between 1c07e78 and 9372862 and are replaced by
-  `<FINAL>` where they must be re-quoted.
+- Done: the submitted build `9c5f7ef` is named above and its evidence was recaptured from it (SH-32, X-59).
 - Run the final live checks that need a quiet machine ([demo-runbook.md](demo-runbook.md) "Final live
   checks"); the live model steps of [how-to-open.txt](how-to-open.txt) (sections 4, 6 and 7) were not
   part of the clean-checkout runs above.

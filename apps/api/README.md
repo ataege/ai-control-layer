@@ -151,9 +151,9 @@ migration yet.
 
 ## Verification and handoff limits
 
-Checked on the submitted build (commit `<FINAL>`): API lint and typecheck exit <FINAL>;
-`pnpm --filter api run test` <FINAL>; `pnpm test:db --fresh` api <FINAL>, gateway <FINAL>; `pnpm verify`
-<FINAL>; `pnpm smoke` (host mode) <FINAL> (the service-log leak checks are skipped because host mode
+Checked on the submitted build (commit `9c5f7ef`): API lint and typecheck exit 0;
+`pnpm --filter api run test` 484 passed (30 files); `pnpm test:db --fresh` api 82 passed, gateway 1748 passed, 0 skipped; `pnpm verify`
+6 passed, 0 failed, 0 skipped; `pnpm smoke` (host mode) 34 passed, 0 failed, 8 skipped (the service-log leak checks are skipped because host mode
 does not capture logs). On 2026-10-04 the real sign-in, profile, sign-out and revoked-profile flow
 returned 200/200/200/401, and a signed-in operator stayed on `/tasks/new` with the task form loaded.
 Those checks did not call the live model. The sanitized audit evidence and its build identifier are

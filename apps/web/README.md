@@ -181,7 +181,7 @@ container image runs the same server directly (see `infra/docker/web.Dockerfile`
 
 ## What the tests cover
 
-`pnpm --filter web run test` runs <FINAL> files, <FINAL> tests (commit `<FINAL>`): Vitest in the
+`pnpm --filter web run test` runs 50 files, 491 tests (commit `9c5f7ef`): Vitest in the
 node environment, so every test is a pure function or a server-rendered string. Covered:
 
 - the proxy (allowlist, cookie and header forwarding, request ids, the four failure codes), the

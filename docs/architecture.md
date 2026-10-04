@@ -370,7 +370,7 @@ in [AGENTS.md](../AGENTS.md).
 
 All npm versions are exact (no ranges) and locked in `pnpm-lock.yaml`; Go modules are locked in
 `services/gateway/go.sum`. Versions shared by several workspaces come from the `catalog` in
-`pnpm-workspace.yaml`. These versions were last compared with the lockfiles and `.nvmrc` at commit `<FINAL>`.
+`pnpm-workspace.yaml`. These versions were last compared with the lockfiles and `.nvmrc` at commit `9c5f7ef`.
 
 ### Runtimes, tooling and images
 
