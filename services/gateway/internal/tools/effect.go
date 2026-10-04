@@ -41,6 +41,7 @@ const (
 	ReasonReportExportRestricted = string(contracts.ReasonReportExportRestricted)
 	ReasonReportLineageMissing   = string(contracts.ReasonReportLineageMissing)
 	ReasonResourceVersionChanged = string(contracts.ReasonResourceVersionChanged)
+	ReasonToolNotAllowed         = string(contracts.ReasonToolNotAllowed)
 )
 
 // EffectRequest is what the executor passes for one claimed attempt. Identity comes from the

@@ -118,6 +118,9 @@ type Decision struct {
 	// DeniedReport names the stored report whose export was denied (GO-64), so the denial event
 	// carries its references. Nil for every other decision.
 	DeniedReport *ReportRef
+	// ReportAlreadyQueued marks a deny whose cause is that a queue_report of this run already
+	// succeeded for the report (tool_not_allowed), so the model is told why.
+	ReportAlreadyQueued bool
 }
 
 // ScopeReader loads the passport scope and the active catalog revision for a verified run.
@@ -151,6 +154,8 @@ type ExportVerdict struct {
 	Allowed             bool
 	ReasonCode          ReasonCode
 	AlternativeTemplate string // a permitted continuation, never extra authority
+	// AlreadyQueued: a queue_report of this run already succeeded for this report (its outbox row exists).
+	AlreadyQueued bool
 	// Report names the stored report by references (id, template, stored classification), so a
 	// denial event can point at it. Empty when Found is false.
 	Report ReportRef
@@ -320,6 +325,13 @@ func (gate *Gate) decide(ctx context.Context, run RunIdentity, proposal Proposal
 			// still enables (reports.enabled_templates): a current restriction, so it is denied here
 			// and never sent to review.
 			return stored(OutcomeDeny, ReasonTemplateNotAllowed)
+		case verdict.AlreadyQueued:
+			// A report is queued once per run. The scope, destination, export and template checks
+			// above decide first; this one runs only for a proposal that would otherwise go to
+			// review, and denies it there, so a second approval can never queue a second outbox row.
+			denial := stored(OutcomeDeny, ReasonToolNotAllowed)
+			denial.ReportAlreadyQueued = true
+			return denial
 		}
 	}
 

@@ -75,6 +75,9 @@ func BuildDenialFeedback(decision Decision, scope PassportScope) DenialFeedback 
 	} else if contractCode := contracts.ReasonCode(decision.ReasonCode); contractCode.Valid() {
 		feedback.SafeMessage = contractCode.SafeMessage()
 	}
+	if decision.ReasonCode == ReasonToolNotAllowed && decision.ReportAlreadyQueued {
+		feedback.SafeMessage = "This report was already queued in this run."
+	}
 	if decision.AlternativeTemplate != "" &&
 		containsString(scope.AllowedTemplates, decision.AlternativeTemplate) &&
 		containsTool(scope.AllowedTools, ToolCreateReport) &&

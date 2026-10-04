@@ -96,6 +96,22 @@ func TestQueueVendorReportCreatesOneSimulatedOutboxRow(t *testing.T) {
 	}
 }
 
+// A report is queued once per run: a second queue_report of the same report, as a different action,
+// is a known failure with tool_not_allowed and leaves the one outbox row. This is the adapter's atomic
+// guard; the executor and the gate refuse it earlier.
+func TestSecondQueueOfTheSameReportInOneRunQueuesNothing(t *testing.T) {
+	world := openWorld(t, func(world *testWorld) passportScope { return scenarioScope(world, true) })
+	vendorReport := createReportFor(t, world, provenance.VendorReconciliationV1.Name)
+	recipient := recipientReference(world.runID, world.atlasID)
+	if _, first := world.queue(t, vendorReport, recipient); first.Outcome != OutcomeSucceeded {
+		t.Fatalf("first queue = %+v", first)
+	}
+	_, second := world.queue(t, vendorReport, recipient)
+	if second.Outcome != OutcomeFailed || second.ReasonCode != ReasonToolNotAllowed || world.outboxRows(t) != 1 {
+		t.Fatalf("second queue = %s/%s with %d outbox rows, want failed/tool_not_allowed and 1", second.Outcome, second.ReasonCode, world.outboxRows(t))
+	}
+}
+
 func TestQueueRefusesUnrelatedReportsUntrustedRecipientsAndChangedSources(t *testing.T) {
 	// Borealis is listed in vendorIds and recipientReferences but belongs to the other
 	// organization, so only the database's organization filter can refuse it.
