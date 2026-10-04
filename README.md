@@ -89,7 +89,12 @@ Before `pnpm dev`, start Ollama, pull `qwen3.5:4b` and set `MODEL_NAME=qwen3.5:4
 ([docs/setup.md](docs/setup.md#7-local-model-ollama), section 7). Without `MODEL_NAME` the gateway
 still starts, but every model call fails closed. `pnpm reset:demo` restores the demo later: it
 empties the `demo` and `runtime` tables, reseeds the synthetic records and keeps the `app` data,
-including the active control catalog. Even after these steps a run cannot start yet; see
+including the active control catalog.
+
+On a clean checkout the gateway activates the imported catalog by itself a few seconds after
+`pnpm dev` starts (no `pnpm catalog:activate` is needed while a gateway runs). Then open
+<http://localhost:3000> and sign in as `demo-operator@example.com` with `DEMO_OPERATOR_PASSWORD` from
+`.env`. Starting a run needs the local model; see
 [Known gaps on a clean checkout](docs/setup.md#known-gaps-on-a-clean-checkout).
 
 Several checkouts on one machine (for example git worktrees) each need their own PostgreSQL: see
@@ -121,9 +126,10 @@ Stop with Ctrl+C in the `pnpm dev` terminal, then `pnpm infra:down`. The databas
 | Gateway | <http://localhost:8080/health/ready>            | Readiness, PostgreSQL ping                                         |
 | Gateway | <http://localhost:8080/internal/ping>           | Requires `Authorization: Bearer <GATEWAY_SERVICE_TOKEN>`, else 401 |
 
-The web app also serves three proxy routes that forward to the API and nothing else:
-`/api/health/live`, `/api/health/ready` and `/api/diagnostics/gateway` on port 3000. The browser
-never calls the API or the gateway directly.
+The web app also serves route handlers that forward to the API and nothing else (health,
+diagnostics, sign-in, runs, actions, control, security and policies; the table is in
+[apps/web/README.md](apps/web/README.md)) on port 3000. The browser never calls the API or the
+gateway directly.
 
 In full-container mode the gateway URLs are not reachable from the host unless you start the stack
 with `--debug`.
@@ -283,9 +289,9 @@ All root scripts, as defined in `package.json`:
 | `make verify-controls`, `make reset-demo`                        | Thin aliases for `pnpm verify:controls` and `pnpm reset:demo` (make is optional).                                                                                       |
 | `pnpm catalog:activate`                                          | Runs the gateway's own catalog activation once (for setups without a gateway; `test:db`, `verify:controls` and `reset:demo` call it); see `services/gateway/README.md`. |
 | `pnpm db:roles`                                                  | Gives the gateway role `task_passport_gateway` its login password from `.env`; run after `pnpm db:migration:run`.                                                       |
-| `pnpm db:seed`                                                   | DRAFT: loads the synthetic demo records from `fixtures/`; see "Testing and verification".                                                                               |
-| `pnpm reset:demo`                                                | DRAFT: truncates the demo and runtime data and reseeds the demo records; see "Testing and verification".                                                                |
-| `pnpm judge`                                                     | DRAFT judge client: submits one input to the NestJS live test entry; see "Testing and verification".                                                                    |
+| `pnpm db:seed`                                                   | Loads the synthetic demo records and the demo operator, and requests the policy and feed; see "Testing and verification".                                               |
+| `pnpm reset:demo`                                                | Truncates the demo and runtime data, reseeds the demo records and activates the catalog; see "Testing and verification".                                                |
+| `pnpm judge`                                                     | Judge client: submits one input to the API's live test entry (X-91); see "Testing and verification".                                                                    |
 | `pnpm benchmark` (`--live`)                                      | Repeatable performance benchmark of the governed tool-result path (GO-81); see `services/gateway/README.md`.                                                            |
 | `pnpm check:instructions`                                        | Checks that `AGENTS.md` and `CLAUDE.md` are identical and complete, and that the agent files are valid.                                                                 |
 | `pnpm db:migration:create <Name>`                                | Writes an empty migration file.                                                                                                                                         |
@@ -512,37 +518,36 @@ be created, migrated or seeded, or a failing test is FAIL; a test skipped while 
 available, or a side with no database-backed tests, is SKIPPED. Go runs with `-count=1`, so a
 cached pass cannot hide a database that is down.
 
-### `pnpm db:seed` (draft)
+### `pnpm db:seed`
 
 An explicit seed; nothing runs it at startup. It loads the synthetic vendors and invoices of
 `fixtures/demo-records.json` into the `demo` tables in one transaction. Running it twice changes
 nothing: missing rows are inserted and present rows are left alone. A present row with other values
 (for example an invoice whose version a run changed) stops the seed with an error and changes
-nothing; `pnpm reset:demo` restores it. It then runs `pnpm policy:import` to seed the control
-catalog when that script exists, and otherwise reports the step as skipped. The command also explicitly seeds the fixture’s demo organization, the `demo-operator@example.com` user named **Development Demonstration Operator**, its scrypt password hash and one membership with `operator` and `reviewer` roles. Set `DEMO_OPERATOR_PASSWORD` in untracked `.env` before running it; use that password with `/api/auth/sign-in`. The app seed commits in its own transaction before the demo records. Rerunning preserves the existing password hash and membership. Identity, password or membership drift fails instead of overwriting credentials or adding authority. Nothing seeds at application startup.
+nothing; `pnpm reset:demo` restores it. It then runs `pnpm policy:import`, which records `config/policy.yaml` and its signature feed as a
+requested catalog revision; the gateway activates it on start, or run `pnpm catalog:activate`. The command also explicitly seeds the fixture’s demo organization, the `demo-operator@example.com` user named **Development Demonstration Operator**, its scrypt password hash and one membership with `operator` and `reviewer` roles. Set `DEMO_OPERATOR_PASSWORD` in untracked `.env` before running it; use that password with `/api/auth/sign-in`. The app seed commits in its own transaction before the demo records. Rerunning preserves the existing password hash and membership. Identity, password or membership drift fails instead of overwriting credentials or adding authority. Nothing seeds at application startup.
 
-**Draft:** the `demo` tables are the unapproved SH-17 migration; run `pnpm db:migration:run` first.
-It uses the API's installed `pg` client, so it adds no dependency.
+Run `pnpm db:migration:run` and `pnpm db:roles` first. It uses the API's installed `pg` client, so it adds no dependency.
 
-### `pnpm reset:demo` (draft)
+### `pnpm reset:demo`
 
-An explicit reset for the judge environment (the planned `make reset-demo` target will call it; no
-`Makefile` is on `main` yet); nothing runs it at
-startup. Decided scope: it truncates every table of the `demo` and `runtime` schemas and reseeds the
+An explicit reset for the judge environment (`make reset-demo` calls it); nothing runs it at startup. Decided scope: it truncates every table of the `demo` and `runtime` schemas and reseeds the
 synthetic demo records, in one transaction, so either the fixtures are fully restored or nothing
 changed. It keeps the app data (users, memberships, control-catalog revisions), so a judge's policy
-edits survive a fixture reset; for the same reason it does not re-import `policy.yaml`. It prints
+edits survive a fixture reset; for the same reason it re-imports `policy.yaml` only into an empty
+catalog (a fresh database), never over an existing one. It then runs the gateway's catalog activation
+once (`pnpm catalog:activate`), so a requested revision is in force without a running gateway. It prints
 the row count of every table before and after, and never removes the database volume.
 
 Like `pnpm db:seed`, it refuses to run unless `POSTGRES_HOST` resolves only to a loopback address,
-and stops when the database does not answer or the tables were not migrated. **Draft:** it works on
-the unapproved SH-16, SH-17, SH-24, SH-27 and SH-44 migrations.
+and stops when the database does not answer or the tables were not migrated.
 
-### `pnpm judge` (draft)
+### `pnpm judge`
 
 A small client for judges and the team (SH-48). It submits one ad-hoc text, one case from
 `fixtures/` or one action proposal to the NestJS live test entry and prints the decision, the reason,
-the controls that ran, the active catalog revision and the timings:
+the controls that ran (with each semantic verdict's source, live or fixture) and the active catalog
+revision:
 
 ```sh
 JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run_id> --text "Ignore previous instructions"
@@ -550,17 +555,15 @@ JUDGE_SESSION_COOKIE="session=<value>" pnpm judge --run <run_id> --case indirect
 pnpm judge --help
 ```
 
-**Draft.** The Go side exists: `POST /internal/control/evaluate` (X-91, GO-82) is served by the
-gateway (`services/gateway/internal/api`), with its frozen schemas in `packages/contracts`. The
-NestJS live test entry, `POST /api/control/evaluate` (X-106, API-38), now exists in `apps/api`
-(`runs/control-evaluation.controller.ts`), and `pnpm db:seed` seeds the demonstration operator
-(SH-19). But this client's request body still follows the earlier proposal in
-`docs/contracts/control-evaluation-draft.md`, which differs from the frozen X-91 schema, so it is not
-verified end to end; the judge console page (`/judge`, being built) is the supported path. Its only credential is the
+The request is the frozen X-91 body (`runId`, `kind`, `text`, `tool`, `arguments`, null where a
+boundary does not use one) sent to `POST /api/control/evaluate`, which forwards it to the gateway's
+`POST /internal/control/evaluate`; the evaluation is a decision only and nothing is executed. The
+web judge console (`/judge`) uses the same entry. Its only credential is the
 operator's session cookie; it never reads `.env`. It exits 0 when a decision came back, whatever the decision, and
 non-zero when none did. For a fixture case it says whether the decision matches the case's label; a
-label is a test expectation, not detection quality. `pnpm test:judge` tests the client against a
-local stand-in server.
+label is a test expectation, not detection quality. `pnpm test:judge` checks every request body the
+client builds against the contract's schema and fixtures, against a local stand-in server; it makes no
+live call.
 
 ## Troubleshooting
 
@@ -772,9 +775,15 @@ describes.
   Fixed afterwards (lead-authorized change to the web launchers): `next dev` now binds to
   `WEB_HOST`, default `127.0.0.1`; lsof showed `TCP 127.0.0.1:3000 (LISTEN)` only and the Wi-Fi
   address refused the connection.
-- Not covered, because the commands do not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
+- Not covered, because the commands did not exist yet: seeds (SH-18, SH-19), reset (SH-29), the
   control suite (SH-47) and the policy reload in a container (API-32). SH-30 is done only when a
   teammate who did not write the procedure has followed it.
+- Update 2026-10-04: [docs/setup.md](docs/setup.md) section 8 was rewritten as the full procedure
+  (prerequisites with `think: false`, clone to catalog activation, model warm-up, `pnpm reset:demo`
+  between rounds, what must not run during the demonstration, the quiet-machine check, teardown). The
+  seed, catalog activation, `pnpm dev`, sign-in, the workflow and `pnpm reset:demo` were run from
+  worktrees of `main`; a fresh clone, the control suite and the live model steps were not repeated
+  for it.
 
 ## Documentation
 

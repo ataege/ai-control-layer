@@ -2536,6 +2536,7 @@ material` outcome says: "Freeze the payload, or bind its source records to versi
     (Cancellation and revocation)
   - Blocked by: nothing
   - Progress (2026-10-03, lane w3): `internal/agent/cancellation_postgres_test.go` through lane f3's loop with the production gate (review freezer), executor and adapters, model scripted and counted on the ledger. Evidence X-55: cancel during a model request -> stopped/run_cancelled, 2 model calls, 1 succeeded attempt from before the cancel, the later proposal not executed, a late continuation dispatches nothing; cancel during a review wait -> stopped/run_cancelled, the reviewer's decision refused (run stopped), executor refuses, no approval row, report kept, outbox 0, no further model request; cancel after approval -> the approved action refused run_cancelled, grant unconsumed, outbox 0; expiry between steps -> stopped/run_expired before the next model request, the earlier read kept. Each logs the cancel_requested_at and run.stopped timestamps. The executor now refuses an expired passport with run_expired instead of run_cancelled (lane f3 asked to map it to stopped in `refusalEnd`). The continuation after a review wait is covered by lane f3's GO-40 tests in `internal/agent/approval_wait_postgres_test.go`: `TestApprovedActionOfACancelledRunDoesNotResume`, `TestExpiredRunStopsFromTheWaitWithoutAResumedEvent` (no run.resumed, nothing executed) and `TestUndecidedApprovalExpiresWhileNoWorkerHoldsTheRun`. My review's lost-cancellation finding (a cancel during a model request lost when the step paused) is fixed by lane 3c's TransitionRun guard and lane f3's mapping (edb712c). Not ticked: the revocation case needs GO-52 (blocked on SH-38).
+  - Progress (2026-10-04, lane w3, branch go/w3-51, main 1c07e78): rerun, no model (scripted provider, counted on the ledger). `go test ./internal/agent -run 'TestCancellationDuringAModelRequest|TestCancellationDuringAReviewWait|TestCancellationAfterApproval|TestExpiryBetweenSteps|TestUndecidedApprovalExpires|TestApprovedActionOfACancelledRun|TestExpiredRunStopsFromTheWait' -count=1 -v` against `starter_test`: exit 0, 7 of 7 PASS. Evidence X-55 from that run: cancel during a model request, cancel_requested_at 02:50:12.489865 and run.stopped 02:50:12.522604, 2 model calls, 1 attempt (succeeded, before the cancel), the proposal after the cancel not executed; cancel during a review wait, both timestamps 02:50:12.951317, decision refused (run stopped), execution refused, record {modelCalls 2, attempts 1, succeededAttempts 1, reports 1, outbox 0} unchanged; cancel after approval, both timestamps 02:50:14.037075, approved action refused `run_cancelled`, grant unconsumed, same record unchanged; expiry between steps, passport expires_at 01:04:14Z and run.stopped 02:50:14.602559+02:00, 1 model call, no request after. Expiry and cancellation after a review wait stay covered by lane f3's `TestExpiredRunStopsFromTheWaitWithoutAResumedEvent`, `TestApprovedActionOfACancelledRunDoesNotResume` and `TestUndecidedApprovalExpiresWhileNoWorkerHoldsTheRun` (same run, 3 of 3 PASS). `pnpm test:db --fresh` exit 0 (gateway 965 passed, api 79 passed; machine load 64). No new test was needed for cancellation and expiry. **Still not ticked, the one missing proof:** revoking authority during a review wait. No revocation table exists (SH-38 is open), `revocation reads` is undecided and GO-52 has no reader, so there is nothing to revoke or to read; a reader that fails closed against a missing table would stop every run (lead decision, 2026-10-03). Tick this task with GO-52 once a revocation written during an approval wait blocks the resumed action.
 
 - [x] **GO-81 · Build the repeatable performance benchmark**
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: A · Size: S (estimate 2-4 h, this roadmap's estimate)
@@ -3013,7 +3014,7 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
 
 ### Agent runtime (report role: Implementer 3)
 
-- [ ] **GO-58 · Make every Go stop, failure and denial state readable**
+- [x] **GO-58 · Make every Go stop, failure and denial state readable**
   - **Report 1.2 change:** Readable states add guard failures, rejected reloads and security allowance exhaustion with their reason codes.
   - Owner: Go implementer (report role: Implementer 3, agent runtime) · Tier: B · Size: S (estimate 1-3 h)
   - Depends on: GO-29, GO-42, GO-53 · Needs: X-13, X-16 · Provides: nothing
@@ -3040,6 +3041,19 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     GO-79 joins the transport cause; a bad response has its own message; lead: no new X-13 code). Error envelopes: no error text reaches them; admission echoes request ids
     through `%q`. Every other reason-coded event gets its X-13 message from 3c's default in
     `repository.AppendEvent` (go/3c; an emitter's own message wins).
+  - Completed (2026-10-04): audited every emitter. All events go through `repository.AppendEvent`, which
+    gives a reason-coded event its X-13 message; every run end goes through `TransitionRun`, which
+    refuses a reason outside X-13, and the agent's end writer replaces an invalid reason with
+    `decision_unavailable`. New tests: `TestEveryStopPauseAndFailureIsReadableThroughTheStoredRecords`
+    (`internal/agent`, real writer and database: all 31 X-13 codes x paused, failed and stopped = 93 run
+    ends, each stored run state carries the code and each stored event the code with its fixed safe
+    message) and `TestEverySecurityDecisionReasonIsAnX13CodeWithASafeMessage` (`internal/security`: the
+    seven security reasons are X-13 codes; `no_free_text_arguments` is evidence on a control record, not
+    a decision reason). No gap found in the Go records; the stale vocabulary comment in
+    `security/security.go` is corrected. Checks: `pnpm test:db gateway` "1060 passed, 0 failed, 0
+    skipped"; `pnpm verify` "6 passed, 0 failed, 0 skipped"; no model called. Not covered: the SH-33
+    rehearsal's wording fixes, and whether a reviewer needs no narration (a human check on the web
+    pages that render these messages).
   - Report: "Relative implementation milestones and critical dependencies" (Hours 18-21); "Live
     demonstration storyboard and proof checks" (Reliable demonstrations without invented
     behavior); "Illustrative passport and interface contracts" (Decision and error semantics)
@@ -3107,6 +3121,21 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     `docs/architecture.md` "Product modules" has one row per Go package on `main` (24 internal, 5
     commands) with purpose, owner lane, contracts and tables. Not done: the Tests line's dry run
     by a teammate who did not write the Go code.
+  - Progress (2026-10-04, lane f3, `main` 1c07e78): the worker, agent, model and budget part is added
+    to "Technical handoff (GO-61)" in `services/gateway/README.md`: "The production chain
+    constructor" (`agent.NewProductionChain`, `ChainConfig`, what it builds, how `cmd/gateway` starts and
+    stops it, and why a test builds the loop the same way), a dry-run checklist with the expected
+    output of each command, the corrected "one gateway process per database" limit (leases prevent a
+    double effect, not a double model request) and five limits seen in live runs (model calls past the
+    20 s deadline on a shared Ollama, unknown usage holding its slot, a lost unknown-usage mark, a 4B
+    model's varying choices, the replay's 15-minute window), three more evidence commands, and "Check
+    results (lane f3, 4 October 2026)" with what that lane ran. `docs/architecture.md` gains the one
+    missing package row (`cmd/catalogactivate`); every other package on `main` already had one. Checks
+    run in a clean worktree of `main` 1c07e78: gateway `format:check`, `lint`, `typecheck`, `test`,
+    `build` exit 0; `pnpm verify` "6 passed, 0 failed, 0 skipped"; `GOFLAGS=-p=3 pnpm test:db --fresh`
+    gateway "965 passed, 0 failed, 0 skipped", api "79 passed, 0 failed, 0 skipped". Not ticked: the Tests
+    line's dry run by a teammate who did not write the Go code has not happened, and the text must be
+    rechecked against the final build (X-59).
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation); "Durable state idempotency audit and uncertain outcomes" (Evidence without
     creating a second disclosure channel)

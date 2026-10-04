@@ -207,29 +207,28 @@ export default function RunPage({ params }: { params: Promise<{ id: string }> })
               </AlertDescription>
             </Alert>
           ) : null}
-          <LimitStopNotice run={run} usage={usage} safeMessage={terminalSafeMessage(events)} />
+          {/* The recorded explanation is already shown by the state panel above. */}
+          <LimitStopNotice run={run} usage={usage} />
         </>
       ) : null}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <div className="space-y-6">
-          {passport !== null ? (
-            <PassportPanel passport={passport} />
-          ) : (
-            <Card data-testid="passport-unavailable">
-              <CardHeader>
-                <CardTitle>Task Passport</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {passportProblem === null
-                  ? "Loading the passport."
-                  : `The passport could not be read: ${passportProblem}`}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-        <div className="space-y-6">{usage !== null ? <RunUsagePanel usage={usage} /> : null}</div>
-      </div>
+      {passport !== null ? (
+        <PassportPanel passport={passport} />
+      ) : (
+        <Card data-testid="passport-unavailable">
+          <CardHeader>
+            <CardTitle>Task Passport</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {passportProblem === null
+              ? "Loading the passport."
+              : `The passport could not be read: ${passportProblem}`}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Full width: the usage tables have five columns and are cut off in a half-width column. */}
+      {usage !== null ? <RunUsagePanel usage={usage} /> : null}
 
       {reports.length > 0 ? (
         <Card data-testid="run-reports">
