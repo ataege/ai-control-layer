@@ -181,7 +181,9 @@ scripts/go.mjs        pnpm/turbo wrapper around the Go toolchain (not part of th
 
 ## Technical handoff (GO-61)
 
-This section is the Go part of the handoff, written from the code on `main` (87f22f0 plus go/w2).
+This section is the Go part of the handoff, written from the code on `main` (87f22f0 plus go/w2)
+and extended on 4 October 2026 by lane f3 on `main` 1c07e78: the production chain constructor, the
+limits of the model path seen in live runs, a dry-run checklist and the check results that lane ran.
 The sections below it hold the detail of each task; this one says how the parts fit, where each
 boundary is, what happens when it fails, how evidence is labelled and what is not covered.
 
@@ -205,6 +207,24 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
    `pnpm test:db gateway` against a dedicated test database (set `GOFLAGS=-p=3` on a loaded machine).
 
 `pnpm reset:demo` restores the synthetic demo data between rehearsals.
+
+**Dry-run checklist for a teammate who did not write the Go code.** On a clean checkout with Docker
+and Go running, in this order; each line says what you should see. Stop at the first line that
+differs and write the difference down.
+
+| Command                                                                                          | Expected                                                                            |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `pnpm install && pnpm run setup`                                                                 | exit 0; `.env` exists with the generated secrets (never print it)                   |
+| `pnpm infra:up && pnpm db:migration:run && pnpm db:roles`                                        | exit 0 each; the migrations run once; the gateway role's login is enabled           |
+| `pnpm db:seed`                                                                                   | exit 0; "requested revision 1" and the stored feed revision                         |
+| `pnpm catalog:activate`                                                                          | "activated revision 1 with signature feed revision 1" (or "nothing to activate")    |
+| `pnpm --filter gateway run format:check`, `lint`, `typecheck`, `test`, `build`                   | exit 0 each                                                                         |
+| `GOFLAGS=-p=3 pnpm test:db --fresh`                                                              | exit 0; the gateway and API counts of "Check results" below, none failed or skipped |
+| `pnpm dev`, then `curl -s -o /dev/null -w '%{http_code}\n' localhost:$GATEWAY_PORT/health/ready` | `200` (the worker runs and an enforceable catalog is active)                        |
+
+Stop `pnpm dev` before `pnpm verify` or any web build in the same worktree: the build overwrites
+`apps/web/.next` and the dev server then answers `404` until the directory is deleted. Nothing in
+this list calls the model; the live checks are in `docs/demo-runbook.md` ("Final live checks").
 
 ### How a run flows through the packages
 
@@ -253,6 +273,44 @@ Follow `docs/setup.md`; the Go-specific steps, from the repository root:
 10. **Catalog activation** (`catalog.WatchRequested`, every second). A requested revision is
     validated with the gateway's own parsers and activated with its feed, or rejected with a safe
     `last_error` while the last good revision stays active.
+
+### The production chain constructor
+
+Everything a run does in the gateway process is built once by one constructor, so there is no second
+wiring to keep in step:
+
+```go
+chain, err := agent.NewProductionChain(pool, catalogLoader, agent.ChainConfig{
+    Model: model, ModelConfigured: configured, Logger: logger, // VerdictSource empty = live
+})
+chain.Worker.Start()               // the durable job loop
+go chain.Expiry.Run(signalContext) // closes approvals nobody decided (GO-40)
+```
+
+`cmd/gateway/main.go` calls it with the pool it shares with admission and the same
+`catalog.Loader` admission uses, then starts the worker and the approval sweeper, hands
+`chain.Worker` to the readiness check, and stops the worker in parallel with the HTTP drain (6 s,
+`workerDrainTimeout`) before the pool closes. The constructor dispatches nothing and starts nothing.
+`ModelConfigured` false (a missing or invalid `MODEL_NAME`) keeps the gateway up for health and
+admission but makes every model call fail closed (`ErrModelNotConfigured`). A test sets
+`VerdictSource: security.VerdictFixture` so a fixture's verdicts are never stored as live.
+
+| Built (field)                      | What it is                                                                                                                               | Package                    |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `ModelCaller`                      | `CatalogAccountedCaller`: catalog allowlist, ledger reservation within the catalog's ceiling, process slot, request deadline, settlement | `agent`, `budget`, `model` |
+| `SecurityCaller`, `Evaluator`      | the same metered caller for the `security` purpose, recorded before dispatch; the semantic evaluator                                     | `agent`, `security`        |
+| `Inspector`, `Settings`, `Catalog` | tool-result and action inspection; settings read from the active catalog on every call                                                   | `security`, `agent`        |
+| `Scopes`, `Gate`, `Executor`       | passport scope, the action gate (with the review freezer) and the executor                                                               | `policy`                   |
+| `Loop`                             | the bounded agent loop: one job claim runs steps until the run ends, waits or reaches 64 steps                                           | `agent`                    |
+| `Worker`                           | `worker.Service` over the job store: claim, renew, drain, readiness                                                                      | `worker`                   |
+| `Expiry`                           | the approval-expiry sweeper (5 s)                                                                                                        | `agent`                    |
+
+`agent.NewLoop` refuses to build without every dependency in `LoopDependencies` (runs, stepper, gate,
+executor, inspector, catalog, scopes, corrections, steps, contexts, telemetry, recovery, final-result
+validator, continuation reader, logger), so a test builds a loop the same way
+(`newTestLoop` in `internal/agent`, `openStory` in `internal/scenario`) and a missing piece is a
+build-time error, not a silent skip. Read "Production chain and gateway wiring (GO-11, GO-09)" below
+for the details of each part.
 
 ### Boundaries and their fail-closed behaviour
 
@@ -308,9 +366,33 @@ limit. Local inference has no tariff, so no cost is recorded.
 
 ### Known limitations
 
-- **One gateway per database and model host.** The cap of concurrent model requests
-  (`local_max_concurrency`) is enforced per gateway process, so a second gateway doubles it. Leases,
-  catalog activation and the ledger are safe with several gateways; the cap is not.
+- **One gateway process per database and model host.** Job leases and the executor's claim prevent a
+  double effect, and the ledger's row lock a double reservation, but not a double model request: two
+  gateways on one database (for example `pnpm dev` next to `pnpm stack:up`) can each claim a job of
+  the same run and send two model requests for it, and the cap of concurrent model requests
+  (`local_max_concurrency`) is per process, so a second gateway doubles it. Catalog activation is safe
+  with several gateways. The demonstration runs one.
+- **Model calls are slow when the model is shared.** The request deadline is 20 s
+  (`request_timeout_seconds`). Observed on 3 and 4 October 2026 with several sessions on one Ollama
+  (load average 12 to 30): agent calls p50 3.9 s, p95 5.4 s, but also calls past 20 s. A timed-out
+  call pauses the run as `outcome_unknown`, usage unknown and held, which a judge reads as "Operator
+  attention required". Wait for a quiet machine or raise the value in `config/policy.yaml`; neither is
+  a defect of the gateway.
+- **Unknown usage holds its slot.** A `usage_unknown` reservation keeps its ledger slot until a
+  trusted late settlement; a run that kept going with all `max_concurrent_calls` slots held by unknown
+  calls would requeue every second without progressing. Latent in the MVP (the action checks no
+  longer call the model); an operator cancels or reconciles the run.
+- **If marking a timed-out call unknown also fails** (a slow or lost database within the 5 s cleanup
+  bound), the run still pauses with `outcome_unknown`, but the reservation stays `reserved` instead
+  of `usage_unknown` (still held, still counted). Found live on 4 October 2026 and fixed in 0eea3c2;
+  the gateway logs "model step ended the run" with fixed error kinds for every such end.
+- **A 4B model's choices vary.** In live runs the model created the internal report in 3 of 3 runs
+  per set but proposed sending it in only 1 of 3, and copied the recipient reference wrongly in 2 of 3
+  before the instruction asked for it verbatim (0 of 3 after). Beat 5 therefore always uses the
+  labelled replay. The final answer is parsed strictly (one JSON object, optionally in one code fence);
+  a rejected answer is a correction.
+- **The replay needs a fresh run.** `cmd/replay` accepts a finished run, but the gate checks the run's
+  expiry first: after the passport's 15 minutes it answers `run_expired` (exit 1, `UNEXPECTED`).
 - **The signature feed has no signing key.** Trust is the authenticated import plus the SHA-256
   pin of the file bytes; this proves integrity, not the issuer. The feed is not called "signed".
 - **Recipient references are bounded.** A run can address only `recipient:<run>:<vendor>` of its
@@ -356,9 +438,55 @@ them; for a single package see "PostgreSQL test harness").
 | `go -C services/gateway run ./cmd/replay -run <run> -fixture <fixture>`                        | a labelled replay of a hostile-note proposal is denied by the real gate (GO-36)            |
 | `go -C services/gateway run ./cmd/modelcheck`, `./cmd/budgetcheck`                             | the model connection and the ledger accounting against the active catalog                  |
 | `pnpm smoke`                                                                                   | the running services answer end to end                                                     |
+| `MODEL_NAME=qwen3.5:4b pnpm verify:controls`                                                   | the control suite with the live model; writes `.verify-controls/results-<timestamp>.json`  |
+| `node scripts/with-env.mjs node apps/web/scripts/e2e-flow.mjs`                                 | the demonstration through the web server's routes, two rounds with a reset (live model)    |
+| `pnpm judge --run <run> --case <fixture id>`                                                   | one judge input through the API to `POST /internal/control/evaluate` (X-91)                |
 
 Live tests need `MODEL_BASE_URL` and `MODEL_NAME` and run alone. Their results are observations of
 one run on one machine, not reliability measures.
+
+### Check results (lane f3, 4 October 2026)
+
+Run by lane f3 itself, each on its own exit code, in a clean worktree of `main` 1c07e78 (a fresh
+`pnpm install`, a recreated test database); none of it is a teammate's dry run.
+
+| Command                                                                        | Result                                                                                                          |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter gateway run format:check`, `lint`, `typecheck`, `test`, `build` | exit 0 each                                                                                                     |
+| `pnpm verify`                                                                  | exit 0; "6 passed, 0 failed, 0 skipped"                                                                         |
+| `GOFLAGS=-p=3 pnpm test:db --fresh`                                            | exit 0; gateway "965 passed, 0 failed, 0 skipped" (281 need the database); api "79 passed, 0 failed, 0 skipped" |
+
+Live observations of the same day, on a heavily loaded machine (load average 12 to 30, one Ollama
+shared by several sessions), `qwen3.5:4b`, Ollama 0.35.1. They are observations of single runs, not
+reliability or detection measures:
+
+- **A run through the real API** (main 3e54f50, run `2e5e93b1-8bf5-4834-bf19-9507fad34fb1`): sign-in
+  200, `POST /api/runs` 201, the run `awaiting_approval` after about 18 s, the review view 200,
+  approval 200, `completed` about 6 s later, both reports read back, the security summary and audit
+  export 200, and an evaluation of the finished run `deny` with `run_not_active`. Every body validated
+  against its schema in `packages/contracts/schemas`. The database held one outbox row to the
+  registered address with the reviewed report's content hash, the approval consumed, five actions and
+  five attempts succeeded, seven reservations settled and nothing reserved.
+- **The run pages in a browser** (headless Chromium, signed in through the login form, no shim): the
+  completed run, a run paused on `outcome_unknown`, one paused on `security_allowance_exhausted`
+  (started with `limits.modelCalls` 2: "2 of 2 (limit reached)", the gateway log
+  `model reservation refused ... limit_kind calls_total`), a failed run, an expired run and a
+  cancelled run each loaded with no console error and no failed `/api` request. Evidence is quoted in
+  WEB-16, WEB-17 and WEB-19 in `docs/roadmap/web-and-api.md`.
+- **A forced model timeout** (a labelled stub provider that never answers, not a model): the run paused
+  `outcome_unknown`, its reservation became `usage_unknown` and its slot stayed held.
+- **A run that failed on a loaded machine** (run `b0027f84-0967-437e-bcb2-5fa675ff5fd9`): the last
+  agent call timed out and marking it unknown also did not finish within its 5 s, which failed the run
+  as "model call failed" while the reservation stayed `reserved`. Fixed in 0eea3c2 (a sent request with
+  unknown usage pauses the run); no reproduction of the slowness exists.
+- **Live story runs** (the GO-27 sets in `docs/roadmap/go.md`): the internal report was created in 3 of 3
+  runs per set; the model proposed sending it in 1 of 3 (denied `report_export_restricted`); the
+  recipient reference was copied wrongly in 2 of 3 before the instruction asked for it verbatim and in
+  0 of 3 after.
+
+Not done: a dry run of the setup list above by a teammate who did not write the Go code (the Tests
+line of GO-61), the live checks that need a quiet machine (`docs/demo-runbook.md`, "Final live
+checks"), and a re-check at the freeze against the final build (X-59).
 
 ## Ollama transport (GO-06 progress)
 

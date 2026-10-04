@@ -3107,6 +3107,21 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     `docs/architecture.md` "Product modules" has one row per Go package on `main` (24 internal, 5
     commands) with purpose, owner lane, contracts and tables. Not done: the Tests line's dry run
     by a teammate who did not write the Go code.
+  - Progress (2026-10-04, lane f3, `main` 1c07e78): the worker, agent, model and budget part is added
+    to "Technical handoff (GO-61)" in `services/gateway/README.md`: "The production chain
+    constructor" (`agent.NewProductionChain`, `ChainConfig`, what it builds, how `cmd/gateway` starts and
+    stops it, and why a test builds the loop the same way), a dry-run checklist with the expected
+    output of each command, the corrected "one gateway process per database" limit (leases prevent a
+    double effect, not a double model request) and five limits seen in live runs (model calls past the
+    20 s deadline on a shared Ollama, unknown usage holding its slot, a lost unknown-usage mark, a 4B
+    model's varying choices, the replay's 15-minute window), three more evidence commands, and "Check
+    results (lane f3, 4 October 2026)" with what that lane ran. `docs/architecture.md` gains the one
+    missing package row (`cmd/catalogactivate`); every other package on `main` already had one. Checks
+    run in a clean worktree of `main` 1c07e78: gateway `format:check`, `lint`, `typecheck`, `test`,
+    `build` exit 0; `pnpm verify` "6 passed, 0 failed, 0 skipped"; `GOFLAGS=-p=3 pnpm test:db --fresh`
+    gateway "965 passed, 0 failed, 0 skipped", api "79 passed, 0 failed, 0 skipped". Not ticked: the Tests
+    line's dry run by a teammate who did not write the Go code has not happened, and the text must be
+    rechecked against the final build (X-59).
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation); "Durable state idempotency audit and uncertain outcomes" (Evidence without
     creating a second disclosure channel)
