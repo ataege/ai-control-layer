@@ -17,9 +17,12 @@ const MAX_REPORTED_ISSUES = 20;
 
 const feedIdentifierPattern = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 const ruleIdentifierPattern = /^[a-z0-9][a-z0-9_]{0,63}$/;
-/** An already normalized ASCII pattern: printable, no capitals, no edge or double spaces. */
+/**
+ * An already normalized ASCII pattern: printable, no capitals, no edge or double spaces, and no space
+ * next to ( ) . or =, because Go's NormalizeText removes those (so the gateway would refuse it).
+ */
 const normalizedAsciiPattern =
-  /^(?!.* {2})[\x21-\x40\x5b-\x7e](?:[\x20-\x40\x5b-\x7e]*[\x21-\x40\x5b-\x7e])?$/;
+  /^(?!.* {2})(?!.*(?: [().=]|[().=] ))[\x21-\x40\x5b-\x7e](?:[\x20-\x40\x5b-\x7e]*[\x21-\x40\x5b-\x7e])?$/;
 
 /** True for the characters Go's unicode.IsControl reports: U+0000 to U+001F and U+007F to U+009F. */
 function containsControlCharacter(text: string): boolean {

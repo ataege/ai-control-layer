@@ -264,7 +264,7 @@ anything else is a decision, not an implemented behaviour.
 9. **Feed grammar and trust (`feed grammar and trust`).** Normalized-substring rules. Trust is the
    authenticated import plus the SHA-256 of the file bytes, pinned by `signatures.revision`. There is
    no signing key; this is a documented limitation, so the feed is **not** called "signed". The feed
-   is `config/attack-signatures.json`, revision `feed_v1`, with four rules (SH-46). On `main`: yes, `config/attack-signatures.json`, revision `feed_v1`, four rules (`prompt_ignore_previous_v1`, `code_exec_python_import_v1`, `unsafe_deserialization_pickle_v1`, `model_repo_trust_remote_code_v1`); its own scope text says it protects no model-loading infrastructure. Importing it into a catalog revision is item 16.
+   is `config/attack-signatures.json`, revision `feed_v2`, with eleven rules (SH-46). On `main`: yes, `config/attack-signatures.json`, revision `feed_v2`, eleven rules (eight wordings of the instruction-redirection phrase, starting with `prompt_ignore_previous_v1`, then `code_exec_python_import_v1`, `unsafe_deserialization_pickle_v1`, `model_repo_trust_remote_code_v1`); its own scope text says it protects no model-loading infrastructure. Importing it into a catalog revision is item 16.
 10. **Reason codes (X-13).** 28 codes: the report's 20 plus `tool_not_registered`, `invalid_arguments`,
     `tool_not_allowed`, `decision_unavailable`, `content_blocked`, `content_too_large`,
     `multiple_actions_not_supported` and `run_expired`. On `main`: yes, 31 values in `packages/contracts/schemas/reason-code.schema.json` at 1dad371: these 28 plus `limit_not_allowed` (admission rejects requested limits above the catalog, GO-13), `run_not_active` (item 26) and `approval_rejected`.

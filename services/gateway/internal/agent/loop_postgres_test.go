@@ -316,7 +316,7 @@ func committedSecuritySettings(t *testing.T) security.Settings {
 		`"secret_pattern":{"enabled":true,"mode":"redact","boundaries":["model_input","tool_result"]},` +
 		`"semantic_injection":{"enabled":true,"mode":"block","threshold":0.75,"boundaries":["model_input","tool_result","action_proposal"]},` +
 		`"signature_match":{"enabled":true,"boundaries":["model_input","tool_result","action_proposal"]}},` +
-		`"signatures":{"path":"attack-signatures.json","revision":"feed_v1","disabled_rules":[]}}`)
+		`"signatures":{"path":"attack-signatures.json","revision":"feed_v2","disabled_rules":[]}}`)
 	settings, err := security.SettingsFromCatalog(1, content, feed, hex.EncodeToString(digest[:]))
 	if err != nil {
 		t.Fatalf("committed security settings: %v", err)

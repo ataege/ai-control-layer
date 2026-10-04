@@ -19,7 +19,7 @@ const policyText = readFileSync(resolve(configDirectory, "policy.yaml"), "utf8")
 const feedBytes = readFileSync(resolve(configDirectory, "attack-signatures.json"));
 const feedText = feedBytes.toString("utf8");
 // The digest Go pins for the committed feed (internal/security feed_file_test.go).
-const COMMITTED_FEED_DIGEST = "c40e5df8ccf55a56908dc56f906173d5a9a72678fa2ff20170a5b09114c67244";
+const COMMITTED_FEED_DIGEST = "ff6ff4fef7e7091a50c1e416fab5a7b1aa825b55d783ada38de43b42a399d98c";
 
 const encode = (text: string) => new TextEncoder().encode(text);
 const digestOf = (text: string) => digestPolicyBytes(encode(text));
@@ -27,8 +27,8 @@ const signaturesOff = policyText.replace(
   /signature_match:\n(\s+)enabled: true/,
   "signature_match:\n$1enabled: false",
 );
-const policyNamingFeedV2 = policyText.replace("revision: feed_v1", "revision: feed_v2");
-const feedV2Text = feedText.replace('"revision": "feed_v1"', '"revision": "feed_v2"');
+const policyNamingNextFeed = policyText.replace("revision: feed_v2", "revision: feed_v3");
+const nextFeedText = feedText.replace('"revision": "feed_v2"', '"revision": "feed_v3"');
 
 function request(policy: string, feed?: string): PolicyImportRequest {
   return {
@@ -85,7 +85,7 @@ describe("importPolicyFile with the signature feed", () => {
     });
     expect(feed).toMatchObject({
       issuer: "task-passport-security",
-      revision: "feed_v1",
+      revision: "feed_v2",
       fileDigest: COMMITTED_FEED_DIGEST,
       importSource: "command",
       importedBy: null,
@@ -125,7 +125,12 @@ describe("importPolicyFile with the signature feed", () => {
       feedText.replace('"issuer": "task-passport-security"', '"issuer": "other-publisher"'),
       "feed.issuer",
     ],
-    ["a policy naming another feed revision", policyNamingFeedV2, feedText, "signatures.revision"],
+    [
+      "a policy naming another feed revision",
+      policyNamingNextFeed,
+      feedText,
+      "signatures.revision",
+    ],
     [
       "a disabled rule the feed does not have",
       policyText.replace("disabled_rules: []", "disabled_rules: [no_such_rule_v1]"),
@@ -185,10 +190,10 @@ describe("importPolicyFile with the signature feed", () => {
 
     const later = await importPolicyFile(
       queryRunner.manager,
-      request(policyNamingFeedV2, feedV2Text),
+      request(policyNamingNextFeed, nextFeedText),
     );
 
-    if (!later.accepted) throw new Error("the feed_v2 policy and feed must be accepted");
+    if (!later.accepted) throw new Error("the feed_v3 policy and feed must be accepted");
     expect(later.feedRevisionId).not.toBe(first.feedRevisionId);
     expect(await readPointer()).toMatchObject({
       requestedRevisionId: later.revisionId,
@@ -204,7 +209,7 @@ describe("importPolicyFile with the signature feed", () => {
       queryRunner.query(
         `INSERT INTO app.signature_feed_revisions
            (issuer, revision, source_file_name, source_text, file_digest, content, import_source)
-         VALUES ('other-publisher', 'feed_v1', 'attack-signatures.json', $1, $2, '{}', 'command')
+         VALUES ('other-publisher', 'feed_v2', 'attack-signatures.json', $1, $2, '{}', 'command')
          RETURNING id::text`,
         [sourceText, digestOf(sourceText)],
       ) as Promise<{ id: string }[]>;

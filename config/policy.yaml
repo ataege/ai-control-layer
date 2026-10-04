@@ -49,7 +49,7 @@ controls:
 # Attack feed: the trusted, versioned signature feed this revision binds to (the feed itself is SH-46).
 signatures:
   path: attack-signatures.json
-  revision: feed_v1
+  revision: feed_v2
   disabled_rules: []
 
 # Reports: a setting that can only narrow which fixed templates may be used.

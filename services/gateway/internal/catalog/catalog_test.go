@@ -74,7 +74,7 @@ func TestPostgresActiveSnapshotFailsClosed(t *testing.T) {
 			world.activate(t, policyContent, nil)
 		},
 		"feed revision differs from the policy": func(world *catalogWorld, t *testing.T) {
-			world.activate(t, strings.Replace(policyContent, `"revision": "feed_v1"`, `"revision": "feed_v2"`, 1), &world.feedID)
+			world.activate(t, strings.Replace(policyContent, `"revision": "feed_v2"`, `"revision": "feed_v3"`, 1), &world.feedID)
 		},
 		"invalid limits": func(world *catalogWorld, t *testing.T) {
 			world.activate(t, strings.Replace(policyContent, `"calls_agent": 12`, `"calls_agent": 30`, 1), &world.feedID)
