@@ -1,6 +1,7 @@
 package security_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -54,7 +55,7 @@ var secretAttempts = []attempt{
 	{"newline after the colon", "password:\n" + password, password, caught, ""},
 	{"tabs and spaces around the colon", "password \t :  \t" + password, password, caught, ""},
 	{"single quoted value", "password='" + password + "'", password, caught, ""},
-	{"json without spaces", `{"password":"` + password + `"}`, password, caught, "the key's quote and colon end up in the masked span"},
+	{"json without spaces", `{"password":"` + password + `"}`, password, caught, "only the value is masked, so the json stays well formed"},
 	{"url encoded separator", "password%3D" + password, password, caught, "the encoded separator is masked with the value"},
 	{"zero-width space inside the value", "password: Sup3r\u200bSecret99", "Secret99", caught, "the whole token, zero-width space included, is masked"},
 	{"bearer token", "Authorization: Bearer abcdefghijklmnop1234", "abcdefghijklmnop1234", caught, ""},
@@ -80,7 +81,7 @@ var secretAttempts = []attempt{
 	{"client secret name", "client_secret: " + apiToken, apiToken, caught, "a keyword after an underscore or other non-alphanumeric is matched"},
 	{"password far from its keyword", "the password for the vault is " + password, password, bypass, "the value must follow the keyword directly"},
 	{"keyword not in the list", "passphrase: " + password, password, bypass, "only password, passwd, passcode and pwd"},
-	{"json with a space after the colon", `{"password": "` + password + `"}`, password, bypass, "the space ends the match at the key's quote and colon"},
+	{"json with a space after the colon", `{"password": "` + password + `"}`, password, caught, "an optional quote around the key and the value is allowed"},
 	{"letters only passphrase", "password: correcthorsebatterystaple", "correcthorse", bypass, "a credential must mix letters and digits"},
 	{"token shaped value without keyword", "sk_live_4eC39HqLyjWDarjtT1zdp7dc", "4eC39HqLyjWDarjtT1zdp7dc", bypass, "the token rule is keyword anchored; no vendor key formats"},
 
@@ -326,6 +327,26 @@ func TestRedTeamNormalizeTextIsIdempotent(t *testing.T) {
 		once := security.NormalizeText(input)
 		if twice := security.NormalizeText(once); twice != once {
 			t.Errorf("%q normalizes to %q, then to %q", input, once, twice)
+		}
+	}
+}
+
+// A quoted JSON secret is masked in place, so the masked text is still the same JSON document.
+func TestRedTeamQuotedJSONSecretIsMaskedInPlace(t *testing.T) {
+	for _, text := range []string{`{"password": "` + password + `"}`, `{"password":"` + password + `"}`, `{"api_key": "` + apiToken + `"}`} {
+		result, err := security.ApplyContentRules(security.Field{Name: security.FieldModelInputText, Text: text},
+			security.BoundaryModelInput, sampleSettings(t))
+		if err != nil || result.Record.Outcome != security.OutcomeRedact {
+			t.Fatalf("%s: outcome %s err %v", text, result.Record.Outcome, err)
+		}
+		var document map[string]string
+		if err := json.Unmarshal([]byte(result.Text), &document); err != nil {
+			t.Errorf("masked text %q is not the same JSON document: %v", result.Text, err)
+		}
+		for _, value := range document {
+			if !strings.HasPrefix(value, "[REDACTED:") {
+				t.Errorf("masked text %q keeps the value %q", result.Text, value)
+			}
 		}
 	}
 }
