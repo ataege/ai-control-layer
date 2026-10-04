@@ -14,7 +14,7 @@ const redirectsToLogin = (pathname: string, cookie?: string) => {
 
 describe("the sign-in gate", () => {
   it("sends a visitor without a session from a product page to /login, keeping where they were", () => {
-    for (const pathname of ["/", "/tasks/new", "/components", "/runs/run_1", "/judge"]) {
+    for (const pathname of ["/", "/tasks/new", "/security", "/runs/run_1", "/judge"]) {
       expect(redirectsToLogin(pathname)).toBe(true);
     }
     const location = middleware(requestFor("/tasks/new")).headers.get("location") ?? "";

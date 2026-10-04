@@ -20,10 +20,10 @@ const PROXIED_API_PATHS = ["/api/health/live", "/api/health/ready", "/api/diagno
 // Public API documents that are not part of the proxy comparison but are scanned for secrets.
 const SCANNED_API_ONLY_PATHS = ["/api/docs-json"];
 // Pages the middleware sends a visitor without a session to the sign-in page, and the sign-in page.
-const SIGN_IN_GATED_PAGE_PATHS = ["/", "/components"];
+const SIGN_IN_GATED_PAGE_PATHS = ["/", "/tasks/new"];
 const LOGIN_PAGE_PATH = "/login";
 // Pages checked with the demo operator's session.
-const WEB_PAGE_PATHS = ["/", "/components", "/diagnostics"];
+const WEB_PAGE_PATHS = ["/", "/tasks/new", "/diagnostics"];
 const SIGN_IN_PATH = "/api/auth/sign-in";
 const SIGN_OUT_PATH = "/api/auth/sign-out";
 // The seeded development-demonstration operator (apps/api/src/auth/demo-operator-seed.ts).

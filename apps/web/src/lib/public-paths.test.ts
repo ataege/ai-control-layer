@@ -38,10 +38,10 @@ describe("isPublicPath", () => {
     for (const pathname of [
       "/",
       "/tasks/new",
-      "/components",
+      "/security",
+      "/security/export",
       "/runs/run_1",
       "/judge",
-      "/security",
     ]) {
       expect(isPublicPath(pathname)).toBe(false);
     }

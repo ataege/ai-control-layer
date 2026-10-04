@@ -83,7 +83,6 @@ one shows the "Your session has ended" failure state with a sign-in link.
 | `/security`                     | Posture: decisions, controls that fired, the active control catalog, model usage per purpose, phase timings               |
 | `/security/export`              | Sanitized audit export as JSON or CSV pages (reviewer role; others see a refusal and no control)                          |
 | `/diagnostics`                  | Live health of the API, the gateway and their database connections, from real responses only                              |
-| `/components`                   | Showcase of every shared primitive and generic component                                                                  |
 
 What the product pages never do: compute a classification, a decision or a label from a title or a
 guess. They show what the server stored (`classification`, `lineage`, `reasonCode`, `effect`,

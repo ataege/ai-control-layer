@@ -130,7 +130,6 @@ Stop with Ctrl+C in the `pnpm dev` terminal, then `pnpm infra:down`. The databas
 | Web     | <http://localhost:3000/judge>                   | Judge console: submit your own input to the control layer                                     |
 | Web     | <http://localhost:3000/security>                | Security posture and active controls                                                          |
 | Web     | <http://localhost:3000/security/export>         | Audit export (JSON or CSV, reviewers only)                                                    |
-| Web     | <http://localhost:3000/components>              | Component showcase                                                                            |
 | Web     | <http://localhost:3000/diagnostics>             | Live service diagnostics                                                                      |
 | API     | <http://localhost:3001/api/health/live>         | Liveness, no dependencies                                                                     |
 | API     | <http://localhost:3001/api/health/ready>        | Readiness, `SELECT 1` against PostgreSQL                                                      |
@@ -470,9 +469,9 @@ Runtime check with real HTTP calls against services that are already running (`p
 
 - API liveness, readiness (database up) and gateway diagnostics (both checks up), each with HTTP 200;
   the OpenAPI document `/api/docs-json` loads.
-- The sign-in gate: `/` and `/components` without a session redirect to `/login`, and `/login` loads.
+- The sign-in gate: `/` and `/tasks/new` without a session redirect to `/login`, and `/login` loads.
   With `DEMO_OPERATOR_PASSWORD` in `.env` it then signs in as the seeded demo operator through
-  `/api/auth/sign-in` (a wrong password gets 401), loads `/`, `/components` and `/diagnostics` with
+  `/api/auth/sign-in` (a wrong password gets 401), loads `/`, `/tasks/new` and `/diagnostics` with
   that session, and signs out. Without the password the signed-in checks are skipped and the web leak
   check says it covered only the sign-in page.
 - The three web proxy routes return the same status as the API.

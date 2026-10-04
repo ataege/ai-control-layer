@@ -47,10 +47,10 @@ describe("mustSignIn", () => {
     for (const pathname of [
       "/",
       "/tasks/new",
-      "/components",
+      "/security",
+      "/security/export",
       "/runs/run_1",
       "/judge",
-      "/security",
     ]) {
       expect(mustSignIn({ status: "signed_out" }, pathname)).toBe(true);
     }
@@ -64,7 +64,7 @@ describe("mustSignIn", () => {
   });
 
   it("matches the middleware's public paths exactly, so /components is not public", () => {
-    expect(isPublicPath("/components")).toBe(false);
+    expect(isPublicPath("/security")).toBe(false);
     expect(isPublicPath("/diagnostics/extra")).toBe(true);
     expect(isPublicPath("/diagnosticsx")).toBe(false);
   });
