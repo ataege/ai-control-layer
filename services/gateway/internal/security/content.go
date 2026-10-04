@@ -62,12 +62,6 @@ var contentRules = []contentRule{
 		accept:  credentialShape(16),
 	},
 	{
-		id:      "secret_iban_v1",
-		kind:    SecretBankAccount,
-		pattern: regexp.MustCompile(`(?i)\b([A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?)\b`),
-		accept:  validIBAN,
-	},
-	{
 		id:      "secret_payment_card_v1",
 		kind:    SecretPaymentCard,
 		pattern: regexp.MustCompile(`\b([0-9](?:[ \-]?[0-9]){12,18})\b`),
@@ -93,6 +87,7 @@ func FindSecrets(text string) ([]Span, error) {
 			}
 		}
 	}
+	spans = append(spans, findIBANs(text)...)
 	return validateSpans(text, spans)
 }
 
@@ -283,6 +278,68 @@ var ibanLengths = map[string]int{
 	"SA": 24, "SC": 31, "SD": 18, "SE": 24, "SI": 19, "SK": 24, "SM": 27, "SO": 23, "ST": 25, "SV": 28,
 	"TL": 23, "TN": 24, "TR": 26, "UA": 29, "VA": 22, "VG": 24, "XK": 20, "YE": 30,
 }
+
+// ibanRuleID names the IBAN rule in records; IBANs are found by findIBANs, not by a pattern.
+const ibanRuleID = "secret_iban_v1"
+
+// findIBANs returns the spans of the valid IBANs in text, in either letter case. A candidate starts
+// at a word boundary with two letters and two digits; its country must be registered, and it then
+// takes exactly that country's length in letters and digits, with a single optional space before
+// each group of four. Taking a fixed length (not "as much as fits") is what keeps a following word
+// out of the span, so "ES91 2100 0418 4502 0005 1332 for Atlas" masks only the IBAN. The span is
+// exactly what was taken, and the mod-97 checksum must hold.
+func findIBANs(text string) []Span {
+	var spans []Span
+	for start := 0; start+4 <= len(text); start++ {
+		if start > 0 && isWordByte(text[start-1]) {
+			continue
+		}
+		if !isASCIILetter(text[start]) || !isASCIILetter(text[start+1]) || !isASCIIDigit(text[start+2]) || !isASCIIDigit(text[start+3]) {
+			continue
+		}
+		length, registered := ibanLengths[strings.ToUpper(text[start:start+2])]
+		if !registered {
+			continue
+		}
+		end, taken := takeIBAN(text, start, length)
+		if !taken || !validIBAN(text[start:end]) {
+			continue
+		}
+		spans = append(spans, Span{Start: start, End: end, Kind: SecretBankAccount, RuleID: ibanRuleID})
+		start = end - 1
+	}
+	return spans
+}
+
+// takeIBAN reads exactly length letters and digits from start, accepting one space before a group of
+// four, and returns where it ended. It fails when the characters run out or when the IBAN is
+// immediately followed by a letter, digit or underscore.
+func takeIBAN(text string, start, length int) (end int, taken bool) {
+	position, count := start+4, 4
+	for count < length {
+		if position+1 < len(text) && text[position] == ' ' && count%4 == 0 && isASCIIAlphanumeric(text[position+1]) {
+			position++
+		}
+		if position >= len(text) || !isASCIIAlphanumeric(text[position]) {
+			return 0, false
+		}
+		position++
+		count++
+	}
+	if position < len(text) && isWordByte(text[position]) {
+		return 0, false
+	}
+	return position, true
+}
+
+func isASCIILetter(character byte) bool {
+	return character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'
+}
+func isASCIIDigit(character byte) bool { return character >= '0' && character <= '9' }
+func isASCIIAlphanumeric(character byte) bool {
+	return isASCIILetter(character) || isASCIIDigit(character)
+}
+func isWordByte(character byte) bool { return isASCIIAlphanumeric(character) || character == '_' }
 
 // validIBAN checks the registered country and its exact length, then the ISO 13616 mod-97 checksum,
 // ignoring spaces and letter case.
