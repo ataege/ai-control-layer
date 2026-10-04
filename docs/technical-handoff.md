@@ -89,10 +89,8 @@ also stated where it applies.
 
 **API**
 
-- The judge CLI `pnpm judge` was sending a request the API refuses (`run_id` instead of `runId`, and
-  missing null fields); a fix was in progress when this was written, so check
-  [apps/api/README.md](../apps/api/README.md) and run `pnpm test:judge` plus one evaluation from the
-  `/judge` page before relying on the CLI.
+- The judge CLI `pnpm judge` sends the frozen X-91 request; its tests validate every body against the
+  contract schema (`pnpm test:judge`). It has not been run against a live model in this handoff.
 - A live two-operator organization-access check is missing because no second-organization operator
   is seeded; the public-path evidence is a database-backed test with a labelled Go fixture (API-23).
 - Free-text fields the contracts allow (for example an event's `safeMessage`) are relayed as the
