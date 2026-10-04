@@ -51,8 +51,9 @@ describe("EvaluationResult", () => {
         reasonCode: "no_risk_found",
       },
     });
-    expect(html).toContain("fixture (not live detection)");
-    expect(html).not.toContain("live model");
+    expect(html).toContain("Fixture verdict");
+    expect(html).toContain("tests handling, not detection quality");
+    expect(html).not.toContain("Live model");
   });
 
   it("labels a live semantic verdict as live", () => {
@@ -60,7 +61,23 @@ describe("EvaluationResult", () => {
       ...baseResponse,
       semantic: { source: "live", riskCategory: "none", score: 0.1, reasonCode: "no_risk_found" },
     });
-    expect(html).toContain("live model");
+    expect(html).toContain("Live model");
+    expect(html).not.toContain("Fixture verdict");
+  });
+
+  it("gives a source it does not recognize no verdict label, never calling it live", () => {
+    const html = render({
+      ...baseResponse,
+      semantic: {
+        source: "stub" as never,
+        riskCategory: "none",
+        score: 0.1,
+        reasonCode: "no_risk_found",
+      },
+    });
+    expect(html).not.toContain("Live model");
+    expect(html).not.toContain("Fixture verdict");
+    expect(html).toContain("category");
   });
 
   it("shows redacted text only when the server returned it, escaped", () => {
