@@ -1,4 +1,12 @@
-import { fetchJson, postJson, FetchJsonResult, FetchJsonOptions } from "./fetch-json";
+import { classifyFailure } from "./errors/failure";
+import { isReasonCode, REASON_FAILURES } from "./errors/reason-failures";
+import {
+  fetchJson,
+  postJson,
+  type FetchJsonError,
+  type FetchJsonOptions,
+  type FetchJsonResult,
+} from "./fetch-json";
 import type {
   RunEventsPage,
   RunState,
@@ -8,73 +16,125 @@ import type {
   TaskFormOptions,
 } from "@workspace/contracts";
 
-export const REASON_CODE_MESSAGES: Record<string, string> = {
-  resource_out_of_scope: "The requested resource is outside the authorized scope.",
-  destination_not_allowed: "The destination is not allowed by policy.",
-  report_export_restricted: "The report export is restricted due to its classification.",
-  report_lineage_missing: "Required report lineage metadata is missing.",
-  source_policy_changed: "The underlying policy for this source has changed.",
-  template_not_allowed: "The requested template is not permitted for this operation.",
-  approval_required: "This action requires explicit approval.",
-  approval_expired: "The approval for this action has expired.",
-  action_changed: "The proposed action was modified after approval.",
-  resource_version_changed: "The resource was updated concurrently.",
-  allowance_exhausted: "The operation budget or allowance was exhausted.",
-  run_cancelled: "The run was cancelled by an operator.",
-  outcome_unknown: "The outcome of the operation is unknown. It remains unconfirmed.",
-  semantic_injection_detected: "Semantic security analysis detected an injection attempt.",
-  security_evaluator_unavailable: "The semantic security evaluator is currently unavailable.",
-  security_allowance_exhausted: "The allowance for semantic security evaluation was exhausted.",
-  content_redacted: "Sensitive content was redacted.",
-  signature_match: "The content matched a known attack signature.",
-  policy_reload_rejected: "The provided policy reload was rejected by validation.",
-  model_not_allowed: "The requested model is not allowed.",
-  upstream_unreachable: "The upstream API could not be reached.",
-  upstream_timeout: "The upstream API did not respond in time. The outcome remains unconfirmed.",
-  invalid_json: "The response was not valid JSON.",
-  configuration_error: "A server configuration error occurred.",
-};
+const UNKNOWN_MESSAGE = "The request failed in a way this page does not recognize.";
 
-import { type FetchJsonError } from "./fetch-json";
-
+/**
+ * The fixed operator message for a failure. An X-13 reason code (given directly or found in an error
+ * body) gets the gateway's safe text for that code from the one typed mapping, WEB-23's
+ * REASON_FAILURES; anything else gets the shared classification's words. A server message is never
+ * shown.
+ */
 export function getSafeMessage(error: FetchJsonError | string): string {
   if (typeof error === "string") {
-    return REASON_CODE_MESSAGES[error] || "An unknown error occurred.";
+    return isReasonCode(error) ? REASON_FAILURES[error].message : UNKNOWN_MESSAGE;
   }
-  if (error.kind === "http") {
-    const code = (error.body as { error?: { code?: string } })?.error?.code;
-    if (code === "unauthorized") return "Invalid credentials.";
-    if (code) return REASON_CODE_MESSAGES[code] || "An unknown error occurred.";
-    if (error.status === 401) return "Invalid credentials.";
-  }
-  if (error.kind === "network") return "The server could not be reached.";
-  if (error.kind === "timeout") return "The request timed out.";
-  return REASON_CODE_MESSAGES[error.kind] || "An unknown error occurred.";
-}
-
-export function getErrorCode(error: FetchJsonError | string): string | undefined {
-  if (typeof error === "string") return error;
-  if (error.kind === "http") {
-    const code = (error.body as { error?: { code?: string } })?.error?.code;
-    return code || (error.status === 401 ? "unauthorized" : undefined);
-  }
-  return error.kind;
+  return classifyFailure(error).description;
 }
 
 // Type Guards for frozen contracts
-function isStartRunResponse(data: unknown): data is StartRunResponse {
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value !== "";
+
+/** True when the record has exactly these keys: the contracts are `additionalProperties: false`. */
+function hasExactlyKeys(record: Record<string, unknown>, keys: string[]): boolean {
+  const actual = Object.keys(record);
+  return actual.length === keys.length && keys.every((key) => key in record);
+}
+
+const isArrayOf = (value: unknown, guard: (item: unknown) => boolean): boolean =>
+  Array.isArray(value) && value.every(guard);
+
+/** X-07: the start-run answer is exactly the run and passport ids Go issued. */
+export function isStartRunResponse(data: unknown): data is StartRunResponse {
   return (
-    typeof data === "object" &&
-    data !== null &&
-    "runId" in data &&
-    typeof (data as Record<string, unknown>).runId === "string" &&
-    "passportId" in data &&
-    typeof (data as Record<string, unknown>).passportId === "string"
+    isRecord(data) &&
+    hasExactlyKeys(data, ["runId", "passportId"]) &&
+    isNonEmptyString(data.runId) &&
+    isNonEmptyString(data.passportId)
   );
 }
 
-function isTaskFormOptions(data: unknown): data is TaskFormOptions {
-  return typeof data === "object" && data !== null && "templates" in data && "vendors" in data;
+const isIdAndName = (item: unknown): boolean =>
+  isRecord(item) &&
+  hasExactlyKeys(item, ["id", "name"]) &&
+  isNonEmptyString(item.id) &&
+  isNonEmptyString(item.name);
+
+const isOfferedInvoice = (item: unknown): boolean =>
+  isRecord(item) &&
+  hasExactlyKeys(item, ["id", "number", "date", "amount", "vendorId", "currency"]) &&
+  isNonEmptyString(item.id) &&
+  typeof item.number === "string" &&
+  typeof item.date === "string" &&
+  /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(item.date) &&
+  Number.isInteger(item.amount) &&
+  isNonEmptyString(item.vendorId) &&
+  typeof item.currency === "string" &&
+  /^[A-Z]{3}$/.test(item.currency);
+
+const isApprovalRequirement = (item: unknown): boolean =>
+  isRecord(item) &&
+  hasExactlyKeys(item, ["id", "description"]) &&
+  isNonEmptyString(item.id) &&
+  isNonEmptyString(item.description);
+
+const isPositiveInteger = (value: unknown): boolean =>
+  Number.isInteger(value) && Number(value) >= 1;
+
+/** The task form options (API-12): every list and both limits, in the contract's exact shape. */
+export function isTaskFormOptions(data: unknown): data is TaskFormOptions {
+  return (
+    isRecord(data) &&
+    hasExactlyKeys(data, [
+      "templates",
+      "vendors",
+      "invoices",
+      "destinations",
+      "approvalRequirements",
+      "limits",
+    ]) &&
+    isArrayOf(data.templates, isIdAndName) &&
+    isArrayOf(data.vendors, isIdAndName) &&
+    isArrayOf(data.invoices, isOfferedInvoice) &&
+    isArrayOf(data.destinations, isIdAndName) &&
+    isArrayOf(data.approvalRequirements, isApprovalRequirement) &&
+    isRecord(data.limits) &&
+    hasExactlyKeys(data.limits, ["maxModelCalls", "maxTimeoutSeconds"]) &&
+    isPositiveInteger(data.limits.maxModelCalls) &&
+    isPositiveInteger(data.limits.maxTimeoutSeconds)
+  );
+}
+
+/** What `GET /api/auth/me` returns: the verified session's user, organization and roles. */
+export interface OperatorProfile {
+  id: string;
+  email: string;
+  name: string;
+  organizationId: string;
+  roles: string[];
+  /** The server's own mark of the development identity, when it sends one. */
+  developmentDemonstration?: boolean;
+}
+
+export function isOperatorProfile(data: unknown): data is OperatorProfile {
+  if (!isRecord(data)) return false;
+  const requiredKeys = ["id", "email", "name", "organizationId", "roles"];
+  const allowedKeys = [...requiredKeys, "developmentDemonstration"];
+  return (
+    requiredKeys.every((key) => key in data) &&
+    Object.keys(data).every((key) => allowedKeys.includes(key)) &&
+    isNonEmptyString(data.id) &&
+    isNonEmptyString(data.email) &&
+    typeof data.name === "string" &&
+    isNonEmptyString(data.organizationId) &&
+    isArrayOf(data.roles, (role) => typeof role === "string") &&
+    (data.developmentDemonstration === undefined ||
+      typeof data.developmentDemonstration === "boolean")
+  );
+}
+
+export function isSignInResponse(data: unknown): data is { message: string } {
+  return isRecord(data) && hasExactlyKeys(data, ["message"]) && typeof data.message === "string";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -245,34 +305,16 @@ export class ProductClient {
     password: string;
   }): Promise<FetchJsonResult<{ message: string }>> {
     const result = await postJson("/api/auth/sign-in", credentials);
-    return enforceGuard(
-      result,
-      (data): data is { message: string } =>
-        typeof data === "object" && data !== null && "message" in data,
-    );
+    return enforceGuard(result, isSignInResponse);
   }
 
-  static async getMe(): Promise<
-    FetchJsonResult<{
-      id: string;
-      email: string;
-      name: string;
-      organizationId: string;
-      roles: string[];
-    }>
-  > {
+  /** Ends the session. A success may carry no body (200 or 204), so there is no guard to apply. */
+  static async signOut(): Promise<FetchJsonResult<unknown>> {
+    return postJson("/api/auth/sign-out", {});
+  }
+
+  static async getMe(): Promise<FetchJsonResult<OperatorProfile>> {
     const result = await fetchJson("/api/auth/me");
-    return enforceGuard(
-      result,
-      (
-        data,
-      ): data is {
-        id: string;
-        email: string;
-        name: string;
-        organizationId: string;
-        roles: string[];
-      } => typeof data === "object" && data !== null && "id" in data && "name" in data,
-    );
+    return enforceGuard(result, isOperatorProfile);
   }
 }
