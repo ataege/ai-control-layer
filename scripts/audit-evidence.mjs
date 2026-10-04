@@ -4,7 +4,9 @@
 // A file fails when it holds any of:
 // - the value of a `.env` entry whose name contains PASSWORD, SECRET, TOKEN, KEY or SIGNING
 //   (8 characters or more);
-// - a local path (/Users/, /home/, /private/, /tmp/, /var/folders, a drive letter);
+// - an absolute path of this machine (/Users/, /home/, /private/, /var/folders, a drive letter, or
+//   the repository root); a bare /tmp/... inside a quoted example, such as a test-case title, is
+//   not a path of ours and passes;
 // - a URL other than example.*, localhost or 127.0.0.1, a Bearer value, a JWT or a session= value;
 // - the first 30 characters of a corpus text, hostile note, internal note or registered address
 //   from fixtures/ (prompt and record text never belongs in evidence);
@@ -24,7 +26,7 @@ const FRAGMENT_LENGTH = 30;
 const MINIMUM_TEXT_LENGTH = 12;
 
 const PATTERN_RULES = [
-  ["path", /(\/Users\/|\/home\/|\/private\/|\/tmp\/|\/var\/folders|[A-Za-z]:\\)/],
+  ["path", /(\/Users\/|\/home\/|\/private\/|\/var\/folders|[A-Za-z]:\\)/],
   ["url", /https?:\/\/(?!example\.|localhost|127\.0\.0\.1)/],
   ["token", /(Bearer\s+\S+|eyJ[A-Za-z0-9_-]{10,}|session=[A-Za-z0-9-]{8,})/],
 ];
@@ -51,7 +53,7 @@ export function loadAuditContext(root = repositoryRoot) {
   const fragments = texts
     .filter((text) => typeof text === "string" && text.length >= MINIMUM_TEXT_LENGTH)
     .map((text) => text.slice(0, FRAGMENT_LENGTH));
-  return { secrets, fragments };
+  return { secrets, fragments, root };
 }
 
 /** Findings for one file's text; each is a label that carries no secret value. */
@@ -60,6 +62,7 @@ export function auditText(text, { isJson, context }) {
   for (const [name, value] of context.secrets) {
     if (text.includes(value)) findings.push(`secret value of ${name}`);
   }
+  if (context.root && text.includes(context.root)) findings.push("repository root path");
   for (const [label, pattern] of PATTERN_RULES) {
     const match = text.match(pattern);
     if (match) findings.push(`${label}: ${match[0].slice(0, 24)}`);

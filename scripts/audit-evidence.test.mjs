@@ -82,6 +82,24 @@ test("a planted bad file fails for every kind of finding, without printing the s
   assert.ok(!labels.includes(FAKE_SECRET), "a finding must never carry the secret value");
 });
 
+test("a quoted /tmp example such as a test-case title passes, a real path of this machine fails", () => {
+  const context = loadAuditContext(root);
+  const caseTitle = 'refuses nonempty or invalid reload body {"path":"/tmp/other"}';
+  assert.deepEqual(auditText(JSON.stringify({ id: caseTitle }), { isJson: true, context }), []);
+  assert.match(
+    auditText("see /private/tmp/run.log", { isJson: false, context }).join(),
+    /path: \/private\//,
+  );
+  assert.match(
+    auditText("see /Users/someone/x", { isJson: false, context }).join(),
+    /path: \/Users\//,
+  );
+  // The temporary root may also look like a machine path (/var/folders on macOS), so only the
+  // root rule is required here.
+  const rootFindings = auditText(`built in ${root}/docs`, { isJson: false, context });
+  assert.ok(rootFindings.includes("repository root path"));
+});
+
 test("only secret-looking names of 8 or more characters are searched", () => {
   const context = loadAuditContext(root);
   assert.deepEqual(
