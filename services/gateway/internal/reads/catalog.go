@@ -164,20 +164,38 @@ func boundaryNames(boundaries []security.Boundary) []string {
 	return names
 }
 
-// decodeLastError keeps only the four decided fields of the stored record. A record that does not
-// parse is reported with a fixed code, never echoed.
+// importRejectionReason is the `reason` the API's importer stores when a policy file fails
+// validation (apps/api policy-file.ts). That record carries the file's issues, name and digest,
+// none of which are passed on.
+const importRejectionReason = "policy_reload_rejected"
+
+// decodeLastError keeps only the four decided fields of the stored record. The gateway's own
+// rejection carries them. An importer rejection has no code: it is reported with a fixed code,
+// message and the import_validation stage, and nothing else from it. Any other record that does
+// not parse is reported with a fixed code, never echoed.
 func decodeLastError(stored []byte) *CatalogLastError {
 	if len(stored) == 0 {
 		return nil
 	}
 	var record struct {
+		Reason     string `json:"reason"`
 		Code       string `json:"code"`
 		Message    string `json:"message"`
 		RevisionID int64  `json:"revision_id"`
 		Stage      string `json:"stage"`
 	}
-	if json.Unmarshal(stored, &record) != nil || record.Code == "" {
-		return &CatalogLastError{Code: "last_error_unreadable", Message: "The stored activation error could not be read.", Stage: "unknown"}
+	if json.Unmarshal(stored, &record) != nil {
+		return unreadableLastError()
 	}
-	return &CatalogLastError{Code: record.Code, Message: record.Message, RevisionID: record.RevisionID, Stage: record.Stage}
+	if record.Code != "" {
+		return &CatalogLastError{Code: record.Code, Message: record.Message, RevisionID: record.RevisionID, Stage: record.Stage}
+	}
+	if record.Reason == importRejectionReason && (record.Stage == "" || record.Stage == "import_validation") {
+		return &CatalogLastError{Code: importRejectionReason, Message: "The policy file failed validation.", Stage: "import_validation"}
+	}
+	return unreadableLastError()
+}
+
+func unreadableLastError() *CatalogLastError {
+	return &CatalogLastError{Code: "last_error_unreadable", Message: "The stored activation error could not be read.", Stage: "unknown"}
 }
