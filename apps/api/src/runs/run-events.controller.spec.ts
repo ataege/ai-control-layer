@@ -87,6 +87,10 @@ describe("Run events facade", () => {
   });
 
   it.each([
+    "after=abc",
+    "after=1.5",
+    "after=1e3",
+    "after=",
     "after=-1",
     "after=9223372036854775808",
     "after=1&after=2",

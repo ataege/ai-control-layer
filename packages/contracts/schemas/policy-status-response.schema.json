@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "policy-status-response.schema.json",
+  "title": "PolicyStatusResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requestedRevisionId",
+    "validatedRevisionId",
+    "activeRevisionId",
+    "activeFeedRevisionId",
+    "lastError"
+  ],
+  "properties": {
+    "requestedRevisionId": {
+      "type": ["string", "null"],
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "validatedRevisionId": {
+      "type": ["string", "null"],
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "activeRevisionId": {
+      "type": ["string", "null"],
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "activeFeedRevisionId": {
+      "type": ["string", "null"],
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "lastError": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["code", "message", "revisionId", "stage"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string"
+        },
+        "revisionId": {
+          "type": ["string", "null"],
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "stage": {
+          "enum": ["gateway_validation", "import_validation"]
+        }
+      }
+    }
+  }
+}

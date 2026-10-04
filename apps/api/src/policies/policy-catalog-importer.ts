@@ -21,6 +21,8 @@ const CATALOG_POINTER_ID = 1;
 const POINTER_LOCK_TIMEOUT = "5s";
 
 export interface PolicyImportRequest {
+  /** Only the authenticated reload supplies this; CLI imports remain actorless commands. */
+  provenance?: { importSource: "reload"; importedBy: string };
   /** File name only, for operators and the audit trail; never used to open anything. */
   sourceFileName: string;
   fileBytes: Uint8Array;
@@ -78,6 +80,15 @@ export async function importPolicyFile(
 ): Promise<PolicyImportOutcome> {
   if (!transactionManager.queryRunner?.isTransactionActive) {
     throw new Error("importPolicyFile must run inside a database transaction");
+  }
+  if (
+    request.provenance !== undefined &&
+    (request.provenance.importSource !== "reload" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+        request.provenance.importedBy,
+      ))
+  ) {
+    throw new Error("Invalid reload provenance");
   }
 
   const validation = validatePolicyFile(request.fileBytes);
@@ -173,7 +184,7 @@ export async function importPolicyFile(
 
   let feedRevision: SignatureFeedRevision | null = null;
   if (checkedFeed !== null) {
-    feedRevision = await storeCheckedFeed(transactionManager, checkedFeed);
+    feedRevision = await storeCheckedFeed(transactionManager, checkedFeed, request.provenance);
   }
 
   const revision = await transactionManager.save(
@@ -184,8 +195,8 @@ export async function importPolicyFile(
       fileDigest: validation.fileDigest,
       content: validation.policy,
       // The explicit command has no authenticated actor; the reload (API-33) records its actor.
-      importSource: "command",
-      importedBy: null,
+      importSource: request.provenance?.importSource ?? "command",
+      importedBy: request.provenance?.importedBy ?? null,
     }),
   );
 
@@ -326,6 +337,7 @@ async function checkSignatureFeed(
 async function storeCheckedFeed(
   transactionManager: EntityManager,
   checked: CheckedFeed,
+  provenance: PolicyImportRequest["provenance"],
 ): Promise<SignatureFeedRevision> {
   if (checked.existing !== null) return checked.existing;
   return transactionManager.save(
@@ -336,8 +348,8 @@ async function storeCheckedFeed(
       sourceText: checked.sourceText,
       fileDigest: checked.fileDigest,
       content: checked.feed,
-      importSource: "command",
-      importedBy: null,
+      importSource: provenance?.importSource ?? "command",
+      importedBy: provenance?.importedBy ?? null,
     }),
   );
 }

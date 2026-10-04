@@ -1,0 +1,16 @@
+{
+  "error": {
+    "code": "policy_reload_rejected",
+    "message": "Policy validation failed",
+    "issues": [
+      {
+        "path": "budgets.calls_agent",
+        "message": "agent and security calls exceed the shared ceiling"
+      }
+    ]
+  },
+  "statusCode": 400,
+  "requestId": "reload-fixture",
+  "timestamp": "2026-10-04T00:00:00Z",
+  "path": "/api/policies/reload"
+}

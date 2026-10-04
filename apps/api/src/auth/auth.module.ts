@@ -7,8 +7,7 @@ import { AuthController } from "./auth.controller.js";
 import { IdentityModule } from "../identity/identity.module.js";
 
 /**
- * Extension point: replace the AUTH_PROVIDER binding with a real provider and add a guard
- * when authentication is introduced. Nothing here is applied to any route.
+ * Stored-session authentication and the global current-membership guard.
  */
 @Module({
   imports: [IdentityModule],
