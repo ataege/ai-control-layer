@@ -40,7 +40,7 @@ Three things affect everyone, so each has exactly one owner:
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Shared contracts     | `packages/contracts` (types, schemas, fixtures) and the matching Go DTOs                                                                           | nestjs (the web + API implementer) coordinates and lands every change; each contract's recorded owner decides its shape after a quick shared review; Go stays the authority for action canonicalization; go applies the Go side |
 | Dependency lockfiles | `pnpm-lock.yaml`, the `catalog`, `allowBuilds` and `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`; `services/gateway/go.sum` together with go | integration runs the install and commits the lockfile                                                                                                                                                                           |
-| Migrations           | The single TypeORM toolchain in `apps/api`, used for every table, including tables the gateway reads                                               | integration: the web + API implementer writes and orders the migrations and the lead owns the database roles, by default (`shared-track assignment`); nestjs maintains the tooling and the `app` entities                       |
+| Migrations           | The single TypeORM toolchain in `apps/api`, used for every table, including tables the gateway reads                                               | integration: the lead's Claude sessions write and order the migrations and own the seeds and the database roles (`shared-track assignment`, decided 2026-10-04); nestjs maintains the tooling and the `app` entities            |
 
 The reason is practical: lockfiles and migration order do not merge well. One person changing them
 in sequence avoids conflicts that cost more than the wait.
@@ -54,8 +54,11 @@ in sequence avoids conflicts that cost more than the wait.
    `packages/contracts/schemas`, and the fixtures in `packages/contracts/fixtures`.
 3. The nestjs owner runs `pnpm --filter @workspace/contracts run test` and
    `pnpm --filter @workspace/contracts run build`.
-4. The go owner mirrors the shape in `services/gateway/internal/health/dto.go` and runs
-   `pnpm --filter gateway run test`. The test decodes the shared fixtures with unknown fields
+4. The go owner mirrors the shape in the matching Go package (`services/gateway/internal/contracts`
+   for the runtime contracts, `internal/health/dto.go` for health) and runs
+   `pnpm --filter gateway run test`. For a Go-owned contract (the read, review and approval shapes in
+   `packages/contracts/README.md`) the change starts in Go and lands in `packages/contracts` with its
+   fixture. The test decodes the shared fixtures with unknown fields
    disallowed and compares the values the handlers emit, so a mismatch fails. It does not validate
    against the JSON Schemas: a schema change that no fixture exercises must be mirrored by hand.
 5. The nestjs owner updates the Swagger DTO classes (they implement the contract interfaces, so
@@ -168,16 +171,11 @@ decisions, including the open items between the report and the architecture spec
 is an explicit, documented command, never loaded at application startup, and labelled as sample
 data in the UI.
 
-## Before implementation starts
+## Setting up a machine
 
-> **History.** These steps were taken before the implementation phase began and are kept for the
-> record; the open decisions they mention are now tracked in
-> [docs/product/README.md](product/README.md). For a new checkout, follow the Quick start in the
-> root `README.md`.
-
-1. **Commit the baseline.** Done: the starter baseline is on `main` in the team repository.
-2. **Each person, once:** install Go 1.27 or newer and Docker with the Compose plugin, then run the
-   commands below. Report the real result of `pnpm verify`.
+1. **Each person, once:** install Go 1.27 or newer and Docker with the Compose plugin, then run the
+   commands below. Report the real result of `pnpm verify`. The Quick start in the root `README.md`
+   continues from there.
 
    ```sh
    pnpm install
@@ -185,8 +183,8 @@ data in the UI.
    pnpm verify
    ```
 
-3. **One person with Docker** validates the container path, which has never been executed, and
-   records the result in the README section "Verification status":
+2. **On a new machine, validate the container path.** It ran on macOS on 2026-10-03 (SH-09, recorded in
+   the README section "Verification status"); repeat it and record the result:
 
    ```sh
    pnpm stack:up
@@ -194,17 +192,11 @@ data in the UI.
    pnpm stack:down
    ```
 
-4. **Settle the open design decisions** listed in `docs/product/README.md` and give each outcome
-   to the document owner, who records it there. Start with the browser to API path and the operator context sent to Go, because the
-   first contracts depend on them.
-5. **Record one owner per contract.** The report asks for this before parallel work starts. The
-   nestjs owner gives the contract owners to the document owner for `docs/product/README.md`. Every Go
-   package belongs to the Go implementer and is recorded in `services/gateway/README.md` when it is
-   created. The lead confirms the shared-track assignment and who holds the researcher role.
-6. **Confirm reuse with the organizers.** The report says not to presume that pre-event code or
-   prepared assets are eligible. The document owner confirms with the organizers whether this starter
-   may be used and how it must be disclosed. `docs/preparation-record.md` lists what was built
-   before the event and its third-party licenses.
+3. **Reuse and disclosure.** The report says not to presume that pre-event code or prepared assets
+   are eligible. The document owner confirms with the organizers whether this starter may be used and
+   how it must be disclosed (`docs/product/organizer-questions.md` holds the question and the proposed
+   pre-event disclosure).
+   `docs/preparation-record.md` lists what was built before the event and its third-party licenses.
 
 ## Using the Claude Code project agents
 
@@ -254,7 +246,7 @@ Migrations and entities already exist (`apps/api/src/database/migrations`, the `
 1. **Agree on it.** The owner of the feature and the migration owner (integration) agree that a
    migration is added now and where it sits in the order.
 2. **Create the entity class** in the API module that owns the data:
-   `apps/api/src/<module>/<name>.entity.ts`. Only NestJS-owned `app` tables become entities; set
+   `apps/api/src/<module>/entities/<name>.entity.ts`. Only NestJS-owned `app` tables become entities; set
    `schema: "app"` on them. Go-owned `runtime` and `demo` tables get no NestJS entity: the migration
    owner writes them by hand with `pnpm db:migration:create <Name>`.
 3. **Register it** in the `entities` array of the shared options factory,

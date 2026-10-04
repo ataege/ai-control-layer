@@ -4,9 +4,10 @@ The index of the technical handoff (SH-35). It links to the text each side owns 
 it, and it holds three things nobody else holds: the run order, the known limits in one place and
 the pointers to the evidence.
 
-**Status.** Assembled on 2026-10-04 from `main` 639f40b. It is not tied to the submitted build yet:
-the build identifier, the final recheck of every pointer below and the evidence recapture (X-59) wait
-for the freeze (SH-34, SH-32). Where a statement below needs that recheck it says so.
+**Status.** Assembled on 2026-10-04 from `main` 639f40b and re-checked in the documentation pass
+against `main` 9372862 (code frozen at c70492d). It is not tied to the submitted build yet: the build
+identifier and the evidence recapture (X-59) wait for the freeze (SH-34, SH-32), and the figures in the
+linked text are written as `<FINAL>` until then. Where a statement below needs that recheck it says so.
 
 ## What the handoff contains
 
@@ -102,7 +103,8 @@ also stated where it applies.
 
 - The sign-in gate checks that a `session` cookie exists; the API decides whether it is valid.
 - The run page polls every 3 seconds. Failure states (`@/components/errors`) are applied on the report
-  page; other pages still print a short message.
+  page and the task form; the security dashboard has its own failure view, and the run page and the
+  judge console still print a short message.
 - The content security policy allows `'unsafe-inline'` for scripts and styles because Next.js inlines
   its bootstrap ([apps/web/README.md](../apps/web/README.md)).
 - No accessibility audit, mobile layout check or browser end-to-end test in the automated suite;
@@ -132,7 +134,8 @@ also stated where it applies.
 ## Before this is final
 
 - Name the submitted build here and recapture every check's evidence from it (SH-32, X-59); the
-  numbers in the linked text were taken on `main` between 1c07e78 and 639f40b.
+  numbers in the linked text were taken on `main` between 1c07e78 and 9372862 and are replaced by
+  `<FINAL>` where they must be re-quoted.
 - Run the final live checks that need a quiet machine ([demo-runbook.md](demo-runbook.md) "Final live
   checks"); the live model steps of [how-to-open.txt](how-to-open.txt) (sections 4, 6 and 7) were not
   part of the clean-checkout runs above.
