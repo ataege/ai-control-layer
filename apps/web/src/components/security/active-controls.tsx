@@ -32,6 +32,7 @@ import type { CatalogStatus } from "@workspace/contracts";
 
 import { getCatalogStatus, type SecurityFailure } from "@/lib/clients/security-client";
 
+import { browserPollEnvironment, pollDelay, schedulePoll } from "./catalog-polling";
 import {
   controlRows,
   describeReload,
@@ -40,9 +41,6 @@ import {
   type ReloadRejection,
   type ReloadState,
 } from "./catalog-view";
-
-/** While a requested revision is not active yet, ask again this often, so a change shows up. */
-const PENDING_POLL_MS = 3_000;
 
 type PanelState =
   | { status: "loading" }
@@ -56,32 +54,40 @@ type PanelState =
  */
 export function ActiveControls() {
   const [state, setState] = useState<PanelState>({ status: "loading" });
-  // Each refresh (a click, or the poll while a change is pending) bumps the count; a request that
-  // settles records which count it answered, so "refreshing" is derived and the effect never sets
-  // state synchronously.
+  // Each refresh (a click, or the background poll) bumps the count; a request that settles records
+  // which count it answered, so "refreshing" is derived and the effect never sets state
+  // synchronously. Only a click spins the button: the background poll is quiet.
   const [refreshCount, setRefreshCount] = useState(0);
   const [settledCount, setSettledCount] = useState(-1);
-  const refreshing = settledCount !== refreshCount;
-  const refresh = () => setRefreshCount((count) => count + 1);
+  const [clickedCount, setClickedCount] = useState(0);
+  const refreshing = settledCount !== refreshCount && clickedCount === refreshCount;
+  const refresh = () => {
+    setClickedCount(refreshCount + 1);
+    setRefreshCount((count) => count + 1);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
-    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let cancelPoll: (() => void) | undefined;
     void getCatalogStatus({ signal: controller.signal }).then((result) => {
       if (controller.signal.aborted) return;
       setSettledCount(refreshCount);
       if (result.ok) {
         setState({ status: "ready", catalog: result.status, requestId: result.requestId });
-        if (isReloadPending(result.status)) {
-          pollTimer = setTimeout(() => setRefreshCount((count) => count + 1), PENDING_POLL_MS);
-        }
       } else {
         setState({ status: "failed", failure: result.failure });
       }
+      // Ask again after every answer, so a policy change made from the terminal, a rejection or a
+      // recovered outage shows up without a click. The poll is sooner while a revision is pending
+      // and waits while the tab is hidden.
+      const pending = result.ok && isReloadPending(result.status);
+      cancelPoll = schedulePoll(browserPollEnvironment, pollDelay(pending), () =>
+        setRefreshCount((count) => count + 1),
+      );
     });
     return () => {
       controller.abort();
-      clearTimeout(pollTimer);
+      cancelPoll?.();
     };
   }, [refreshCount]);
 
