@@ -2982,6 +2982,14 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     benign semantic allow. Under a machine load average of 50-90 the security call timed out
     (usage unknown), and the evaluation correctly denied with `security_evaluator_unavailable`. The
     benign allow is shown with the labelled fixture model.
+  - Follow-up (2026-10-04, lane 3c, lead decision after lane f3's quiet-window run): the judge console's
+    "Start a dedicated judge run" was an ordinary start-run, so the agent really ran on it and competed
+    with the evaluations for the local model. New `POST /internal/judge-runs`
+    (`admission.Admitter.AdmitJudge`, `repository.Tx.InsertJudgeAdmission`): the same X-07 body,
+    validation, passport, ledger and answers, but no agent job, and `run.queued` marked `inputSource:
+"judge"`; evaluations accept the queued run until cancel (stopped at once) or passport expiry
+    (`run_expired`). Known limit: an expired judge run keeps status `queued`. The API and web part
+    (`POST /api/runs/judge`) is lane c2's.
   - Report: "Technical architecture and service ownership" (Small integration boundary); "Illustrative passport and interface contracts" (Proposed browser and runtime operations)
   - Blocked by: nothing
 

@@ -26,6 +26,10 @@ import (
 // StartRunRoutePattern is the internal start-run command (X-28).
 const StartRunRoutePattern = "POST /internal/runs"
 
+// JudgeRunRoutePattern starts a run for the judge console: the same X-07 body and answers as
+// StartRunRoutePattern, but no agent job, so only evaluations use the run.
+const JudgeRunRoutePattern = "POST /internal/judge-runs"
+
 // CancelRunRoutePattern is the internal cancel command (X-42, GO-41).
 const CancelRunRoutePattern = "POST /internal/runs/{runId}/cancel"
 
@@ -38,6 +42,12 @@ const maximumStartRunBodyBytes = 64 << 10
 // RunAdmitter issues passports; *admission.Admitter implements it.
 type RunAdmitter interface {
 	Admit(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest) (contracts.Passport, error)
+}
+
+// JudgeRunAdmitter issues passports for judge runs without an agent job; *admission.Admitter
+// implements it.
+type JudgeRunAdmitter interface {
+	AdmitJudge(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest) (contracts.Passport, error)
 }
 
 // RunCanceller records cancellations; *repository.Repository implements it.
@@ -82,6 +92,7 @@ const maximumEvaluateBodyBytes = 16 << 10
 // Dependencies are what the internal routes need.
 type Dependencies struct {
 	Admitter  RunAdmitter
+	Judges    JudgeRunAdmitter
 	Canceller RunCanceller
 	Approvals Approvals
 	Runs      RunReader
@@ -95,6 +106,7 @@ type Dependencies struct {
 func Commands(dependencies Dependencies) []httpserver.InternalCommand {
 	return []httpserver.InternalCommand{
 		{Pattern: StartRunRoutePattern, Handler: StartRunHandler(dependencies.Admitter)},
+		{Pattern: JudgeRunRoutePattern, Handler: JudgeRunHandler(dependencies.Judges)},
 		{Pattern: CancelRunRoutePattern, Handler: CancelRunHandler(dependencies.Canceller)},
 		{Pattern: ControlEvaluateRoutePattern, Handler: ControlEvaluateHandler(dependencies.Evaluator)},
 		{Pattern: TaskOptionsRoutePattern, Handler: TaskOptionsHandler(dependencies.Options)},
@@ -118,9 +130,28 @@ func Commands(dependencies Dependencies) []httpserver.InternalCommand {
 // admission could not decide. It never waits on a model or tool request: the run proceeds in
 // the worker.
 func StartRunHandler(admitter RunAdmitter) http.Handler {
+	if admitter == nil {
+		return admissionHandler(nil)
+	}
+	return admissionHandler(admitter.Admit)
+}
+
+// JudgeRunHandler starts a judge run (no agent job) with the same body, answers and logging as
+// StartRunHandler.
+func JudgeRunHandler(admitter JudgeRunAdmitter) http.Handler {
+	if admitter == nil {
+		return admissionHandler(nil)
+	}
+	return admissionHandler(admitter.AdmitJudge)
+}
+
+type admitFunc func(ctx context.Context, operator contracts.OperatorContext, request contracts.StartRunRequest) (contracts.Passport, error)
+
+// admissionHandler is the shared start-run handler behind both routes.
+func admissionHandler(admit admitFunc) http.Handler {
 	return http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
 		operator, verified := operatorcontext.FromContext(request.Context())
-		if !verified || admitter == nil {
+		if !verified || admit == nil {
 			// The route guard always sets the operator; its absence is never an allow.
 			httpserver.WriteError(responseWriter, request, http.StatusUnauthorized, "unauthorized", "Missing or invalid operator context.")
 			return
@@ -129,7 +160,7 @@ func StartRunHandler(admitter RunAdmitter) http.Handler {
 		if !httpserver.DecodeJSONBody(responseWriter, request, maximumStartRunBodyBytes, &startRequest) {
 			return
 		}
-		passport, err := admitter.Admit(request.Context(), operator, startRequest)
+		passport, err := admit(request.Context(), operator, startRequest)
 		var rejection *admission.Rejection
 		switch {
 		case errors.As(err, &rejection):
