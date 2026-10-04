@@ -43,10 +43,10 @@ func TestValidIBANNeedsARegisteredCountryAndItsLength(t *testing.T) {
 }
 
 // Lower-case hex identifiers (a MongoDB ObjectId is 24 characters) were flagged about once in 1,400
-// when the pattern became case insensitive. With the registry they are not, for a fixed sample.
+// when the pattern became case insensitive. With the registry they are not, for a fixed sample of 40,000.
 func TestHexIdentifiersAreNotTakenForIBANs(t *testing.T) {
 	random := rand.New(rand.NewSource(20261004))
-	for range 5000 {
+	for range 40000 {
 		length := 24 + random.Intn(5)
 		identifier := make([]byte, length)
 		for index := range identifier {
@@ -60,6 +60,64 @@ func TestHexIdentifiersAreNotTakenForIBANs(t *testing.T) {
 		for _, span := range spans {
 			if span.Kind == SecretBankAccount {
 				t.Fatalf("hex identifier taken for an IBAN: %s", fmt.Sprintf("%q", text))
+			}
+		}
+	}
+}
+
+// validIBANFor builds an IBAN of the registered length for a country: a deterministic digit BBAN and
+// the mod-97 check digits that make it valid.
+func validIBANFor(country string, length int) string {
+	bban := make([]byte, length-4)
+	for index := range bban {
+		bban[index] = "1234567890"[(index*7+3)%10]
+	}
+	remainder := 0
+	for _, character := range string(bban) + country + "00" {
+		if character >= '0' && character <= '9' {
+			remainder = (remainder*10 + int(character-'0')) % 97
+		} else {
+			remainder = (remainder*100 + int(character-'A') + 10) % 97
+		}
+	}
+	return fmt.Sprintf("%s%02d%s", country, 98-remainder, bban)
+}
+
+// groupedInFours writes an IBAN the way it is printed: groups of four separated by single spaces.
+func groupedInFours(iban string) string {
+	var groups []string
+	for len(iban) > 4 {
+		groups, iban = append(groups, iban[:4]), iban[4:]
+	}
+	return strings.Join(append(groups, iban), " ")
+}
+
+// A trailing word must never be absorbed into the IBAN candidate: every registered country, compact
+// and grouped, in either letter case, is masked exactly, whatever follows it.
+func TestEveryRegisteredIBANIsMaskedExactlyWhateverFollows(t *testing.T) {
+	suffixes := []string{"", ".", " ok", " for Atlas", " FOR ATLAS", " today", " tomorrow", ", thanks", "\nnext line"}
+	prefixes := []string{"", "IBAN: ", "pay to "}
+	for country, length := range ibanLengths {
+		compact := validIBANFor(country, length)
+		if !validIBAN(compact) {
+			t.Fatalf("%s: the generated %q is not a valid IBAN", country, compact)
+		}
+		for _, written := range []string{compact, groupedInFours(compact), strings.ToLower(compact), strings.ToLower(groupedInFours(compact))} {
+			for _, prefix := range prefixes {
+				for _, suffix := range suffixes {
+					text := prefix + written + suffix
+					spans, err := FindSecrets(text)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(spans) != 1 || spans[0].Kind != SecretBankAccount || text[spans[0].Start:spans[0].End] != written {
+						t.Errorf("%q: spans %+v, want exactly the IBAN %q", text, spans, written)
+						continue
+					}
+					if masked, _ := MaskText(text, spans); masked != prefix+"[REDACTED:bank_account]"+suffix {
+						t.Errorf("%q: masked %q", text, masked)
+					}
+				}
 			}
 		}
 	}
