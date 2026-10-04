@@ -1378,8 +1378,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Work: A separate hostile-note fixture (redirect to invoice_B01 or another recipient, or include internal information in a vendor message), distinct from the clean authorized note; defined secret-redaction cases; and "a small labeled corpus containing benign text, direct/indirect instruction attacks and secret-redaction cases". Harmless attack strings only.
   - Done when: the fixtures load through the seed command and are labelled synthetic.
   - Tests: run the seed on an empty database and query the fixtures.
-  - Completed (2026-10-04, lane 3c; Done-when narrowed by the lead): the corpus is not loaded by `pnpm
-db:seed`, and nothing needs it in the database: every consumer reads the files directly.
+  - Completed (2026-10-04, lane 3c): loading into the database is not required: the corpus is read directly by the Go security tests, the replays, `pnpm verify:controls` and the judge client (accepted by the lead 2026-10-04); `pnpm db:seed` does not load it.
     `fixtures/hostile-notes.json` (the hostile notes, distinct from the clean authorized note in
     `demo-records.json`) and `fixtures/semantic-corpus.json` (`fixture_version` 3: benign texts with
     hard negatives, direct and indirect instruction attacks, 13 secret-redaction cases) both carry
@@ -1503,6 +1502,13 @@ db:seed`, and nothing needs it in the database: every consumer reads the files d
   - Done when: a report row cannot be committed without its lineage rows, and the migration reverts
     cleanly.
   - Tests: a database-backed test through X-24; migration round trip.
+  - Progress (2026-10-04, lane 3c; lead decision: no migration before the freeze): lineage table and FK
+    done (`runtime.report_lineage`, migration 1791060000000: immutable rows, foreign key to
+    `demo.reports` per organization); at-least-one-lineage is enforced by Go (one transaction in
+    `provenance/store.go`, `report_lineage_missing` at export); a deferred DB trigger is a known limit
+    (a `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` on `demo.reports` would enforce it at
+    commit, but the tests that commit a report without lineage on purpose would have to change in the
+    same round).
   - Report: "MVP" (Inherited report restrictions); "Durable state idempotency audit and uncertain
     outcomes"
   - Blocked by: `report storage`; `internal report rendering` (context part)
