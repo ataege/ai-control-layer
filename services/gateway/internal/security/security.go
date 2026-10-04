@@ -93,8 +93,8 @@ const (
 	ControlFieldLimit        = "field_limit"
 )
 
-// Reason codes from the proposed vocabulary (docs/product/README.md). ReasonContentBlocked and
-// ReasonContentTooLarge were approved by the lead's delegate on 2026-10-03 and wait for X-13.
+// Reason codes of the X-13 vocabulary (contracts.ReasonCode); the test in reason_vocabulary_test.go
+// keeps them in step with it.
 const (
 	ReasonContentRedacted              = "content_redacted"
 	ReasonContentBlocked               = "content_blocked"
