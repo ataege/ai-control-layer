@@ -2074,6 +2074,23 @@ test:db --fresh` on go/3c 8e71c75 (main 87f22f0): gateway 878 passed, api 16 pas
     Checks: gateway `format:check`, `lint`, `typecheck`, `test`, `build` exit 0; api `lint`, `typecheck` exit 0; `pnpm verify` 6 passed, 0 failed, 0 skipped; `GOFLAGS=-p=3 pnpm test:db`: gateway "741 passed, 0 failed, 0 skipped; 185 need the database", api "16 passed". Model call retries are not adopted
     (`model call retries`), so no retry reserves again; local inference has no tariff, so no
     estimated cost is recorded.
+  - Completed, the missing-counts variant (2026-10-04, lane f3, no model): a provider answer that
+    carries no usable token counts is unknown usage, never zero, through the real stack.
+    `TestAnswerWithoutTokenCountsIsUnknownUsageNotZero` (`internal/agent`, PostgreSQL) serves
+    Ollama-shaped JSON from a labelled stub through the real transport, accounted caller, stepper and
+    loop for three answers (no counts, input count only, output count only), and for each asserts: one
+    provider request even after a second claim; the run `paused`/`outcome_unknown` with the explanation
+    "The local model call failed or returned no usage counts; whether it used tokens is unknown, so its
+    allowance stays held and the run is paused."; the call recorded `usage_unknown`; the reservation
+    `usage_unknown` with its whole 4,480 tokens and its slot held and no input, output or actual count;
+    and the operator read (`reads.RunUsageHandler`) showing usage unknown 1, settled tokens 0, held
+    tokens 4,480, ledger used 0, reserved 4,480, one call in flight. The same on the real stack (web,
+    API, gateway) with a labelled stub that answers at once without counts: run
+    `5e1806ce-671c-4a49-ac06-ba781f0dc677` paused `outcome_unknown` in about 2 s, usage `usageUnknown 1,
+settledTokens 0, heldTokens 4428, reserved 4428, used 0`, and the run page showed "Operator attention
+    required", "Usage is uncertain", "0 + uncertain" reported, 4,428 held, "1 with unknown usage" and the
+    recorded explanation above, with no console error and no failed /api request (the same page path as
+    WEB-19). Checks: `go vet ./internal/agent` clean; the test passes against `f3_test`.
   - Report: "Atomic allowances hard limits and estimated cost"; "Validation plan and evidence
     matrix" (critical check Unknown usage); "Architecture and chart reading guide" (Figures 4 and 5)
   - Blocked by: `decision 6 in docs/product/README.md`; `dispatched attempts`
@@ -3118,9 +3135,10 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     unknown outcomes, the audit stream as application evidence, literal field inspection, no
     start-run idempotency key); and every evidence command with what it proves. The README's
     configuration table now lists `POSTGRES_GATEWAY_PASSWORD`, `MODEL_BASE_URL` and `MODEL_NAME`.
-    `docs/architecture.md` "Product modules" has one row per Go package on `main` (24 internal, 5
-    commands) with purpose, owner lane, contracts and tables. Not done: the Tests line's dry run
-    by a teammate who did not write the Go code.
+    `docs/architecture.md` "Product modules" has one row per Go package on `main` (24 internal
+    packages and the 6 commands: the gateway and five tools) with purpose, owner lane, contracts and
+    tables. Not done: the Tests line's dry run by a teammate who did not write the Go code (done
+    since, see the next entry).
   - Progress (2026-10-04, lane f3, `main` 1c07e78): the worker, agent, model and budget part is added
     to "Technical handoff (GO-61)" in `services/gateway/README.md`: "The production chain
     constructor" (`agent.NewProductionChain`, `ChainConfig`, what it builds, how `cmd/gateway` starts and
@@ -3133,9 +3151,18 @@ chain.Settings)`) with a recorder and freezer that store nothing, so evaluated a
     missing package row (`cmd/catalogactivate`); every other package on `main` already had one. Checks
     run in a clean worktree of `main` 1c07e78: gateway `format:check`, `lint`, `typecheck`, `test`,
     `build` exit 0; `pnpm verify` "6 passed, 0 failed, 0 skipped"; `GOFLAGS=-p=3 pnpm test:db --fresh`
-    gateway "965 passed, 0 failed, 0 skipped", api "79 passed, 0 failed, 0 skipped". Not ticked: the Tests
-    line's dry run by a teammate who did not write the Go code has not happened, and the text must be
-    rechecked against the final build (X-59).
+    gateway "965 passed, 0 failed, 0 skipped", api "79 passed, 0 failed, 0 skipped".
+  - Dry run (2026-10-04, session c2, who did not write the Go code; `go/f3-61` 641f611, a clean
+    worktree with its own Compose project and port, a fresh `pnpm install`, no model call, every line
+    on its own exit code): every line of the "Dry-run checklist" held. `db:migration:run` executed 21
+    migrations; `db:seed` printed "requested revision 1"; `catalog:activate` "activated revision 1 with
+    signature feed revision 1"; the five gateway checks exit 0; `GOFLAGS=-p=3 pnpm test:db --fresh` exit 0
+    in 86 s with gateway "965 passed, 0 failed, 0 skipped" and api "79 passed, 0 failed, 0 skipped" (the
+    same numbers); `pnpm dev` readiness 200; `pnpm smoke` "36 passed, 0 failed, 6 skipped"; the five
+    named evidence tests and the model-free `pnpm benchmark` passed. Six small mismatches in the text
+    (the gateway port variable, the working directory of the `go test` rows, the runbook pointer, six
+    secrets not three, the missing-model warning, this command count) were corrected. Not ticked: the
+    text must be rechecked against the final build (X-59), which is what X-62 requires.
   - Report: "Research documentation and submission workflow" (From requirements to verified
     presentation); "Durable state idempotency audit and uncertain outcomes" (Evidence without
     creating a second disclosure channel)
