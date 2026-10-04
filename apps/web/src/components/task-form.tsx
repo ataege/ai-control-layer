@@ -6,13 +6,14 @@ import { Loader2 } from "lucide-react";
 import type { TaskFormOptions } from "@workspace/contracts";
 
 import { AdmissionRejectionNotice } from "@/components/admission-rejection";
+import { FailureState } from "@/components/errors";
 import { admissionRejectionFromError, type AdmissionRejection } from "@/lib/admission-rejection";
+import { classifyFailure, type Failure } from "@/lib/errors/failure";
 import { ProductClient } from "@/lib/product-client";
 import {
   buildStartRunRequest,
+  classifyOptionsFailure,
   describeEmptyOffers,
-  describeOptionsFailure,
-  describeStartFailure,
   EMPTY_FORM_STATE,
   firstProblemWithChoices,
   formatInvoiceAmount,
@@ -53,10 +54,18 @@ interface TaskFormViewProps {
   /** Called only from the operator's own submit or from the rejection notice's button. */
   onSubmit: () => void;
   isSubmitting: boolean;
-  /** A reason the choices cannot be submitted, or a start failure that is not an admission rejection. */
+  /** A reason the choices cannot be submitted, found before anything is sent. */
   problem: string | null;
+  /** A start that failed for a reason other than an admission rejection, in its own truthful state. */
+  failure: FailureView | null;
   /** The admission rejection of the last submission; no passport or run exists for it. */
   rejection: AdmissionRejection | null;
+}
+
+/** A classified failure with the request id of the exchange that failed. */
+interface FailureView {
+  failure: Failure;
+  requestId?: string;
 }
 
 /** The form's fields and messages for a loaded options read; it holds no state of its own. */
@@ -67,6 +76,7 @@ export function TaskFormView({
   onSubmit,
   isSubmitting,
   problem,
+  failure,
   rejection,
 }: TaskFormViewProps) {
   const offeredInvoices = options.invoices as OfferedInvoice[];
@@ -269,6 +279,13 @@ export function TaskFormView({
               {problem}
             </div>
           )}
+          {failure !== null && (
+            <FailureState
+              failure={failure.failure}
+              requestId={failure.requestId}
+              onRetry={onSubmit}
+            />
+          )}
         </CardContent>
         <CardFooter>
           <Button type="submit" className="w-full" disabled={isSubmitting}>
@@ -286,9 +303,12 @@ export function TaskFormView({
   );
 }
 
+// A failure that was thrown rather than returned (fetchJson itself never throws): nothing is known about it.
+const UNEXPECTED_ERROR = { kind: "http", status: 0, body: undefined } as const;
+
 type OptionsRead =
   | { status: "loading" }
-  | { status: "failed"; message: string }
+  | { status: "failed"; view: FailureView }
   | { status: "loaded"; options: TaskFormOptions };
 
 export function TaskForm() {
@@ -298,6 +318,7 @@ export function TaskForm() {
   const [state, setState] = React.useState<TaskFormState>(EMPTY_FORM_STATE);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [problem, setProblem] = React.useState<string | null>(null);
+  const [failure, setFailure] = React.useState<FailureView | null>(null);
   const [rejection, setRejection] = React.useState<AdmissionRejection | null>(null);
 
   React.useEffect(() => {
@@ -309,12 +330,18 @@ export function TaskForm() {
           setState(initialFormState(result.data));
           setOptionsRead({ status: "loaded", options: result.data });
         } else {
-          setOptionsRead({ status: "failed", message: describeOptionsFailure(result.error) });
+          setOptionsRead({
+            status: "failed",
+            view: { failure: classifyOptionsFailure(result.error), requestId: result.requestId },
+          });
         }
       })
       .catch(() => {
         if (isCurrent) {
-          setOptionsRead({ status: "failed", message: "Loading the task options failed." });
+          setOptionsRead({
+            status: "failed",
+            view: { failure: classifyFailure(UNEXPECTED_ERROR) },
+          });
         }
       });
     return () => {
@@ -327,12 +354,14 @@ export function TaskForm() {
     const choicesProblem = firstProblemWithChoices(state, optionsRead.options);
     if (choicesProblem !== null) {
       setRejection(null);
+      setFailure(null);
       setProblem(choicesProblem);
       return;
     }
 
     setIsSubmitting(true);
     setProblem(null);
+    setFailure(null);
     setRejection(null);
     try {
       const result = await ProductClient.startRun(buildStartRunRequest(state));
@@ -343,9 +372,15 @@ export function TaskForm() {
       // The operator's choices stay exactly as they are; only a new submission can change the outcome.
       const admissionRejection = admissionRejectionFromError(result.error);
       if (admissionRejection !== null) setRejection(admissionRejection);
-      else setProblem(describeStartFailure(result.error));
+      else {
+        // Starting a task is a command: with no answer it may still have been carried out.
+        setFailure({
+          failure: classifyFailure(result.error, { command: true }),
+          requestId: result.requestId,
+        });
+      }
     } catch {
-      setProblem("An unexpected error occurred, so it is not known whether the task was started.");
+      setFailure({ failure: classifyFailure(UNEXPECTED_ERROR, { command: true }) });
     } finally {
       setIsSubmitting(false);
     }
@@ -361,25 +396,28 @@ export function TaskForm() {
     );
   }
 
-  const unavailableMessage =
-    optionsRead.status === "failed"
-      ? optionsRead.message
-      : describeEmptyOffers(optionsRead.options);
-  if (optionsRead.status === "failed" || unavailableMessage !== null) {
+  const retryLoad = () => {
+    setOptionsRead({ status: "loading" });
+    setLoadAttempt((attempt) => attempt + 1);
+  };
+  if (optionsRead.status === "failed") {
+    return (
+      <FailureState
+        failure={optionsRead.view.failure}
+        requestId={optionsRead.view.requestId}
+        onRetry={retryLoad}
+      />
+    );
+  }
+  const emptyOffers = describeEmptyOffers(optionsRead.options);
+  if (emptyOffers !== null) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
           <p role="alert" className="text-destructive">
-            {unavailableMessage}
+            {emptyOffers}
           </p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => {
-              setOptionsRead({ status: "loading" });
-              setLoadAttempt((attempt) => attempt + 1);
-            }}
-          >
+          <Button variant="outline" className="mt-4" onClick={retryLoad}>
             Retry
           </Button>
         </CardContent>
@@ -395,6 +433,7 @@ export function TaskForm() {
       onSubmit={() => void submit()}
       isSubmitting={isSubmitting}
       problem={problem}
+      failure={failure}
       rejection={rejection}
     />
   );
