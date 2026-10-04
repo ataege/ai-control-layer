@@ -7,6 +7,9 @@ import {
   HttpCode,
   UnauthorizedException,
   UsePipes,
+  Get,
+  Header,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import type { Response, Request } from "express";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -44,6 +47,36 @@ export class AuthController {
     @InjectRepository(PasswordHash) private readonly passwordRepository: Repository<PasswordHash>,
     @InjectRepository(Session) private readonly sessionRepository: Repository<Session>,
   ) {}
+
+  @Get("me")
+  @Header("Cache-Control", "no-store")
+  @ApiOperation({ summary: "Read the verified operator profile and current organization roles" })
+  @ApiResponse({ status: 200, description: "Profile from trusted app records and membership" })
+  @ApiResponse({ status: 401, description: "Missing session, user or current membership" })
+  @ApiResponse({ status: 503, description: "Identity dependency unavailable" })
+  async me(@Req() req: Request) {
+    const context = req.operatorContext;
+    if (!context || req.user?.subjectId !== context.userId) {
+      throw new UnauthorizedException("Missing verified operator context");
+    }
+    let user;
+    try {
+      user = await this.userRepository.findOne({
+        where: { id: context.userId },
+        select: { id: true, email: true, name: true },
+      });
+    } catch {
+      throw new ServiceUnavailableException("Identity unavailable");
+    }
+    if (!user) throw new UnauthorizedException("User not found");
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      organizationId: context.organizationId,
+      roles: context.roles,
+    };
+  }
 
   @Public()
   @Post("sign-in")

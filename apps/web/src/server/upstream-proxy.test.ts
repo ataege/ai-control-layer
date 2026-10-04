@@ -436,4 +436,134 @@ describe("upstream proxy", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('{"events":[]}');
   });
+  // CSRF guard on commands (WEB security review, finding 4).
+  describe("commands from a browser page", () => {
+    async function postFrom(headers: Record<string, string>, body: string | null = "{}") {
+      stubUpstream = await startStubUpstream((_request, response) => {
+        sendJson(response, 201, { runId: "r", passportId: "p" });
+      });
+      vi.stubEnv("API_UPSTREAM_URL", stubUpstream.baseUrl);
+      return postRun(
+        new Request("http://web.test/api/runs", {
+          method: "POST",
+          headers: body === null ? headers : { "content-type": "application/json", ...headers },
+          body,
+        }),
+      );
+    }
+
+    it.each([
+      ["a cross-site page", { "sec-fetch-site": "cross-site" }],
+      ["a same-site page of another origin", { "sec-fetch-site": "same-site" }],
+      ["another origin", { origin: "https://evil.example" }],
+      ["a null origin", { origin: "null" }],
+      ["an origin on the same host name but another port", { origin: "http://web.test:3999" }],
+    ])("refuses %s with 403 before any upstream call", async (_name, headers) => {
+      const response = await postFrom({ ...headers, cookie: "session=abc" });
+      expect(response.status).toBe(403);
+      const body = (await response.json()) as { error: { code: string } };
+      expect(body.error.code).toBe("cross_site_request_refused");
+      expect(stubUpstream?.receivedRequests).toHaveLength(0);
+    });
+
+    it.each([
+      ["same-origin fetch metadata", { "sec-fetch-site": "same-origin" }],
+      ["a direct navigation", { "sec-fetch-site": "none" }],
+      ["the page's own origin", { origin: "http://web.test" }],
+      ["no browser headers (a script or the judge client)", {}],
+    ])("allows %s", async (_name, headers) => {
+      const response = await postFrom(headers);
+      expect(response.status).toBe(201);
+      expect(stubUpstream?.receivedRequests).toHaveLength(1);
+    });
+
+    it("accepts the Host the browser addressed when the request URL carries an internal origin", async () => {
+      stubUpstream = await startStubUpstream((_request, response) => {
+        sendJson(response, 201, { runId: "r", passportId: "p" });
+      });
+      vi.stubEnv("API_UPSTREAM_URL", stubUpstream.baseUrl);
+      const response = await postRun(
+        new Request("http://internal-web:3000/api/runs", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "https://panel.example",
+            host: "panel.example",
+          },
+          body: "{}",
+        }),
+      );
+      expect(response.status).toBe(201);
+    });
+
+    it.each([
+      ["a form post", "application/x-www-form-urlencoded"],
+      ["text/plain", "text/plain"],
+      ["multipart", "multipart/form-data; boundary=x"],
+      ["no content type", ""],
+    ])("refuses a body sent as %s with 415", async (_name, contentType) => {
+      stubUpstream = await startStubUpstream((_request, response) => sendJson(response, 201, {}));
+      vi.stubEnv("API_UPSTREAM_URL", stubUpstream.baseUrl);
+      const headers = new Headers();
+      if (contentType !== "") headers.set("content-type", contentType);
+      const response = await postRun(
+        new Request("http://web.test/api/runs", { method: "POST", headers, body: "a=b" }),
+      );
+      expect(response.status).toBe(415);
+      expect(stubUpstream.receivedRequests).toHaveLength(0);
+    });
+
+    it("lets a command without a body through, and a JSON type with a charset", async () => {
+      stubUpstream = await startStubUpstream((_request, response) =>
+        sendJson(response, 200, { ok: 1 }),
+      );
+      vi.stubEnv("API_UPSTREAM_URL", stubUpstream.baseUrl);
+      const cancel = await proxyUpstream(
+        new Request("http://web.test/api/runs/r/cancel", { method: "POST" }),
+        "/api/runs/r/cancel",
+      );
+      expect(cancel.status).toBe(200);
+      const charset = await postRun(
+        new Request("http://web.test/api/runs", {
+          method: "POST",
+          headers: { "content-type": "Application/JSON; charset=utf-8" },
+          body: "{}",
+        }),
+      );
+      expect(charset.status).toBe(200);
+    });
+
+    it("treats a Content-Length 0 request with an empty stream as bodyless", async () => {
+      stubUpstream = await startStubUpstream((_request, response) =>
+        sendJson(response, 200, { ok: 1 }),
+      );
+      vi.stubEnv("API_UPSTREAM_URL", stubUpstream.baseUrl);
+      // What a browser's bodyless POST looks like inside a Next.js route handler.
+      const response = await proxyUpstream(
+        new Request("http://web.test/api/auth/sign-out", {
+          method: "POST",
+          headers: { "content-length": "0" },
+          body: new ReadableStream({ start: (controller) => controller.close() }),
+          duplex: "half",
+        } as RequestInit & { duplex: "half" }),
+        "/api/auth/sign-out",
+      );
+      expect(response.status).toBe(200);
+    });
+
+    it("does not apply to reads", async () => {
+      stubUpstream = await startStubUpstream((_request, response) =>
+        sendJson(response, 200, { ok: 1 }),
+      );
+      vi.stubEnv("API_UPSTREAM_URL", stubUpstream.baseUrl);
+      const response = await getRun(
+        incomingRequest("/api/runs/run-1", {
+          "sec-fetch-site": "cross-site",
+          origin: "https://evil.example",
+        }),
+        { params: Promise.resolve({ id: "run-1" }) },
+      );
+      expect(response.status).toBe(200);
+    });
+  });
 });

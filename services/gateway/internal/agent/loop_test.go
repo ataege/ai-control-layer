@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"starter/services/gateway/internal/budget"
@@ -87,5 +88,22 @@ func TestProposedCallKeepsOnlyASmallJSONObject(t *testing.T) {
 		if string(got) != want {
 			t.Errorf("%s: got %s, want %s", raw, got, want)
 		}
+	}
+}
+
+// A step error that carries ErrUsageUnknown pauses the run for attention even when it also carries
+// the failure to persist that fact; the log names the kinds and never the error text.
+func TestUnpersistedUnknownUsagePausesTheRunAndTheLogNamesTheKinds(t *testing.T) {
+	err := errors.Join(ErrModelCallFailed, errors.Join(model.ErrUsageUnknown, model.ErrAccounting))
+	end := stepErrorEnd(err)
+	if end.status != contracts.RunPaused || end.reason != contracts.ReasonOutcomeUnknown {
+		t.Fatalf("a dispatched call with unknown usage ended the run as %s/%s", end.status, end.reason)
+	}
+	kinds := strings.Join(stepErrorKinds(errors.Join(err, errors.New("provider said: secret detail"))), ",")
+	if kinds != "usage_unknown,accounting,model_call_failed" {
+		t.Fatalf("kinds %q", kinds)
+	}
+	if end := stepErrorEnd(errors.Join(ErrModelCallFailed, model.ErrAccounting)); end.status != contracts.RunFailed {
+		t.Fatalf("an accounting failure without a dispatched call must still fail: %s", end.status)
 	}
 }

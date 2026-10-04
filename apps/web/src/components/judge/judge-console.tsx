@@ -26,8 +26,9 @@ import {
   BOUNDARIES,
   INACTIVE_RUN_STATUSES,
   JudgeClient,
-  MAX_TEXT_LENGTH,
+  MAX_TEXT_BYTES,
   TOOLS,
+  utf8ByteLength,
   buildEvaluationRequest,
   type EvaluationOutcome,
 } from "@/lib/clients/judge-client";
@@ -208,14 +209,13 @@ export function JudgeConsole() {
             {needsText ? (
               <div className="space-y-2">
                 <Label htmlFor="judge-text">
-                  Text ({text.length}/{MAX_TEXT_LENGTH})
+                  Text ({utf8ByteLength(text)}/{MAX_TEXT_BYTES} bytes)
                 </Label>
                 <Textarea
                   id="judge-text"
                   value={text}
                   onChange={(changeEvent) => setText(changeEvent.target.value)}
                   rows={6}
-                  maxLength={MAX_TEXT_LENGTH}
                   placeholder="Paste the untrusted text to evaluate"
                 />
               </div>

@@ -340,7 +340,7 @@ describe("catalog status", () => {
     });
     const result = await getCatalogStatus({ fetchImplementation: implementation });
     expect(result.ok && result.requestId).toBe("req-9");
-    expect(requests).toEqual([{ url: "/api/policies/status", accept: "application/json" }]);
+    expect(requests).toEqual([{ url: "/api/policies/catalog", accept: "application/json" }]);
   });
 
   it("says not available when the route is not served, and never calls that an outage", async () => {

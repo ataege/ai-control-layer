@@ -125,9 +125,8 @@ export function outboxEffectLabel(effect: string | null | undefined): LabelText 
 }
 
 /**
- * The seeded operator's email (apps/api/src/auth/demo-operator-seed.ts). The session's `/me` carries
- * no flag for a development identity, so the label is derived from this seeded identity; a server
- * field would be better and is an open request.
+ * The seeded operator's email (apps/api/src/auth/demo-operator-seed.ts). Until the session's `/me`
+ * carries a development-demonstration flag, the label is derived from this seeded identity.
  */
 export const DEVELOPMENT_DEMONSTRATION_OPERATOR_EMAIL = "demo-operator@example.com";
 
@@ -138,7 +137,16 @@ export function isDevelopmentDemonstrationOperator(email: string | null | undefi
   );
 }
 
-export function developmentDemonstrationLabel(email: string | null | undefined): LabelText | null {
+/**
+ * The development-demonstration label of a session. The server's own flag decides when the session
+ * carries one (true labels, false does not); only a session without the flag falls back to the seeded
+ * operator's email.
+ */
+export function developmentDemonstrationLabel(
+  email: string | null | undefined,
+  serverFlag?: boolean | null,
+): LabelText | null {
+  if (typeof serverFlag === "boolean") return serverFlag ? LABELS.developmentDemonstration : null;
   return isDevelopmentDemonstrationOperator(email) ? LABELS.developmentDemonstration : null;
 }
 

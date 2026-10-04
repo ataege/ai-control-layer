@@ -4,10 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AdmissionRejectionNotice } from "./admission-rejection";
 
-const limitRejection = {
-  code: "limit_not_allowed",
-  message: "limits.modelCalls exceeds the catalog limit of 12",
-};
+const limitRejection = { code: "limit_not_allowed" };
 
 const render = (props: Partial<Parameters<typeof AdmissionRejectionNotice>[0]> = {}) =>
   renderToStaticMarkup(
@@ -22,7 +19,7 @@ describe("AdmissionRejectionNotice", () => {
   it("shows the reason code, the safe message and the scope or limit to change", () => {
     const html = render();
     expect(html).toContain("limit_not_allowed");
-    expect(html).toContain("limits.modelCalls exceeds the catalog limit of 12");
+    expect(html).toContain("A requested limit is above what the active policy allows.");
     expect(html).toContain("Limits (model calls, timeout)");
     expect(html).toContain("A requested limit is higher than the active policy permits.");
   });
@@ -67,16 +64,16 @@ describe("AdmissionRejectionNotice", () => {
     expect(render({ isSubmitting: false })).not.toContain('disabled=""');
   });
 
-  it("omits the server line when there is no message, and escapes one that has markup", () => {
-    expect(render({ rejection: { code: "template_not_allowed", message: null } })).not.toContain(
-      "Admission said",
-    );
-    const html = render({ rejection: { code: "template_not_allowed", message: "<b>x</b>" } });
-    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
-    expect(html).not.toContain("<b>x</b>");
+  it("shows only the fixed safe message, never upstream wording a caller passes along", () => {
+    // The type has no message field; a reply's text must not reach the page even if it is smuggled in.
+    const smuggled = { code: "template_not_allowed", message: "<b>upstream</b> detail" };
+    const html = render({ rejection: smuggled });
+    expect(html).toContain("The requested template is not permitted for this operation.");
+    expect(html).not.toContain("upstream");
+    expect(html).not.toContain("&lt;b&gt;");
   });
 
   it("renders nothing for a code admission does not return, instead of a generic banner", () => {
-    expect(render({ rejection: { code: "approval_required", message: null } })).toBe("");
+    expect(render({ rejection: { code: "approval_required" } })).toBe("");
   });
 });

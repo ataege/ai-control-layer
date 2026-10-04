@@ -29,7 +29,12 @@ export const DEFAULT_UPSTREAM_TIMEOUT_MS = 10_000;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
 type ProxyErrorCode =
-  "configuration_error" | "upstream_unreachable" | "upstream_timeout" | "upstream_invalid_response";
+  | "configuration_error"
+  | "upstream_unreachable"
+  | "upstream_timeout"
+  | "upstream_invalid_response"
+  | "cross_site_request_refused"
+  | "unsupported_media_type";
 
 interface ProxyOptions {
   /** Upper bound for the whole upstream exchange, including reading the body. */
@@ -112,6 +117,68 @@ function isPathAllowed(path: string): boolean {
   );
 }
 
+/** Fetch-metadata values a browser sends for a request that its own pages made. */
+const SAME_ORIGIN_FETCH_SITES = new Set(["same-origin", "none"]);
+
+/**
+ * CSRF guard for commands (every method but GET and HEAD). A browser always sends Sec-Fetch-Site and,
+ * on a POST, Origin, so a cross-site or same-site-other-origin page is refused here even where the
+ * SameSite=Lax cookie would still travel. A client that sends neither header is not a browser and
+ * is not a CSRF vector (the end-to-end script, the judge client).
+ */
+function commandRefusal(
+  request: Request,
+): { status: number; code: ProxyErrorCode; message: string } | null {
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite !== null && !SAME_ORIGIN_FETCH_SITES.has(fetchSite.toLowerCase())) {
+    return {
+      status: 403,
+      code: "cross_site_request_refused",
+      message: "The request did not come from this site.",
+    };
+  }
+  const origin = request.headers.get("origin");
+  if (origin !== null) {
+    // The browser's Origin must be this site's own origin: the request URL, or the Host the
+    // browser addressed (the URL can carry an internal origin behind a reverse proxy).
+    let originHost: string | null = null;
+    try {
+      originHost = new URL(origin).host;
+    } catch {
+      originHost = null;
+    }
+    const ownOrigin = new URL(request.url).origin;
+    if (
+      origin !== ownOrigin &&
+      (originHost === null || originHost !== request.headers.get("host"))
+    ) {
+      return {
+        status: 403,
+        code: "cross_site_request_refused",
+        message: "The request did not come from this site.",
+      };
+    }
+  }
+  // Commands are JSON. A body of another type is how a plain HTML form would post.
+  // A bodyless POST (sign-out, cancel) reaches a Next.js handler with an empty stream and
+  // Content-Length 0, so the stream alone does not say that a body was sent.
+  const sendsBody = request.body !== null && request.headers.get("content-length") !== "0";
+  if (sendsBody) {
+    const mediaType = (request.headers.get("content-type") ?? "")
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase();
+    if (mediaType !== "application/json") {
+      return {
+        status: 415,
+        code: "unsupported_media_type",
+        message: "The request body must be application/json.",
+      };
+    }
+  }
+  return null;
+}
+
 export async function proxyUpstream(
   request: Request,
   upstreamPath: string,
@@ -129,6 +196,13 @@ export async function proxyUpstream(
       requestId,
       "",
     );
+  }
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    const refusal = commandRefusal(request);
+    if (refusal !== null) {
+      return proxyErrorResponse(refusal.status, refusal.code, refusal.message, requestId, pathname);
+    }
   }
 
   let upstreamBaseUrl: string;

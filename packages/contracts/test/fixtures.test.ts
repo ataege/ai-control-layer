@@ -38,6 +38,10 @@ import type {
   StartRunResponse,
   StoredAction,
   TaskFormOptions,
+  PolicyReloadRequest,
+  PolicyReloadResponse,
+  PolicyReloadErrorResponse,
+  PolicyStatusResponse,
 } from "../src/index.ts";
 
 const packageRoot = join(import.meta.dirname, "..");
@@ -853,6 +857,36 @@ export const typedSamples = {
     },
     expires_at: "2026-10-03T22:23:29.02559Z",
   } satisfies ReviewView,
+  policyReloadRequest: {} satisfies PolicyReloadRequest,
+  policyReloadResponse: {
+    status: "requested",
+    requestedRevisionId: "2",
+    fileDigest: "a".repeat(64),
+    feedRevision: "feed_v1",
+  } satisfies PolicyReloadResponse,
+  policyStatusResponse: {
+    requestedRevisionId: "2",
+    validatedRevisionId: "2",
+    activeRevisionId: "2",
+    activeFeedRevisionId: "1",
+    lastError: null,
+  } satisfies PolicyStatusResponse,
+  policyReloadErrorResponse: {
+    error: {
+      code: "policy_reload_rejected",
+      message: "Policy validation failed",
+      issues: [
+        {
+          path: "budgets.calls_agent",
+          message: "agent and security calls exceed the shared ceiling",
+        },
+      ],
+    },
+    statusCode: 400,
+    requestId: "reload-fixture",
+    timestamp: "2026-10-04T00:00:00Z",
+    path: "/api/policies/reload",
+  } satisfies PolicyReloadErrorResponse,
   taskFormOptions: {
     templates: [{ id: "reconcile_atlas_v1", name: "Reconcile Atlas invoices" }],
     vendors: [{ id: "vendor_Atlas", name: "Atlas" }],
@@ -862,6 +896,7 @@ export const typedSamples = {
         number: "INV104",
         date: "2026-09-01",
         amount: 125000,
+        currency: "EUR",
         vendorId: "vendor_Atlas",
       },
       {
@@ -869,6 +904,7 @@ export const typedSamples = {
         number: "INV104",
         date: "2026-09-08",
         amount: 125000,
+        currency: "EUR",
         vendorId: "vendor_Atlas",
       },
     ],
@@ -915,6 +951,10 @@ const fixtureFileOfSample: Record<keyof typeof typedSamples, string> = {
   approvalResponse: "approval-response.approve.json",
   reviewView: "review-view.queue-report.json",
   taskFormOptions: "task-form-options.atlas.json",
+  policyReloadRequest: "policy-reload-request.empty.json",
+  policyReloadResponse: "policy-reload-response.requested.json",
+  policyStatusResponse: "policy-status-response.active.json",
+  policyReloadErrorResponse: "policy-reload-error-response.invalid.json",
 };
 
 test("typed samples are identical to their fixtures", () => {
@@ -954,4 +994,53 @@ test("review and approval contracts reject what Go never produces", () => {
   const validateApproval = validatorFor("approval-response");
   assert.equal(validateApproval({ ...approval, decision: "approved" }), false);
   assert.equal(validateApproval({ ...approval, payload: {} }), false);
+});
+
+// NestJS-owned API-33 shapes. These literals pin types to the corresponding schemas/fixtures.
+test("policy reload contracts reject browser authority and inconsistent responses", () => {
+  const request: PolicyReloadRequest = {};
+  const response: PolicyReloadResponse = {
+    status: "requested",
+    requestedRevisionId: "2",
+    fileDigest: "a".repeat(64),
+    feedRevision: "feed_v1",
+  };
+  const status: PolicyStatusResponse = {
+    requestedRevisionId: "2",
+    validatedRevisionId: "2",
+    activeRevisionId: "2",
+    activeFeedRevisionId: "1",
+    lastError: null,
+  };
+  const failure: PolicyReloadErrorResponse = {
+    error: {
+      code: "policy_reload_rejected",
+      message: "Policy validation failed",
+      issues: [
+        {
+          path: "budgets.calls_agent",
+          message: "agent and security calls exceed the shared ceiling",
+        },
+      ],
+    },
+    statusCode: 400,
+    requestId: "reload-fixture",
+    timestamp: "2026-10-04T00:00:00Z",
+    path: "/api/policies/reload",
+  };
+  for (const [name, value, fixture] of [
+    ["policy-reload-request", request, "empty"],
+    ["policy-reload-response", response, "requested"],
+    ["policy-status-response", status, "active"],
+    ["policy-reload-error-response", failure, "invalid"],
+  ] as const) {
+    assert.equal(validatorFor(name)(value), true);
+    assert.deepEqual(value, readJson(join(fixtureDirectory, `${name}.${fixture}.json`)));
+  }
+  assert.equal(validatorFor("policy-reload-request")({ userId: "forged" }), false);
+  assert.equal(validatorFor("policy-reload-response")({ ...response, status: "active" }), false);
+  assert.equal(
+    validatorFor("policy-status-response")({ ...status, rawPolicy: "protected" }),
+    false,
+  );
 });

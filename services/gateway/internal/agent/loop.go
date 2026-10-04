@@ -307,7 +307,11 @@ func (loop *Loop) step(ctx context.Context, run policy.RunIdentity) (runEnd, boo
 		if errors.Is(err, budget.ErrConcurrencyLimit) {
 			return runEnd{}, false, err
 		}
-		return stepErrorEnd(err), false, nil
+		end := stepErrorEnd(err)
+		// A model step that ends the run says why in the log: fixed kinds only, never provider text.
+		loop.dependencies.Logger.Warn("model step ended the run", "run_id", run.RunID, "status", string(end.status),
+			"reason", string(end.reason), "error_kinds", stepErrorKinds(err))
+		return end, false, nil
 	}
 	// A cancel that landed during the model request: its result is not acted on, a final answer
 	// does not complete the run.
@@ -657,6 +661,30 @@ const (
 	messageModelNotRecorded  = "The model call could not be recorded, so the run failed."
 	messageModelCallFailed   = "The model call failed before its answer could be used, so the run failed."
 )
+
+// stepErrorKinds names the known failure kinds inside a step error, for the log. The labels are
+// fixed; the error text, which may carry provider detail, is never logged.
+func stepErrorKinds(err error) []string {
+	known := []struct {
+		label string
+		cause error
+	}{
+		{"timeout", model.ErrTimeout}, {"deadline_exceeded", context.DeadlineExceeded}, {"canceled", context.Canceled},
+		{"transport", model.ErrTransport}, {"response", model.ErrResponse}, {"usage_unknown", model.ErrUsageUnknown},
+		{"accounting", model.ErrAccounting}, {"overspend", model.ErrOverspend}, {"budget_exhausted", budget.ErrExhausted},
+		{"budget_paused", budget.ErrPaused}, {"budget_unavailable", budget.ErrUnavailable},
+		{"concurrency_limit", budget.ErrConcurrencyLimit}, {"ledger_not_found", budget.ErrNotFound},
+		{"model_not_allowed", ErrModelNotAllowed}, {"unusable_response", ErrUnusableResponse},
+		{"recording", ErrRecording}, {"model_call_failed", ErrModelCallFailed},
+	}
+	kinds := []string{}
+	for _, entry := range known {
+		if errors.Is(err, entry.cause) {
+			kinds = append(kinds, entry.label)
+		}
+	}
+	return kinds
+}
 
 // stepErrorEnd maps a failed model step to the run's end. Nothing here continues the run.
 func stepErrorEnd(err error) runEnd {
