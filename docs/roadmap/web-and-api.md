@@ -396,7 +396,7 @@ must enforce and show, so that any gap reaches the document owner in the same se
   - Report: "Illustrative passport and interface contracts" (Proposed browser and runtime
     operations); "Technical architecture and service ownership" (Interfaces and repository strategy)
   - Blocked by: `contract owners`; the operator context part also `decision 4 in docs/product/README.md` and `decision 7 in docs/product/README.md`
-  - Done (2026-10-04), a review plus the existing database tests: (1) No actor or organization field exists in a command body: `start-run-request.schema.json` and `control-evaluation-request.schema.json` are `additionalProperties: false` without one; the approval body is exactly `{"decision":"approve"}` or `{"decision":"reject"}` (docs/api-facade-handoff.md); the runs, events and review examples carry `runId`/`run_id` and, for events, `organizationId`, which the object check needs, while organization and actor come from the session's verified membership. (2) `product-access.db-spec.ts` (real credentials and sessions; labelled Go response fixtures) passes 18 tests: verified membership on every public read and command, object denial for a second organization on runs and actions, reviewer role read from the database on each call. (3) "Authorized subscription; no unrestricted raw payload stream": no stream exists (WEB-21 and API-25 are optional); nothing to authorize. (4) Facts for `command timeout budget`, read from the code: web proxy 10 s default (`DEFAULT_UPSTREAM_TIMEOUT_MS`; the judge route sets 45 s), browser helper 15 s (`DEFAULT_FETCH_TIMEOUT_MS`), API `GATEWAY_TIMEOUT_MS` default 3000 ms and `COMMAND_TIMEOUT_MS` default 10000 ms (each at most 20000), API server request timeout 30 s, gateway write timeout 30 s. Finding for the document owner: the proxy's 10 s deadline equals the API's 10 s command timeout, so on a slow command the proxy may answer `upstream_timeout` before the API's `outcome_unconfirmed`, both 504; the comment in `upstream-proxy.ts` says the proxy should be longer. Not reviewed row by row against the report's table (not available as text here): the gap list above is what the code and tests show. Checks (2026-10-04, worktree ai-control-layer-c2, own PostgreSQL 18.6 from the Compose image `postgres:18-alpine` on port 55590): `pnpm --filter api run lint`, `typecheck` and `test` exit 0 (366 passed); `pnpm test:db api --fresh` exit 0 ("api PASS 67 passed, 0 failed, 0 skipped"; the gateway side was not run).
+  - Done (2026-10-04), a row-by-row review of the report's "Proposed browser and runtime operations" (report text converted with `textutil` into a temporary directory outside the repository) against the routes, the frozen schemas and the existing tests. Every authority is checked from the verified session plus fields of an agreed example, never from an identity in the body: `start-run-request.schema.json` and `control-evaluation-request.schema.json` are `additionalProperties: false` without an actor or organization field, and the approval body is exactly `{"decision":"approve"}` or `{"decision":"reject"}`. Rows: (1) `POST /api/runs`, "verified actor and organization; authoritative task and policy versions": actor and organization come from the signed operator context; Go derives the passport from the active catalog (the registry tables are not read, see API-04). (2) `POST /api/runs/{id}/cancel`, "actor may manage this run within this organization": holds at organization and run scope only; Go's `CancelRun(organizationID, runID)` takes no actor, so any member of the organization can cancel any of its runs (gap: no per-actor ownership; recorded in `apps/api/README.md`). (3) `POST /api/actions/{id}/approval`, "authorized reviewer; exact action integrity and expiry": the `reviewer` role is checked before Go on both the review read and the approval, and Go checks the frozen action and its expiry; `product-access.db-spec.ts` uses real database roles on each call. (4) `GET /api/runs/{id}`, "organization and object access checked on every read": every run read (state, usage, events, passport, reports) signs the verified context and the API compares the returned run and organization reference; `product-access.db-spec.ts` shows object denial for a second organization. (5) `GET /api/runs/{id}/events`, "authorized subscription; no unrestricted raw payload stream": a cursor page of sanitized events with organization and run references; SSE does not exist (WEB-21 and API-25 optional), so there is no stream to authorize. (6) `POST /api/policies/reload`, "authorized configuration operator; validation and last-known-good": reviewer-only, exactly `{}`, validates the repository file and requests a revision, Go activates; a rejected file leaves the active revision (README, API-33). (7) `GET /api/security/summary`, "organization-scoped; no raw protected content": verified organization, summary organization checked; counts and codes only. (8) `GET /api/security/audit/export` is served as `GET /api/security/export?kind=events|assessments&format=json|csv&after=&limit=`: reviewer role, organization scope, a page of at most 500 records, sanitized fields (the route name differs from the report's). (9) `POST /internal/control/evaluate` is reached as `POST /api/control/evaluate`: authenticated operator, run in the operator's organization, and the caller cannot issue a grant (`actionId` is always null). Facts for `command timeout budget`, read from the code: web proxy default 12 s (lead commit on main; the judge route sets 45 s), browser helper 15 s (`DEFAULT_FETCH_TIMEOUT_MS`), API `GATEWAY_TIMEOUT_MS` default 3000 ms and `COMMAND_TIMEOUT_MS` default 10000 ms (each at most 20000), API server request timeout 30 s, gateway write timeout 30 s; the proxy deadline is now longer than the API's command timeout, so the API's mapped status arrives first. Open for the document owner: per-actor cancellation (row 2) and the differing export route name (row 8). Checks (2026-10-04, worktree ai-control-layer-c2, own PostgreSQL 18.6 from the Compose image `postgres:18-alpine` on port 55590): `pnpm --filter api run lint`, `typecheck` and `test` exit 0 (423 passed); `pnpm test:db api` exit 0 ("api PASS 82 passed, 0 failed, 0 skipped"; the gateway side was not run).
 
 - [x] **API-31 · Add the control catalog, active revision and feed records**
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
@@ -633,10 +633,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     forwarded request (`auth/session-cookie.ts`, `auth/default-deny.guard.ts`), trusts no
     `x-forwarded-*` header (Express `trust proxy` stays off) and keeps CORS to GET, HEAD and OPTIONS
     without credentials for the explicit origins only. Tests: `app.setup.spec.ts` (forged
-    `x-forwarded-for` and `x-forwarded-host` change neither the client address nor the host); new
-    `common/cors-forwarder.spec.ts` (a preflight from another origin gets no CORS headers; the
-    configured origin gets no POST and no credentials; an unauthenticated command is refused whatever
-    origin and forwarded host it claims). Evidence for the authenticated path: WEB-14/WEB-15 browser
+    `x-forwarded-for` and `x-forwarded-host` change neither the client address nor the host); new `common/cors-forwarder.spec.ts` (a preflight from another origin gets no CORS headers; the configured origin gets no POST and no credentials; a command without a session is refused with 401 whatever origin and forwarded host it claims). Known limit (review 2026-10-04): the CSRF check lives only in the web proxy and the API port has no Origin check, so a cross-origin request is not refused by the API, it only gets no CORS headers; browsers must reach the API only through the forwarder. Evidence for the authenticated path: WEB-14/WEB-15 browser
     checks on 2026-10-04 (approve, reject and cancel through `/api/actions/…` and `/api/runs/…` on the
     forwarder with the demo operator's session). `pnpm --filter api run test` (see the commit).
   - Report: "Architecture and chart reading guide"; "Technical architecture and service ownership"
@@ -737,17 +734,12 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
   - Completed (2026-10-04, lane 3c on api/3c): `POST /api/runs` (`runs/runs.controller.ts`) validates
     the body strictly with `runs/dto/start-run.dto.ts` (a zod `.strict()` object mirroring X-07), takes
     actor and organization only from the verified context, forwards to `POST /internal/runs` with the
-    signed operator context and returns its X-07 response validated against the contract. New here: an
-    admission rejection keeps Go's fixed explanation. `gateway-client.service.ts` keeps the gateway's
-    message on a 4xx failure outcome, and the route passes it through only for a 400 whose code is one
-    of the X-13 reason codes (`reason-code.schema.json`) with a bounded, printable message; every other
-    failure keeps the generic text. Swagger: the route is documented with DTO classes that implement the contract types (`StartRunRequestDto`, `StartRunLimitsDto`, `StartRunResponseDto` in `runs/dto/start-run.dto.ts`) and its 201, 400, 401, 503 and 504 answers (`start-run.openapi.spec.ts`); the title and description in `openapi.ts` are already Task Passport's. Tests
+    signed operator context and returns its X-07 response validated against the contract. New here: an admission rejection keeps Go's fixed explanation. `gateway-client.service.ts` keeps the gateway's 4xx message only when a caller asks (`postCommand(…, { keepErrorMessage: true })`, used only by this route; reads and every other command never carry it), and the route passes it through only for a 400 whose code is one of `resource_out_of_scope`, `destination_not_allowed`, `template_not_allowed`, `limit_not_allowed` or `invalid_arguments` with a bounded, printable message; every other failure, including other X-13 codes such as `approval_required`, keeps the generic text. Swagger: the route is documented with DTO classes that implement the contract types (`StartRunRequestDto`, `StartRunLimitsDto`, `StartRunResponseDto` in `runs/dto/start-run.dto.ts`) and its 201, 400, 401, 503 and 504 answers (`start-run.openapi.spec.ts`); the title and description in `openapi.ts` are already Task Passport's. Tests
     (`start-run.controller.spec.ts`): forged `organizationId`, `actorId` or `roles` and wrong value
     types are refused with 400 before any upstream call; a Go rejection keeps `resource_out_of_scope`
-    and its explanation; an unknown code, a message with control characters or no message keep the
-    generic text; Go statuses 401/403/404/409/503 are preserved; a timeout is 504 `outcome_unconfirmed`,
+    and its explanation; an unknown code, `approval_required`, a message with control characters or DEL, over 300 characters or missing keep the generic text; Go statuses 401/403/404/409/503 are preserved; a timeout is 504 `outcome_unconfirmed`,
     never "started"; an unknown field or malformed id in Go's answer is 503.
-    `gateway-client.service.spec.ts`: the 4xx outcome carries the message. By hand against the real
+    `gateway-client.service.spec.ts`: by default a 4xx outcome carries no message; with `keepErrorMessage` it does; a read never does. By hand against the real
     gateway (api/3c on a private database, demo operator): an over-scope request (an invoice of another
     vendor) answered 400 `resource_out_of_scope` "an invoice in invoiceIds is not available to this
     organization" and the passport count stayed 2; an accepted request answered 201 and the count became 3.
@@ -857,10 +849,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     whenever the worker loop is not running (GO-09) or no enforceable catalog is active (GO-72). The API
     already reads any 503 as `not_ready` (`gateway-client.service.ts` `interpretReadinessResponse`), so
     diagnostics answers 503 `degraded` with the gateway check down, and the web reports it as degraded,
-    never healthy; no code change was needed. Tests: new `gateway-client.service.spec.ts` case with the
-    exact body of a stopped worker or missing catalog (503, `status: "unavailable"`,
-    `checks.database.status: "up"`) → `not_ready`; `diagnostics.controller.spec.ts` "returns 503
-    degraded when the gateway is reachable but not ready"; `apps/web/src/lib/service-checks.test.ts` (a
+    never healthy; no code change was needed. Tests: `diagnostics.controller.spec.ts` "preserves worker/catalog unavailability even when the upstream database check is up" drives the real gateway client against a stub gateway answering the exact body of a stopped worker or missing catalog (503, `status: "unavailable"`, `checks.database.status: "up"`) and now asserts the exact degraded diagnostics body; "returns 503 degraded when the gateway is reachable but not ready"; `apps/web/src/lib/service-checks.test.ts` (a
     `not_ready` report yields `degraded`, never `healthy`). Health and diagnostics stay public
     (`@Public()`). Known naming limit: the check is still called `databaseReadiness`, as option B keeps
     the schema. `pnpm --filter api run test` (see the commit).
@@ -2106,7 +2095,7 @@ handoff from X-62, and RS-09 submits.
 
 ### NestJS (report role: Implementer 2)
 
-- [ ] **API-27 · Supply the NestJS part of the technical handoff**
+- [x] **API-27 · Supply the NestJS part of the technical handoff**
   - Progress (2026-10-04, second pass on `api/w2`): the NestJS text is checked against main 31cff75 plus this
     branch. `apps/api/README.md` "Verification and handoff limits" is rewritten with current results and
     limits; `docs/api-facade-handoff.md` no longer carries the old smoke numbers or the draft combined run
@@ -2115,8 +2104,21 @@ handoff from X-62, and RS-09 submits.
     `pnpm test:db --fresh` api "71 passed", gateway "965 passed", 0 failed, 0 skipped; `pnpm verify`
     "6 passed, 0 failed, 0 skipped"; `pnpm smoke` "36 passed, 0 failed, 6 skipped" (service-log leak
     checks skipped in host mode); `pnpm test:judge` 8 passed (the judge CLI still sends `run_id`, which
-    the API refuses: recorded as a limit). Not done: a teammate's setup on a clean checkout, and the
-    integration owner's final-build incorporation. The task stays open.
+    the API refuses: recorded as a limit).
+  - Completed (2026-10-04): clean-checkout run of the Quick start by the w2 session (not the text's author), from a
+    fresh clone of origin/main `efaae10` in a scratch directory, with its own Compose project
+    (`COMPOSE_PROJECT_NAME`) and ports (database 55550, web 3130, API 3131, gateway 8130), no model and no run
+    started: `pnpm install` exit 0; `pnpm run setup` exit 0; `pnpm infra:up` exit 0 (healthy);
+    `pnpm db:migration:run` exit 0; `pnpm db:roles` exit 0; `pnpm db:seed` exit 0 (demo records, operator and
+    membership, catalog revision 1 and signature feed 1 requested); `pnpm dev`: all three services up after
+    25 s and the gateway logged "catalog revision validated and activated" with no `catalog:activate`;
+    `pnpm smoke`: "36 passed, 0 failed, 6 skipped". Signed in as the demo operator: sign-in 200,
+    `/api/auth/me` 200, `/api/runs/options` 200, `/api/policies/catalog` 200, `/api/security/summary` 200.
+    README gaps found and fixed in the same change (`README.md` Quick start and URLs, `docs/setup.md` "Known
+    gaps on a clean checkout" and two stale lines): the gap list said the operator seed, the feed import and
+    catalog activation did not exist; the URLs paragraph said the web serves three proxy routes. Not
+    verified: starting a run (needs the model), the full-container mode, Linux and WSL. Integration still
+    places the text into the final submission (SH-35).
   - **Report 1.2 change:** Adds the policy file, catalog reload, security summary and audit export.
   - **Report 1.1 change:** Adds the report templates and projection rules.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: B · Size: S (estimate 0.5-1.5 h)

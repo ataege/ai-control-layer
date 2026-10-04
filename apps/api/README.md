@@ -125,6 +125,30 @@ repository-root `.env` itself, and real environment variables win over the file.
   output; it does not affect the scripts above.
 - Files created by the migration commands are not formatted; run `pnpm format` afterwards.
 
+## Known limits of the database and identity records
+
+Checked by `src/database/app-entities.db-spec.ts` (`pnpm test:db api`); none of these is fixed by a
+migration yet.
+
+- Membership roles are a free `text[]` column with no CHECK: a typo in a role name is stored, and
+  nothing in the database limits the values to the report's roles. The API only compares against
+  the roles it knows (`reviewer`).
+- The registry foreign keys (`task_templates`, `policy_versions`, `tool_definitions` to
+  `organizations`) cascade on organization delete, while the membership foreign keys are
+  `NO ACTION`: deleting an organization removes its registry rows but is refused while memberships
+  exist.
+- Membership uniqueness is per (user, organization) pair, not one organization per user. A user with
+  several memberships gets the oldest one (`createdAt` ascending, in the default-deny guard); there
+  is no organization switch.
+- The registry tables (`app.task_templates`, `app.policy_versions`, `app.tool_definitions`) are
+  unused by admission (report 1.2: the control catalog is the policy source). No Go code reads them,
+  the gateway role has no grant on them, and nothing limits `tool_definitions.name` to the four
+  registered tools. Cancelling a run (`POST /api/runs/{id}/cancel`) is checked at organization and
+  run scope only: any member of the organization can cancel its runs; the demo has one operator.
+- The API connects to PostgreSQL as the owner role (`POSTGRES_USER`); a least-privilege API role
+  (`task_passport_api`, which exists but has no login and grants only on the catalog tables) is
+  planned (API-17, deferred).
+
 ## Verification and handoff limits
 
 Checked on 2026-10-04 on `api/w2`, which is main efaae10 plus this branch's commits (not a frozen
@@ -155,10 +179,6 @@ failure or a body outside the contract gives a sanitized 503, never an empty cat
 
 Known limits:
 
-- The draft judge CLI (`pnpm judge`, `scripts/judge-client.mjs`) still sends `run_id` and omits the
-  null fields; the API's X-91 request needs `runId` plus all of `kind`, `text`, `tool` and
-  `arguments` and refuses unknown keys, so the CLI cannot reach a decision until it is updated.
-  The API adds no compatibility defaults.
 - Activity uses polling, not server-sent events (API-25 was not built).
 - Organization access is proven through the public path with labelled Go response fixtures
   (`src/auth/product-access.db-spec.ts`: a second organization gets 404 on every object route).
@@ -168,3 +188,17 @@ Known limits:
 - Teammate clean-checkout setup, Docker, and a new live-model approval/outbox rehearsal were not
   verified in this API work. Fixtures prove contract and authorization behavior, not semantic
   detection quality. Cookie auth has no production identity federation, onboarding or hardening claim.
+
+### Known limits (review of api/3c, 2026-10-04)
+
+- `/api/docs` and `/api/docs-json` are mounted outside the global guard: a deliberate
+  development-only exposure (smoke asserts docs-json 200). They describe routes, never data;
+  every product route stays behind the session guard.
+- One organization per operator in the demo, with no organization switch. The membership table
+  allows a user in several organizations; the guard uses the oldest membership
+  (`DefaultDenyGuard`, pinned by its spec).
+- The CSRF check lives only in the web proxy. The API port has no Origin check: a cross-origin
+  request gets no CORS headers but is not refused by the API, so browsers must reach the API only
+  through the same-origin forwarder (decision 3).
+- Gateway readiness keeps its schema (worker readiness, option B): a stopped worker or a missing
+  catalog is reported in the check still named `databaseReadiness`, as `not_ready`.

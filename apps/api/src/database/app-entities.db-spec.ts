@@ -9,6 +9,7 @@ import { DataSource, QueryFailedError, type MigrationInterface } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { databaseEnvironmentSchema, parseEnvironment } from "../config/environment.js";
+import { DatabaseInitializerService } from "./database-initializer.service.js";
 import { buildTypeOrmOptions } from "./typeorm-options.js";
 
 const databaseEnvironment = parseEnvironment(databaseEnvironmentSchema, process.env);
@@ -52,15 +53,42 @@ async function insertReturningId(sql: string, parameters: unknown[]): Promise<st
   return rows[0].id;
 }
 
-async function expectRejected(sql: string, parameters: unknown[], expectedMessage: string) {
+/** The name of the one constraint of the given type on a table, read from pg_constraint. */
+async function constraintName(
+  table: string,
+  type: "f" | "u",
+  referencedTable?: string,
+): Promise<string> {
+  const rows = await dataSource.query<{ conname: string }[]>(
+    `SELECT conname FROM pg_constraint
+     WHERE conrelid = $1::regclass AND contype = $2
+       AND ($3::text IS NULL OR confrelid = $3::regclass)`,
+    [table, type, referencedTable ?? null],
+  );
+  if (rows.length !== 1) throw new Error(`expected one ${type} constraint on ${table}`);
+  return rows[0]!.conname;
+}
+
+/** Asserts the statement fails and the constraint that fired is the expected one (by name). */
+async function expectConstraintViolation(
+  sql: string,
+  parameters: unknown[],
+  expectedConstraint: string,
+  expectedCode: "23503" | "23505",
+) {
   const failure = await dataSource.query(sql, parameters).then(
     () => null,
     (error: unknown) => error,
   );
-  expect(failure, `expected a rejection mentioning ${expectedMessage}`).toBeInstanceOf(
+  expect(failure, `expected ${expectedConstraint} to refuse the statement`).toBeInstanceOf(
     QueryFailedError,
   );
-  expect((failure as QueryFailedError).message).toContain(expectedMessage);
+  const driverError = (failure as QueryFailedError).driverError as {
+    constraint?: string;
+    code?: string;
+  };
+  expect(driverError.constraint).toBe(expectedConstraint);
+  expect(driverError.code).toBe(expectedCode);
 }
 
 beforeAll(async () => {
@@ -80,28 +108,35 @@ afterAll(async () => {
 });
 
 describe("API startup against a fresh database (API-04, API-05)", () => {
-  it("initializing the data source creates no table and no extension", async () => {
-    const options = buildTypeOrmOptions({
-      ...databaseEnvironment,
-      POSTGRES_DB: temporaryDatabaseName,
-    });
-    const connection = new DataSource(options);
-    await connection.initialize();
-    try {
-      const before = await listSchemaObjects(connection);
-      // Initialization is what the API does at startup; it must not change the schema.
-      expect(before.tables).toEqual([]);
-      expect(before.extensions).toEqual(["plpgsql"]);
-    } finally {
-      await connection.destroy();
-    }
+  const freshOptions = () =>
+    buildTypeOrmOptions({ ...databaseEnvironment, POSTGRES_DB: temporaryDatabaseName });
 
-    const inspector = new DataSource(options);
-    await inspector.initialize();
+  it("the shared options factory turns every schema-changing switch off", () => {
+    expect(freshOptions()).toMatchObject({
+      synchronize: false,
+      migrationsRun: false,
+      dropSchema: false,
+      installExtensions: false,
+      uuidExtension: "pgcrypto",
+    });
+  });
+
+  it("the API's database initializer connects to a fresh database and creates no table or extension", async () => {
+    const connection = new DataSource(freshOptions());
+    const initializer = new DatabaseInitializerService(connection);
+    initializer.onApplicationBootstrap();
     try {
-      expect(await listSchemaObjects(inspector)).toEqual({ tables: [], extensions: ["plpgsql"] });
+      // The initializer connects in the background, as at startup; wait for it.
+      for (let attempt = 0; attempt < 100 && !connection.isInitialized; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      expect(connection.isInitialized, "the initializer did not connect").toBe(true);
+      expect(await listSchemaObjects(connection)).toEqual({
+        tables: [],
+        extensions: ["plpgsql"],
+      });
     } finally {
-      await inspector.destroy();
+      await initializer.onApplicationShutdown();
     }
   });
 });
@@ -126,31 +161,61 @@ describe("app entities after the migrations", () => {
     expect(extensions).toEqual(["plpgsql"]);
   });
 
-  it("refuse a second membership of the same user in the same organization", async () => {
-    const organizationId = await insertReturningId(
-      `INSERT INTO app.organizations (name) VALUES ($1) RETURNING id`,
-      [`org-${randomUUID()}`],
-    );
-    const userId = await insertReturningId(
+  async function createUser(): Promise<string> {
+    return insertReturningId(
       `INSERT INTO app.users (email, name) VALUES ($1, 'Test User') RETURNING id`,
       [`user-${randomUUID()}@example.test`],
     );
-    await dataSource.query(
-      `INSERT INTO app.memberships ("userId", "organizationId", roles) VALUES ($1, $2, '{operator}')`,
-      [userId, organizationId],
+  }
+  async function createOrganization(): Promise<string> {
+    return insertReturningId(`INSERT INTO app.organizations (name) VALUES ($1) RETURNING id`, [
+      `org-${randomUUID()}`,
+    ]);
+  }
+  const insertMembership = (userId: string, organizationId: string, role: string) =>
+    dataSource.query(
+      `INSERT INTO app.memberships ("userId", "organizationId", roles) VALUES ($1, $2, $3)`,
+      [userId, organizationId, `{${role}}`],
     );
-    await expectRejected(
+
+  it("refuse a second membership of the same user in the same organization", async () => {
+    const organizationId = await createOrganization();
+    const userId = await createUser();
+    await insertMembership(userId, organizationId, "operator");
+    await expectConstraintViolation(
       `INSERT INTO app.memberships ("userId", "organizationId", roles) VALUES ($1, $2, '{reviewer}')`,
       [userId, organizationId],
-      "UQ_",
+      await constraintName("app.memberships", "u"),
+      "23505",
     );
   });
 
-  it("refuse a membership of a user or organization that does not exist", async () => {
-    await expectRejected(
+  it("accept the same user in a second organization: the constraint is per pair, not per user", async () => {
+    const userId = await createUser();
+    await insertMembership(userId, await createOrganization(), "operator");
+    await insertMembership(userId, await createOrganization(), "operator");
+    const countRows = await dataSource.query<{ count: string }[]>(
+      `SELECT count(*) FROM app.memberships WHERE "userId" = $1`,
+      [userId],
+    );
+    expect(countRows[0]?.count).toBe("2");
+  });
+
+  it("refuse a membership of a missing organization for an existing user", async () => {
+    await expectConstraintViolation(
       `INSERT INTO app.memberships ("userId", "organizationId", roles) VALUES ($1, $2, '{}')`,
-      [randomUUID(), randomUUID()],
-      "FK_",
+      [await createUser(), randomUUID()],
+      await constraintName("app.memberships", "f", "app.organizations"),
+      "23503",
+    );
+  });
+
+  it("refuse a membership of a missing user in an existing organization", async () => {
+    await expectConstraintViolation(
+      `INSERT INTO app.memberships ("userId", "organizationId", roles) VALUES ($1, $2, '{}')`,
+      [randomUUID(), await createOrganization()],
+      await constraintName("app.memberships", "f", "app.users"),
+      "23503",
     );
   });
 
@@ -165,7 +230,12 @@ describe("app entities after the migrations", () => {
   ])(
     "refuse a %s row of an organization that does not exist",
     async (table, constraint, columns) => {
-      await expectRejected(`INSERT INTO app.${table} ${columns}`, [randomUUID()], constraint);
+      await expectConstraintViolation(
+        `INSERT INTO app.${table} ${columns}`,
+        [randomUUID()],
+        constraint,
+        "23503",
+      );
     },
   );
 });

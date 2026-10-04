@@ -8,22 +8,28 @@ outside `docs/product`); written by lane w3.
 Status: **not rehearsed on the final build.** Commands and expected output below were taken from the
 code and from recorded test runs; timings are observations from one developer machine, not targets.
 SH-33 sets the pitch timing from the rehearsal. The steps marked "checked" were run once on lane w3's
-machine at `main` 93e1c96 (load average 15 to 18, not idle).
+machine at `main` 93e1c96 (load average 15 to 18, not idle). "What exists today", the
+**[web]** markers and the "Final live checks" were refreshed on 4 October 2026 (lane f3) against `main`
+efaae10 plus the lead's pending merges.
 
 ## What exists today
 
-The NestJS API and the web screens for runs, review and reporting are not on `main` yet. Every step
-that needs them is marked **[API pending]** with the gateway path that works now. The gateway's
-internal routes require the service token and a signed `X-Operator-Context` token; no presenter tool
-mints that token, so until the API lands the Go-backed beats run through the scenario tests and the
-commands below, not through an HTTP client.
+The NestJS API and the web pages for runs, review, reports, the judge and the security posture are on
+`main`: sign in, the task form (`/tasks/new`), the run page (`/runs/<run id>`), the review page
+(`/runs/<run id>/review/<action id>`), the report page (`/runs/<run id>/reports/<report id>`), the
+judge page (`/judge`) and the security page with the active controls and the audit export
+(`/security`). Each beat below says which page shows it (**[web]**) and keeps the gateway command or
+test as the fallback, because the web path is only as good as the last rehearsal. The gateway's
+internal routes still require the service token and a signed `X-Operator-Context` token; no presenter
+tool mints that token, so a presenter reaches the gateway through the API (`/api/...`) or the commands
+below, never by calling an internal route directly.
 
-| Need                     | Once the API lands                    | Until then (this runbook)                                                                   |
-| ------------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Start a run (beat 1)     | API start-run (API-13) and the form   | the live or scripted story test admits the run through real Go admission                    |
-| Review and approve (8)   | review screen and approval (API-19)   | the story test approves through `policy.Approvals`, the same code the approval route calls  |
-| Timeline, summary (3-12) | run views and security pages (API-20) | the test output, `psql`, and the gateway read routes listed in `services/gateway/README.md` |
-| Ad-hoc judge input (10)  | judge client through the API (SH-48)  | the live corpus test; `POST /internal/control/evaluate` exists but needs the signed context |
+| Need                     | Where it is on `main`                                                 | Fallback (this runbook)                                                                     |
+| ------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Start a run (beat 1)     | the task form `/tasks/new`, `POST /api/runs`                          | the live or scripted story test admits the run through real Go admission                    |
+| Review and approve (8)   | the review page, `POST /api/actions/<id>/approval`                    | the story test approves through `policy.Approvals`, the same code the approval route calls  |
+| Timeline, summary (3-12) | the run page and `/security` (events, usage, passport, summary)       | the test output, `psql`, and the gateway read routes listed in `services/gateway/README.md` |
+| Ad-hoc judge input (10)  | `/judge` and `pnpm judge` through `POST /api/control/evaluate` (X-91) | the live corpus test; `POST /internal/control/evaluate` needs the signed context            |
 
 ## Before the demo (about 30 minutes before)
 
@@ -98,6 +104,20 @@ print it: it holds the generated secrets).
      machine (2026-10-03, quiet)"), or a fresh `pnpm benchmark` (add `--live` for the model).
    - A `psql` session on the demo database for the before-and-after counts below.
 
+### Two pitfalls (found in rehearsal, 4 October 2026)
+
+- **Replay within the run's 15-minute window.** `cmd/replay` accepts a finished run, but the gate
+  checks the run's expiry first. Replay `hostile_note_internal_disclosure_v1` right after the live run
+  finishes, within its 15-minute passport window (`run_expiry_minutes` in `config/policy.yaml`).
+  Observed: on a run older than that, the replay printed `decision: deny`, `reason: run_expired`,
+  `result: UNEXPECTED` and exited 1 instead of showing `report_export_restricted`. Start a fresh run if
+  the window has passed.
+- **Never build next to a running dev stack.** Do not run `pnpm verify` or a web build
+  (`pnpm --filter web run build`) in the worktree of a running `pnpm dev`: the build overwrites
+  `apps/web/.next` with production output (it leaves a `BUILD_ID`), and the dev server then answers
+  `404` for `/login` and other pages until the directory is deleted and dev restarted. Delete
+  `apps/web/.next` before starting the demo stack (`rm -rf apps/web/.next`, then `pnpm dev`).
+
 ## The beats
 
 Each beat lists how to run it today, what the audience should see, the observed timing, the fallback
@@ -125,7 +145,8 @@ GOFLAGS=-p=3 pnpm test:db gateway   # includes TestStoryThroughTheProductionChai
 ### Beat 1: delegate the job
 
 - Today: the story test admits the run through `admission.Admitter` (the code behind
-  `POST /internal/runs`). **[API pending]** the task form and passport summary (API-13).
+  `POST /internal/runs`). **[web]** the task form at `/tasks/new` and the passport panel on the run
+  page.
 - Audience sees: the passport with the four tools, `invoice_A01` and `invoice_A02`, the Atlas vendor
   and its one recipient reference, both report templates, `queue_report` requiring approval, the
   expiry and the limits; event `run.queued`.
@@ -135,7 +156,8 @@ GOFLAGS=-p=3 pnpm test:db gateway   # includes TestStoryThroughTheProductionChai
 ### Beat 2: establish the baseline
 
 - Today: in `psql`, the invoice versions, `SELECT count(*) FROM demo.outbox_messages` (0) and the
-  active catalog and feed revision (step 2 above). **[API pending]** the controls view.
+  active catalog and feed revision (step 2 above). **[web]** the passport and the empty outbox state on
+  the run page, and the active controls panel at the top of `/security`.
 - Say: "The outbox is simulated: a database record, no email is sent."
 
 ### Beats 3 and 4: investigate and create the internal report (live)
@@ -156,7 +178,8 @@ but proposed queueing it in 0 of 3 runs in the first set and 1 of 3 in the secon
 denied `report_export_restricted`), so this beat always uses the labelled replay against the
 genuinely created report. The live attempt is never presented as part of the demonstration. `cmd/replay` accepts only
 a finished run (completed, failed or stopped), so it never takes a step a live loop is about to use;
-run it after the live story ends.
+run it after the live story ends and within that run's 15-minute passport window (see "Two
+pitfalls": later the gate answers `run_expired` first).
 
 ```sh
 # The live story's run: the newest finished run that has an internal_only report.
@@ -193,8 +216,8 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   `vendor_shareable`, projection rule `vendor_invoice_fields_v1`, no internal note text;
   `approval.requested` and `run.awaiting_approval`; the reviewer approves (`approval.decided`); then
   `run.resumed`, `action.succeeded` and one outbox row to the registered address whose content hash
-  matches the reviewed report; `run.completed`. **[API pending]** the review screen (API-19); today the
-  test approves through `policy.Approvals`.
+  matches the reviewed report; `run.completed`. **[web]** the review page (click Approve, then Approve in the
+  confirm dialog); the fallback test approves through `policy.Approvals`.
 - Recorded live run: 6 agent calls, 1 security call, one outbox row, completed.
 - Fallback: `TestStoryAfterApproval` (scripted provider) shows the same ordered events every time.
 
@@ -228,7 +251,8 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
     -run '^TestLiveSemanticCorpus$' -count=1 -v -timeout 20m
   ```
 
-  **[API pending]** the judge client and live test entry (SH-48, API-38).
+  **[web]** `/judge` ("Start a dedicated judge run", then evaluate) and `pnpm judge --run <run id> --case
+<fixture id>`, both through the API's `POST /api/control/evaluate` (X-91).
 
 - Audience sees: verdicts labelled `live` with score and category, benign cases passing (including the
   hard negative), blocked notes absent from the would-be agent context.
@@ -252,18 +276,227 @@ node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> 
   revision is then refused with `source_policy_changed`, so do not change the configuration during
   a review wait. Re-importing an unchanged file creates a new revision today as well; after lane
   c1's importer fix it is a no-op.
-- Show the same input before and after (the judge input path once the API lands; until then a test
-  or replay against the new revision). **[API pending]** the revision view (WEB-29).
+- Show the same input before and after on the judge input path (`/judge` or `pnpm judge`). **[web]** the
+  revision view: the active controls panel on `/security` shows the requested, validated and active
+  revision and any rejection.
 
 ### Beat 12: test and reporting evidence
 
 - The suite: `MODEL_NAME=qwen3.5:4b pnpm verify:controls` (about two minutes, checked; see "Evidence
   windows" above for the result). Open the results file it names.
 - Summary and export: `GET /internal/security/summary`, `/internal/security/assessments` and
-  `/internal/security/events` on the gateway (contracts in `packages/contracts`); **[API pending]**
-  the dashboard and export file (API-20, WEB-30, WEB-31).
+  `/internal/security/events` on the gateway (contracts in `packages/contracts`). **[web]** the security
+  posture dashboard and the audit export at `/security` (`GET /api/security/summary` and
+  `/api/security/export`).
 - Timing: the quiet benchmark table (deterministic controls well under 1 ms, live semantic about
   1.9 s, gateway overhead about 5 ms).
+
+## Final live checks (quiet window)
+
+Run once, by one operator, top to bottom, on the presentation machine after the agent work is
+finished. It takes about 35 to 40 minutes for checks 1 to 10; checks 11 and 12 are extras that add
+about 8. Every check says what to do, what passes and which roadmap task it supports. A failed check
+is written down with its exact output and the run continues; nothing is marked passed that did not
+run. Keep binaries out of the repository: save one full-page screenshot per page named below, the
+researcher collects them later.
+
+**Why a quiet window.** Every check marked _(model)_ calls the local `qwen3.5:4b`. Seven sessions
+sharing one Ollama push model calls past the 20-second request timeout and pause runs with
+`outcome_unknown`; the checks only mean something when the machine is quiet.
+
+### Setup (about 5 minutes)
+
+```sh
+uptime                                  # load average under about 4
+ollama ps                               # nothing else using the model
+set -a; . ./.env; set +a                # never print it: it holds the generated secrets
+lsof -nP -iTCP:"$WEB_PORT" -iTCP:"$API_PORT" -iTCP:"$GATEWAY_PORT" -sTCP:LISTEN   # no output: ports free
+pnpm infra:up && pnpm db:migration:run && pnpm db:roles
+pnpm db:seed && pnpm reset:demo         # synthetic records, demo operator, clean data, catalog active
+rm -rf apps/web/.next                   # pitfall: never leave a production build next to dev
+MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway run ./cmd/modelcheck   # warms the model, exit 0
+pnpm dev                                # web, API and gateway; leave it running, use a second terminal
+```
+
+Passes when `curl -s -o /dev/null -w '%{http_code}\n' "http://localhost:$API_PORT/api/health/ready"`
+and the same for `http://localhost:$GATEWAY_PORT/health/ready` print `200`. Open
+`http://localhost:$WEB_PORT/login` and sign in as `demo-operator@example.com` with
+`DEMO_OPERATOR_PASSWORD`; the page you land on shows the "Development demonstration" label and the
+operator. In a second terminal, `<postgres container>` is the demo database's container and
+`psql` below means
+`docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" <postgres container> psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc`.
+
+### 1. Active controls and reload state (WEB-29, about 3 minutes, no model)
+
+Needs `GET /api/policies/catalog` and the `/api/policies` proxy prefix, both on `main`. Do it first:
+it changes the policy revision, so never do it while a run waits for review (`source_policy_changed`).
+
+1. Open `/security`. Note the active revision N in the "active controls" panel.
+2. Valid reload: `sed -i '' 's/threshold: 0.75/threshold: 0.80/' config/policy.yaml && pnpm policy:import`.
+3. Invalid reload: `sed -i '' 's/threshold: 0.80/threshold: 1.5/' config/policy.yaml && pnpm policy:import`.
+4. Restore: `sed -i '' 's/threshold: 1.5/threshold: 0.75/' config/policy.yaml && pnpm policy:import`.
+
+Passes when: after step 2 the panel shows the revision pending and then in force (within a few
+seconds, without a click) as N+1; after step 3 `policy:import` prints a rejection
+(`policy_reload_rejected`), the panel shows the rejection code, message and stage, and N+1 is still
+the active revision; after step 4 N+2 is active; the panel never shows "Not available yet"; and
+`git diff --stat config/policy.yaml` prints nothing. Ticks **WEB-29**.
+
+### 2. An admission rejection through the form (WEB-11, about 2 minutes, no model)
+
+At `/tasks/new` choose Atlas and an invoice that does not belong to it (for example `invoice_C01`).
+Passes when the form shows a business-language rejection (reason `resource_out_of_scope`), asks for an
+explicit resubmission, no run appears (`psql "SELECT count(*) FROM runtime.runs"` still 0) and the
+browser console shows no error. If the form does not offer that combination, note it: the form
+offers only what the server returned. Ticks **WEB-11**.
+
+### 3. Real start through the form (WEB-05, about 3 minutes, _model_)
+
+At `/tasks/new` choose the Atlas reconciliation, vendor Atlas, `invoice_A01` and `invoice_A02`, destination
+Atlas and the review requirement for `queue_report`, then submit. Passes when the page opens
+`/runs/<run id>`, that id equals `psql "SELECT id FROM runtime.runs ORDER BY created_at DESC LIMIT 1"`
+(the run Go admitted), the request body in the browser's network tab carries no actor, organization or
+grant, and the run page shows the passport (four tools, the two invoices, the Atlas recipient
+reference). Ticks **WEB-05** (this is c1's real start through the form) and the beat 1 evidence.
+Note the time: the run's 15-minute window starts now.
+
+### 4. Waiting for approval, without a shim (WEB-10, about 1 minute, same run)
+
+The run reaches `awaiting_approval` within about 20 to 40 seconds. Passes when the page shows
+"Waiting for approval", "Nothing has run for it yet", a "Review the action" link, and no console
+error; `curl` of `/api/auth/me` through the page needs no workaround (c1's navigation fix). Take the
+screenshot. Closes the `awaiting_approval` evidence gap in **WEB-10**.
+
+### 5. The full approval through the interface (WEB-14, WEB-18, about 3 minutes, same run)
+
+Click "Review the action": the page shows the exact recipient (`reports@atlas.example.com`), the report
+content, its SHA-256 and the source manifest. Click Approve, then **Approve again in the dialog**
+("Approve this exact action?"; the first click only opens it). Passes when the run resumes and shows
+"Completed" within about 10 seconds, both reports are linked, the queued message carries the
+"Simulated outbox" label, `psql "SELECT count(*), max(recipient) FROM demo.outbox_messages"` prints
+`1` and the registered address, and the outbox row's content hash equals the hash on the review page.
+Ticks **WEB-14** and **WEB-18** (the legitimate task through the interface).
+
+### 6. The export denial and the other replay on the page (WEB-09, WEB-28, about 2 minutes, no model call)
+
+Within 15 minutes of check 3, replay against that run (the command of beat 5, run id from the URL):
+
+```sh
+node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> -fixture hostile_note_internal_disclosure_v1
+node scripts/with-env.mjs go -C services/gateway run ./cmd/replay -run <run id> -fixture hostile_note_redirect_record_v1
+```
+
+Passes when both exit 0 with `deny` and the reasons `report_export_restricted` and
+`resource_out_of_scope`, and after a reload of `/runs/<run id>` the page shows the "Send attempt
+blocked" row with "Export denied: the report inherits an Internal only restriction", "The recipient was
+permitted" and the vendor-report continuation, plus "Labelled replay: ... Replay: scripted proposal, not
+generated by the model", while the outbox still holds the one approved row. Closes the beat 5 gap in
+**WEB-09** and the browser check of **WEB-28**.
+
+### 7. Hostile and benign input through the judge path (WEB-32, X-91, about 5 minutes, _model_)
+
+On `/judge` choose "Start a dedicated judge run", then evaluate as `tool_result`: the text of
+`hostile_note_internal_disclosure_v1` from `fixtures/hostile-notes.json` and a benign case such as
+`benign_duplicate_finding_v1` from `fixtures/semantic-corpus.json`. Then the same through the CLI against
+the gateway's control evaluation (X-91, through the API's live test entry), with the operator's session
+cookie and no other credential:
+
+```sh
+curl -s -c /tmp/judge-cookies.txt -H 'content-type: application/json' \
+  -d "{\"email\":\"demo-operator@example.com\",\"password\":\"$DEMO_OPERATOR_PASSWORD\"}" \
+  "http://localhost:$API_PORT/api/auth/sign-in" > /dev/null
+export JUDGE_API_URL="http://localhost:$API_PORT" \
+  JUDGE_SESSION_COOKIE="session=$(awk '$6=="session"{print $7}' /tmp/judge-cookies.txt)"
+pnpm judge --run <judge run id> --case hostile_note_internal_disclosure_v1
+pnpm judge --run <judge run id> --case benign_duplicate_finding_v1
+```
+
+Passes when, on the `/judge` page and on the CLI (which prints the decision, the active revision and the
+verdict source), the hostile note is denied (a known
+signature fires before any semantic call, or the live semantic verdict blocks it) and its text is never
+echoed back, the benign case is allowed, both
+decisions carry the active catalog revision and the verdict source label ("Live model", never presented
+as a detection rate), and the judge run's timeline shows the evaluations as judge input, never as an
+action. A model-dependent mismatch (a hard negative blocked, a hostile note allowed) is recorded as a
+note, not hidden. Ticks **WEB-32** (the hostile-note run shows the block before context and the clean
+run its allow) and c2's live `pnpm judge` call against X-91 (SH-48).
+
+### 8. The limit stop through the interface (WEB-17, about 3 minutes, _model_)
+
+Start a run from `/tasks/new` with the smallest model-call limit the form offers. If that is above 2,
+start it with the route the form posts to, using the session from check 7's cookie file:
+
+```sh
+curl -s -b /tmp/judge-cookies.txt -H 'content-type: application/json' \
+  -d '{"template":"reconcile_atlas_v1","vendorId":"vendor_Atlas","invoiceIds":["invoice_A01","invoice_A02"],"destination":"vendor_Atlas","approvalRequirement":"review_queue_report","limits":{"modelCalls":2}}' \
+  "http://localhost:$API_PORT/api/runs"
+```
+
+(The cookie file comes from check 7; sign in again if it is gone.) Passes when the run page shows
+"Paused at a limit", the recorded reason (`allowance_exhausted` or `security_allowance_exhausted`),
+"Model requests ... 2 of 2 (limit reached)", "Every dispatched request is accounted for", and the
+gateway log has a `model reservation refused` line with the limit kind. Ticks the interface leg of
+**WEB-17**.
+
+### 9. The web end-to-end rerun (WEB-18, WEB-20, WEB-24, about 10 minutes, _model_)
+
+c2's script drives the whole demonstration through the web server's own routes and ends each round with
+`pnpm reset:demo`, so run it after the checks above have been looked at:
+
+```sh
+E2E_POSTGRES_CONTAINER=<postgres container> E2E_ROUNDS=2 \
+  node scripts/with-env.mjs node apps/web/scripts/e2e-flow.mjs
+```
+
+Passes when the summary lists no failed check, every model-dependent mismatch is a NOTE, round 2's
+business counts equal round 1's after the reset, and the summary ends with the list of things that
+only a browser can show (checks 3 to 8 above). Save the whole summary. Ticks **WEB-18**, **WEB-20**
+and **WEB-24**.
+
+**Re-run beat 10's secret check live, and read it.** In session 08's e2e run (`main` 39d5899 plus docs,
+a loaded machine, `qwen3.5:4b`) the check "a secret is redacted and its value never returned"
+failed in both rounds: round 1 with "decision is deny" (the live path denied where the check expects
+redact), round 2 with "evaluate answered 504" (a model timeout); an earlier run also answered 504 for
+that check and for "hard negative...". It is not diagnosed. Beat 10's other checks passed in that run
+(a signature fires before any semantic call, benign input gets a live metered verdict, a hostile note is
+denied, evaluations are recorded as judge input). On the quiet machine this check must pass in both
+rounds with no 504: a 504 is a model timeout, so first confirm the machine is quiet; a second `deny`
+where `redact` is expected is a finding for lane c1 (the secret-pattern control and the evaluator's
+verdict), written down with the exact output, not retried until it passes.
+
+### 10. The control test suite, live (about 2 minutes, _model_)
+
+```sh
+MODEL_NAME=qwen3.5:4b pnpm verify:controls
+```
+
+Passes when it exits 0, writes `.verify-controls/results-<timestamp>.json`, no case failed or was
+skipped and no guard failed; a label mismatch is recorded, not failed, and an unavailable model makes
+the run INCOMPLETE and exit nonzero. Keep the file for the claim-to-proof list (SH-47).
+
+### 11. The live story, three times (about 4 minutes, _model_, extra)
+
+Run the live story of the beats section three times on the quiet machine and count, per run: internal
+report created (3 of 3 so far), a live attempt to send it (1 of 3 so far; it is shown only as a
+labelled replay), recipient reference mangled (0 of 3 so far), `semantic_injection_detected` on a clean
+proposal (0), and the agent calls' p50 and p95 (3.9 s and 5.4 s on a loaded machine). Passes when the
+internal report is created in every run and no clean proposal is blocked. Updates the **GO-27** and
+**GO-47** live evidence with quiet-machine numbers.
+
+### 12. Benchmark and model check, live (about 4 minutes, _model_, extra)
+
+```sh
+MODEL_NAME=qwen3.5:4b pnpm benchmark --live
+MODEL_BASE_URL=http://127.0.0.1:11434 MODEL_NAME=qwen3.5:4b go -C services/gateway run ./cmd/modelcheck
+```
+
+Passes when `modelcheck` exits 0 and the benchmark prints a live table with 0 errors and a load
+average at the start and the end; quote it as an observation under that load. Updates **GO-81** (the
+quiet-machine table) and **GO-03** (hardware fit; whether this machine is the presentation machine is
+still the user's to confirm).
+
+After the window: stop `pnpm dev`, run `rm -f /tmp/judge-cookies.txt`, run `git status` (nothing but
+intended changes), and write the results into the roadmap blocks named above.
 
 ## What must not be claimed
 
@@ -285,9 +518,12 @@ Point to these limitations in `services/gateway/README.md` instead of claiming m
 
 ## Gaps to close before the pitch
 
-- A way to start and approve a run in the demo database without the test harness (the API, or a
-  documented presenter command that signs the operator context).
-- A rehearsal on the final build with recorded timings (SH-33), and a run kept for beat 5.
+- A rehearsal on the final build with recorded timings (SH-33), and a run kept for beat 5 (the replay
+  only works within that run's 15-minute window, so "kept" means the screenshots and the printed
+  output, not the run).
+- The "Final live checks" above, run once in a quiet window; until then every live number in this file
+  is an observation from a loaded machine.
 
 Done on `main` since the first version: the feed import in `pnpm policy:import` with
-`pnpm catalog:activate` (no hand load anywhere), and `pnpm verify:controls` (SH-47).
+`pnpm catalog:activate` (no hand load anywhere), `pnpm verify:controls` (SH-47), and the API and web
+pages that start, review, approve and inspect a run without the test harness.
