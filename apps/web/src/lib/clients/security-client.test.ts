@@ -8,7 +8,9 @@ import {
   exportFileName,
   failureForStatus,
   fetchExportPage,
+  getCatalogStatus,
   getSecuritySummary,
+  isCatalogStatus,
   isSecuritySummary,
   probeExportAuthorization,
   summarizeJsonPage,
@@ -111,6 +113,7 @@ describe("failureForStatus", () => {
     expect(failureForStatus(401).kind).toBe("unauthorized");
     expect(failureForStatus(403).kind).toBe("forbidden");
     expect(failureForStatus(400).kind).toBe("bad_request");
+    expect(failureForStatus(404).kind).toBe("not_available");
     expect(failureForStatus(500)).toMatchObject({ kind: "unavailable", status: 500 });
   });
 });
@@ -296,5 +299,83 @@ describe("summarizeJsonPage", () => {
     expect(summarizeJsonPage("not json", "events")).toBeNull();
     expect(summarizeJsonPage(JSON.stringify([]), "events")).toBeNull();
     expect(summarizeJsonPage(JSON.stringify({ events: [], nextCursor: 1 }), "events")).toBeNull();
+  });
+});
+
+describe("catalog status", () => {
+  const activeFixture = contractFixture("catalog-status.active.json") as Record<string, unknown>;
+  const rejectedFixture = contractFixture("catalog-status.rejected-request.json");
+  const body = JSON.stringify(activeFixture);
+
+  it("accepts both statuses the gateway really serves", () => {
+    expect(isCatalogStatus(activeFixture)).toBe(true);
+    expect(isCatalogStatus(rejectedFixture)).toBe(true);
+  });
+
+  it("rejects a status outside the contract", () => {
+    expect(isCatalogStatus(null)).toBe(false);
+    expect(isCatalogStatus({ ...activeFixture, controls: "none" })).toBe(false);
+    expect(isCatalogStatus({ ...activeFixture, activeRevisionId: "1" })).toBe(false);
+    expect(isCatalogStatus({ ...activeFixture, lastError: { code: "x" } })).toBe(false);
+    expect(isCatalogStatus({ ...activeFixture, disabledRules: [1] })).toBe(false);
+    const controls = activeFixture.controls as Record<string, unknown>[];
+    expect(
+      isCatalogStatus({ ...activeFixture, controls: [{ ...controls[0], controlId: "made_up" }] }),
+    ).toBe(false);
+    expect(
+      isCatalogStatus({
+        ...activeFixture,
+        controls: [{ ...controls[0], boundaries: ["anywhere"] }],
+      }),
+    ).toBe(false);
+    expect(
+      isCatalogStatus({ ...activeFixture, controls: [{ ...controls[0], mode: "allow" }] }),
+    ).toBe(false);
+  });
+
+  it("returns the status with its request id", async () => {
+    const { implementation, requests } = stubFetch(200, body, {
+      "content-type": "application/json",
+      "x-request-id": "req-9",
+    });
+    const result = await getCatalogStatus({ fetchImplementation: implementation });
+    expect(result.ok && result.requestId).toBe("req-9");
+    expect(requests).toEqual([{ url: "/api/policies/status", accept: "application/json" }]);
+  });
+
+  it("says not available when the route is not served, and never calls that an outage", async () => {
+    const missing = stubFetch(404, JSON.stringify({ error: { code: "not_found" } }));
+    const notFound = await getCatalogStatus({ fetchImplementation: missing.implementation });
+    expect(!notFound.ok && notFound.failure.kind).toBe("not_available");
+    // The web proxy's own refusal of a path it does not forward (yet).
+    const refused = stubFetch(
+      500,
+      JSON.stringify({ error: { code: "configuration_error", message: "x" } }),
+    );
+    const proxyRefusal = await getCatalogStatus({ fetchImplementation: refused.implementation });
+    expect(!proxyRefusal.ok && proxyRefusal.failure.kind).toBe("not_available");
+  });
+
+  it("shows an unenforceable revision (503) and other server errors as unavailable", async () => {
+    const down = stubFetch(503, JSON.stringify({ error: { code: "unavailable" } }));
+    const unavailable = await getCatalogStatus({ fetchImplementation: down.implementation });
+    expect(!unavailable.ok && unavailable.failure.kind).toBe("unavailable");
+    const broken = stubFetch(500, JSON.stringify({ error: { code: "internal_error" } }));
+    const other = await getCatalogStatus({ fetchImplementation: broken.implementation });
+    expect(!other.ok && other.failure.kind).toBe("unavailable");
+  });
+
+  it("maps sign-in and role refusals and a body outside the contract", async () => {
+    const signedOut = stubFetch(401, JSON.stringify({ error: { code: "unauthorized" } }));
+    const unauthorized = await getCatalogStatus({ fetchImplementation: signedOut.implementation });
+    expect(!unauthorized.ok && unauthorized.failure.kind).toBe("unauthorized");
+    const forbidden = stubFetch(403, JSON.stringify({ error: { code: "forbidden" } }));
+    const refusal = await getCatalogStatus({ fetchImplementation: forbidden.implementation });
+    expect(!refusal.ok && refusal.failure.kind).toBe("forbidden");
+    const wrong = stubFetch(200, JSON.stringify({ activeRevisionId: 1 }));
+    const invalid = await getCatalogStatus({ fetchImplementation: wrong.implementation });
+    expect(!invalid.ok && invalid.failure.kind).toBe("invalid_response");
+    const network = await getCatalogStatus({ fetchImplementation: failingFetch });
+    expect(!network.ok && network.failure.kind).toBe("network");
   });
 });

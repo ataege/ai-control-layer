@@ -418,7 +418,7 @@ must enforce and show, so that any gap reaches the document owner in the same se
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-01 · Check the frozen examples against what the interface must show**
+- [x] **WEB-01 · Check the frozen examples against what the interface must show**
   - **Report 1.1 change:** The fields add the classification, source trail, export denial, alternative template, report and source versions in review, and internal evidence and report types in the task form.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 0.5-1.5 h, this roadmap's
     estimate)
@@ -437,6 +437,12 @@ must enforce and show, so that any gap reaches the document owner in the same se
     the M0 exit's "agreed contract example for each command and event" covers the screens the report
     names.
   - Tests: none (a review of the examples).
+  - Evidence (2026-10-04, branch `web/audit-01-02`): `docs/web-contract-audit.md`. A reading review,
+    not a live run (the API does not compile on that day's merged `main`). Open items recorded there:
+    task goal text, correction count, estimated cost, report types and internal evidence in the task
+    form. The page-level mismatches (legacy `RunView` and `SanitizedEvent` shapes against the frozen
+    `RunState` and `SafeEvent`) are listed there as blocking the demonstration; they are follow-up
+    work, not part of this review.
   - Report: "Users operating model and proposed user journeys" (Journeys 1 to 3); "Live
     demonstration storyboard and proof checks"; "Atomic allowances hard limits and estimated cost"
   - Blocked by: `contract owners`
@@ -1565,6 +1571,7 @@ this side starts and reviews.
   - Blocked by: nothing
 
 - [ ] **WEB-29 · Show the active controls, policy revision and reload state**
+  - **Progress (2026-10-04, web/security), not ticked:** the panel is built and sits at the top of `/security` (`components/security/active-controls.tsx`, `catalog-view.ts`, `lib/clients/security-client.ts`, route handler `app/api/policies/status/route.ts`) against lane 08's `CatalogStatus` contract (`GET /internal/catalog/active`; contract files taken from `web/catalog-status` d5bea8c, TypeScript side only). It shows the active, requested and validated revisions, the policy and feed digests, the feed revision and rule count, the disabled feed rules, and each of the three controls with its state (a disabled one shown as disabled), response, threshold and boundaries. A requested revision that is not active yet is shown as pending and the panel asks again every 3 seconds until it is in force; a rejected change shows its code, message and stage with the active revision still in force. A 404 or the web proxy's refusal of a path it does not forward is shown as "Not available yet", a 503 as an outage and never as an empty catalog; 401, 403 and a body outside the contract are handled; no upstream text is shown. Checks: `pnpm --filter web run lint` exit 0 (0 errors; 3 warnings in other lanes' files), `typecheck` exit 0, `test` exit 0 (131 passed, with the view model and client tested against both real fixtures), contracts lint, typecheck, test (9) and build exit 0. In headless Chromium on the local stack: the live page shows "Not available yet"; with the page's own request answered by the real contract fixtures, the active, rejected, disabled-control, pending (becoming in force without a click), nothing-active and every failure state rendered correctly and the page has no horizontal scroll at 390 px. **Missing for the done-when ("after a valid and an invalid reload the page shows the right active revision and the error"):** the API route `GET /api/policies/status` (Noyan) and `"/api/policies"` in the web proxy's `UPSTREAM_PREFIXES` (the lead's `upstream-proxy.ts`); until both exist the live page cannot show a reload, so this task is ticked only after a live valid and invalid reload through the real API.
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: API-33 · Needs: X-83 · Provides: nothing
   - Paths: `apps/web`
@@ -1833,7 +1840,7 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
 
 ### Next.js (report role: Implementer 1)
 
-- [ ] **WEB-23 · Polish the error states**
+- [x] **WEB-23 · Polish the error states**
   - Owner: Web + API implementer (report role: Implementer 1, interface) · Tier: B · Size: S (estimate 2-4 h)
   - Depends on: WEB-14, WEB-15, WEB-16 · Needs: X-13 · Provides: nothing
   - Paths: `apps/web/src/lib/service-checks.ts`, `apps/web/src/lib` (the client from WEB-03),
@@ -1852,6 +1859,7 @@ needs X-58). A change that lands after SH-32 needs its evidence recaptured.
     output); "Relative implementation milestones and critical dependencies" (Proposed 24-hour
     implementation sequence)
   - Blocked by: nothing
+  - Completed (2026-10-04): lane web/reports, in new files. `lib/errors/failure.ts` (`classifyFailure`, `failureFromReason`) maps every failed same-origin request to its own state: offline, client timeout, cancelled, an unreadable response, an expired session, forbidden, not found, conflict, bad request, too large, the proxy codes (`configuration_error`, `upstream_unreachable`, `upstream_timeout`, `upstream_invalid_response`), the API's gateway-side codes (`upstream_unavailable`, `outcome_unconfirmed`, `timeout`, ...), a server error, and every X-13 reason code (`lib/errors/reason-failures.ts`: words for all 31 codes, the gateway's fixed safe texts, checked against the contracts enum and free of run-status words). Each state has its own title and fixed words (never a server message), says where it failed (browser, web server, API, gateway, live model, session, request), and offers retry, sign-in or nothing. A command that got no answer is unconfirmed: no retry, "check the run before submitting it again"; a failure that certainly did not run (401, 404, 400, unreachable API) is not. A provider failure (`outcome_unknown`, `security_evaluator_unavailable`, `model_not_allowed`) sits on "The live model" with the note that the gateway reported it itself and deterministic checks and labelled replays do not need the model. `components/errors/failure-state.tsx` (`FailureState`) renders the state (index: `@/components/errors`); an expired session links to `/login?callbackUrl=<this page>`. Applied in the report page (`ReportPanel`), which keeps its own words only for "Report not found" and "Report cannot be shown". Tests (195 in the web package, 46 new): every reason code has words; each failure kind maps to its own state and title, none reads as a success; a server message never reaches the page; commands versus reads; overrides; the component's sign-in link, retry, unconfirmed and live-model notes. Browser checks, quoted, on the report page: with the API stopped (the web server running) the state was "The API could not be reached" (upstream_unreachable, Where: The API, request id, Try again); with a stale session cookie "Your session has ended" with a Sign in link to `/login?callbackUrl=%2Fruns%2F…%2Freports%2F…`; with the browser request aborted (a simulated disconnect) "You appear to be offline", and Try again recovered the report. Not checked in a browser: a provider failure, which needs the run page being rebuilt (its states are specified and tested here); the other pages adopt `FailureState` by importing it from `@/components/errors`.
 
 - [ ] **WEB-24 · Make every demonstration beat observable for the rehearsal**
   - **Report 1.2 change:** Twelve beats in three evidence segments.

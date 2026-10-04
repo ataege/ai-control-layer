@@ -2,17 +2,17 @@
 
 import * as React from "react";
 import type { ReportView } from "@workspace/contracts";
-import { Button } from "@workspace/ui/components/button";
-import { ErrorState } from "@workspace/ui/components/error-state";
 import { LoadingState } from "@workspace/ui/components/loading-state";
+import { FailureState } from "@/components/errors";
 import { getReport } from "@/lib/clients/reports-client";
-import { describeReportFailure, type ReportFailure } from "./report-errors";
+import type { Failure } from "@/lib/errors/failure";
+import { describeReportFailure } from "./report-errors";
 import { ReportContent } from "./report-content";
 
 type PanelState =
   | { kind: "loading" }
   | { kind: "ready"; report: ReportView }
-  | { kind: "failed"; failure: ReportFailure };
+  | { kind: "failed"; failure: Failure; requestId?: string };
 
 /** Loads one stored report through the same-origin route and shows it, or why it cannot be shown. */
 export function ReportPanel({ runId, reportId }: { runId: string; reportId: string }) {
@@ -26,7 +26,11 @@ export function ReportPanel({ runId, reportId }: { runId: string; reportId: stri
       setState(
         result.ok
           ? { kind: "ready", report: result.data }
-          : { kind: "failed", failure: describeReportFailure(result.error) },
+          : {
+              kind: "failed",
+              failure: describeReportFailure(result.error),
+              requestId: result.requestId,
+            },
       );
     });
     return () => controller.abort();
@@ -35,20 +39,13 @@ export function ReportPanel({ runId, reportId }: { runId: string; reportId: stri
   if (state.kind === "loading") return <LoadingState label="Loading the stored report" />;
   if (state.kind === "failed") {
     return (
-      <ErrorState
-        title={state.failure.title}
-        description={state.failure.description}
-        action={
-          <Button
-            variant="outline"
-            onClick={() => {
-              setState({ kind: "loading" });
-              setAttempt((current) => current + 1);
-            }}
-          >
-            Try again
-          </Button>
-        }
+      <FailureState
+        failure={state.failure}
+        requestId={state.requestId}
+        onRetry={() => {
+          setState({ kind: "loading" });
+          setAttempt((current) => current + 1);
+        }}
       />
     );
   }
