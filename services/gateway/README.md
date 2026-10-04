@@ -423,6 +423,18 @@ limit. Local inference has no tariff, so no cost is recorded.
   anywhere in the database holds them back. Pages come back empty with the same cursor until it
   ends; nothing is lost.
 - **Two identical start-run requests create two runs** (`command idempotency keys` is open).
+- **Stored-document decoding accepts case-variant keys.** `contracts.DecodeStrict` rejects unknown
+  fields and trailing data but, like `encoding/json`, matches field names case-insensitively and keeps
+  the last of two equal keys. The command bodies (start-run, cancel, approval, evaluate:
+  `httpserver.DecodeJSONBody`) and the action decoder (`policy.DecodeArguments`) are strict: duplicate
+  keys at any depth, case-variant keys, stray closing delimiters and nesting past 32 levels are a bad
+  request or `invalid_arguments`. The adapters' own re-decode of the stored canonical arguments
+  (`tools.decodeArguments`) is the permissive kind too; those arguments come from the gate and are
+  bound to the action digest, so changing them needs write access to the database.
+- **`source_invoice_ids` has no length cap in the decoder.** The array is bounded by the size of the
+  model's answer and, before any effect, by the passport's invoice list (every element must be in
+  scope and repeats are refused); a 100,000-level nesting bomb is refused quickly. Found by the
+  red-team tables (`go/w2-redteam`).
 
 ### Evidence commands
 

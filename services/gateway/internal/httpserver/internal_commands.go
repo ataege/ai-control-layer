@@ -49,8 +49,8 @@ func WriteError(responseWriter http.ResponseWriter, request *http.Request, statu
 var errMalformedBody = errors.New("malformed request body")
 
 // DecodeJSONBody reads at most maximumBytes of a JSON body into target: one document, valid
-// UTF-8, no unknown fields, no trailing data. On failure it has already answered 400
-// bad_request and returns false; the handler must stop.
+// UTF-8, no unknown fields, no duplicate or case-variant keys, no trailing data. On failure it has
+// already answered 400 bad_request and returns false; the handler must stop.
 func DecodeJSONBody(responseWriter http.ResponseWriter, request *http.Request, maximumBytes int64, target any) bool {
 	if err := decodeJSONBody(responseWriter, request, maximumBytes, target); err != nil {
 		writeError(responseWriter, request, http.StatusBadRequest, "bad_request", "The request body is not a valid command.")
@@ -71,10 +71,18 @@ func decodeJSONBody(responseWriter http.ResponseWriter, request *http.Request, m
 	if err != nil || !utf8.Valid(body) {
 		return errMalformedBody
 	}
+	if err := rejectDuplicateKeys(body); err != nil {
+		return err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil || decoder.More() {
+	if err := decoder.Decode(target); err != nil {
 		return errMalformedBody
 	}
-	return nil
+	// decoder.More is false before a stray closing brace or bracket, so it would let `{...}}`
+	// through; only the end of the input is acceptable after the document.
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return errMalformedBody
+	}
+	return requireExactKeys(body, target)
 }
