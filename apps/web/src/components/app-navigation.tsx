@@ -30,6 +30,7 @@ export function AppNavigation({ children }: Readonly<{ children: React.ReactNode
 
   // null until the session has been read; "unavailable" when it could not be read at all.
   const [session, setSession] = React.useState<SessionOutcome | null>(null);
+  const [signOutFailed, setSignOutFailed] = React.useState(false);
 
   React.useEffect(() => {
     if (currentPathname === "/login") return;
@@ -55,7 +56,13 @@ export function AppNavigation({ children }: Readonly<{ children: React.ReactNode
   }
 
   const handleSignOut = async () => {
-    await fetch("/api/auth/sign-out", { method: "POST" });
+    setSignOutFailed(false);
+    const result = await ProductClient.signOut();
+    // A sign-out that did not happen is not shown as one: the operator stays where they are.
+    if (!result.ok) {
+      setSignOutFailed(true);
+      return;
+    }
     router.push("/login");
     router.refresh();
   };
@@ -77,21 +84,28 @@ export function AppNavigation({ children }: Readonly<{ children: React.ReactNode
   let sidebarFooter: React.ReactNode = null;
   if (operator !== null) {
     sidebarFooter = (
-      <div className="flex items-center justify-between rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-3">
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-semibold">{operator.name}</span>
-          <span className="truncate text-xs text-muted-foreground">{operator.email}</span>
-          <span className="mt-1 truncate text-[10px] text-muted-foreground/80 uppercase">
-            Organization: {operator.organizationId}
-          </span>
+      <div className="flex flex-col rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-3">
+        <div className="flex items-center justify-between">
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-semibold">{operator.name}</span>
+            <span className="truncate text-xs text-muted-foreground">{operator.email}</span>
+            <span className="mt-1 truncate text-[10px] text-muted-foreground/80 uppercase">
+              Organization: {operator.organizationId}
+            </span>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="ml-2 shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            aria-label="Sign out"
+          >
+            <LogOutIcon className="size-4" />
+          </button>
         </div>
-        <button
-          onClick={handleSignOut}
-          className="ml-2 shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-          aria-label="Sign out"
-        >
-          <LogOutIcon className="size-4" />
-        </button>
+        {signOutFailed ? (
+          <p role="alert" className="mt-2 text-xs text-destructive">
+            Sign-out failed; you are still signed in.
+          </p>
+        ) : null}
       </div>
     );
   } else if (session?.status === "unavailable") {
