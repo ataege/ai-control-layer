@@ -735,8 +735,7 @@ exec vitest run src/server`: 20 passed (spoofed headers, allowlist and traversal
     admission rejection keeps Go's fixed explanation. `gateway-client.service.ts` keeps the gateway's
     message on a 4xx failure outcome, and the route passes it through only for a 400 whose code is one
     of the X-13 reason codes (`reason-code.schema.json`) with a bounded, printable message; every other
-    failure keeps the generic text. Swagger: the route is documented with an inline request schema (no
-    DTO class); the title and description in `openapi.ts` are already Task Passport's. Tests
+    failure keeps the generic text. Swagger: the route is documented with DTO classes that implement the contract types (`StartRunRequestDto`, `StartRunLimitsDto`, `StartRunResponseDto` in `runs/dto/start-run.dto.ts`) and its 201, 400, 401, 503 and 504 answers (`start-run.openapi.spec.ts`); the title and description in `openapi.ts` are already Task Passport's. Tests
     (`start-run.controller.spec.ts`): forged `organizationId`, `actorId` or `roles` and wrong value
     types are refused with 400 before any upstream call; a Go rejection keeps `resource_out_of_scope`
     and its explanation; an unknown code, a message with control characters or no message keep the

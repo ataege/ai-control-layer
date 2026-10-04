@@ -28,7 +28,7 @@ import type { Request } from "express";
 import { z } from "zod";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { GatewayClientService } from "../gateway-client/gateway-client.service.js";
-import { StartRunSchema } from "./dto/start-run.dto.js";
+import { StartRunRequestDto, StartRunResponseDto, StartRunSchema } from "./dto/start-run.dto.js";
 import startResponseContract from "@workspace/contracts/schemas/start-run-response.schema.json" with { type: "json" };
 import passportContract from "@workspace/contracts/schemas/passport.schema.json" with { type: "json" };
 import optionsContract from "@workspace/contracts/schemas/task-form-options.schema.json" with { type: "json" };
@@ -279,28 +279,28 @@ export class RunsController {
   }
 
   @Post()
-  @ApiOperation({ summary: "Start a new run" })
-  @ApiBody({
-    schema: {
-      type: "object",
-      properties: {
-        template: { type: "string" },
-        vendorId: { type: "string" },
-        invoiceIds: { type: "array", items: { type: "string" } },
-        destination: { type: "string" },
-        approvalRequirement: { type: "string" },
-        limits: {
-          type: "object",
-          properties: {
-            modelCalls: { type: "number" },
-            timeoutSeconds: { type: "number" },
-          },
-        },
-      },
-      required: ["template", "invoiceIds", "destination"],
-    },
+  @ApiOperation({
+    summary: "Start a new run",
+    description:
+      "Validates the X-07 body strictly, takes actor and organization only from the session and forwards the command to Go's admission.",
   })
-  @ApiResponse({ status: 201, description: "Run started successfully." })
+  @ApiBody({ type: StartRunRequestDto })
+  @ApiResponse({
+    status: 201,
+    type: StartRunResponseDto,
+    description: "Admitted: Go stored the passport, run and job.",
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Invalid body, or an admission rejection with its X-13 reason code and explanation; no passport.",
+  })
+  @ApiResponse({ status: 401, description: "No valid session." })
+  @ApiResponse({ status: 503, description: "Admission could not be decided; no run was started." })
+  @ApiResponse({
+    status: 504,
+    description: "The gateway did not answer in time; the outcome is unconfirmed.",
+  })
   @UsePipes(new ZodValidationPipe(StartRunSchema))
   async startRun(
     @Body() startRunRequest: StartRunRequest,
