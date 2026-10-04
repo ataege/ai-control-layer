@@ -786,6 +786,7 @@ estimates. Every size is a planning estimate, never a schedule.
 ### P (before the coding window)
 
 - [ ] **SH-01 · Decide: authentication mechanism (decision 7)**
+  - **Progress:** Not ticked (2026-10-04): decision 7 is recorded (HttpOnly cookie carrying a signed JWT), but the record itself says "Open for the user": the implementation is a stored session, not a JWT. Tick when the user decides and the record matches.
   - **Progress (2026-10-03):** Decided by the lead: an HttpOnly cookie carrying a signed JWT (decision 7 in `docs/product/README.md`). Tick this box with that record; the implementation is API-05 to API-08.
   - **Report 1.1 change:** Recorded in `docs/product/README.md` by the document owner.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: S (estimate 0.5-2 h)
@@ -813,6 +814,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 7 in docs/product/README.md`: the authentication design is on hold by the user's decision of 2026-10-03; this task waits until the hold is lifted
 
 - [ ] **SH-02 · Decide: browser to API path (decision 3)**
+  - **Progress:** Not ticked (2026-10-04): decision 3 in `docs/product/README.md` still reads "Open". The same-origin route handlers, the allowlist and the session-cookie forwarding exist and were observed live (WEB-02); the document owner has to record the outcome.
   - Owner: Web + API implementer (report roles: Implementer 1, interface, and Implementer 2, application API) · Tier: A · Size: S (estimate 0.5-2 h)
   - Depends on: SH-01 · Needs: nothing · Provides: nothing
   - Paths: `docs/product/README.md`, `apps/web/src/server/upstream-proxy.ts`, `apps/api/src/app.setup.ts`
@@ -836,6 +838,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 7 in docs/product/README.md` (what the browser carries depends on it)
 
 - [ ] **SH-03 · Decide: operator context to Go (decision 4)**
+  - **Progress:** Not ticked, depends on SH-01 (2026-10-04): decision 4 is recorded as settled, and `TestPostgresReadRoutesThroughTheGatewayHandler` (service token plus signed operator context, other organization gets 404) passes in `pnpm test:db`.
   - **Progress (2026-10-03):** Decided with decision 7: a short-lived signed JWT of the operator context in an `X-Operator-Context` header (decision 4). Tick this box with that record; the contract is SH-39.
   - **Report 1.1 change:** The architecture's shape, "signed, short-lived operator context containing the user and organization", is an input, proposed by the architecture specification, not decided; the conflict is decision 4's status.
   - Owner: Web + API implementer with the Go implementer · Tier: A · Size: S (estimate 1-2 h)
@@ -855,7 +858,8 @@ estimates. Every size is a planning estimate, never a schedule.
     replacement or extension for authenticated operator context")
   - Blocked by: `decision 7 in docs/product/README.md`
 
-- [ ] **SH-04 · Decide: model provider, model and accounting rule (decision 6)**
+- [x] **SH-04 · Decide: model provider, model and accounting rule (decision 6)**
+  - **Evidence** (2026-10-04, main 31cff75, read, not run): `docs/product/README.md` decision 6 records the provider (Ollama), the model (`qwen3.5:4b`, Apache 2.0, digest `2a654d98…`, `think: false`, context 8192) and, in "GO-06 MVP accounting adopted", the accounting rule.
   - **Report 1.2 change:** Report 1.2 settles the provider type: a locally hosted model (for example Ollama) serving agent and security purposes; decide which model fits the actual machines, with SH-45.
   - Owner: Go implementer with the lead (infrastructure) · Tier: A · Size: S (estimate 0.5-2 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -873,7 +877,8 @@ estimates. Every size is a planning estimate, never a schedule.
     "Relative implementation milestones and critical dependencies" (provider connection in hours 0-2)
   - Blocked by: nothing
 
-- [ ] **SH-05 · Decide: read path for the run, usage, event and review views**
+- [x] **SH-05 · Decide: read path for the run, usage, event and review views**
+  - **Evidence** (2026-10-04, main 31cff75): recorded in `docs/product/README.md`, "Decisions recorded by the lead's delegate", item 1 (`read path`: private Go `/internal` endpoints). Observed live through the web proxy and API: `GET /api/runs/{id}`, `/events` and `/usage` returned the frozen shapes (WEB-02 evidence).
   - **Report 1.1 change:** Option 1 (views) now has the architecture's statements ("NestJS has read access only to authorized runtime views", "Read authorized runtime view", "NestJS SSE from safe, ordered event records"); option 2 keeps the report's "call corresponding private Go endpoints".
   - Owner: Document owner (the lead until `researcher role` is settled) with both implementers · Tier: A · Size: S (estimate 0.5-2 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -892,7 +897,8 @@ estimates. Every size is a planning estimate, never a schedule.
     passport and interface contracts" (Proposed browser and runtime operations)
   - Blocked by: nothing
 
-- [ ] **SH-06 · Decide: single Go executor connection (decision 2 detail)**
+- [x] **SH-06 · Decide: single Go executor connection (decision 2 detail)**
+  - **Evidence** (2026-10-04, main 31cff75): recorded under decision 2 in `docs/product/README.md` ("the Go executor uses one PostgreSQL connection and transaction to commit the report or outbox effect, trusted lineage, runtime completion and associated events"). `pnpm test:db --fresh` on a clean PostgreSQL: gateway 965 passed, 0 failed, 0 skipped, including `TestTheGatewayRoleRunsTheEffectsAndNothingElse` (run alone: PASS).
   - **Report 1.1 change:** Option 1 is now the architecture's design and the report's recommendation; the outcome records its adoption. Report content and its lineage join the transaction ("so an artifact cannot exist without its restrictions").
   - Owner: the lead with the Go implementer · Tier: A · Size: S (estimate 0.5-1 h)
   - Depends on: nothing · Needs: nothing · Provides: nothing
@@ -996,6 +1002,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `contract owners`; the names of the read operations also `read path`; `vendor projection fields` (the field list)
 
 - [ ] **SH-11 · Land the frozen contracts in `packages/contracts`**
+  - **Progress:** Not ticked (2026-10-04): no standalone schema file exists for policy activation, the semantic verdict, the audit export record or the telemetry fields of the contracts list in `docs/product/README.md`; the other listed contracts have a type, schema, fixture and typed sample (`pnpm --filter @workspace/contracts run test`: 10 passed).
   - **Report 1.2 change:** Provides adds X-79, the report 1.2 contracts.
   - **Report 1.1 change:** Provides adds X-71. Work adds the report and lineage summary contract and the new fields of X-08, X-09, X-12 and X-13.
   - Owner: Web + API implementer (report role: Implementer 2, application API) · Tier: A · Size: M (estimate 2-7 h)
@@ -1118,6 +1125,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 6 in docs/product/README.md` (the model name and pricing only)
 
 - [ ] **SH-42 · Write the sample `policy.yaml` and document its schema**
+  - **Progress:** Not ticked, depends on SH-10 (2026-10-04): `config/policy.yaml` and `config/README.md` exist; `pnpm db:seed` ran the import: "Accepted … policy.yaml as catalog revision 1 (sha256 df00c9d6…)".
   - Owner: Web + API implementer (report role: Implementer 2) with the Go implementer · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-10 · Needs: X-06 · Provides: X-78
   - Paths: a new file named at M0 (the report's name: `policy.yaml`); `docs/setup.md`
@@ -1128,6 +1136,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-43 · Write the app-schema migration for the control catalog**
+  - **Progress:** Not ticked, depends on API-31 (2026-10-04): `app.control_catalog_revisions`, `control_catalog_pointer` and `signature_feed_revisions` exist after `pnpm db:migration:run`; the gateway role activated revision 1 (`pnpm catalog:activate`); `TestPostgresGatewayRoleMayOnlyAcknowledge` PASS; 20 of 20 reverts clean on a clean cluster.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: API-31 · Needs: X-24 · Provides: X-80 (part: migration)
   - Paths: `apps/api/src/database/migrations`
@@ -1163,6 +1172,7 @@ estimates. Every size is a planning estimate, never a schedule.
 ### M1 (hours 2-6)
 
 - [ ] **SH-39 · Freeze and land the authenticated operator context contract**
+  - **Progress:** Not ticked, depends on SH-01, SH-03, SH-07, SH-10 (2026-10-04): `operator-context.schema.json`, the fixture `operator-context.operator.json` and the typed sample `operatorContext` exist; `pnpm --filter @workspace/contracts run test`: 10 passed.
   - Owner: Web + API implementer with the Go implementer · Tier: A · Size: S (estimate 0.5-1 h, split from SH-11's estimate)
   - Depends on: SH-01, SH-03, SH-07, SH-10 · Needs: X-01 · Provides: X-14
   - Paths: `docs/product/README.md`, `packages/contracts/src/index.ts`,
@@ -1184,6 +1194,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `contract owners`; `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **SH-15 · Create the `app` schema and the app-schema migration**
+  - **Progress:** Not ticked, depends on SH-10 (2026-10-04): on a clean cluster `pnpm db:migration:run` ran 20 migrations and created `app` (11 tables), `runtime` (16) and `demo` (4). The API started on an empty database (log: "API listening", "Database connection established") and the database still held 0 tables and only the `plpgsql` extension.
   - **Report 1.1 change:** Work adds `organizations` with the user records (decision 7).
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: SH-10 · Needs: X-17 · Provides: X-18
@@ -1246,6 +1257,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `record versions`; `source classification storage` (label fields only)
 
 - [ ] **SH-18 · Seed the policy fixture and the minimal synthetic records**
+  - **Progress:** Not ticked, depends on SH-15 (2026-10-04): a migrated, unseeded database held 0 invoices, 0 vendors, 0 catalog revisions and 0 users. `pnpm db:seed` then reported "demo.vendors: 2 inserted", "demo.invoices: 4 inserted" and imported `config/policy.yaml` as catalog revision 1; `pnpm catalog:activate`: "activated revision 1 with signature feed revision 1". In `e2e-flow.mjs`: the run was admitted and "authorized reads of the invoices before any report" PASS.
   - **Report 1.1 change:** Work adds the seed of the two report templates and the projection rule; the seed file location follows `repository layout` (the architecture proposes `db/seeds`, feasibility unverified).
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: SH-15, SH-17 · Needs: X-06 ·
@@ -1267,6 +1279,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `app-schema seed ownership`; `repository layout` (seed location only)
 
 - [ ] **SH-19 · Seed the demonstration operator, organization and membership**
+  - **Progress:** Not ticked, depends on SH-01 and SH-15 (2026-10-04): the seed creates 1 user, 1 membership and 1 organization; sign-in with the seeded credential answered 200 and a wrong password 401 through the web proxy; an empty database stays empty when the API starts.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-2 h)
   - Depends on: SH-01, SH-15 · Needs: X-23 · Provides: X-22
   - Paths: `package.json`, `apps/api/src/auth`
@@ -1306,6 +1319,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 4 in docs/product/README.md`; `decision 7 in docs/product/README.md`
 
 - [ ] **SH-21 · Provide a database-backed test command**
+  - **Progress:** Not ticked, depends on SH-08 (2026-10-04): `POSTGRES_PORT=55569 pnpm test:db` exit 1 ("database FAIL cannot connect", gateway and api SKIPPED). Against a live database `pnpm test:db --fresh`: gateway 965 passed, 0 failed, 0 skipped (281 need the database); api 71 passed, 0 failed, 0 skipped.
   - **Report 1.1 change:** Owner not assigned by the default (`shared-track assignment`).
   - Owner: not assigned by the default (`shared-track assignment`) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: SH-08 · Needs: X-01 · Provides: X-24
@@ -1323,6 +1337,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-22 · Integrate the vertical path across the services**
+  - **Progress:** Not ticked, depends on SH-12, SH-18 and SH-19 (2026-10-04): a run started through the web route was admitted and read the permitted invoices (`e2e-flow.mjs`, "beat 3" PASS); the run page in headless Chromium showed "Waiting for approval awaiting_approval" and the Task Passport panel from the stored passport.
   - **Report 1.2 change:** The M1 exit of report 1.2: "A real task executes one allowed read; a hostile tool-result fixture is blocked before agent context; both model purposes appear in usage and latency records."
   - **Report 1.1 change:** Owner not assigned by the default; the run includes the internal report, the denied export and the vendor report once M2 delivers them.
   - Owner: not assigned by the default (`shared-track assignment`), with both implementers · Tier: A · Size: M (estimate 4-12 h)
@@ -1372,6 +1387,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-49 · Write the hostile-note, redaction and semantic corpus fixtures**
+  - **Progress:** Not ticked (2026-10-04): `fixtures/hostile-notes.json` and `fixtures/semantic-corpus.json` carry `"synthetic": true` and `pnpm test:fixtures` passes (18 tests), but `pnpm db:seed` does not load them; the gateway tests, the judge client and `verify:controls` read them.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-18 · Needs: X-06 · Provides: X-86
   - Paths: the seed location of SH-18
@@ -1383,7 +1399,8 @@ estimates. Every size is a planning estimate, never a schedule.
 
 ### M2 (hours 6-10)
 
-- [ ] **SH-24 · Write the demo-schema migration for reports and the simulated outbox**
+- [x] **SH-24 · Write the demo-schema migration for reports and the simulated outbox**
+  - **Evidence** (2026-10-04, main 31cff75): the migrated database holds `outbox_messages_one_per_action UNIQUE (action_id)` (read with `pg_get_constraintdef`; no violating row was inserted by hand). On a clean PostgreSQL cluster: `pnpm db:migration:run` ran 20 migrations, 20 × `pnpm db:migration:revert` all exited 0 and left 0 tables, 0 schemas and 0 `task_passport%` roles, and a second `pnpm db:migration:run` ran 20 again. `TestQueueVendorReportCreatesOneSimulatedOutboxRow` and `TestKnownSafeRetryOfQueueReportYieldsOneOutboxRow` PASS. Reverting fails if the service role still holds grants in another database of the same cluster.
   - **Report 1.1 change:** The report table holds immutable reports with classification, template and projection identifiers and versions, content hash, allowed destination class and server-rendered content; lineage per `report storage` (SH-40); the templates are `app` records (X-68) unless SH-10 records otherwise; outbox name proposal `outbox_messages`.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-3 h)
   - Depends on: SH-17 · Needs: X-24 · Provides: X-33; X-64 if `stored report read` chooses a view
@@ -1428,6 +1445,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 7 in docs/product/README.md` (the second organization's sign-in); `source classification storage`
 
 - [ ] **SH-26 · Create the service database roles and grants**
+  - **Progress:** Not ticked (2026-10-04): the API does not connect with its own role: `task_passport_api` is NOLOGIN and the API runs as the owner `starter`. Gateway side PASS: `TestTheGatewayRoleRunsTheEffectsAndNothingElse`, `TestPostgresGatewayRoleMayOnlyAcknowledge`; `pnpm smoke` 34 passed, 0 failed, 8 skipped (leak checks for the gateway role password in responses PASS; service logs are not captured in host mode).
   - **Report 1.1 change:** Work adds the Go read grant on report templates, projection rules and source labels in `app` and the lineage grants per `report storage`; NestJS read on the classification and lineage summary if `stored report read` chooses a view.
   - Owner: the lead (database roles, by default) with both implementers · Tier: B · Size: M (estimate 2-9 h)
   - Depends on: SH-05, SH-06, SH-16, SH-24 · Needs: X-24 · Provides: X-35
@@ -1464,6 +1482,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `decision 2 in docs/product/README.md`; `read path`; `form options` (the form-option read grant only); `stored report read` (the report read grant only); `decision 4 in docs/product/README.md` and `decision 7 in docs/product/README.md` (the Go read grant on the records behind operator and reviewer authority only); `report storage` (lineage grants only)
 
 - [ ] **SH-36 · Observe the M2 exit across the services**
+  - **Progress:** Not ticked, depends on SH-25 (2026-10-04), same e2e run: the permitted run completes with one simulated outbox row to the registered address; the labelled replays are "denied with report_export_restricted", "resource_out_of_scope" and "destination_not_allowed, nothing executed", and "denied replays leave the outbox, reports and invoice versions unchanged" PASS.
   - **Report 1.1 change:** Work: run the internal investigation, the denied export to Atlas and the vendor report creation; compare the outbox count (zero for the denied artifact) and the stored provenance. Done when: the M2 exit of report 1.1, "An internal report is retained for authorized internal viewing; its vendor export is denied; a separate approved-field vendor report can be created." Report: beats 3 to 5 and 7.
   - Owner: the lead with the Go implementer · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-25 · Needs: X-63, X-64, X-72, X-75 · Provides: nothing
@@ -1483,6 +1502,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-40 · Write the migration for report lineage (and context manifests if chosen)**
+  - **Progress:** Not ticked (2026-10-04): the database does not enforce "a report row cannot be committed without its lineage rows": `demo.reports` and `runtime.report_lineage` carry only immutability triggers. Go enforces it: `TestStoreReportWithoutLineageStoresNothing` PASS.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data); the Go implementer supplies the definitions · Tier: A · Size: S (estimate 1-3 h, this roadmap's estimate)
   - Depends on: SH-16, SH-24 · Needs: X-24 · Provides: X-69
   - Paths: `apps/api/src/database/migrations`
@@ -1498,6 +1518,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `report storage`; `internal report rendering` (context part)
 
 - [ ] **SH-41 · Write the app-schema migration for templates and projection rules**
+  - **Progress:** Not ticked (2026-10-04): `app.task_templates` holds 0 rows after `pnpm db:seed`; the two templates and the projection rule are not migrated data.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: A · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: SH-15 · Needs: X-24, X-68 (part: entities) · Provides: X-68 (part: migration); X-70
     (part, if `source classification storage` chooses `app`)
@@ -1573,6 +1594,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: `demonstration baseline`
 
 - [ ] **SH-38 · Write the app-schema migration for the revocation records**
+  - **Progress:** Not ticked (2026-10-04): no revocation table exists after the 20 migrations (the `app` schema has 11 tables, none for revocations).
   - **Report 1.1 change:** The revocation records include source and template revocations.
   - Owner: Web + API implementer by default (`shared-track assignment`; report role: Implementer 5, data) · Tier: B · Size: S (estimate 1-2 h, this roadmap's estimate)
   - Depends on: SH-15, SH-26 · Needs: X-24, X-66 ·
@@ -1597,6 +1619,7 @@ estimates. Every size is a planning estimate, never a schedule.
 ### M4 (hours 14-18)
 
 - [ ] **SH-29 · Write and document the reset command**
+  - **Progress:** Not ticked, depends on SH-25 (2026-10-04): `E2E_POSTGRES_CONTAINER=… E2E_ROUNDS=2 node scripts/with-env.mjs node apps/web/scripts/e2e-flow.mjs`: "round 2's counts match round 1 (outbox, reports, invoice versions)" PASS and "the baseline is back: empty outbox, no reports" PASS after each reset. In that run the two beat 10 judge checks failed ("decision is deny"; 504), model-related and outside this task.
   - **Progress (2026-10-03):** `test command` is settled: `make reset-demo` is a thin wrapper over the pnpm script `reset:demo`.
   - **Report 1.2 change:** Tier A ("Provide make reset-demo for the judge environment"); provides X-90; the command name follows `test command`; test users, organizations and fixture records stay isolated.
   - **Report 1.1 change:** Owner not assigned by the default. The comparison adds the stored classifications and lineage.
@@ -1651,6 +1674,7 @@ estimates. Every size is a planning estimate, never a schedule.
   - Blocked by: nothing
 
 - [ ] **SH-48 · Build the judge client**
+  - **Progress:** Not ticked (2026-10-04): `pnpm judge` fails against the current API with "HTTP 400 bad_request: Invalid control evaluation request": `scripts/judge-client.mjs` sends the draft body (`run_id`, no null `tool` or `arguments`) while the API validates the frozen X-91 request (`runId`, `kind`, `text`, `tool`, `arguments`). `pnpm test:judge` passes (8) because it tests the draft. The web judge console works (`e2e-flow.mjs` beat 10, except two checks that failed on a 504 and a deny).
   - **Report 1.2 change:** The client enters through the NestJS live test entry (Figure 2; API-38, X-106), not the internal Go endpoint, which needs service identity.
   - Owner: the lead by default (`shared-track assignment`; report role: Implementer 5, integration) · Tier: A · Size: S (estimate 2-3 h, this roadmap's estimate)
   - Depends on: nothing · Needs: X-106 · Provides: X-92
