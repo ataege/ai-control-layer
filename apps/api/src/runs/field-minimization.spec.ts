@@ -49,6 +49,7 @@ describe("Field minimization on the activity views", () => {
   let upstream: unknown;
   let upstreamFailure: { statusCode: number; code: string } | undefined;
   const runId = state.runId;
+  const ownerOrganization = events.events[0]!.organizationId;
   const getRead = vi.fn((_path: string, _requestId: string, schema: z.ZodTypeAny) => {
     if (upstreamFailure) {
       return { success: false, reason: "bad_request", ...upstreamFailure };
@@ -85,7 +86,7 @@ describe("Field minimization on the activity views", () => {
   });
   beforeEach(() => {
     roles = ["operator"];
-    organizationId = state.organizationId;
+    organizationId = ownerOrganization;
     upstream = undefined;
     upstreamFailure = undefined;
     getRead.mockClear();
@@ -96,10 +97,10 @@ describe("Field minimization on the activity views", () => {
   it("serves a full run's views with no protected value", async () => {
     // Each labelled fixture belongs to its own run and organization.
     const views: [string, string, unknown][] = [
-      [`/api/runs/${state.runId}`, state.organizationId, state],
-      [`/api/runs/${usage.runId}/usage`, state.organizationId, usage],
+      [`/api/runs/${state.runId}`, ownerOrganization, state],
+      [`/api/runs/${usage.runId}/usage`, ownerOrganization, usage],
       [`/api/runs/${events.events[0]!.runId}/events`, events.events[0]!.organizationId, events],
-      [`/api/runs/${report.runId}/reports/${report.reportId}`, state.organizationId, report],
+      [`/api/runs/${report.runId}/reports/${report.reportId}`, ownerOrganization, report],
     ];
     for (const [path, viewOrganizationId, body] of views) {
       organizationId = viewOrganizationId;
@@ -171,9 +172,9 @@ describe("Field minimization on the activity views", () => {
     expect(refused.text).not.toContain(review.report.content_hash);
 
     roles = ["operator", "reviewer"];
-    const served = await get(path).expect(200);
-    expect(served.body.recipient.address).toBe(review.recipient.address);
-    expect(served.body.canonical_arguments).toEqual(review.canonical_arguments);
+    const served = (await get(path).expect(200)).body as typeof review;
+    expect(served.recipient.address).toBe(review.recipient.address);
+    expect(served.canonical_arguments).toEqual(review.canonical_arguments);
     expect(getRead).toHaveBeenCalledTimes(1);
 
     // The same address is not on any other activity view of the run.
